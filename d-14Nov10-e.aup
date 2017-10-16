@@ -1,0 +1,940 @@
+<?xml version="1.0" standalone="no" ?>
+<!DOCTYPE project PUBLIC "-//audacityproject-1.3.0//DTD//EN" "http://audacity.sourceforge.net/xml/audacityproject-1.3.0.dtd" >
+<project xmlns="http://audacity.sourceforge.net/xml/" projname="d-14Nov10-e_data" version="1.3.0" audacityversion="2.1.3" sel0="1200.0000000000" sel1="2400.0000000000" vpos="0" h="254.8453608247" zoom="0.4041666667" rate="44100.0" snapto="off" selectionformat="hh:mm:ss + milliseconds" frequencyformat="Hz" bandwidthformat="octaves">
+	<tags/>
+	<wavetrack name="d-14Nov10-e" channel="0" linked="1" mute="0" solo="0" height="150" minimized="0" isSelected="0" rate="16000" gain="1.0" pan="0.0">
+		<waveclip offset="0.00000000">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="19200000">
+				<waveblock start="0">
+					<pcmaliasblockfile summaryfile="e0001768.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="0" aliaslen="262144" aliaschannel="0" min="-0.355011" max="0.372284" rms="0.087126"/>
+				</waveblock>
+				<waveblock start="262144">
+					<pcmaliasblockfile summaryfile="e0001cbf.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="262144" aliaslen="262144" aliaschannel="0" min="-0.377167" max="0.329407" rms="0.088029"/>
+				</waveblock>
+				<waveblock start="524288">
+					<pcmaliasblockfile summaryfile="e000192e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="524288" aliaslen="262144" aliaschannel="0" min="-0.319763" max="0.332336" rms="0.085076"/>
+				</waveblock>
+				<waveblock start="786432">
+					<pcmaliasblockfile summaryfile="e0001e34.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="786432" aliaslen="262144" aliaschannel="0" min="-0.336365" max="0.319824" rms="0.078829"/>
+				</waveblock>
+				<waveblock start="1048576">
+					<pcmaliasblockfile summaryfile="e0001e07.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="1048576" aliaslen="262144" aliaschannel="0" min="-0.314392" max="0.35083" rms="0.072735"/>
+				</waveblock>
+				<waveblock start="1310720">
+					<pcmaliasblockfile summaryfile="e0001f86.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="1310720" aliaslen="262144" aliaschannel="0" min="-0.31604" max="0.315247" rms="0.077944"/>
+				</waveblock>
+				<waveblock start="1572864">
+					<pcmaliasblockfile summaryfile="e0001e59.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="1572864" aliaslen="262144" aliaschannel="0" min="-0.356873" max="0.336975" rms="0.081115"/>
+				</waveblock>
+				<waveblock start="1835008">
+					<pcmaliasblockfile summaryfile="e000147f.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="1835008" aliaslen="262144" aliaschannel="0" min="-0.300629" max="0.293457" rms="0.05926"/>
+				</waveblock>
+				<waveblock start="2097152">
+					<pcmaliasblockfile summaryfile="e000193c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="2097152" aliaslen="262144" aliaschannel="0" min="-0.365265" max="0.306305" rms="0.065018"/>
+				</waveblock>
+				<waveblock start="2359296">
+					<pcmaliasblockfile summaryfile="e0001399.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="2359296" aliaslen="262144" aliaschannel="0" min="-0.419159" max="0.418396" rms="0.065704"/>
+				</waveblock>
+				<waveblock start="2621440">
+					<pcmaliasblockfile summaryfile="e000156c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="2621440" aliaslen="262144" aliaschannel="0" min="-0.426849" max="0.406708" rms="0.069542"/>
+				</waveblock>
+				<waveblock start="2883584">
+					<pcmaliasblockfile summaryfile="e0001a31.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="2883584" aliaslen="262144" aliaschannel="0" min="-0.454376" max="0.418945" rms="0.047351"/>
+				</waveblock>
+				<waveblock start="3145728">
+					<pcmaliasblockfile summaryfile="e0001402.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="3145728" aliaslen="262144" aliaschannel="0" min="-0.488556" max="0.434326" rms="0.047138"/>
+				</waveblock>
+				<waveblock start="3407872">
+					<pcmaliasblockfile summaryfile="e000121f.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="3407872" aliaslen="262144" aliaschannel="0" min="-0.520416" max="0.487854" rms="0.105298"/>
+				</waveblock>
+				<waveblock start="3670016">
+					<pcmaliasblockfile summaryfile="e0001c1b.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="3670016" aliaslen="262144" aliaschannel="0" min="-0.506622" max="0.47583" rms="0.111342"/>
+				</waveblock>
+				<waveblock start="3932160">
+					<pcmaliasblockfile summaryfile="e000186d.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="3932160" aliaslen="262144" aliaschannel="0" min="-0.447723" max="0.508759" rms="0.11607"/>
+				</waveblock>
+				<waveblock start="4194304">
+					<pcmaliasblockfile summaryfile="e000193a.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="4194304" aliaslen="262144" aliaschannel="0" min="-0.478424" max="0.477509" rms="0.10963"/>
+				</waveblock>
+				<waveblock start="4456448">
+					<pcmaliasblockfile summaryfile="e0001e5d.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="4456448" aliaslen="262144" aliaschannel="0" min="-0.424164" max="0.518555" rms="0.121597"/>
+				</waveblock>
+				<waveblock start="4718592">
+					<pcmaliasblockfile summaryfile="e0001b25.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="4718592" aliaslen="262144" aliaschannel="0" min="-0.46344" max="0.526855" rms="0.118399"/>
+				</waveblock>
+				<waveblock start="4980736">
+					<pcmaliasblockfile summaryfile="e0001a9b.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="4980736" aliaslen="262144" aliaschannel="0" min="-0.476379" max="0.535126" rms="0.117625"/>
+				</waveblock>
+				<waveblock start="5242880">
+					<pcmaliasblockfile summaryfile="e0002baf.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="5242880" aliaslen="262144" aliaschannel="0" min="-0.517365" max="0.508148" rms="0.115989"/>
+				</waveblock>
+				<waveblock start="5505024">
+					<pcmaliasblockfile summaryfile="e000216d.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="5505024" aliaslen="262144" aliaschannel="0" min="-0.499146" max="0.481598" rms="0.100422"/>
+				</waveblock>
+				<waveblock start="5767168">
+					<pcmaliasblockfile summaryfile="e0002c57.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="5767168" aliaslen="262144" aliaschannel="0" min="-0.527313" max="0.49118" rms="0.119106"/>
+				</waveblock>
+				<waveblock start="6029312">
+					<pcmaliasblockfile summaryfile="e000236a.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="6029312" aliaslen="262144" aliaschannel="0" min="-0.562622" max="0.495667" rms="0.111641"/>
+				</waveblock>
+				<waveblock start="6291456">
+					<pcmaliasblockfile summaryfile="e0002eb2.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="6291456" aliaslen="262144" aliaschannel="0" min="-0.468292" max="0.53772" rms="0.10482"/>
+				</waveblock>
+				<waveblock start="6553600">
+					<pcmaliasblockfile summaryfile="e0002d3a.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="6553600" aliaslen="262144" aliaschannel="0" min="-0.100433" max="0.113403" rms="0.015853"/>
+				</waveblock>
+				<waveblock start="6815744">
+					<pcmaliasblockfile summaryfile="e000261f.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="6815744" aliaslen="262144" aliaschannel="0" min="-0.176941" max="0.168274" rms="0.025384"/>
+				</waveblock>
+				<waveblock start="7077888">
+					<pcmaliasblockfile summaryfile="e0002ad8.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="7077888" aliaslen="262144" aliaschannel="0" min="-0.310059" max="0.387054" rms="0.050032"/>
+				</waveblock>
+				<waveblock start="7340032">
+					<pcmaliasblockfile summaryfile="e0002942.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="7340032" aliaslen="262144" aliaschannel="0" min="-0.450378" max="0.427032" rms="0.071207"/>
+				</waveblock>
+				<waveblock start="7602176">
+					<pcmaliasblockfile summaryfile="e00028e5.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="7602176" aliaslen="262144" aliaschannel="0" min="-0.495911" max="0.456604" rms="0.074149"/>
+				</waveblock>
+				<waveblock start="7864320">
+					<pcmaliasblockfile summaryfile="e00021c4.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="7864320" aliaslen="262144" aliaschannel="0" min="-0.528717" max="0.491241" rms="0.116959"/>
+				</waveblock>
+				<waveblock start="8126464">
+					<pcmaliasblockfile summaryfile="e000267d.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="8126464" aliaslen="262144" aliaschannel="0" min="-0.510529" max="0.487091" rms="0.11082"/>
+				</waveblock>
+				<waveblock start="8388608">
+					<pcmaliasblockfile summaryfile="e00020e1.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="8388608" aliaslen="262144" aliaschannel="0" min="-0.533051" max="0.513062" rms="0.120266"/>
+				</waveblock>
+				<waveblock start="8650752">
+					<pcmaliasblockfile summaryfile="e0002214.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="8650752" aliaslen="262144" aliaschannel="0" min="-0.609894" max="0.561768" rms="0.141039"/>
+				</waveblock>
+				<waveblock start="8912896">
+					<pcmaliasblockfile summaryfile="e0002735.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="8912896" aliaslen="262144" aliaschannel="0" min="-0.540161" max="0.56015" rms="0.11201"/>
+				</waveblock>
+				<waveblock start="9175040">
+					<pcmaliasblockfile summaryfile="e00023df.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="9175040" aliaslen="262144" aliaschannel="0" min="-0.550293" max="0.575562" rms="0.135049"/>
+				</waveblock>
+				<waveblock start="9437184">
+					<pcmaliasblockfile summaryfile="e000265e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="9437184" aliaslen="262144" aliaschannel="0" min="-0.566956" max="0.528687" rms="0.125113"/>
+				</waveblock>
+				<waveblock start="9699328">
+					<pcmaliasblockfile summaryfile="e0002040.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="9699328" aliaslen="262144" aliaschannel="0" min="-0.535614" max="0.564941" rms="0.131778"/>
+				</waveblock>
+				<waveblock start="9961472">
+					<pcmaliasblockfile summaryfile="e00024d8.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="9961472" aliaslen="262144" aliaschannel="0" min="-0.639984" max="0.581055" rms="0.133238"/>
+				</waveblock>
+				<waveblock start="10223616">
+					<pcmaliasblockfile summaryfile="e0002258.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="10223616" aliaslen="262144" aliaschannel="0" min="-0.592499" max="0.548157" rms="0.111204"/>
+				</waveblock>
+				<waveblock start="10485760">
+					<pcmaliasblockfile summaryfile="e0002b40.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="10485760" aliaslen="262144" aliaschannel="0" min="-0.591583" max="0.657898" rms="0.127456"/>
+				</waveblock>
+				<waveblock start="10747904">
+					<pcmaliasblockfile summaryfile="e0002c8a.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="10747904" aliaslen="262144" aliaschannel="0" min="-0.592194" max="0.604004" rms="0.174058"/>
+				</waveblock>
+				<waveblock start="11010048">
+					<pcmaliasblockfile summaryfile="e0002b15.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="11010048" aliaslen="262144" aliaschannel="0" min="-0.571625" max="0.632111" rms="0.171717"/>
+				</waveblock>
+				<waveblock start="11272192">
+					<pcmaliasblockfile summaryfile="e00027b6.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="11272192" aliaslen="262144" aliaschannel="0" min="-0.568176" max="0.576324" rms="0.17311"/>
+				</waveblock>
+				<waveblock start="11534336">
+					<pcmaliasblockfile summaryfile="e0002c7c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="11534336" aliaslen="262144" aliaschannel="0" min="-0.621765" max="0.666473" rms="0.179641"/>
+				</waveblock>
+				<waveblock start="11796480">
+					<pcmaliasblockfile summaryfile="e0002d90.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="11796480" aliaslen="262144" aliaschannel="0" min="-0.603516" max="0.629517" rms="0.186857"/>
+				</waveblock>
+				<waveblock start="12058624">
+					<pcmaliasblockfile summaryfile="e0002512.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="12058624" aliaslen="262144" aliaschannel="0" min="-0.590454" max="0.594727" rms="0.161186"/>
+				</waveblock>
+				<waveblock start="12320768">
+					<pcmaliasblockfile summaryfile="e0002103.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="12320768" aliaslen="262144" aliaschannel="0" min="-0.664093" max="0.630249" rms="0.181719"/>
+				</waveblock>
+				<waveblock start="12582912">
+					<pcmaliasblockfile summaryfile="e0002476.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="12582912" aliaslen="262144" aliaschannel="0" min="-0.608368" max="0.621643" rms="0.179728"/>
+				</waveblock>
+				<waveblock start="12845056">
+					<pcmaliasblockfile summaryfile="e0002c1d.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="12845056" aliaslen="262144" aliaschannel="0" min="-0.595337" max="0.576721" rms="0.167622"/>
+				</waveblock>
+				<waveblock start="13107200">
+					<pcmaliasblockfile summaryfile="e0002807.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="13107200" aliaslen="262144" aliaschannel="0" min="-0.562836" max="0.5625" rms="0.100387"/>
+				</waveblock>
+				<waveblock start="13369344">
+					<pcmaliasblockfile summaryfile="e00028e2.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="13369344" aliaslen="262144" aliaschannel="0" min="-0.231537" max="0.264832" rms="0.041784"/>
+				</waveblock>
+				<waveblock start="13631488">
+					<pcmaliasblockfile summaryfile="e00029e2.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="13631488" aliaslen="262144" aliaschannel="0" min="-0.232147" max="0.277039" rms="0.041376"/>
+				</waveblock>
+				<waveblock start="13893632">
+					<pcmaliasblockfile summaryfile="e000216f.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="13893632" aliaslen="262144" aliaschannel="0" min="-0.489532" max="0.459869" rms="0.072551"/>
+				</waveblock>
+				<waveblock start="14155776">
+					<pcmaliasblockfile summaryfile="e0002c1f.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="14155776" aliaslen="262144" aliaschannel="0" min="-0.480774" max="0.415222" rms="0.06338"/>
+				</waveblock>
+				<waveblock start="14417920">
+					<pcmaliasblockfile summaryfile="e0002256.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="14417920" aliaslen="262144" aliaschannel="0" min="-0.490936" max="0.448914" rms="0.077471"/>
+				</waveblock>
+				<waveblock start="14680064">
+					<pcmaliasblockfile summaryfile="e00020db.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="14680064" aliaslen="262144" aliaschannel="0" min="-0.570129" max="0.551025" rms="0.103216"/>
+				</waveblock>
+				<waveblock start="14942208">
+					<pcmaliasblockfile summaryfile="e0002be2.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="14942208" aliaslen="262144" aliaschannel="0" min="-0.554291" max="0.579193" rms="0.135314"/>
+				</waveblock>
+				<waveblock start="15204352">
+					<pcmaliasblockfile summaryfile="e0002169.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="15204352" aliaslen="262144" aliaschannel="0" min="-0.566132" max="0.608032" rms="0.137043"/>
+				</waveblock>
+				<waveblock start="15466496">
+					<pcmaliasblockfile summaryfile="e00029b2.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="15466496" aliaslen="262144" aliaschannel="0" min="-0.562775" max="0.603821" rms="0.140196"/>
+				</waveblock>
+				<waveblock start="15728640">
+					<pcmaliasblockfile summaryfile="e0002f7c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="15728640" aliaslen="262144" aliaschannel="0" min="-0.636627" max="0.583282" rms="0.139532"/>
+				</waveblock>
+				<waveblock start="15990784">
+					<pcmaliasblockfile summaryfile="e0002b10.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="15990784" aliaslen="262144" aliaschannel="0" min="-0.606506" max="0.56134" rms="0.146233"/>
+				</waveblock>
+				<waveblock start="16252928">
+					<pcmaliasblockfile summaryfile="e000202a.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="16252928" aliaslen="262144" aliaschannel="0" min="-0.554657" max="0.564606" rms="0.137205"/>
+				</waveblock>
+				<waveblock start="16515072">
+					<pcmaliasblockfile summaryfile="e00025f6.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="16515072" aliaslen="262144" aliaschannel="0" min="-0.568939" max="0.600586" rms="0.134027"/>
+				</waveblock>
+				<waveblock start="16777216">
+					<pcmaliasblockfile summaryfile="e0002327.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="16777216" aliaslen="262144" aliaschannel="0" min="-0.581085" max="0.598572" rms="0.141811"/>
+				</waveblock>
+				<waveblock start="17039360">
+					<pcmaliasblockfile summaryfile="e000201e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="17039360" aliaslen="262144" aliaschannel="0" min="-0.597656" max="0.583832" rms="0.153134"/>
+				</waveblock>
+				<waveblock start="17301504">
+					<pcmaliasblockfile summaryfile="e000280e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="17301504" aliaslen="262144" aliaschannel="0" min="-0.617615" max="0.572113" rms="0.155145"/>
+				</waveblock>
+				<waveblock start="17563648">
+					<pcmaliasblockfile summaryfile="e00022b0.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="17563648" aliaslen="262144" aliaschannel="0" min="-0.646027" max="0.589905" rms="0.146606"/>
+				</waveblock>
+				<waveblock start="17825792">
+					<pcmaliasblockfile summaryfile="e0002e5f.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="17825792" aliaslen="262144" aliaschannel="0" min="-0.589874" max="0.636749" rms="0.130193"/>
+				</waveblock>
+				<waveblock start="18087936">
+					<pcmaliasblockfile summaryfile="e00021f7.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="18087936" aliaslen="262144" aliaschannel="0" min="-0.59549" max="0.63443" rms="0.164094"/>
+				</waveblock>
+				<waveblock start="18350080">
+					<pcmaliasblockfile summaryfile="e0002f19.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="18350080" aliaslen="262144" aliaschannel="0" min="-0.591827" max="0.60849" rms="0.167464"/>
+				</waveblock>
+				<waveblock start="18612224">
+					<pcmaliasblockfile summaryfile="e00020cc.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="18612224" aliaslen="262144" aliaschannel="0" min="-0.623505" max="0.61203" rms="0.165403"/>
+				</waveblock>
+				<waveblock start="18874368">
+					<pcmaliasblockfile summaryfile="e00024d0.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="18874368" aliaslen="262144" aliaschannel="0" min="-0.603394" max="0.614044" rms="0.171897"/>
+				</waveblock>
+				<waveblock start="19136512">
+					<pcmaliasblockfile summaryfile="e0002912.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="19136512" aliaslen="63488" aliaschannel="0" min="-0.561829" max="0.56955" rms="0.162186"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<wavetrack name="d-14Nov10-e" channel="1" linked="0" mute="0" solo="0" height="150" minimized="0" isSelected="0" rate="16000" gain="1.0" pan="0.0">
+		<waveclip offset="0.00000000">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="19200000">
+				<waveblock start="0">
+					<pcmaliasblockfile summaryfile="e000196c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="0" aliaslen="262144" aliaschannel="1" min="-0.384521" max="0.387634" rms="0.092545"/>
+				</waveblock>
+				<waveblock start="262144">
+					<pcmaliasblockfile summaryfile="e0001efa.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="262144" aliaslen="262144" aliaschannel="1" min="-0.430481" max="0.41156" rms="0.093688"/>
+				</waveblock>
+				<waveblock start="524288">
+					<pcmaliasblockfile summaryfile="e0001d95.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="524288" aliaslen="262144" aliaschannel="1" min="-0.372314" max="0.372223" rms="0.086845"/>
+				</waveblock>
+				<waveblock start="786432">
+					<pcmaliasblockfile summaryfile="e0001647.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="786432" aliaslen="262144" aliaschannel="1" min="-0.367004" max="0.365082" rms="0.084454"/>
+				</waveblock>
+				<waveblock start="1048576">
+					<pcmaliasblockfile summaryfile="e000156e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="1048576" aliaslen="262144" aliaschannel="1" min="-0.361572" max="0.369293" rms="0.079261"/>
+				</waveblock>
+				<waveblock start="1310720">
+					<pcmaliasblockfile summaryfile="e00013a0.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="1310720" aliaslen="262144" aliaschannel="1" min="-0.354858" max="0.405182" rms="0.085001"/>
+				</waveblock>
+				<waveblock start="1572864">
+					<pcmaliasblockfile summaryfile="e000168b.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="1572864" aliaslen="262144" aliaschannel="1" min="-0.35553" max="0.388306" rms="0.089009"/>
+				</waveblock>
+				<waveblock start="1835008">
+					<pcmaliasblockfile summaryfile="e0001025.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="1835008" aliaslen="262144" aliaschannel="1" min="-0.32019" max="0.381561" rms="0.064852"/>
+				</waveblock>
+				<waveblock start="2097152">
+					<pcmaliasblockfile summaryfile="e0001c34.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="2097152" aliaslen="262144" aliaschannel="1" min="-0.358978" max="0.358521" rms="0.061454"/>
+				</waveblock>
+				<waveblock start="2359296">
+					<pcmaliasblockfile summaryfile="e00010aa.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="2359296" aliaslen="262144" aliaschannel="1" min="-0.442841" max="0.397949" rms="0.058373"/>
+				</waveblock>
+				<waveblock start="2621440">
+					<pcmaliasblockfile summaryfile="e00011d5.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="2621440" aliaslen="262144" aliaschannel="1" min="-0.391479" max="0.35614" rms="0.060048"/>
+				</waveblock>
+				<waveblock start="2883584">
+					<pcmaliasblockfile summaryfile="e0001bc0.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="2883584" aliaslen="262144" aliaschannel="1" min="-0.414703" max="0.390198" rms="0.044646"/>
+				</waveblock>
+				<waveblock start="3145728">
+					<pcmaliasblockfile summaryfile="e000101e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="3145728" aliaslen="262144" aliaschannel="1" min="-0.418915" max="0.386719" rms="0.043426"/>
+				</waveblock>
+				<waveblock start="3407872">
+					<pcmaliasblockfile summaryfile="e000123f.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="3407872" aliaslen="262144" aliaschannel="1" min="-0.504089" max="0.476471" rms="0.104863"/>
+				</waveblock>
+				<waveblock start="3670016">
+					<pcmaliasblockfile summaryfile="e00011dc.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="3670016" aliaslen="262144" aliaschannel="1" min="-0.489197" max="0.465424" rms="0.10992"/>
+				</waveblock>
+				<waveblock start="3932160">
+					<pcmaliasblockfile summaryfile="e0001fc0.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="3932160" aliaslen="262144" aliaschannel="1" min="-0.450256" max="0.450958" rms="0.115529"/>
+				</waveblock>
+				<waveblock start="4194304">
+					<pcmaliasblockfile summaryfile="e00014e3.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="4194304" aliaslen="262144" aliaschannel="1" min="-0.512482" max="0.438446" rms="0.104764"/>
+				</waveblock>
+				<waveblock start="4456448">
+					<pcmaliasblockfile summaryfile="e000166d.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="4456448" aliaslen="262144" aliaschannel="1" min="-0.442352" max="0.458923" rms="0.114809"/>
+				</waveblock>
+				<waveblock start="4718592">
+					<pcmaliasblockfile summaryfile="e0001f13.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="4718592" aliaslen="262144" aliaschannel="1" min="-0.426788" max="0.471863" rms="0.111268"/>
+				</waveblock>
+				<waveblock start="4980736">
+					<pcmaliasblockfile summaryfile="e000114b.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="4980736" aliaslen="262144" aliaschannel="1" min="-0.480316" max="0.468292" rms="0.110846"/>
+				</waveblock>
+				<waveblock start="5242880">
+					<pcmaliasblockfile summaryfile="e0002a52.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="5242880" aliaslen="262144" aliaschannel="1" min="-0.49942" max="0.465027" rms="0.109618"/>
+				</waveblock>
+				<waveblock start="5505024">
+					<pcmaliasblockfile summaryfile="e00025b0.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="5505024" aliaslen="262144" aliaschannel="1" min="-0.490204" max="0.454681" rms="0.097235"/>
+				</waveblock>
+				<waveblock start="5767168">
+					<pcmaliasblockfile summaryfile="e000259e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="5767168" aliaslen="262144" aliaschannel="1" min="-0.517151" max="0.469116" rms="0.114718"/>
+				</waveblock>
+				<waveblock start="6029312">
+					<pcmaliasblockfile summaryfile="e0002120.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="6029312" aliaslen="262144" aliaschannel="1" min="-0.541504" max="0.451874" rms="0.108838"/>
+				</waveblock>
+				<waveblock start="6291456">
+					<pcmaliasblockfile summaryfile="e00025cf.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="6291456" aliaslen="262144" aliaschannel="1" min="-0.421021" max="0.514526" rms="0.098738"/>
+				</waveblock>
+				<waveblock start="6553600">
+					<pcmaliasblockfile summaryfile="e0002413.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="6553600" aliaslen="262144" aliaschannel="1" min="-0.10968" max="0.107605" rms="0.017779"/>
+				</waveblock>
+				<waveblock start="6815744">
+					<pcmaliasblockfile summaryfile="e0002a82.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="6815744" aliaslen="262144" aliaschannel="1" min="-0.167603" max="0.154694" rms="0.024424"/>
+				</waveblock>
+				<waveblock start="7077888">
+					<pcmaliasblockfile summaryfile="e000221c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="7077888" aliaslen="262144" aliaschannel="1" min="-0.313416" max="0.384186" rms="0.049905"/>
+				</waveblock>
+				<waveblock start="7340032">
+					<pcmaliasblockfile summaryfile="e00023a7.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="7340032" aliaslen="262144" aliaschannel="1" min="-0.480408" max="0.438995" rms="0.072131"/>
+				</waveblock>
+				<waveblock start="7602176">
+					<pcmaliasblockfile summaryfile="e0002803.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="7602176" aliaslen="262144" aliaschannel="1" min="-0.506653" max="0.461121" rms="0.075585"/>
+				</waveblock>
+				<waveblock start="7864320">
+					<pcmaliasblockfile summaryfile="e0002c3c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="7864320" aliaslen="262144" aliaschannel="1" min="-0.526642" max="0.496765" rms="0.119045"/>
+				</waveblock>
+				<waveblock start="8126464">
+					<pcmaliasblockfile summaryfile="e0002042.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="8126464" aliaslen="262144" aliaschannel="1" min="-0.5242" max="0.498993" rms="0.112789"/>
+				</waveblock>
+				<waveblock start="8388608">
+					<pcmaliasblockfile summaryfile="e00026aa.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="8388608" aliaslen="262144" aliaschannel="1" min="-0.545898" max="0.512817" rms="0.122285"/>
+				</waveblock>
+				<waveblock start="8650752">
+					<pcmaliasblockfile summaryfile="e0002663.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="8650752" aliaslen="262144" aliaschannel="1" min="-0.626923" max="0.56723" rms="0.14323"/>
+				</waveblock>
+				<waveblock start="8912896">
+					<pcmaliasblockfile summaryfile="e0002f50.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="8912896" aliaslen="262144" aliaschannel="1" min="-0.538574" max="0.533112" rms="0.113635"/>
+				</waveblock>
+				<waveblock start="9175040">
+					<pcmaliasblockfile summaryfile="e00021d2.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="9175040" aliaslen="262144" aliaschannel="1" min="-0.562225" max="0.561005" rms="0.137186"/>
+				</waveblock>
+				<waveblock start="9437184">
+					<pcmaliasblockfile summaryfile="e00021b4.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="9437184" aliaslen="262144" aliaschannel="1" min="-0.568054" max="0.554474" rms="0.127085"/>
+				</waveblock>
+				<waveblock start="9699328">
+					<pcmaliasblockfile summaryfile="e0002893.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="9699328" aliaslen="262144" aliaschannel="1" min="-0.539917" max="0.524963" rms="0.133795"/>
+				</waveblock>
+				<waveblock start="9961472">
+					<pcmaliasblockfile summaryfile="e00024bf.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="9961472" aliaslen="262144" aliaschannel="1" min="-0.661774" max="0.581543" rms="0.135286"/>
+				</waveblock>
+				<waveblock start="10223616">
+					<pcmaliasblockfile summaryfile="e00024ac.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="10223616" aliaslen="262144" aliaschannel="1" min="-0.587616" max="0.57135" rms="0.112953"/>
+				</waveblock>
+				<waveblock start="10485760">
+					<pcmaliasblockfile summaryfile="e0002a07.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="10485760" aliaslen="262144" aliaschannel="1" min="-0.57428" max="0.646942" rms="0.129177"/>
+				</waveblock>
+				<waveblock start="10747904">
+					<pcmaliasblockfile summaryfile="e0002d5f.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="10747904" aliaslen="262144" aliaschannel="1" min="-0.599304" max="0.601501" rms="0.176625"/>
+				</waveblock>
+				<waveblock start="11010048">
+					<pcmaliasblockfile summaryfile="e0002d6c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="11010048" aliaslen="262144" aliaschannel="1" min="-0.582977" max="0.612732" rms="0.174307"/>
+				</waveblock>
+				<waveblock start="11272192">
+					<pcmaliasblockfile summaryfile="e0002af8.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="11272192" aliaslen="262144" aliaschannel="1" min="-0.61795" max="0.602448" rms="0.175842"/>
+				</waveblock>
+				<waveblock start="11534336">
+					<pcmaliasblockfile summaryfile="e0002edf.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="11534336" aliaslen="262144" aliaschannel="1" min="-0.622528" max="0.655212" rms="0.182488"/>
+				</waveblock>
+				<waveblock start="11796480">
+					<pcmaliasblockfile summaryfile="e00027fd.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="11796480" aliaslen="262144" aliaschannel="1" min="-0.601196" max="0.659515" rms="0.189648"/>
+				</waveblock>
+				<waveblock start="12058624">
+					<pcmaliasblockfile summaryfile="e000213d.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="12058624" aliaslen="262144" aliaschannel="1" min="-0.609772" max="0.614807" rms="0.16376"/>
+				</waveblock>
+				<waveblock start="12320768">
+					<pcmaliasblockfile summaryfile="e0002145.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="12320768" aliaslen="262144" aliaschannel="1" min="-0.667786" max="0.638" rms="0.184424"/>
+				</waveblock>
+				<waveblock start="12582912">
+					<pcmaliasblockfile summaryfile="e0002ede.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="12582912" aliaslen="262144" aliaschannel="1" min="-0.631927" max="0.633728" rms="0.182688"/>
+				</waveblock>
+				<waveblock start="12845056">
+					<pcmaliasblockfile summaryfile="e0002dce.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="12845056" aliaslen="262144" aliaschannel="1" min="-0.593933" max="0.584442" rms="0.170117"/>
+				</waveblock>
+				<waveblock start="13107200">
+					<pcmaliasblockfile summaryfile="e00020b6.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="13107200" aliaslen="262144" aliaschannel="1" min="-0.608795" max="0.578033" rms="0.101874"/>
+				</waveblock>
+				<waveblock start="13369344">
+					<pcmaliasblockfile summaryfile="e00028dd.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="13369344" aliaslen="262144" aliaschannel="1" min="-0.249359" max="0.27771" rms="0.044048"/>
+				</waveblock>
+				<waveblock start="13631488">
+					<pcmaliasblockfile summaryfile="e0002c92.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="13631488" aliaslen="262144" aliaschannel="1" min="-0.245422" max="0.293427" rms="0.043577"/>
+				</waveblock>
+				<waveblock start="13893632">
+					<pcmaliasblockfile summaryfile="e000299c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="13893632" aliaslen="262144" aliaschannel="1" min="-0.516174" max="0.483154" rms="0.076229"/>
+				</waveblock>
+				<waveblock start="14155776">
+					<pcmaliasblockfile summaryfile="e0002d75.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="14155776" aliaslen="262144" aliaschannel="1" min="-0.496552" max="0.437775" rms="0.066578"/>
+				</waveblock>
+				<waveblock start="14417920">
+					<pcmaliasblockfile summaryfile="e0002d0e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="14417920" aliaslen="262144" aliaschannel="1" min="-0.516846" max="0.465912" rms="0.081103"/>
+				</waveblock>
+				<waveblock start="14680064">
+					<pcmaliasblockfile summaryfile="e0002578.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="14680064" aliaslen="262144" aliaschannel="1" min="-0.583527" max="0.571991" rms="0.108199"/>
+				</waveblock>
+				<waveblock start="14942208">
+					<pcmaliasblockfile summaryfile="e00026fb.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="14942208" aliaslen="262144" aliaschannel="1" min="-0.577271" max="0.632843" rms="0.141314"/>
+				</waveblock>
+				<waveblock start="15204352">
+					<pcmaliasblockfile summaryfile="e00022b8.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="15204352" aliaslen="262144" aliaschannel="1" min="-0.584198" max="0.603027" rms="0.143492"/>
+				</waveblock>
+				<waveblock start="15466496">
+					<pcmaliasblockfile summaryfile="e0002600.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="15466496" aliaslen="262144" aliaschannel="1" min="-0.59024" max="0.614899" rms="0.146783"/>
+				</waveblock>
+				<waveblock start="15728640">
+					<pcmaliasblockfile summaryfile="e0002982.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="15728640" aliaslen="262144" aliaschannel="1" min="-0.627075" max="0.608551" rms="0.146078"/>
+				</waveblock>
+				<waveblock start="15990784">
+					<pcmaliasblockfile summaryfile="e0002658.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="15990784" aliaslen="262144" aliaschannel="1" min="-0.653717" max="0.572571" rms="0.153474"/>
+				</waveblock>
+				<waveblock start="16252928">
+					<pcmaliasblockfile summaryfile="e0002537.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="16252928" aliaslen="262144" aliaschannel="1" min="-0.600983" max="0.589264" rms="0.143755"/>
+				</waveblock>
+				<waveblock start="16515072">
+					<pcmaliasblockfile summaryfile="e00025c1.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="16515072" aliaslen="262144" aliaschannel="1" min="-0.588409" max="0.622437" rms="0.140666"/>
+				</waveblock>
+				<waveblock start="16777216">
+					<pcmaliasblockfile summaryfile="e0002401.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="16777216" aliaslen="262144" aliaschannel="1" min="-0.605164" max="0.593842" rms="0.148192"/>
+				</waveblock>
+				<waveblock start="17039360">
+					<pcmaliasblockfile summaryfile="e0002a60.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="17039360" aliaslen="262144" aliaschannel="1" min="-0.619568" max="0.603516" rms="0.159985"/>
+				</waveblock>
+				<waveblock start="17301504">
+					<pcmaliasblockfile summaryfile="e00028f0.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="17301504" aliaslen="262144" aliaschannel="1" min="-0.634949" max="0.588135" rms="0.162077"/>
+				</waveblock>
+				<waveblock start="17563648">
+					<pcmaliasblockfile summaryfile="e0002396.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="17563648" aliaslen="262144" aliaschannel="1" min="-0.641083" max="0.654846" rms="0.153012"/>
+				</waveblock>
+				<waveblock start="17825792">
+					<pcmaliasblockfile summaryfile="e0002d1a.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="17825792" aliaslen="262144" aliaschannel="1" min="-0.605408" max="0.632721" rms="0.136246"/>
+				</waveblock>
+				<waveblock start="18087936">
+					<pcmaliasblockfile summaryfile="e0002d31.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="18087936" aliaslen="262144" aliaschannel="1" min="-0.657623" max="0.641785" rms="0.171824"/>
+				</waveblock>
+				<waveblock start="18350080">
+					<pcmaliasblockfile summaryfile="e0002391.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="18350080" aliaslen="262144" aliaschannel="1" min="-0.621582" max="0.640656" rms="0.174896"/>
+				</waveblock>
+				<waveblock start="18612224">
+					<pcmaliasblockfile summaryfile="e000258f.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="18612224" aliaslen="262144" aliaschannel="1" min="-0.60733" max="0.620667" rms="0.173115"/>
+				</waveblock>
+				<waveblock start="18874368">
+					<pcmaliasblockfile summaryfile="e0002db9.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="18874368" aliaslen="262144" aliaschannel="1" min="-0.653656" max="0.634827" rms="0.179633"/>
+				</waveblock>
+				<waveblock start="19136512">
+					<pcmaliasblockfile summaryfile="e0002e8c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-e" aliasstart="19136512" aliaslen="63488" aliaschannel="1" min="-0.562531" max="0.590729" rms="0.169288"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<labeltrack name="Label Track" numlabels="14" height="122" minimized="0" isSelected="0">
+		<label t="0.0000000000" t1="193.7670000000" title="...Nightrider (5:30)"/>
+		<label t="7.8232574792" t1="52.1470467445" title="~&quot;I am the Night Rider&quot; xN"/>
+		<label t="128.5051546392" t1="136.8556701031" title="~start of transition, background &quot;Murder&quot;"/>
+		<label t="185.1030927835" t1="192.6804123711" title="drop-off -- but doesn&apos;t seem like transition"/>
+		<label t="193.7670000000" t1="453.7670000000" title="Diet for Murder (4:20)"/>
+		<label t="255.4771858513" t1="265.2603645630" title="~clearest quote"/>
+		<label t="399.2527616019" t1="410.2743173657" title="~last quote"/>
+		<label t="407.1216240051" t1="443.4527982790" title="~battle sounds"/>
+		<label t="430.2121879048" t1="443.5866600676" title="helicopter, and a chorus?"/>
+		<label t="443.4513553914" t1="443.4513553914" title="promo6 (promo2)"/>
+		<label t="468.2720995870" t1="468.2720995870" title="Dreams of Heaven"/>
+		<label t="834.5981379654" t1="834.5981379654" title="Secrets"/>
+		<label t="879.2838235380" t1="881.2689429364" title="skip?"/>
+		<label t="919.8547012432" t1="924.6934297769" title="~there is a secret soul"/>
+	</labeltrack>
+	<wavetrack name="d-Nov10-f" channel="0" linked="1" mute="0" solo="0" height="150" minimized="0" isSelected="1" rate="16000" gain="1.0" pan="0.0">
+		<waveclip offset="1200.00000000">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="19200000">
+				<waveblock start="0">
+					<pcmaliasblockfile summaryfile="e0002436.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="0" aliaslen="262144" aliaschannel="0" min="-0.60083" max="0.636444" rms="0.153983"/>
+				</waveblock>
+				<waveblock start="262144">
+					<pcmaliasblockfile summaryfile="e0002df1.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="262144" aliaslen="262144" aliaschannel="0" min="-0.426453" max="0.502289" rms="0.063781"/>
+				</waveblock>
+				<waveblock start="524288">
+					<pcmaliasblockfile summaryfile="e0002f2b.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="524288" aliaslen="262144" aliaschannel="0" min="-0.598785" max="0.577698" rms="0.169823"/>
+				</waveblock>
+				<waveblock start="786432">
+					<pcmaliasblockfile summaryfile="e000273d.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="786432" aliaslen="262144" aliaschannel="0" min="-0.573059" max="0.586731" rms="0.171918"/>
+				</waveblock>
+				<waveblock start="1048576">
+					<pcmaliasblockfile summaryfile="e0002be8.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="1048576" aliaslen="262144" aliaschannel="0" min="-0.591309" max="0.606995" rms="0.176712"/>
+				</waveblock>
+				<waveblock start="1310720">
+					<pcmaliasblockfile summaryfile="e0002e8d.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="1310720" aliaslen="262144" aliaschannel="0" min="-0.626129" max="0.589417" rms="0.181308"/>
+				</waveblock>
+				<waveblock start="1572864">
+					<pcmaliasblockfile summaryfile="e0002c51.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="1572864" aliaslen="262144" aliaschannel="0" min="-0.601746" max="0.624908" rms="0.183588"/>
+				</waveblock>
+				<waveblock start="1835008">
+					<pcmaliasblockfile summaryfile="e0002958.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="1835008" aliaslen="262144" aliaschannel="0" min="-0.599579" max="0.618988" rms="0.164914"/>
+				</waveblock>
+				<waveblock start="2097152">
+					<pcmaliasblockfile summaryfile="e00027b8.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="2097152" aliaslen="262144" aliaschannel="0" min="-0.532074" max="0.551514" rms="0.131831"/>
+				</waveblock>
+				<waveblock start="2359296">
+					<pcmaliasblockfile summaryfile="e0002dfc.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="2359296" aliaslen="262144" aliaschannel="0" min="-0.302887" max="0.346558" rms="0.038687"/>
+				</waveblock>
+				<waveblock start="2621440">
+					<pcmaliasblockfile summaryfile="e0002c62.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="2621440" aliaslen="262144" aliaschannel="0" min="-0.513702" max="0.492798" rms="0.045907"/>
+				</waveblock>
+				<waveblock start="2883584">
+					<pcmaliasblockfile summaryfile="e00029cc.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="2883584" aliaslen="262144" aliaschannel="0" min="-0.527283" max="0.511139" rms="0.084975"/>
+				</waveblock>
+				<waveblock start="3145728">
+					<pcmaliasblockfile summaryfile="e0002c24.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="3145728" aliaslen="262144" aliaschannel="0" min="-0.57254" max="0.534973" rms="0.086659"/>
+				</waveblock>
+				<waveblock start="3407872">
+					<pcmaliasblockfile summaryfile="e0002a13.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="3407872" aliaslen="262144" aliaschannel="0" min="-0.591644" max="0.61673" rms="0.149916"/>
+				</waveblock>
+				<waveblock start="3670016">
+					<pcmaliasblockfile summaryfile="e0002ad4.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="3670016" aliaslen="262144" aliaschannel="0" min="-0.591858" max="0.614624" rms="0.157669"/>
+				</waveblock>
+				<waveblock start="3932160">
+					<pcmaliasblockfile summaryfile="e000223e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="3932160" aliaslen="262144" aliaschannel="0" min="-0.606384" max="0.612244" rms="0.160634"/>
+				</waveblock>
+				<waveblock start="4194304">
+					<pcmaliasblockfile summaryfile="e0002f52.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="4194304" aliaslen="262144" aliaschannel="0" min="-0.574432" max="0.653351" rms="0.150397"/>
+				</waveblock>
+				<waveblock start="4456448">
+					<pcmaliasblockfile summaryfile="e000227a.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="4456448" aliaslen="262144" aliaschannel="0" min="-0.607574" max="0.607635" rms="0.155279"/>
+				</waveblock>
+				<waveblock start="4718592">
+					<pcmaliasblockfile summaryfile="e000267b.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="4718592" aliaslen="262144" aliaschannel="0" min="-0.637207" max="0.626465" rms="0.183479"/>
+				</waveblock>
+				<waveblock start="4980736">
+					<pcmaliasblockfile summaryfile="e0002207.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="4980736" aliaslen="262144" aliaschannel="0" min="-0.640106" max="0.643188" rms="0.178269"/>
+				</waveblock>
+				<waveblock start="5242880">
+					<pcmaliasblockfile summaryfile="e0002938.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="5242880" aliaslen="262144" aliaschannel="0" min="-0.638855" max="0.688019" rms="0.18128"/>
+				</waveblock>
+				<waveblock start="5505024">
+					<pcmaliasblockfile summaryfile="e000280c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="5505024" aliaslen="262144" aliaschannel="0" min="-0.641907" max="0.654053" rms="0.163704"/>
+				</waveblock>
+				<waveblock start="5767168">
+					<pcmaliasblockfile summaryfile="e0002142.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="5767168" aliaslen="262144" aliaschannel="0" min="-0.604218" max="0.642944" rms="0.144659"/>
+				</waveblock>
+				<waveblock start="6029312">
+					<pcmaliasblockfile summaryfile="e0002ff0.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="6029312" aliaslen="262144" aliaschannel="0" min="-0.647308" max="0.639099" rms="0.156489"/>
+				</waveblock>
+				<waveblock start="6291456">
+					<pcmaliasblockfile summaryfile="e0002ff1.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="6291456" aliaslen="262144" aliaschannel="0" min="-0.614807" max="0.620636" rms="0.143892"/>
+				</waveblock>
+				<waveblock start="6553600">
+					<pcmaliasblockfile summaryfile="e0002d76.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="6553600" aliaslen="262144" aliaschannel="0" min="-0.640259" max="0.664673" rms="0.17841"/>
+				</waveblock>
+				<waveblock start="6815744">
+					<pcmaliasblockfile summaryfile="e0002c76.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="6815744" aliaslen="262144" aliaschannel="0" min="-0.668213" max="0.687927" rms="0.183157"/>
+				</waveblock>
+				<waveblock start="7077888">
+					<pcmaliasblockfile summaryfile="e0002257.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="7077888" aliaslen="262144" aliaschannel="0" min="-0.656189" max="0.668976" rms="0.188321"/>
+				</waveblock>
+				<waveblock start="7340032">
+					<pcmaliasblockfile summaryfile="e00021b6.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="7340032" aliaslen="262144" aliaschannel="0" min="-0.604126" max="0.623413" rms="0.156279"/>
+				</waveblock>
+				<waveblock start="7602176">
+					<pcmaliasblockfile summaryfile="e0002afe.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="7602176" aliaslen="262144" aliaschannel="0" min="-0.611664" max="0.6203" rms="0.141856"/>
+				</waveblock>
+				<waveblock start="7864320">
+					<pcmaliasblockfile summaryfile="e0002ed7.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="7864320" aliaslen="262144" aliaschannel="0" min="-0.631531" max="0.654846" rms="0.15631"/>
+				</waveblock>
+				<waveblock start="8126464">
+					<pcmaliasblockfile summaryfile="e0002a39.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="8126464" aliaslen="262144" aliaschannel="0" min="-0.651154" max="0.630554" rms="0.16457"/>
+				</waveblock>
+				<waveblock start="8388608">
+					<pcmaliasblockfile summaryfile="e00025e9.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="8388608" aliaslen="262144" aliaschannel="0" min="-0.603607" max="0.622437" rms="0.07634"/>
+				</waveblock>
+				<waveblock start="8650752">
+					<pcmaliasblockfile summaryfile="e0002989.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="8650752" aliaslen="262144" aliaschannel="0" min="-0.544464" max="0.542877" rms="0.048843"/>
+				</waveblock>
+				<waveblock start="8912896">
+					<pcmaliasblockfile summaryfile="e0000ba1.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="8912896" aliaslen="262144" aliaschannel="0" min="-0.548187" max="0.547638" rms="0.075141"/>
+				</waveblock>
+				<waveblock start="9175040">
+					<pcmaliasblockfile summaryfile="e00005c2.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="9175040" aliaslen="262144" aliaschannel="0" min="-0.543182" max="0.591522" rms="0.089318"/>
+				</waveblock>
+				<waveblock start="9437184">
+					<pcmaliasblockfile summaryfile="e00007a9.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="9437184" aliaslen="262144" aliaschannel="0" min="-0.552246" max="0.584625" rms="0.107643"/>
+				</waveblock>
+				<waveblock start="9699328">
+					<pcmaliasblockfile summaryfile="e0000d07.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="9699328" aliaslen="262144" aliaschannel="0" min="-0.613556" max="0.627716" rms="0.18739"/>
+				</waveblock>
+				<waveblock start="9961472">
+					<pcmaliasblockfile summaryfile="e0000af2.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="9961472" aliaslen="262144" aliaschannel="0" min="-0.583679" max="0.652191" rms="0.188414"/>
+				</waveblock>
+				<waveblock start="10223616">
+					<pcmaliasblockfile summaryfile="e0000466.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="10223616" aliaslen="262144" aliaschannel="0" min="-0.603882" max="0.650513" rms="0.186615"/>
+				</waveblock>
+				<waveblock start="10485760">
+					<pcmaliasblockfile summaryfile="e00007bd.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="10485760" aliaslen="262144" aliaschannel="0" min="-0.586273" max="0.586426" rms="0.102952"/>
+				</waveblock>
+				<waveblock start="10747904">
+					<pcmaliasblockfile summaryfile="e00008b2.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="10747904" aliaslen="262144" aliaschannel="0" min="-0.612244" max="0.616821" rms="0.182676"/>
+				</waveblock>
+				<waveblock start="11010048">
+					<pcmaliasblockfile summaryfile="e0000503.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="11010048" aliaslen="262144" aliaschannel="0" min="-0.611633" max="0.641571" rms="0.1818"/>
+				</waveblock>
+				<waveblock start="11272192">
+					<pcmaliasblockfile summaryfile="e00008e1.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="11272192" aliaslen="262144" aliaschannel="0" min="-0.646912" max="0.610107" rms="0.15519"/>
+				</waveblock>
+				<waveblock start="11534336">
+					<pcmaliasblockfile summaryfile="e0000b49.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="11534336" aliaslen="262144" aliaschannel="0" min="-0.599854" max="0.58963" rms="0.161132"/>
+				</waveblock>
+				<waveblock start="11796480">
+					<pcmaliasblockfile summaryfile="e0000218.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="11796480" aliaslen="262144" aliaschannel="0" min="-0.580566" max="0.631104" rms="0.175722"/>
+				</waveblock>
+				<waveblock start="12058624">
+					<pcmaliasblockfile summaryfile="e00004ef.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="12058624" aliaslen="262144" aliaschannel="0" min="-0.619995" max="0.648224" rms="0.18028"/>
+				</waveblock>
+				<waveblock start="12320768">
+					<pcmaliasblockfile summaryfile="e000065a.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="12320768" aliaslen="262144" aliaschannel="0" min="-0.606903" max="0.615845" rms="0.179646"/>
+				</waveblock>
+				<waveblock start="12582912">
+					<pcmaliasblockfile summaryfile="e0000e5e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="12582912" aliaslen="262144" aliaschannel="0" min="-0.578491" max="0.59848" rms="0.119867"/>
+				</waveblock>
+				<waveblock start="12845056">
+					<pcmaliasblockfile summaryfile="e0000260.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="12845056" aliaslen="262144" aliaschannel="0" min="-0.187286" max="0.197205" rms="0.031079"/>
+				</waveblock>
+				<waveblock start="13107200">
+					<pcmaliasblockfile summaryfile="e0000eac.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="13107200" aliaslen="262144" aliaschannel="0" min="-0.443756" max="0.431946" rms="0.064797"/>
+				</waveblock>
+				<waveblock start="13369344">
+					<pcmaliasblockfile summaryfile="e0000f1a.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="13369344" aliaslen="262144" aliaschannel="0" min="-0.425262" max="0.428253" rms="0.081248"/>
+				</waveblock>
+				<waveblock start="13631488">
+					<pcmaliasblockfile summaryfile="e000091c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="13631488" aliaslen="262144" aliaschannel="0" min="-0.442535" max="0.468292" rms="0.094969"/>
+				</waveblock>
+				<waveblock start="13893632">
+					<pcmaliasblockfile summaryfile="e0000357.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="13893632" aliaslen="262144" aliaschannel="0" min="-0.460022" max="0.482422" rms="0.091838"/>
+				</waveblock>
+				<waveblock start="14155776">
+					<pcmaliasblockfile summaryfile="e000000c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="14155776" aliaslen="262144" aliaschannel="0" min="-0.479523" max="0.462433" rms="0.100463"/>
+				</waveblock>
+				<waveblock start="14417920">
+					<pcmaliasblockfile summaryfile="e0000216.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="14417920" aliaslen="262144" aliaschannel="0" min="-0.545471" max="0.538025" rms="0.10535"/>
+				</waveblock>
+				<waveblock start="14680064">
+					<pcmaliasblockfile summaryfile="e00009c8.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="14680064" aliaslen="262144" aliaschannel="0" min="-0.515991" max="0.516174" rms="0.117748"/>
+				</waveblock>
+				<waveblock start="14942208">
+					<pcmaliasblockfile summaryfile="e00009ff.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="14942208" aliaslen="262144" aliaschannel="0" min="-0.604218" max="0.497375" rms="0.131685"/>
+				</waveblock>
+				<waveblock start="15204352">
+					<pcmaliasblockfile summaryfile="e0000fc9.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="15204352" aliaslen="262144" aliaschannel="0" min="-0.494934" max="0.562164" rms="0.116293"/>
+				</waveblock>
+				<waveblock start="15466496">
+					<pcmaliasblockfile summaryfile="e0000282.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="15466496" aliaslen="262144" aliaschannel="0" min="-0.55249" max="0.507416" rms="0.125987"/>
+				</waveblock>
+				<waveblock start="15728640">
+					<pcmaliasblockfile summaryfile="e00008d7.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="15728640" aliaslen="262144" aliaschannel="0" min="-0.59845" max="0.557007" rms="0.15179"/>
+				</waveblock>
+				<waveblock start="15990784">
+					<pcmaliasblockfile summaryfile="e0000b21.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="15990784" aliaslen="262144" aliaschannel="0" min="-0.590942" max="0.5466" rms="0.14594"/>
+				</waveblock>
+				<waveblock start="16252928">
+					<pcmaliasblockfile summaryfile="e0000699.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="16252928" aliaslen="262144" aliaschannel="0" min="-0.565796" max="0.5336" rms="0.146007"/>
+				</waveblock>
+				<waveblock start="16515072">
+					<pcmaliasblockfile summaryfile="e0000961.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="16515072" aliaslen="262144" aliaschannel="0" min="-0.543304" max="0.540039" rms="0.144346"/>
+				</waveblock>
+				<waveblock start="16777216">
+					<pcmaliasblockfile summaryfile="e0000703.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="16777216" aliaslen="262144" aliaschannel="0" min="-0.533203" max="0.507263" rms="0.131895"/>
+				</waveblock>
+				<waveblock start="17039360">
+					<pcmaliasblockfile summaryfile="e00009df.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="17039360" aliaslen="262144" aliaschannel="0" min="-0.516663" max="0.520569" rms="0.136647"/>
+				</waveblock>
+				<waveblock start="17301504">
+					<pcmaliasblockfile summaryfile="e000023c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="17301504" aliaslen="262144" aliaschannel="0" min="-0.49585" max="0.533386" rms="0.128753"/>
+				</waveblock>
+				<waveblock start="17563648">
+					<pcmaliasblockfile summaryfile="e0000115.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="17563648" aliaslen="262144" aliaschannel="0" min="-0.520508" max="0.520355" rms="0.13619"/>
+				</waveblock>
+				<waveblock start="17825792">
+					<pcmaliasblockfile summaryfile="e0000558.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="17825792" aliaslen="262144" aliaschannel="0" min="-0.539124" max="0.566833" rms="0.140108"/>
+				</waveblock>
+				<waveblock start="18087936">
+					<pcmaliasblockfile summaryfile="e000003e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="18087936" aliaslen="262144" aliaschannel="0" min="-0.579681" max="0.568665" rms="0.140674"/>
+				</waveblock>
+				<waveblock start="18350080">
+					<pcmaliasblockfile summaryfile="e000028c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="18350080" aliaslen="262144" aliaschannel="0" min="-0.61618" max="0.56308" rms="0.150351"/>
+				</waveblock>
+				<waveblock start="18612224">
+					<pcmaliasblockfile summaryfile="e0000aec.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="18612224" aliaslen="262144" aliaschannel="0" min="-0.553528" max="0.550262" rms="0.152883"/>
+				</waveblock>
+				<waveblock start="18874368">
+					<pcmaliasblockfile summaryfile="e0000742.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="18874368" aliaslen="262144" aliaschannel="0" min="-0.621979" max="0.542267" rms="0.152045"/>
+				</waveblock>
+				<waveblock start="19136512">
+					<pcmaliasblockfile summaryfile="e00001bc.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="19136512" aliaslen="63488" aliaschannel="0" min="-0.557709" max="0.543182" rms="0.161658"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<wavetrack name="d-Nov10-f" channel="1" linked="0" mute="0" solo="0" height="150" minimized="0" isSelected="1" rate="16000" gain="1.0" pan="0.0">
+		<waveclip offset="1200.00000000">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="19200000">
+				<waveblock start="0">
+					<pcmaliasblockfile summaryfile="e00021b0.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="0" aliaslen="262144" aliaschannel="1" min="-0.6185" max="0.668365" rms="0.161009"/>
+				</waveblock>
+				<waveblock start="262144">
+					<pcmaliasblockfile summaryfile="e00027f4.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="262144" aliaslen="262144" aliaschannel="1" min="-0.449707" max="0.529114" rms="0.067108"/>
+				</waveblock>
+				<waveblock start="524288">
+					<pcmaliasblockfile summaryfile="e0002d06.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="524288" aliaslen="262144" aliaschannel="1" min="-0.628693" max="0.623322" rms="0.177836"/>
+				</waveblock>
+				<waveblock start="786432">
+					<pcmaliasblockfile summaryfile="e0002a69.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="786432" aliaslen="262144" aliaschannel="1" min="-0.596283" max="0.608185" rms="0.179958"/>
+				</waveblock>
+				<waveblock start="1048576">
+					<pcmaliasblockfile summaryfile="e0002d04.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="1048576" aliaslen="262144" aliaschannel="1" min="-0.619568" max="0.617706" rms="0.184458"/>
+				</waveblock>
+				<waveblock start="1310720">
+					<pcmaliasblockfile summaryfile="e0002aa6.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="1310720" aliaslen="262144" aliaschannel="1" min="-0.617523" max="0.603394" rms="0.189246"/>
+				</waveblock>
+				<waveblock start="1572864">
+					<pcmaliasblockfile summaryfile="e0002776.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="1572864" aliaslen="262144" aliaschannel="1" min="-0.621582" max="0.661835" rms="0.191749"/>
+				</waveblock>
+				<waveblock start="1835008">
+					<pcmaliasblockfile summaryfile="e0002376.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="1835008" aliaslen="262144" aliaschannel="1" min="-0.639893" max="0.614624" rms="0.172749"/>
+				</waveblock>
+				<waveblock start="2097152">
+					<pcmaliasblockfile summaryfile="e000256c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="2097152" aliaslen="262144" aliaschannel="1" min="-0.55069" max="0.578339" rms="0.138516"/>
+				</waveblock>
+				<waveblock start="2359296">
+					<pcmaliasblockfile summaryfile="e000240c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="2359296" aliaslen="262144" aliaschannel="1" min="-0.315643" max="0.371521" rms="0.040601"/>
+				</waveblock>
+				<waveblock start="2621440">
+					<pcmaliasblockfile summaryfile="e0002e78.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="2621440" aliaslen="262144" aliaschannel="1" min="-0.544586" max="0.516663" rms="0.048808"/>
+				</waveblock>
+				<waveblock start="2883584">
+					<pcmaliasblockfile summaryfile="e0002c46.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="2883584" aliaslen="262144" aliaschannel="1" min="-0.545166" max="0.537872" rms="0.090574"/>
+				</waveblock>
+				<waveblock start="3145728">
+					<pcmaliasblockfile summaryfile="e0002b7e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="3145728" aliaslen="262144" aliaschannel="1" min="-0.585999" max="0.528931" rms="0.09245"/>
+				</waveblock>
+				<waveblock start="3407872">
+					<pcmaliasblockfile summaryfile="e00023f5.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="3407872" aliaslen="262144" aliaschannel="1" min="-0.607849" max="0.632568" rms="0.159338"/>
+				</waveblock>
+				<waveblock start="3670016">
+					<pcmaliasblockfile summaryfile="e000205a.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="3670016" aliaslen="262144" aliaschannel="1" min="-0.621185" max="0.637878" rms="0.16752"/>
+				</waveblock>
+				<waveblock start="3932160">
+					<pcmaliasblockfile summaryfile="e0002a96.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="3932160" aliaslen="262144" aliaschannel="1" min="-0.627838" max="0.64447" rms="0.170396"/>
+				</waveblock>
+				<waveblock start="4194304">
+					<pcmaliasblockfile summaryfile="e0002d7e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="4194304" aliaslen="262144" aliaschannel="1" min="-0.60495" max="0.639801" rms="0.160416"/>
+				</waveblock>
+				<waveblock start="4456448">
+					<pcmaliasblockfile summaryfile="e0002eff.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="4456448" aliaslen="262144" aliaschannel="1" min="-0.631012" max="0.631744" rms="0.165645"/>
+				</waveblock>
+				<waveblock start="4718592">
+					<pcmaliasblockfile summaryfile="e0002287.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="4718592" aliaslen="262144" aliaschannel="1" min="-0.681274" max="0.642181" rms="0.195472"/>
+				</waveblock>
+				<waveblock start="4980736">
+					<pcmaliasblockfile summaryfile="e0002f28.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="4980736" aliaslen="262144" aliaschannel="1" min="-0.672791" max="0.703583" rms="0.188882"/>
+				</waveblock>
+				<waveblock start="5242880">
+					<pcmaliasblockfile summaryfile="e0002b5b.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="5242880" aliaslen="262144" aliaschannel="1" min="-0.690918" max="0.679993" rms="0.191961"/>
+				</waveblock>
+				<waveblock start="5505024">
+					<pcmaliasblockfile summaryfile="e0002418.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="5505024" aliaslen="262144" aliaschannel="1" min="-0.691895" max="0.654633" rms="0.173569"/>
+				</waveblock>
+				<waveblock start="5767168">
+					<pcmaliasblockfile summaryfile="e0002fff.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="5767168" aliaslen="262144" aliaschannel="1" min="-0.634888" max="0.66452" rms="0.154118"/>
+				</waveblock>
+				<waveblock start="6029312">
+					<pcmaliasblockfile summaryfile="e0002365.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="6029312" aliaslen="262144" aliaschannel="1" min="-0.65979" max="0.658875" rms="0.166833"/>
+				</waveblock>
+				<waveblock start="6291456">
+					<pcmaliasblockfile summaryfile="e0002b3d.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="6291456" aliaslen="262144" aliaschannel="1" min="-0.622833" max="0.645386" rms="0.152853"/>
+				</waveblock>
+				<waveblock start="6553600">
+					<pcmaliasblockfile summaryfile="e00024e4.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="6553600" aliaslen="262144" aliaschannel="1" min="-0.70755" max="0.69809" rms="0.189199"/>
+				</waveblock>
+				<waveblock start="6815744">
+					<pcmaliasblockfile summaryfile="e00027c4.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="6815744" aliaslen="262144" aliaschannel="1" min="-0.727173" max="0.677032" rms="0.193778"/>
+				</waveblock>
+				<waveblock start="7077888">
+					<pcmaliasblockfile summaryfile="e0002d92.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="7077888" aliaslen="262144" aliaschannel="1" min="-0.660522" max="0.672119" rms="0.199053"/>
+				</waveblock>
+				<waveblock start="7340032">
+					<pcmaliasblockfile summaryfile="e00027af.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="7340032" aliaslen="262144" aliaschannel="1" min="-0.643707" max="0.649719" rms="0.166542"/>
+				</waveblock>
+				<waveblock start="7602176">
+					<pcmaliasblockfile summaryfile="e000242e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="7602176" aliaslen="262144" aliaschannel="1" min="-0.62735" max="0.635468" rms="0.151152"/>
+				</waveblock>
+				<waveblock start="7864320">
+					<pcmaliasblockfile summaryfile="e000256e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="7864320" aliaslen="262144" aliaschannel="1" min="-0.679993" max="0.64624" rms="0.166896"/>
+				</waveblock>
+				<waveblock start="8126464">
+					<pcmaliasblockfile summaryfile="e000255a.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="8126464" aliaslen="262144" aliaschannel="1" min="-0.699219" max="0.664612" rms="0.175511"/>
+				</waveblock>
+				<waveblock start="8388608">
+					<pcmaliasblockfile summaryfile="e0002b02.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="8388608" aliaslen="262144" aliaschannel="1" min="-0.632233" max="0.656738" rms="0.081687"/>
+				</waveblock>
+				<waveblock start="8650752">
+					<pcmaliasblockfile summaryfile="e0002609.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="8650752" aliaslen="262144" aliaschannel="1" min="-0.549805" max="0.55423" rms="0.050968"/>
+				</waveblock>
+				<waveblock start="8912896">
+					<pcmaliasblockfile summaryfile="e0000791.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="8912896" aliaslen="262144" aliaschannel="1" min="-0.578033" max="0.561096" rms="0.078324"/>
+				</waveblock>
+				<waveblock start="9175040">
+					<pcmaliasblockfile summaryfile="e000029e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="9175040" aliaslen="262144" aliaschannel="1" min="-0.57843" max="0.627472" rms="0.093237"/>
+				</waveblock>
+				<waveblock start="9437184">
+					<pcmaliasblockfile summaryfile="e0000592.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="9437184" aliaslen="262144" aliaschannel="1" min="-0.601776" max="0.621307" rms="0.112756"/>
+				</waveblock>
+				<waveblock start="9699328">
+					<pcmaliasblockfile summaryfile="e000022c.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="9699328" aliaslen="262144" aliaschannel="1" min="-0.635437" max="0.648834" rms="0.196668"/>
+				</waveblock>
+				<waveblock start="9961472">
+					<pcmaliasblockfile summaryfile="e0000fcc.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="9961472" aliaslen="262144" aliaschannel="1" min="-0.611877" max="0.65329" rms="0.197829"/>
+				</waveblock>
+				<waveblock start="10223616">
+					<pcmaliasblockfile summaryfile="e0000312.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="10223616" aliaslen="262144" aliaschannel="1" min="-0.660583" max="0.626373" rms="0.196056"/>
+				</waveblock>
+				<waveblock start="10485760">
+					<pcmaliasblockfile summaryfile="e0000d5b.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="10485760" aliaslen="262144" aliaschannel="1" min="-0.603455" max="0.624023" rms="0.108091"/>
+				</waveblock>
+				<waveblock start="10747904">
+					<pcmaliasblockfile summaryfile="e00004ec.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="10747904" aliaslen="262144" aliaschannel="1" min="-0.611511" max="0.639862" rms="0.19183"/>
+				</waveblock>
+				<waveblock start="11010048">
+					<pcmaliasblockfile summaryfile="e0000ff6.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="11010048" aliaslen="262144" aliaschannel="1" min="-0.632751" max="0.663452" rms="0.190946"/>
+				</waveblock>
+				<waveblock start="11272192">
+					<pcmaliasblockfile summaryfile="e0000685.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="11272192" aliaslen="262144" aliaschannel="1" min="-0.634674" max="0.643066" rms="0.162498"/>
+				</waveblock>
+				<waveblock start="11534336">
+					<pcmaliasblockfile summaryfile="e000074f.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="11534336" aliaslen="262144" aliaschannel="1" min="-0.630371" max="0.62323" rms="0.169115"/>
+				</waveblock>
+				<waveblock start="11796480">
+					<pcmaliasblockfile summaryfile="e00003c3.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="11796480" aliaslen="262144" aliaschannel="1" min="-0.619781" max="0.614563" rms="0.184671"/>
+				</waveblock>
+				<waveblock start="12058624">
+					<pcmaliasblockfile summaryfile="e000022d.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="12058624" aliaslen="262144" aliaschannel="1" min="-0.63916" max="0.665436" rms="0.189609"/>
+				</waveblock>
+				<waveblock start="12320768">
+					<pcmaliasblockfile summaryfile="e000038e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="12320768" aliaslen="262144" aliaschannel="1" min="-0.644562" max="0.649506" rms="0.188774"/>
+				</waveblock>
+				<waveblock start="12582912">
+					<pcmaliasblockfile summaryfile="e0000fd1.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="12582912" aliaslen="262144" aliaschannel="1" min="-0.604767" max="0.624329" rms="0.125691"/>
+				</waveblock>
+				<waveblock start="12845056">
+					<pcmaliasblockfile summaryfile="e000084f.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="12845056" aliaslen="262144" aliaschannel="1" min="-0.20517" max="0.201935" rms="0.033086"/>
+				</waveblock>
+				<waveblock start="13107200">
+					<pcmaliasblockfile summaryfile="e000081e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="13107200" aliaslen="262144" aliaschannel="1" min="-0.469482" max="0.45047" rms="0.068782"/>
+				</waveblock>
+				<waveblock start="13369344">
+					<pcmaliasblockfile summaryfile="e0000d67.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="13369344" aliaslen="262144" aliaschannel="1" min="-0.448303" max="0.448914" rms="0.086343"/>
+				</waveblock>
+				<waveblock start="13631488">
+					<pcmaliasblockfile summaryfile="e000090d.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="13631488" aliaslen="262144" aliaschannel="1" min="-0.430023" max="0.494293" rms="0.100684"/>
+				</waveblock>
+				<waveblock start="13893632">
+					<pcmaliasblockfile summaryfile="e000043b.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="13893632" aliaslen="262144" aliaschannel="1" min="-0.485077" max="0.515442" rms="0.096935"/>
+				</waveblock>
+				<waveblock start="14155776">
+					<pcmaliasblockfile summaryfile="e0000fe7.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="14155776" aliaslen="262144" aliaschannel="1" min="-0.527466" max="0.495544" rms="0.106314"/>
+				</waveblock>
+				<waveblock start="14417920">
+					<pcmaliasblockfile summaryfile="e0000b3e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="14417920" aliaslen="262144" aliaschannel="1" min="-0.52597" max="0.533905" rms="0.11183"/>
+				</waveblock>
+				<waveblock start="14680064">
+					<pcmaliasblockfile summaryfile="e0000cc8.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="14680064" aliaslen="262144" aliaschannel="1" min="-0.539398" max="0.529541" rms="0.124952"/>
+				</waveblock>
+				<waveblock start="14942208">
+					<pcmaliasblockfile summaryfile="e000018d.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="14942208" aliaslen="262144" aliaschannel="1" min="-0.604065" max="0.523773" rms="0.139795"/>
+				</waveblock>
+				<waveblock start="15204352">
+					<pcmaliasblockfile summaryfile="e00006e7.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="15204352" aliaslen="262144" aliaschannel="1" min="-0.541565" max="0.54837" rms="0.124039"/>
+				</waveblock>
+				<waveblock start="15466496">
+					<pcmaliasblockfile summaryfile="e0000187.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="15466496" aliaslen="262144" aliaschannel="1" min="-0.580261" max="0.565063" rms="0.133694"/>
+				</waveblock>
+				<waveblock start="15728640">
+					<pcmaliasblockfile summaryfile="e000002e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="15728640" aliaslen="262144" aliaschannel="1" min="-0.621063" max="0.564514" rms="0.160737"/>
+				</waveblock>
+				<waveblock start="15990784">
+					<pcmaliasblockfile summaryfile="e00004f9.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="15990784" aliaslen="262144" aliaschannel="1" min="-0.576538" max="0.564606" rms="0.154237"/>
+				</waveblock>
+				<waveblock start="16252928">
+					<pcmaliasblockfile summaryfile="e0000e8d.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="16252928" aliaslen="262144" aliaschannel="1" min="-0.628601" max="0.553253" rms="0.154534"/>
+				</waveblock>
+				<waveblock start="16515072">
+					<pcmaliasblockfile summaryfile="e0000d49.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="16515072" aliaslen="262144" aliaschannel="1" min="-0.579163" max="0.540375" rms="0.152488"/>
+				</waveblock>
+				<waveblock start="16777216">
+					<pcmaliasblockfile summaryfile="e00009a4.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="16777216" aliaslen="262144" aliaschannel="1" min="-0.550995" max="0.559143" rms="0.140241"/>
+				</waveblock>
+				<waveblock start="17039360">
+					<pcmaliasblockfile summaryfile="e000022e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="17039360" aliaslen="262144" aliaschannel="1" min="-0.57309" max="0.554169" rms="0.144925"/>
+				</waveblock>
+				<waveblock start="17301504">
+					<pcmaliasblockfile summaryfile="e0000328.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="17301504" aliaslen="262144" aliaschannel="1" min="-0.52533" max="0.545563" rms="0.137291"/>
+				</waveblock>
+				<waveblock start="17563648">
+					<pcmaliasblockfile summaryfile="e0000170.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="17563648" aliaslen="262144" aliaschannel="1" min="-0.538757" max="0.544159" rms="0.145083"/>
+				</waveblock>
+				<waveblock start="17825792">
+					<pcmaliasblockfile summaryfile="e0000899.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="17825792" aliaslen="262144" aliaschannel="1" min="-0.56369" max="0.579346" rms="0.149039"/>
+				</waveblock>
+				<waveblock start="18087936">
+					<pcmaliasblockfile summaryfile="e000022a.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="18087936" aliaslen="262144" aliaschannel="1" min="-0.57019" max="0.560303" rms="0.149176"/>
+				</waveblock>
+				<waveblock start="18350080">
+					<pcmaliasblockfile summaryfile="e00004b9.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="18350080" aliaslen="262144" aliaschannel="1" min="-0.600128" max="0.637085" rms="0.159158"/>
+				</waveblock>
+				<waveblock start="18612224">
+					<pcmaliasblockfile summaryfile="e000061e.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="18612224" aliaslen="262144" aliaschannel="1" min="-0.573975" max="0.596954" rms="0.16196"/>
+				</waveblock>
+				<waveblock start="18874368">
+					<pcmaliasblockfile summaryfile="e0000f52.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="18874368" aliaslen="262144" aliaschannel="1" min="-0.610901" max="0.583038" rms="0.16092"/>
+				</waveblock>
+				<waveblock start="19136512">
+					<pcmaliasblockfile summaryfile="e0000b86.auf" aliasfile="D:\tim\Music\netradioDNB\d-14Nov10-f" aliasstart="19136512" aliaslen="63488" aliaschannel="1" min="-0.572693" max="0.639618" rms="0.170638"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<labeltrack name="Label Track" numlabels="1" height="73" minimized="0" isSelected="0">
+		<label t="1367.9646408651" t1="1367.9646408651" title="Grey Odyssey"/>
+	</labeltrack>
+</project>

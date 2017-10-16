@@ -1,0 +1,176 @@
+<?xml version="1.0" standalone="no" ?>
+<!DOCTYPE project PUBLIC "-//audacityproject-1.3.0//DTD//EN" "http://audacity.sourceforge.net/xml/audacityproject-1.3.0.dtd" >
+<project xmlns="http://audacity.sourceforge.net/xml/" projname="d187-200_data" version="1.3.0" audacityversion="2.1.3" sel0="220.2774693620" sel1="220.2774693620" vpos="0" h="207.1181258875" zoom="3.8432174711" rate="16000.0" snapto="off" selectionformat="hh:mm:ss + milliseconds" frequencyformat="Hz" bandwidthformat="octaves">
+	<tags/>
+	<wavetrack name="d187-200" channel="0" linked="1" mute="0" solo="0" height="150" minimized="0" isSelected="1" rate="16000" gain="1.0" pan="0.0">
+		<waveclip offset="0.00000000">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="6389749">
+				<waveblock start="0">
+					<pcmaliasblockfile summaryfile="e000026c.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="0" aliaslen="262144" aliaschannel="0" min="-0.389099" max="0.309814" rms="0.046686"/>
+				</waveblock>
+				<waveblock start="262144">
+					<pcmaliasblockfile summaryfile="e000056f.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="262144" aliaslen="262144" aliaschannel="0" min="-0.405914" max="0.332397" rms="0.085866"/>
+				</waveblock>
+				<waveblock start="524288">
+					<pcmaliasblockfile summaryfile="e0000925.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="524288" aliaslen="262144" aliaschannel="0" min="-0.422852" max="0.334656" rms="0.102931"/>
+				</waveblock>
+				<waveblock start="786432">
+					<pcmaliasblockfile summaryfile="e0000ecb.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="786432" aliaslen="262144" aliaschannel="0" min="-0.421112" max="0.321625" rms="0.101359"/>
+				</waveblock>
+				<waveblock start="1048576">
+					<pcmaliasblockfile summaryfile="e000053c.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="1048576" aliaslen="262144" aliaschannel="0" min="-0.422119" max="0.340149" rms="0.106521"/>
+				</waveblock>
+				<waveblock start="1310720">
+					<pcmaliasblockfile summaryfile="e0000757.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="1310720" aliaslen="262144" aliaschannel="0" min="-0.426483" max="0.346069" rms="0.10734"/>
+				</waveblock>
+				<waveblock start="1572864">
+					<pcmaliasblockfile summaryfile="e00009cd.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="1572864" aliaslen="262144" aliaschannel="0" min="-0.409271" max="0.344879" rms="0.095801"/>
+				</waveblock>
+				<waveblock start="1835008">
+					<pcmaliasblockfile summaryfile="e0000479.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="1835008" aliaslen="262144" aliaschannel="0" min="-0.416748" max="0.317932" rms="0.08543"/>
+				</waveblock>
+				<waveblock start="2097152">
+					<pcmaliasblockfile summaryfile="e0000c8d.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="2097152" aliaslen="262144" aliaschannel="0" min="-0.416748" max="0.344116" rms="0.090256"/>
+				</waveblock>
+				<waveblock start="2359296">
+					<pcmaliasblockfile summaryfile="e0000749.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="2359296" aliaslen="262144" aliaschannel="0" min="-0.413513" max="0.341156" rms="0.092216"/>
+				</waveblock>
+				<waveblock start="2621440">
+					<pcmaliasblockfile summaryfile="e00002a0.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="2621440" aliaslen="262144" aliaschannel="0" min="-0.402832" max="0.340424" rms="0.090797"/>
+				</waveblock>
+				<waveblock start="2883584">
+					<pcmaliasblockfile summaryfile="e0000406.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="2883584" aliaslen="262144" aliaschannel="0" min="-0.402863" max="0.340607" rms="0.092691"/>
+				</waveblock>
+				<waveblock start="3145728">
+					<pcmaliasblockfile summaryfile="e00007d8.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="3145728" aliaslen="262144" aliaschannel="0" min="-0.395905" max="0.328125" rms="0.075173"/>
+				</waveblock>
+				<waveblock start="3407872">
+					<pcmaliasblockfile summaryfile="e0000739.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="3407872" aliaslen="262144" aliaschannel="0" min="-0.169495" max="0.188385" rms="0.025764"/>
+				</waveblock>
+				<waveblock start="3670016">
+					<pcmaliasblockfile summaryfile="e00000d5.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="3670016" aliaslen="262144" aliaschannel="0" min="-0.401642" max="0.362518" rms="0.096534"/>
+				</waveblock>
+				<waveblock start="3932160">
+					<pcmaliasblockfile summaryfile="e0000cfc.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="3932160" aliaslen="262144" aliaschannel="0" min="-0.421051" max="0.369354" rms="0.09788"/>
+				</waveblock>
+				<waveblock start="4194304">
+					<pcmaliasblockfile summaryfile="e0000095.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="4194304" aliaslen="262144" aliaschannel="0" min="-0.412476" max="0.374695" rms="0.114447"/>
+				</waveblock>
+				<waveblock start="4456448">
+					<pcmaliasblockfile summaryfile="e00006eb.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="4456448" aliaslen="262144" aliaschannel="0" min="-0.406708" max="0.378967" rms="0.113268"/>
+				</waveblock>
+				<waveblock start="4718592">
+					<pcmaliasblockfile summaryfile="e00001e5.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="4718592" aliaslen="262144" aliaschannel="0" min="-0.412994" max="0.367126" rms="0.108946"/>
+				</waveblock>
+				<waveblock start="4980736">
+					<pcmaliasblockfile summaryfile="e000053b.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="4980736" aliaslen="262144" aliaschannel="0" min="-0.420074" max="0.367249" rms="0.110164"/>
+				</waveblock>
+				<waveblock start="5242880">
+					<pcmaliasblockfile summaryfile="e0000d43.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="5242880" aliaslen="262144" aliaschannel="0" min="-0.422943" max="0.369446" rms="0.1087"/>
+				</waveblock>
+				<waveblock start="5505024">
+					<pcmaliasblockfile summaryfile="e0000f7e.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="5505024" aliaslen="262144" aliaschannel="0" min="-0.401398" max="0.368591" rms="0.107214"/>
+				</waveblock>
+				<waveblock start="5767168">
+					<pcmaliasblockfile summaryfile="e0000b9b.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="5767168" aliaslen="262144" aliaschannel="0" min="-0.405396" max="0.363098" rms="0.088614"/>
+				</waveblock>
+				<waveblock start="6029312">
+					<pcmaliasblockfile summaryfile="e0000189.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="6029312" aliaslen="262144" aliaschannel="0" min="-0.413605" max="0.341705" rms="0.086882"/>
+				</waveblock>
+				<waveblock start="6291456">
+					<pcmaliasblockfile summaryfile="e0000e7c.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="6291456" aliaslen="98293" aliaschannel="0" min="-0.380035" max="0.326874" rms="0.085253"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<wavetrack name="d187-200" channel="1" linked="0" mute="0" solo="0" height="150" minimized="0" isSelected="1" rate="16000" gain="1.0" pan="0.0">
+		<waveclip offset="0.00000000">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="6389749">
+				<waveblock start="0">
+					<pcmaliasblockfile summaryfile="e0000cc3.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="0" aliaslen="262144" aliaschannel="1" min="-0.400177" max="0.313232" rms="0.04355"/>
+				</waveblock>
+				<waveblock start="262144">
+					<pcmaliasblockfile summaryfile="e00001ce.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="262144" aliaslen="262144" aliaschannel="1" min="-0.424988" max="0.335815" rms="0.085112"/>
+				</waveblock>
+				<waveblock start="524288">
+					<pcmaliasblockfile summaryfile="e00006ea.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="524288" aliaslen="262144" aliaschannel="1" min="-0.420746" max="0.338715" rms="0.10059"/>
+				</waveblock>
+				<waveblock start="786432">
+					<pcmaliasblockfile summaryfile="e00005ec.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="786432" aliaslen="262144" aliaschannel="1" min="-0.401031" max="0.308136" rms="0.095526"/>
+				</waveblock>
+				<waveblock start="1048576">
+					<pcmaliasblockfile summaryfile="e0000e3c.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="1048576" aliaslen="262144" aliaschannel="1" min="-0.412537" max="0.336517" rms="0.098982"/>
+				</waveblock>
+				<waveblock start="1310720">
+					<pcmaliasblockfile summaryfile="e0000cee.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="1310720" aliaslen="262144" aliaschannel="1" min="-0.417816" max="0.32132" rms="0.100531"/>
+				</waveblock>
+				<waveblock start="1572864">
+					<pcmaliasblockfile summaryfile="e0000129.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="1572864" aliaslen="262144" aliaschannel="1" min="-0.393036" max="0.352509" rms="0.089305"/>
+				</waveblock>
+				<waveblock start="1835008">
+					<pcmaliasblockfile summaryfile="e0000c72.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="1835008" aliaslen="262144" aliaschannel="1" min="-0.420746" max="0.311646" rms="0.079121"/>
+				</waveblock>
+				<waveblock start="2097152">
+					<pcmaliasblockfile summaryfile="e00002f3.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="2097152" aliaslen="262144" aliaschannel="1" min="-0.421661" max="0.332092" rms="0.08515"/>
+				</waveblock>
+				<waveblock start="2359296">
+					<pcmaliasblockfile summaryfile="e00008a3.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="2359296" aliaslen="262144" aliaschannel="1" min="-0.410736" max="0.338715" rms="0.087585"/>
+				</waveblock>
+				<waveblock start="2621440">
+					<pcmaliasblockfile summaryfile="e000072d.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="2621440" aliaslen="262144" aliaschannel="1" min="-0.396698" max="0.334473" rms="0.086137"/>
+				</waveblock>
+				<waveblock start="2883584">
+					<pcmaliasblockfile summaryfile="e0000fd4.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="2883584" aliaslen="262144" aliaschannel="1" min="-0.400482" max="0.332916" rms="0.087736"/>
+				</waveblock>
+				<waveblock start="3145728">
+					<pcmaliasblockfile summaryfile="e0000e07.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="3145728" aliaslen="262144" aliaschannel="1" min="-0.41568" max="0.326782" rms="0.069304"/>
+				</waveblock>
+				<waveblock start="3407872">
+					<pcmaliasblockfile summaryfile="e0000d1f.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="3407872" aliaslen="262144" aliaschannel="1" min="-0.157471" max="0.172974" rms="0.019894"/>
+				</waveblock>
+				<waveblock start="3670016">
+					<pcmaliasblockfile summaryfile="e0000fe1.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="3670016" aliaslen="262144" aliaschannel="1" min="-0.404022" max="0.374939" rms="0.092269"/>
+				</waveblock>
+				<waveblock start="3932160">
+					<pcmaliasblockfile summaryfile="e0000487.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="3932160" aliaslen="262144" aliaschannel="1" min="-0.409271" max="0.35675" rms="0.093583"/>
+				</waveblock>
+				<waveblock start="4194304">
+					<pcmaliasblockfile summaryfile="e0000ea6.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="4194304" aliaslen="262144" aliaschannel="1" min="-0.40979" max="0.370087" rms="0.108873"/>
+				</waveblock>
+				<waveblock start="4456448">
+					<pcmaliasblockfile summaryfile="e000032a.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="4456448" aliaslen="262144" aliaschannel="1" min="-0.415161" max="0.361572" rms="0.108311"/>
+				</waveblock>
+				<waveblock start="4718592">
+					<pcmaliasblockfile summaryfile="e0000b6d.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="4718592" aliaslen="262144" aliaschannel="1" min="-0.416199" max="0.355225" rms="0.104569"/>
+				</waveblock>
+				<waveblock start="4980736">
+					<pcmaliasblockfile summaryfile="e00005f9.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="4980736" aliaslen="262144" aliaschannel="1" min="-0.42923" max="0.347626" rms="0.105846"/>
+				</waveblock>
+				<waveblock start="5242880">
+					<pcmaliasblockfile summaryfile="e00006e1.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="5242880" aliaslen="262144" aliaschannel="1" min="-0.424866" max="0.356659" rms="0.104339"/>
+				</waveblock>
+				<waveblock start="5505024">
+					<pcmaliasblockfile summaryfile="e0000171.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="5505024" aliaslen="262144" aliaschannel="1" min="-0.399048" max="0.352386" rms="0.10278"/>
+				</waveblock>
+				<waveblock start="5767168">
+					<pcmaliasblockfile summaryfile="e0000afc.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="5767168" aliaslen="262144" aliaschannel="1" min="-0.391235" max="0.3591" rms="0.084586"/>
+				</waveblock>
+				<waveblock start="6029312">
+					<pcmaliasblockfile summaryfile="e0000ce7.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="6029312" aliaslen="262144" aliaschannel="1" min="-0.404083" max="0.337555" rms="0.082995"/>
+				</waveblock>
+				<waveblock start="6291456">
+					<pcmaliasblockfile summaryfile="e0000478.auf" aliasfile="D:\tim\Music\netradioDNB\d187-200.wav" aliasstart="6291456" aliaslen="98293" aliaschannel="1" min="-0.382172" max="0.328735" rms="0.081128"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<labeltrack name="Label Track" numlabels="5" height="73" minimized="0" isSelected="1">
+		<label t="0.0000000000" t1="0.0000000000" title="Dark Fader"/>
+		<label t="133.8925886732" t1="133.8925886732" title="..&quot;(oh) give&quot;"/>
+		<label t="208.2422420295" t1="208.2422420295" title="..talking in background"/>
+		<label t="219.6859239922" t1="219.6859239922" title="..&quot;telling them...&quot;"/>
+		<label t="220.2774693620" t1="220.2774693620" title="..&quot;where to go...&quot;"/>
+	</labeltrack>
+</project>
