@@ -1,6 +1,6 @@
 <?xml version="1.0" standalone="no" ?>
 <!DOCTYPE project PUBLIC "-//audacityproject-1.3.0//DTD//EN" "http://audacity.sourceforge.net/xml/audacityproject-1.3.0.dtd" >
-<project xmlns="http://audacity.sourceforge.net/xml/" projname="d336-355_data" version="1.3.0" audacityversion="2.1.3" sel0="2490.0703674746" sel1="2490.0703674746" vpos="640" h="1685.0029767856" zoom="2.6890160210" rate="44100.0" snapto="off" selectionformat="hh:mm:ss + milliseconds" frequencyformat="Hz" bandwidthformat="octaves">
+<project xmlns="http://audacity.sourceforge.net/xml/" projname="d336-355_data" version="1.3.0" audacityversion="2.1.3" sel0="2788.2769455232" sel1="2788.2769455232" vpos="640" h="1880.3705063993" zoom="0.6631671768" rate="44100.0" snapto="off" selectionformat="hh:mm:ss + milliseconds" frequencyformat="Hz" bandwidthformat="octaves">
 	<tags>
 		<tag name="Software" value="Lavf57.71.100"/>
 	</tags>
@@ -1444,12 +1444,15 @@
 			<envelope numpoints="0"/>
 		</waveclip>
 	</wavetrack>
-	<labeltrack name="Label Track" numlabels="12" height="73" minimized="0" isSelected="1">
+	<labeltrack name="Label Track" numlabels="15" height="73" minimized="0" isSelected="1">
 		<label t="2409.1877013544" t1="2409.1877013544" title="second your-sound knocks"/>
 		<label t="2419.2138078426" t1="2419.2138078426" title="Your Sound (changeover to YS drumline)"/>
 		<label t="2465.9394174839" t1="2467.8110143135" title="&quot;Your Sound&quot;"/>
 		<label t="2488.1798194682" t1="2489.1971324144" title="last chords of Urban Style Music"/>
+		<label t="2679.6075991007" t1="2679.6075991007" title="transition starts - melody of new track in background"/>
 		<label t="2712.5488663018" t1="2722.5175918686" title="transition?"/>
+		<label t="2736.9563883429" t1="2736.9600000000" title="beat change"/>
+		<label t="2788.2769455232" t1="2788.2769455232" title="break/beat change"/>
 		<label t="2830.7662236122" t1="2837.8029710711" title="instrumental insert"/>
 		<label t="2889.0539483972" t1="2893.5105551212" title="new drumline"/>
 		<label t="2920.9538702111" t1="2920.9538702111" title="Shazam: On the Roof / Hidden Agenda"/>
