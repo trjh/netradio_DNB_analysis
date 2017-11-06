@@ -460,19 +460,37 @@
 			<envelope numpoints="0"/>
 		</waveclip>
 	</wavetrack>
-	<labeltrack name="Label Track" numlabels="12" height="73" minimized="0" isSelected="1">
-		<label t="0.3518373729" t1="33.3072713057" title="transition to your sound"/>
-		<label t="65.6763096169" t1="69.3119624707" title="~&quot;Your Sound&quot;"/>
-		<label t="90.0703674746" t1="90.0703674746" title="Shazam: Your Sound / J Majik"/>
-		<label t="312.5488663018" t1="322.5175918686" title="transition?"/>
-		<label t="430.7662236122" t1="437.8029710711" title="instrumental insert"/>
-		<label t="489.0539483972" t1="493.5105551212" title="new drumline"/>
-		<label t="520.9538702111" t1="520.9538702111" title="Shazam: On the Roof / Hidden Agenda"/>
-		<label t="842.2986708366" t1="846.5207193120" title="new track"/>
-		<label t="870.0938232995" t1="870.0938232995" title="shazam: Sea of Tears / Goldie"/>
-		<label t="911.8012118843" t1="913.7363174355" title="SKIP?"/>
-		<label t="1133.0629397967" t1="1137.6808053167" title="transition?"/>
-		<label t="1172.9952068532" t1="1172.9952068532" title="shazam unknown"/>
+	<labeltrack name="Label Track" numlabels="30" height="73" minimized="0" isSelected="1">
+		<label t="0009.1877013544" t1="0009.1877013544" title="second your-sound knocks"/>
+		<label t="0019.2138078426" t1="0019.2138078426" title="Your Sound (changeover to YS drumline)"/>
+		<label t="0065.9394174839" t1="0067.8110143135" title="&quot;Your Sound&quot;"/>
+		<label t="0088.1798194682" t1="0089.1971324144" title="last chords of Urban Style Music"/>
+		<label t="0279.6075991007" t1="0279.6075991007" title="transition starts - OTR piano audible"/>
+		<label t="0289.7418008824" t1="0289.7418008824" title="On the Roof (otr volume increases)"/>
+		<label t="0313.4454770313" t1="0313.4454770313" title="horns/synth of OTR starts"/>
+		<label t="0328.1885918131" t1="0328.1885918131" title="end of Your Sound"/>
+		<label t="0383.9596955752" t1="0383.9596955752" title="last beat before drum break"/>
+		<label t="0431.4507910639" t1="0431.4507910639" title="dreamy bit starts"/>
+		<label t="0467.7966455164" t1="0467.7966455164" title="last significant beat before break"/>
+		<label t="0493.1955512839" t1="0494.3032071623" title="&quot;in a restroom&quot;"/>
+		<label t="0498.8020692809" t1="0499.9131226808" title="&quot;in a restroom&quot;"/>
+		<label t="0547.4258338513" t1="0547.4258338513" title="transition start"/>
+		<label t="0558.1513329648" t1="0558.1513329648" title="&quot;be-eee&quot;"/>
+		<label t="0572.4530778833" t1="0572.4530778833" title="Mystery Track 5 (last OTR beat)"/>
+		<label t="0842.8557372234" t1="0842.8600000000" title="align1 SoT file: before skip"/>
+		<label t="0843.1503403980" t1="0843.1503403980" title="Sea of Tears"/>
+		<label t="0843.2022815570" t1="0843.2178030081" title="window"/>
+		<label t="0891.1897688988" t1="0891.1897688988" title="guitar enters"/>
+		<label t="0891.1910730229" t1="0891.1932127571" title="peaks"/>
+		<label t="0912.6039091865" t1="0912.6039091865" title="SKIP?"/>
+		<label t="0918.1873286693" t1="0918.2000319101" title="align2"/>
+		<label t="0966.2297432524" t1="0966.2297432524" title="drums enter"/>
+		<label t="1126.0015842185" t1="1126.0015842185" title="start overlap"/>
+		<label t="1133.7592271387" t1="1133.7592271387" title="drumline change"/>
+		<label t="1163.7133223709" t1="1163.7133223709" title="end of SOT drumline"/>
+		<label t="1181.7085699184" t1="1181.7085699184" title="last &quot;tears&quot;"/>
+		<label t="1190.5971459227" t1="1191.4595880052" title="&quot;what are you doing here&quot;"/>
+		<label t="1191.5178986129" t1="1191.5178986129" title="end Sea of Tears"/>
 	</labeltrack>
 	<wavetrack name="dnb396-415" channel="0" linked="1" mute="0" solo="0" height="150" minimized="0" isSelected="0" rate="16000" gain="1.0" pan="0.0">
 		<waveclip offset="1200.00000000">
