@@ -1,13 +1,13 @@
 <?xml version="1.0" standalone="no" ?>
 <!DOCTYPE project PUBLIC "-//audacityproject-1.3.0//DTD//EN" "http://audacity.sourceforge.net/xml/audacityproject-1.3.0.dtd" >
-<project xmlns="http://audacity.sourceforge.net/xml/" projname="d376-395_data" version="1.3.0" audacityversion="2.1.3" sel0="1133.7592271387" sel1="1133.7592271387" vpos="272" h="1313.7960435064" zoom="5.6919032729" rate="44100.0" snapto="off" selectionformat="hh:mm:ss + milliseconds" frequencyformat="Hz" bandwidthformat="octaves">
+<project xmlns="http://audacity.sourceforge.net/xml/" projname="d376-395_data" version="1.3.0" audacityversion="2.1.3" sel0="0.0000000000" sel1="3600.0000000000" vpos="384" h="1955.2116997764" zoom="18.3524883797" rate="44100.0" snapto="off" selectionformat="hh:mm:ss + milliseconds" frequencyformat="Hz" bandwidthformat="octaves">
 	<tags>
 		<tag name="major_brand" value="isom"/>
 		<tag name="Software" value="Lavf57.71.100"/>
 		<tag name="compatible_brands" value="isomiso2mp41"/>
 		<tag name="minor_version" value="512"/>
 	</tags>
-	<wavetrack name="dnb376-395" channel="0" linked="1" mute="0" solo="0" height="150" minimized="0" isSelected="1" rate="16000" gain="1.0" pan="0.0">
+	<wavetrack name="dnb376-395" channel="0" linked="1" mute="1" solo="0" height="150" minimized="0" isSelected="0" rate="16000" gain="1.0" pan="0.0">
 		<waveclip offset="0.00000000">
 			<sequence maxsamples="262144" sampleformat="262159" numsamples="19200000">
 				<waveblock start="0">
@@ -236,7 +236,7 @@
 			<envelope numpoints="0"/>
 		</waveclip>
 	</wavetrack>
-	<wavetrack name="dnb376-395" channel="1" linked="0" mute="0" solo="0" height="150" minimized="0" isSelected="1" rate="16000" gain="1.0" pan="0.0">
+	<wavetrack name="dnb376-395" channel="1" linked="0" mute="1" solo="0" height="150" minimized="0" isSelected="0" rate="16000" gain="1.0" pan="0.0">
 		<waveclip offset="0.00000000">
 			<sequence maxsamples="262144" sampleformat="262159" numsamples="19200000">
 				<waveblock start="0">
@@ -465,7 +465,7 @@
 			<envelope numpoints="0"/>
 		</waveclip>
 	</wavetrack>
-	<labeltrack name="Label Track" numlabels="35" height="116" minimized="0" isSelected="1">
+	<labeltrack name="Label Track" numlabels="35" height="116" minimized="0" isSelected="0">
 		<label t="9.1877013544" t1="9.1877013544" title="second your-sound knocks"/>
 		<label t="19.2138078426" t1="19.2138078426" title="Your Sound (changeover to YS drumline)"/>
 		<label t="65.9394174839" t1="67.8110143135" title="&quot;Your Sound&quot;"/>
@@ -502,7 +502,7 @@
 		<label t="1190.5971459227" t1="1191.4595880052" title="&quot;what are you doing here&quot;"/>
 		<label t="1191.5178986129" t1="1191.5178986129" title="end Sea of Tears"/>
 	</labeltrack>
-	<wavetrack name="dnb396-415" channel="0" linked="1" mute="0" solo="0" height="143" minimized="0" isSelected="1" rate="16000" gain="1.0" pan="0.0">
+	<wavetrack name="dnb396-415" channel="0" linked="1" mute="0" solo="1" height="146" minimized="0" isSelected="0" rate="16000" gain="1.0" pan="0.0">
 		<waveclip offset="1200.00000000">
 			<sequence maxsamples="262144" sampleformat="262159" numsamples="19200000">
 				<waveblock start="0">
@@ -731,7 +731,7 @@
 			<envelope numpoints="0"/>
 		</waveclip>
 	</wavetrack>
-	<wavetrack name="dnb396-415" channel="1" linked="0" mute="0" solo="0" height="157" minimized="0" isSelected="1" rate="16000" gain="1.0" pan="0.0">
+	<wavetrack name="dnb396-415" channel="1" linked="0" mute="0" solo="1" height="154" minimized="0" isSelected="0" rate="16000" gain="1.0" pan="0.0">
 		<waveclip offset="1200.00000000">
 			<sequence maxsamples="262144" sampleformat="262159" numsamples="19200000">
 				<waveblock start="0">
@@ -960,7 +960,7 @@
 			<envelope numpoints="0"/>
 		</waveclip>
 	</wavetrack>
-	<wavetrack name="dnb416-435" channel="0" linked="1" mute="1" solo="0" height="150" minimized="1" isSelected="1" rate="16000" gain="1.0" pan="0.0">
+	<wavetrack name="dnb416-435" channel="0" linked="1" mute="1" solo="0" height="150" minimized="1" isSelected="0" rate="16000" gain="1.0" pan="0.0">
 		<waveclip offset="2400.00000000">
 			<sequence maxsamples="262144" sampleformat="262159" numsamples="19200000">
 				<waveblock start="0">
@@ -1189,7 +1189,7 @@
 			<envelope numpoints="0"/>
 		</waveclip>
 	</wavetrack>
-	<wavetrack name="dnb416-435" channel="1" linked="0" mute="1" solo="0" height="150" minimized="1" isSelected="1" rate="16000" gain="1.0" pan="0.0">
+	<wavetrack name="dnb416-435" channel="1" linked="0" mute="1" solo="0" height="150" minimized="1" isSelected="0" rate="16000" gain="1.0" pan="0.0">
 		<waveclip offset="2400.00000000">
 			<sequence maxsamples="262144" sampleformat="262159" numsamples="19200000">
 				<waveblock start="0">
@@ -1418,29 +1418,41 @@
 			<envelope numpoints="0"/>
 		</waveclip>
 	</wavetrack>
-	<labeltrack name="Label Track" numlabels="42" height="103" minimized="0" isSelected="1">
+	<labeltrack name="dnb396-415/416-435" numlabels="54" height="99" minimized="0" isSelected="1">
 		<label t="1267.2226627119" t1="1267.2226627119" title="begin harder interlude"/>
 		<label t="1307.6724343067" t1="1307.6724343067" title="shazam unknown"/>
+		<label t="1347.5892096390" t1="1347.5892096390" title="align1: TAF sync quote"/>
 		<label t="1371.9779754320" t1="1371.9779754320" title="end noisy drumline/interlude"/>
 		<label t="1410.4206679723" t1="1410.4206679723" title="begin transition"/>
 		<label t="1420.0725658308" t1="1420.0725658308" title="first TAF signature note"/>
 		<label t="1423.7812699570" t1="1423.7812699570" title="first vague verbalization"/>
-		<label t="1443.8522466650" t1="1443.8522466650" title="overlap volume increase"/>
+		<label t="1443.8522466650" t1="1443.8522466650" title="The Angels Fell (overlap volume increase)"/>
 		<label t="1452.4061094877" t1="1454.1907756651" title="&quot;the angels fell&quot;"/>
 		<label t="1467.0197990472" t1="1470.4849965278" title="end transition?"/>
-		<label t="1482.7942054886" t1="1482.7942054886" title="shazam: The Angels Fell / Dillinja"/>
-		<label t="1550.1244655021" t1="1559.3063522664" title="beat transition"/>
+		<label t="1500.1143192683" t1="1501.4919777772" title="&quot;the angels fell&quot;"/>
+		<label t="1550.7300000000" t1="1550.7300000000" title="beat change"/>
 		<label t="1584.2790662684" t1="1592.6537541963" title="transition"/>
 		<label t="1595.0753507056" t1="1597.7491968512" title="last angels fell?"/>
-		<label t="1643.9108803094" t1="1647.6441749278" title="drum change"/>
-		<label t="1669.5528338813" t1="1672.0353634196" title="transition?"/>
-		<label t="1691.7921609953" t1="1695.2573584759" title="end Angels Fell / melodic start"/>
-		<label t="1709.8939388789" t1="1709.8939388789" title="shazam: Ja Know Ya Big / Dillinja"/>
-		<label t="1787.6805605660" t1="1793.5832020573" title="&quot;Ja Know You&apos;re Big - Big - Big ...&quot;"/>
-		<label t="1868.7402267396" t1="1873.4900312744" title="transition"/>
+		<label t="1643.1264195011" t1="1643.1264195011" title="file align2: ja returns"/>
+		<label t="1644.9923378685" t1="1644.9923378685" title="file align1: JKYB groove enter"/>
+		<label t="1645.5885300962" t1="1645.5885300962" title="beat change"/>
+		<label t="1669.2837185244" t1="1669.2837185244" title="beat change &quot;hey&quot;"/>
+		<label t="1674.9244728415" t1="1674.9244728415" title="beat drop 1"/>
+		<label t="1686.8369395965" t1="1686.8369395965" title="beat drop 2"/>
+		<label t="1692.9941908401" t1="1693.0196923632" title="semi-peak"/>
+		<label t="1692.9944286390" t1="1692.9944286390" title="Ja Know Ya Big (groove enters)"/>
+		<label t="1716.6932346303" t1="1716.6932346303" title="first voices"/>
+		<label t="1787.6805605660" t1="1793.5832020573" title="&quot;Ja Know Ya Big - Big - Big ...&quot;"/>
+		<label t="1835.0557857578" t1="1835.0557857578" title="first long waah note"/>
+		<label t="1870.5829680288" t1="1870.5829680288" title="begin overlap, also skip break2?"/>
+		<label t="1876.5025287280" t1="1876.5025287280" title="chimes enter?"/>
 		<label t="1880.9516482659" t1="1880.9516482659" title="flute start"/>
+		<label t="1882.4244369111" t1="1882.4244369111" title="&quot;ja know ya big&quot; returns"/>
 		<label t="1893.1498579848" t1="1895.0855940359" title="more overlap"/>
+		<label t="1989.0021521051" t1="1989.0021521051" title="last &quot;ja know ya big&quot;"/>
 		<label t="2000.0635261923" t1="2003.8017982799" title="transition/ drumline change"/>
+		<label t="2000.4583738344" t1="2000.4583738344" title="JNYB ends"/>
+		<label t="2000.8292364927" t1="2000.8292364927" title="The Flute Tune (clean flute note)"/>
 		<label t="2068.1000781861" t1="2068.1000781861" title="shazam: The Flute Tune / Hidden Agenda"/>
 		<label t="2138.9576105066" t1="2143.5050539282" title="tune change/quote"/>
 		<label t="2221.1053557467" t1="2225.4593432369" title="zip transition?"/>
@@ -1461,5 +1473,21 @@
 		<label t="3276.5734949179" t1="3282.2028928851" title="transition"/>
 		<label t="3506.3232994527" t1="3506.3232994527" title="shazam: Peace Love And Unity / DJ Hype feat. MC Fats"/>
 		<label t="3556.0203283815" t1="3562.7052384676" title="transition?"/>
+	</labeltrack>
+	<labeltrack name="Ja Know Ya Big notes" numlabels="14" height="73" minimized="0" isSelected="0">
+		<label t="1645.1685937801" t1="1645.1685937801" title="start track"/>
+		<label t="1692.9949979397" t1="1692.9949979397" title="groove starts"/>
+		<label t="1716.9055816829" t1="1716.9055816829" title="first voices"/>
+		<label t="1773.4142603666" t1="1773.4142603666" title="beat before 1st break"/>
+		<label t="1788.6245155594" t1="1794.4327818256" title="ja know ya big big(x8)"/>
+		<label t="1836.4544800030" t1="1836.4544800030" title="first long waah note"/>
+		<label t="1871.2193964329" t1="1871.2193964329" title="last strong beat before 2nd break"/>
+		<label t="1884.2889542882" t1="1884.2889542882" title="&quot;ja know ya big&quot; returns"/>
+		<label t="1932.1329513718" t1="1932.1329513718" title="groove returns"/>
+		<label t="1955.5182877255" t1="1956.5909162225" title="ja"/>
+		<label t="1967.7768991189" t1="1968.5430623309" title="ja"/>
+		<label t="1979.4991962637" t1="1980.4185921182" title="ja"/>
+		<label t="1991.9356577977" t1="1991.9356577977" title="last &quot;ja know ya big&quot;, drums mostly gone"/>
+		<label t="2006.3180521557" t1="2006.3180521557" title="end track"/>
 	</labeltrack>
 </project>
