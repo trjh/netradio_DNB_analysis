@@ -4,7 +4,14 @@ use strict;
 use Data::Dumper;
 
 # pull samples from labels that mention shazam
+# ...or just pretty-print labels
 
+my $READLABEL = 0;
+if ($0 =~ /readlabel/) {
+    $READLABEL++;
+}
+my $debug = 1;
+    
 #                     (via http://audiotag.info/index.php,
 #                      http://indigo.ie/~trjh/OldHome/d019-040024.mp3)
 #                     sox d041-064.wav d041-064.mp3 trim 0 45 : newfile : restart
@@ -56,6 +63,7 @@ while (<IN>) {
     elsif (/^\s*<waveclip\s.*\boffset="([^"]+)"/) {
 	$offset = $1;
 	$tracks{$offset}->{"name"} = $wavetrackname;
+	print "ESTABLISH offset $offset / name $wavetrackname\n" if ($debug);
     }
     elsif (/^\s*<pcmaliasblockfile\s.*\baliasfile="([^"]+)"/) {
 	$tracks{$offset}->{"filename"} = $1;
@@ -74,13 +82,23 @@ while (<IN>) {
 		$clips[$clipid]->{"labelsec"} = $value;
 	    }
 	    elsif ($key eq "title") {
-		print ".$value\n";
+		print ".$value\n" if ($debug>1);
 		$clips[$clipid]->{"labeltitle"} = $value;
-		# only move on to the next clip if this has a string we want
-		if ($clips[$clipid]->{"labeltitle"} =~ /shazam/i) {
-		    $clips++;
-		    print "will check label ".$clips[$clipid]->{"labelsec"}.
-			  ": ".$clips[$clipid]->{"labeltitle"}."\n";
+
+		# if we're pulling clips, then don't keep this clip unless it
+		# has a string we want.  but if we're just printing labels,
+		# keep all the clips
+		
+		if ($READLABEL) {
+		    $clips++
+		}
+		else {
+		    if ($clips[$clipid]->{"labeltitle"} =~ /shazam/i) {
+			$clips++;
+			print "will check label ".$clips[$clipid]->{"labelsec"}.
+			      ": ".$clips[$clipid]->{"labeltitle"}."\n"
+			if ($debug);
+		    }
 		}
 	    }
 	}
@@ -92,9 +110,14 @@ close (IN);
 my @offsets = sort { $a <=> $b } keys %tracks;
 print "tracks\n------\n";
 foreach my $o (@offsets) {
-    printf "%6d : %s\n", $o, $tracks{$o}->{"filename"};
+    my $filename = "[missing]";
+    if (defined($tracks{$o}->{"filename"})) {
+	$filename = $tracks{$o}->{"filename"};
+    }
+    printf "%6d : %s\n", $o, $filename;
 }
 
+my $filename = "";
 CLIP: for (my $i = 0; $i <= $#clips; $i++) {
     my $labeltime = $clips[$i]->{"labelsec"};
     OFFSET: for (my $oindex = 0; $oindex < $#offsets; $oindex++) {
@@ -105,6 +128,18 @@ CLIP: for (my $i = 0; $i <= $#clips; $i++) {
 	    my $tracktime = $labeltime - $tracko;
 	    $clips[$i]->{"start"} = $tracktime;
 	    $clips[$i]->{"filename"} = $tracks{$tracko}->{"filename"};
+	    if ($clips[$i]->{"filename"} ne $filename) {
+		$filename=$clips[$i]->{"filename"};
+		print "\n$filename\n-----\n";
+	    }
+	    if ($READLABEL) {
+		my $m = int($tracktime/60);
+		my $s = $tracktime-($m*60);
+		my $l = $clips[$i]->{"labeltitle"};
+		$l =~ s/\&quot\;/\"/g;
+		printf "\t%02d:%06.3f .. %s\n", $m, $s, $l;
+		next CLIP;
+	    }
 	    printf "clip %2d set:  %s\n", $i,$clips[$i]->{"labeltitle"};
 	    # print "track set: ".Dumper($clips[$i])."\n";
 	    next CLIP;
@@ -116,15 +151,28 @@ CLIP: for (my $i = 0; $i <= $#clips; $i++) {
     $clips[$i]->{"start"} = $tracktime;
     $clips[$i]->{"filename"} = $tracks{$tracko}->{"filename"};
     # print "track set:: ".Dumper($clips[$i])."\n";
+    if ($READLABEL) {
+	my $m = int($tracktime/60);
+	my $s = $tracktime-($m*60);
+	my $l = $clips[$i]->{"labeltitle"};
+	$l =~ s/\&quot\;/\"/g;
+	printf "\t%02d:%06.3f .. %s\n", $m, $s, $l;
+	next CLIP;
+    }
     printf "clip %2d set:: %s\n", $i,$clips[$i]->{"labeltitle"};
 }
+
+exit 0 if ($READLABEL);
 
 print "\n";
 CLIP: for (my $i = 0; $i <= $#clips; $i++)
 {
     if (defined($clips[$i]->{"start"})) {
 	my $s = int($clips[$i]->{"start"});
-	my $f = $clips[$i]->{"filename"};
+	my $f = "[missing]";
+	if (defined($clips[$i]->{"filename"})) {
+	    $f = $clips[$i]->{"filename"};
+	}
 	$f =~ s/^.*\///;
 	$f =~ s/^.*\\//;
 
