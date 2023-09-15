@@ -1,213 +1,217 @@
 <?xml version="1.0" standalone="no" ?>
 <!DOCTYPE project PUBLIC "-//audacityproject-1.3.0//DTD//EN" "http://audacity.sourceforge.net/xml/audacityproject-1.3.0.dtd" >
-<project xmlns="http://audacity.sourceforge.net/xml/" projname="d000-018_data" version="1.3.0" audacityversion="2.1.3" sel0="1102.8480000000" sel1="1102.8480000000" vpos="256" h="1085.1887471264" zoom="25.8517240197" rate="16000.0" snapto="off" selectionformat="hh:mm:ss + milliseconds" frequencyformat="Hz" bandwidthformat="octaves">
-	<tags/>
+<project xmlns="http://audacity.sourceforge.net/xml/" projname="d000-018_data" version="1.3.0" audacityversion="2.1.3" sel0="0.0000000000" sel1="35.2988484300" vpos="48" h="0.0000000000" zoom="25.8517240197" rate="16000.0" snapto="off" selectionformat="hh:mm:ss + milliseconds" frequencyformat="Hz" bandwidthformat="octaves">
+	<tags>
+		<tag name="TITLE" value="Club Groove Promo 1"/>
+		<tag name="YEAR" value="1998"/>
+		<tag name="ARTIST" value="NetRadio"/>
+	</tags>
 	<wavetrack name="d000-018" channel="0" linked="1" mute="0" solo="0" height="150" minimized="0" isSelected="1" rate="16000" gain="1.0" pan="0.0">
 		<waveclip offset="0.00000000">
 			<sequence maxsamples="262144" sampleformat="262159" numsamples="17645568">
 				<waveblock start="0">
-					<pcmaliasblockfile summaryfile="e00007d6.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="0" aliaslen="262144" aliaschannel="0" min="-0.402344" max="0.372253" rms="0.045934"/>
+					<pcmaliasblockfile summaryfile="e00007d6.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="0" aliaslen="262144" aliaschannel="0" min="-0.402344" max="0.372253" rms="0.045934"/>
 				</waveblock>
 				<waveblock start="262144">
-					<pcmaliasblockfile summaryfile="e0000e37.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="262144" aliaslen="262144" aliaschannel="0" min="-0.336182" max="0.307251" rms="0.048548"/>
+					<pcmaliasblockfile summaryfile="e0000e37.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="262144" aliaslen="262144" aliaschannel="0" min="-0.336182" max="0.307251" rms="0.048548"/>
 				</waveblock>
 				<waveblock start="524288">
-					<pcmaliasblockfile summaryfile="e0000158.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="524288" aliaslen="262144" aliaschannel="0" min="-0.308258" max="0.386169" rms="0.047993"/>
+					<pcmaliasblockfile summaryfile="e0000158.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="524288" aliaslen="262144" aliaschannel="0" min="-0.308258" max="0.386169" rms="0.047993"/>
 				</waveblock>
 				<waveblock start="786432">
-					<pcmaliasblockfile summaryfile="e0000161.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="786432" aliaslen="262144" aliaschannel="0" min="-0.287811" max="0.316406" rms="0.038911"/>
+					<pcmaliasblockfile summaryfile="e0000161.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="786432" aliaslen="262144" aliaschannel="0" min="-0.287811" max="0.316406" rms="0.038911"/>
 				</waveblock>
 				<waveblock start="1048576">
-					<pcmaliasblockfile summaryfile="e000033b.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="1048576" aliaslen="262144" aliaschannel="0" min="-0.090607" max="0.072906" rms="0.014651"/>
+					<pcmaliasblockfile summaryfile="e000033b.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="1048576" aliaslen="262144" aliaschannel="0" min="-0.090607" max="0.072906" rms="0.014651"/>
 				</waveblock>
 				<waveblock start="1310720">
-					<pcmaliasblockfile summaryfile="e000070e.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="1310720" aliaslen="262144" aliaschannel="0" min="-0.276459" max="0.246368" rms="0.049785"/>
+					<pcmaliasblockfile summaryfile="e000070e.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="1310720" aliaslen="262144" aliaschannel="0" min="-0.276459" max="0.246368" rms="0.049785"/>
 				</waveblock>
 				<waveblock start="1572864">
-					<pcmaliasblockfile summaryfile="e00005b1.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="1572864" aliaslen="262144" aliaschannel="0" min="-0.359985" max="0.364807" rms="0.056982"/>
+					<pcmaliasblockfile summaryfile="e00005b1.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="1572864" aliaslen="262144" aliaschannel="0" min="-0.359985" max="0.364807" rms="0.056982"/>
 				</waveblock>
 				<waveblock start="1835008">
-					<pcmaliasblockfile summaryfile="e00005d4.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="1835008" aliaslen="262144" aliaschannel="0" min="-0.375916" max="0.352295" rms="0.055092"/>
+					<pcmaliasblockfile summaryfile="e00005d4.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="1835008" aliaslen="262144" aliaschannel="0" min="-0.375916" max="0.352295" rms="0.055092"/>
 				</waveblock>
 				<waveblock start="2097152">
-					<pcmaliasblockfile summaryfile="e000077f.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="2097152" aliaslen="262144" aliaschannel="0" min="-0.347717" max="0.405365" rms="0.057832"/>
+					<pcmaliasblockfile summaryfile="e000077f.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="2097152" aliaslen="262144" aliaschannel="0" min="-0.347717" max="0.405365" rms="0.057832"/>
 				</waveblock>
 				<waveblock start="2359296">
-					<pcmaliasblockfile summaryfile="e00001ba.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="2359296" aliaslen="262144" aliaschannel="0" min="-0.350677" max="0.359436" rms="0.060717"/>
+					<pcmaliasblockfile summaryfile="e00001ba.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="2359296" aliaslen="262144" aliaschannel="0" min="-0.350677" max="0.359436" rms="0.060717"/>
 				</waveblock>
 				<waveblock start="2621440">
-					<pcmaliasblockfile summaryfile="e000048f.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="2621440" aliaslen="262144" aliaschannel="0" min="-0.360138" max="0.410339" rms="0.05413"/>
+					<pcmaliasblockfile summaryfile="e000048f.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="2621440" aliaslen="262144" aliaschannel="0" min="-0.360138" max="0.410339" rms="0.05413"/>
 				</waveblock>
 				<waveblock start="2883584">
-					<pcmaliasblockfile summaryfile="e0000b48.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="2883584" aliaslen="262144" aliaschannel="0" min="-0.358582" max="0.305664" rms="0.050479"/>
+					<pcmaliasblockfile summaryfile="e0000b48.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="2883584" aliaslen="262144" aliaschannel="0" min="-0.358582" max="0.305664" rms="0.050479"/>
 				</waveblock>
 				<waveblock start="3145728">
-					<pcmaliasblockfile summaryfile="e00001a7.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="3145728" aliaslen="262144" aliaschannel="0" min="-0.330292" max="0.3302" rms="0.053787"/>
+					<pcmaliasblockfile summaryfile="e00001a7.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="3145728" aliaslen="262144" aliaschannel="0" min="-0.330292" max="0.3302" rms="0.053787"/>
 				</waveblock>
 				<waveblock start="3407872">
-					<pcmaliasblockfile summaryfile="e0000d08.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="3407872" aliaslen="262144" aliaschannel="0" min="-0.414825" max="0.391846" rms="0.062874"/>
+					<pcmaliasblockfile summaryfile="e0000d08.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="3407872" aliaslen="262144" aliaschannel="0" min="-0.414825" max="0.391846" rms="0.062874"/>
 				</waveblock>
 				<waveblock start="3670016">
-					<pcmaliasblockfile summaryfile="e00009c9.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="3670016" aliaslen="262144" aliaschannel="0" min="-0.385529" max="0.34668" rms="0.059678"/>
+					<pcmaliasblockfile summaryfile="e00009c9.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="3670016" aliaslen="262144" aliaschannel="0" min="-0.385529" max="0.34668" rms="0.059678"/>
 				</waveblock>
 				<waveblock start="3932160">
-					<pcmaliasblockfile summaryfile="e00007e6.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="3932160" aliaslen="262144" aliaschannel="0" min="-0.37561" max="0.326416" rms="0.060302"/>
+					<pcmaliasblockfile summaryfile="e00007e6.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="3932160" aliaslen="262144" aliaschannel="0" min="-0.37561" max="0.326416" rms="0.060302"/>
 				</waveblock>
 				<waveblock start="4194304">
-					<pcmaliasblockfile summaryfile="e00001bd.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="4194304" aliaslen="262144" aliaschannel="0" min="-0.380371" max="0.376038" rms="0.061298"/>
+					<pcmaliasblockfile summaryfile="e00001bd.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="4194304" aliaslen="262144" aliaschannel="0" min="-0.380371" max="0.376038" rms="0.061298"/>
 				</waveblock>
 				<waveblock start="4456448">
-					<pcmaliasblockfile summaryfile="e0000700.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="4456448" aliaslen="262144" aliaschannel="0" min="-0.323242" max="0.343018" rms="0.033827"/>
+					<pcmaliasblockfile summaryfile="e0000700.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="4456448" aliaslen="262144" aliaschannel="0" min="-0.323242" max="0.343018" rms="0.033827"/>
 				</waveblock>
 				<waveblock start="4718592">
-					<pcmaliasblockfile summaryfile="e0000e43.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="4718592" aliaslen="262144" aliaschannel="0" min="-0.10083" max="0.096924" rms="0.013391"/>
+					<pcmaliasblockfile summaryfile="e0000e43.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="4718592" aliaslen="262144" aliaschannel="0" min="-0.10083" max="0.096924" rms="0.013391"/>
 				</waveblock>
 				<waveblock start="4980736">
-					<pcmaliasblockfile summaryfile="e0000b58.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="4980736" aliaslen="262144" aliaschannel="0" min="-0.114197" max="0.116821" rms="0.019848"/>
+					<pcmaliasblockfile summaryfile="e0000b58.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="4980736" aliaslen="262144" aliaschannel="0" min="-0.114197" max="0.116821" rms="0.019848"/>
 				</waveblock>
 				<waveblock start="5242880">
-					<pcmaliasblockfile summaryfile="e0000165.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="5242880" aliaslen="262144" aliaschannel="0" min="-0.373932" max="0.297638" rms="0.052709"/>
+					<pcmaliasblockfile summaryfile="e0000165.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="5242880" aliaslen="262144" aliaschannel="0" min="-0.373932" max="0.297638" rms="0.052709"/>
 				</waveblock>
 				<waveblock start="5505024">
-					<pcmaliasblockfile summaryfile="e00007f3.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="5505024" aliaslen="262144" aliaschannel="0" min="-0.408508" max="0.375275" rms="0.069536"/>
+					<pcmaliasblockfile summaryfile="e00007f3.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="5505024" aliaslen="262144" aliaschannel="0" min="-0.408508" max="0.375275" rms="0.069536"/>
 				</waveblock>
 				<waveblock start="5767168">
-					<pcmaliasblockfile summaryfile="e0000b80.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="5767168" aliaslen="262144" aliaschannel="0" min="-0.525085" max="0.463715" rms="0.075907"/>
+					<pcmaliasblockfile summaryfile="e0000b80.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="5767168" aliaslen="262144" aliaschannel="0" min="-0.525085" max="0.463715" rms="0.075907"/>
 				</waveblock>
 				<waveblock start="6029312">
-					<pcmaliasblockfile summaryfile="e0000edc.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="6029312" aliaslen="262144" aliaschannel="0" min="-0.520569" max="0.447205" rms="0.07599"/>
+					<pcmaliasblockfile summaryfile="e0000edc.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="6029312" aliaslen="262144" aliaschannel="0" min="-0.520569" max="0.447205" rms="0.07599"/>
 				</waveblock>
 				<waveblock start="6291456">
-					<pcmaliasblockfile summaryfile="e0000467.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="6291456" aliaslen="262144" aliaschannel="0" min="-0.500671" max="0.475739" rms="0.073397"/>
+					<pcmaliasblockfile summaryfile="e0000467.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="6291456" aliaslen="262144" aliaschannel="0" min="-0.500671" max="0.475739" rms="0.073397"/>
 				</waveblock>
 				<waveblock start="6553600">
-					<pcmaliasblockfile summaryfile="e000078f.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="6553600" aliaslen="262144" aliaschannel="0" min="-0.509399" max="0.450348" rms="0.079476"/>
+					<pcmaliasblockfile summaryfile="e000078f.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="6553600" aliaslen="262144" aliaschannel="0" min="-0.509399" max="0.450348" rms="0.079476"/>
 				</waveblock>
 				<waveblock start="6815744">
-					<pcmaliasblockfile summaryfile="e0000934.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="6815744" aliaslen="262144" aliaschannel="0" min="-0.53363" max="0.449188" rms="0.07907"/>
+					<pcmaliasblockfile summaryfile="e0000934.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="6815744" aliaslen="262144" aliaschannel="0" min="-0.53363" max="0.449188" rms="0.07907"/>
 				</waveblock>
 				<waveblock start="7077888">
-					<pcmaliasblockfile summaryfile="e0000f52.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="7077888" aliaslen="262144" aliaschannel="0" min="-0.527222" max="0.513031" rms="0.078605"/>
+					<pcmaliasblockfile summaryfile="e0000f52.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="7077888" aliaslen="262144" aliaschannel="0" min="-0.527222" max="0.513031" rms="0.078605"/>
 				</waveblock>
 				<waveblock start="7340032">
-					<pcmaliasblockfile summaryfile="e0000341.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="7340032" aliaslen="262144" aliaschannel="0" min="-0.45639" max="0.373352" rms="0.065877"/>
+					<pcmaliasblockfile summaryfile="e0000341.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="7340032" aliaslen="262144" aliaschannel="0" min="-0.45639" max="0.373352" rms="0.065877"/>
 				</waveblock>
 				<waveblock start="7602176">
-					<pcmaliasblockfile summaryfile="e0000beb.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="7602176" aliaslen="262144" aliaschannel="0" min="-0.413696" max="0.365082" rms="0.065795"/>
+					<pcmaliasblockfile summaryfile="e0000beb.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="7602176" aliaslen="262144" aliaschannel="0" min="-0.413696" max="0.365082" rms="0.065795"/>
 				</waveblock>
 				<waveblock start="7864320">
-					<pcmaliasblockfile summaryfile="e0000644.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="7864320" aliaslen="262144" aliaschannel="0" min="-0.507568" max="0.451111" rms="0.068016"/>
+					<pcmaliasblockfile summaryfile="e0000644.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="7864320" aliaslen="262144" aliaschannel="0" min="-0.507568" max="0.451111" rms="0.068016"/>
 				</waveblock>
 				<waveblock start="8126464">
-					<pcmaliasblockfile summaryfile="e0000651.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="8126464" aliaslen="262144" aliaschannel="0" min="-0.535187" max="0.463409" rms="0.081657"/>
+					<pcmaliasblockfile summaryfile="e0000651.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="8126464" aliaslen="262144" aliaschannel="0" min="-0.535187" max="0.463409" rms="0.081657"/>
 				</waveblock>
 				<waveblock start="8388608">
-					<pcmaliasblockfile summaryfile="e00001a9.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="8388608" aliaslen="262144" aliaschannel="0" min="-0.571564" max="0.47937" rms="0.076262"/>
+					<pcmaliasblockfile summaryfile="e00001a9.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="8388608" aliaslen="262144" aliaschannel="0" min="-0.571564" max="0.47937" rms="0.076262"/>
 				</waveblock>
 				<waveblock start="8650752">
-					<pcmaliasblockfile summaryfile="e0000fdd.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="8650752" aliaslen="262144" aliaschannel="0" min="-0.49472" max="0.540588" rms="0.07354"/>
+					<pcmaliasblockfile summaryfile="e0000fdd.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="8650752" aliaslen="262144" aliaschannel="0" min="-0.49472" max="0.540588" rms="0.07354"/>
 				</waveblock>
 				<waveblock start="8912896">
-					<pcmaliasblockfile summaryfile="e0000f07.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="8912896" aliaslen="262144" aliaschannel="0" min="-0.391815" max="0.295929" rms="0.027725"/>
+					<pcmaliasblockfile summaryfile="e0000f07.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="8912896" aliaslen="262144" aliaschannel="0" min="-0.391815" max="0.295929" rms="0.027725"/>
 				</waveblock>
 				<waveblock start="9175040">
-					<pcmaliasblockfile summaryfile="e0000ccf.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="9175040" aliaslen="262144" aliaschannel="0" min="-0.36264" max="0.376892" rms="0.021374"/>
+					<pcmaliasblockfile summaryfile="e0000ccf.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="9175040" aliaslen="262144" aliaschannel="0" min="-0.36264" max="0.376892" rms="0.021374"/>
 				</waveblock>
 				<waveblock start="9437184">
-					<pcmaliasblockfile summaryfile="e0000bdb.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="9437184" aliaslen="262144" aliaschannel="0" min="-0.38559" max="0.367004" rms="0.037981"/>
+					<pcmaliasblockfile summaryfile="e0000bdb.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="9437184" aliaslen="262144" aliaschannel="0" min="-0.38559" max="0.367004" rms="0.037981"/>
 				</waveblock>
 				<waveblock start="9699328">
-					<pcmaliasblockfile summaryfile="e0000ecd.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="9699328" aliaslen="262144" aliaschannel="0" min="-0.401398" max="0.360016" rms="0.048027"/>
+					<pcmaliasblockfile summaryfile="e0000ecd.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="9699328" aliaslen="262144" aliaschannel="0" min="-0.401398" max="0.360016" rms="0.048027"/>
 				</waveblock>
 				<waveblock start="9961472">
-					<pcmaliasblockfile summaryfile="e0000168.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="9961472" aliaslen="262144" aliaschannel="0" min="-0.467407" max="0.354858" rms="0.048167"/>
+					<pcmaliasblockfile summaryfile="e0000168.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="9961472" aliaslen="262144" aliaschannel="0" min="-0.467407" max="0.354858" rms="0.048167"/>
 				</waveblock>
 				<waveblock start="10223616">
-					<pcmaliasblockfile summaryfile="e00006c2.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="10223616" aliaslen="262144" aliaschannel="0" min="-0.43158" max="0.331024" rms="0.040057"/>
+					<pcmaliasblockfile summaryfile="e00006c2.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="10223616" aliaslen="262144" aliaschannel="0" min="-0.43158" max="0.331024" rms="0.040057"/>
 				</waveblock>
 				<waveblock start="10485760">
-					<pcmaliasblockfile summaryfile="e0000181.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="10485760" aliaslen="262144" aliaschannel="0" min="-0.12149" max="0.124268" rms="0.017432"/>
+					<pcmaliasblockfile summaryfile="e0000181.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="10485760" aliaslen="262144" aliaschannel="0" min="-0.12149" max="0.124268" rms="0.017432"/>
 				</waveblock>
 				<waveblock start="10747904">
-					<pcmaliasblockfile summaryfile="e0000bd0.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="10747904" aliaslen="262144" aliaschannel="0" min="-0.163696" max="0.150208" rms="0.020668"/>
+					<pcmaliasblockfile summaryfile="e0000bd0.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="10747904" aliaslen="262144" aliaschannel="0" min="-0.163696" max="0.150208" rms="0.020668"/>
 				</waveblock>
 				<waveblock start="11010048">
-					<pcmaliasblockfile summaryfile="e0000954.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="11010048" aliaslen="262144" aliaschannel="0" min="-0.507904" max="0.480164" rms="0.061663"/>
+					<pcmaliasblockfile summaryfile="e0000954.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="11010048" aliaslen="262144" aliaschannel="0" min="-0.507904" max="0.480164" rms="0.061663"/>
 				</waveblock>
 				<waveblock start="11272192">
-					<pcmaliasblockfile summaryfile="e000089c.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="11272192" aliaslen="262144" aliaschannel="0" min="-0.488068" max="0.490051" rms="0.078909"/>
+					<pcmaliasblockfile summaryfile="e000089c.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="11272192" aliaslen="262144" aliaschannel="0" min="-0.488068" max="0.490051" rms="0.078909"/>
 				</waveblock>
 				<waveblock start="11534336">
-					<pcmaliasblockfile summaryfile="e0000cc0.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="11534336" aliaslen="262144" aliaschannel="0" min="-0.452606" max="0.473022" rms="0.078182"/>
+					<pcmaliasblockfile summaryfile="e0000cc0.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="11534336" aliaslen="262144" aliaschannel="0" min="-0.452606" max="0.473022" rms="0.078182"/>
 				</waveblock>
 				<waveblock start="11796480">
-					<pcmaliasblockfile summaryfile="e0000552.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="11796480" aliaslen="262144" aliaschannel="0" min="-0.452332" max="0.455719" rms="0.082533"/>
+					<pcmaliasblockfile summaryfile="e0000552.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="11796480" aliaslen="262144" aliaschannel="0" min="-0.452332" max="0.455719" rms="0.082533"/>
 				</waveblock>
 				<waveblock start="12058624">
-					<pcmaliasblockfile summaryfile="e00004ba.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="12058624" aliaslen="262144" aliaschannel="0" min="-0.488556" max="0.462311" rms="0.079347"/>
+					<pcmaliasblockfile summaryfile="e00004ba.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="12058624" aliaslen="262144" aliaschannel="0" min="-0.488556" max="0.462311" rms="0.079347"/>
 				</waveblock>
 				<waveblock start="12320768">
-					<pcmaliasblockfile summaryfile="e0000cf9.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="12320768" aliaslen="262144" aliaschannel="0" min="-0.505646" max="0.493713" rms="0.078708"/>
+					<pcmaliasblockfile summaryfile="e0000cf9.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="12320768" aliaslen="262144" aliaschannel="0" min="-0.505646" max="0.493713" rms="0.078708"/>
 				</waveblock>
 				<waveblock start="12582912">
-					<pcmaliasblockfile summaryfile="e000032a.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="12582912" aliaslen="262144" aliaschannel="0" min="-0.404663" max="0.414825" rms="0.046368"/>
+					<pcmaliasblockfile summaryfile="e000032a.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="12582912" aliaslen="262144" aliaschannel="0" min="-0.404663" max="0.414825" rms="0.046368"/>
 				</waveblock>
 				<waveblock start="12845056">
-					<pcmaliasblockfile summaryfile="e0000490.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="12845056" aliaslen="262144" aliaschannel="0" min="-0.377441" max="0.440582" rms="0.045149"/>
+					<pcmaliasblockfile summaryfile="e0000490.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="12845056" aliaslen="262144" aliaschannel="0" min="-0.377441" max="0.440582" rms="0.045149"/>
 				</waveblock>
 				<waveblock start="13107200">
-					<pcmaliasblockfile summaryfile="e00006e1.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="13107200" aliaslen="262144" aliaschannel="0" min="-0.381042" max="0.45401" rms="0.073809"/>
+					<pcmaliasblockfile summaryfile="e00006e1.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="13107200" aliaslen="262144" aliaschannel="0" min="-0.381042" max="0.45401" rms="0.073809"/>
 				</waveblock>
 				<waveblock start="13369344">
-					<pcmaliasblockfile summaryfile="e000026c.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="13369344" aliaslen="262144" aliaschannel="0" min="-0.402832" max="0.465851" rms="0.077057"/>
+					<pcmaliasblockfile summaryfile="e000026c.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="13369344" aliaslen="262144" aliaschannel="0" min="-0.402832" max="0.465851" rms="0.077057"/>
 				</waveblock>
 				<waveblock start="13631488">
-					<pcmaliasblockfile summaryfile="e000020c.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="13631488" aliaslen="262144" aliaschannel="0" min="-0.457397" max="0.491058" rms="0.075211"/>
+					<pcmaliasblockfile summaryfile="e000020c.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="13631488" aliaslen="262144" aliaschannel="0" min="-0.457397" max="0.491058" rms="0.075211"/>
 				</waveblock>
 				<waveblock start="13893632">
-					<pcmaliasblockfile summaryfile="e0000c67.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="13893632" aliaslen="262144" aliaschannel="0" min="-0.461243" max="0.486847" rms="0.078727"/>
+					<pcmaliasblockfile summaryfile="e0000c67.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="13893632" aliaslen="262144" aliaschannel="0" min="-0.461243" max="0.486847" rms="0.078727"/>
 				</waveblock>
 				<waveblock start="14155776">
-					<pcmaliasblockfile summaryfile="e0000db4.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="14155776" aliaslen="262144" aliaschannel="0" min="-0.446045" max="0.501801" rms="0.075964"/>
+					<pcmaliasblockfile summaryfile="e0000db4.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="14155776" aliaslen="262144" aliaschannel="0" min="-0.446045" max="0.501801" rms="0.075964"/>
 				</waveblock>
 				<waveblock start="14417920">
-					<pcmaliasblockfile summaryfile="e0000b50.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="14417920" aliaslen="262144" aliaschannel="0" min="-0.423645" max="0.435822" rms="0.058226"/>
+					<pcmaliasblockfile summaryfile="e0000b50.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="14417920" aliaslen="262144" aliaschannel="0" min="-0.423645" max="0.435822" rms="0.058226"/>
 				</waveblock>
 				<waveblock start="14680064">
-					<pcmaliasblockfile summaryfile="e0000cc1.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="14680064" aliaslen="262144" aliaschannel="0" min="-0.108337" max="0.121185" rms="0.008641"/>
+					<pcmaliasblockfile summaryfile="e0000cc1.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="14680064" aliaslen="262144" aliaschannel="0" min="-0.108337" max="0.121185" rms="0.008641"/>
 				</waveblock>
 				<waveblock start="14942208">
-					<pcmaliasblockfile summaryfile="e0000a26.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="14942208" aliaslen="262144" aliaschannel="0" min="-0.469147" max="0.505646" rms="0.080412"/>
+					<pcmaliasblockfile summaryfile="e0000a26.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="14942208" aliaslen="262144" aliaschannel="0" min="-0.469147" max="0.505646" rms="0.080412"/>
 				</waveblock>
 				<waveblock start="15204352">
-					<pcmaliasblockfile summaryfile="e0000910.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="15204352" aliaslen="262144" aliaschannel="0" min="-0.465881" max="0.450592" rms="0.077184"/>
+					<pcmaliasblockfile summaryfile="e0000910.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="15204352" aliaslen="262144" aliaschannel="0" min="-0.465881" max="0.450592" rms="0.077184"/>
 				</waveblock>
 				<waveblock start="15466496">
-					<pcmaliasblockfile summaryfile="e0000f9b.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="15466496" aliaslen="262144" aliaschannel="0" min="-0.473022" max="0.513153" rms="0.080493"/>
+					<pcmaliasblockfile summaryfile="e0000f9b.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="15466496" aliaslen="262144" aliaschannel="0" min="-0.473022" max="0.513153" rms="0.080493"/>
 				</waveblock>
 				<waveblock start="15728640">
-					<pcmaliasblockfile summaryfile="e0000d00.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="15728640" aliaslen="262144" aliaschannel="0" min="-0.50531" max="0.449524" rms="0.078762"/>
+					<pcmaliasblockfile summaryfile="e0000d00.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="15728640" aliaslen="262144" aliaschannel="0" min="-0.50531" max="0.449524" rms="0.078762"/>
 				</waveblock>
 				<waveblock start="15990784">
-					<pcmaliasblockfile summaryfile="e000085c.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="15990784" aliaslen="262144" aliaschannel="0" min="-0.497742" max="0.542542" rms="0.081634"/>
+					<pcmaliasblockfile summaryfile="e000085c.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="15990784" aliaslen="262144" aliaschannel="0" min="-0.497742" max="0.542542" rms="0.081634"/>
 				</waveblock>
 				<waveblock start="16252928">
-					<pcmaliasblockfile summaryfile="e0000419.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="16252928" aliaslen="262144" aliaschannel="0" min="-0.478668" max="0.498169" rms="0.073105"/>
+					<pcmaliasblockfile summaryfile="e0000419.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="16252928" aliaslen="262144" aliaschannel="0" min="-0.478668" max="0.498169" rms="0.073105"/>
 				</waveblock>
 				<waveblock start="16515072">
-					<pcmaliasblockfile summaryfile="e00000a8.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="16515072" aliaslen="262144" aliaschannel="0" min="-0.123596" max="0.151031" rms="0.017957"/>
+					<pcmaliasblockfile summaryfile="e00000a8.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="16515072" aliaslen="262144" aliaschannel="0" min="-0.123596" max="0.151031" rms="0.017957"/>
 				</waveblock>
 				<waveblock start="16777216">
-					<pcmaliasblockfile summaryfile="e000052d.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="16777216" aliaslen="262144" aliaschannel="0" min="-0.388641" max="0.457397" rms="0.065216"/>
+					<pcmaliasblockfile summaryfile="e000052d.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="16777216" aliaslen="262144" aliaschannel="0" min="-0.388641" max="0.457397" rms="0.065216"/>
 				</waveblock>
 				<waveblock start="17039360">
-					<pcmaliasblockfile summaryfile="e00003a6.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="17039360" aliaslen="262144" aliaschannel="0" min="-0.409698" max="0.45517" rms="0.076957"/>
+					<pcmaliasblockfile summaryfile="e00003a6.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="17039360" aliaslen="262144" aliaschannel="0" min="-0.409698" max="0.45517" rms="0.076957"/>
 				</waveblock>
 				<waveblock start="17301504">
-					<pcmaliasblockfile summaryfile="e000063e.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="17301504" aliaslen="262144" aliaschannel="0" min="-0.387604" max="0.446808" rms="0.072584"/>
+					<pcmaliasblockfile summaryfile="e000063e.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="17301504" aliaslen="262144" aliaschannel="0" min="-0.387604" max="0.446808" rms="0.072584"/>
 				</waveblock>
 				<waveblock start="17563648">
-					<pcmaliasblockfile summaryfile="e0000659.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="17563648" aliaslen="81920" aliaschannel="0" min="-0.371338" max="0.414734" rms="0.069911"/>
+					<pcmaliasblockfile summaryfile="e0000659.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="17563648" aliaslen="81920" aliaschannel="0" min="-0.371338" max="0.414734" rms="0.069911"/>
 				</waveblock>
 			</sequence>
 			<envelope numpoints="0"/>
@@ -217,208 +221,208 @@
 		<waveclip offset="0.00000000">
 			<sequence maxsamples="262144" sampleformat="262159" numsamples="17645568">
 				<waveblock start="0">
-					<pcmaliasblockfile summaryfile="e000057a.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="0" aliaslen="262144" aliaschannel="1" min="-0.343109" max="0.333099" rms="0.039426"/>
+					<pcmaliasblockfile summaryfile="e000057a.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="0" aliaslen="262144" aliaschannel="1" min="-0.343109" max="0.333099" rms="0.039426"/>
 				</waveblock>
 				<waveblock start="262144">
-					<pcmaliasblockfile summaryfile="e000054c.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="262144" aliaslen="262144" aliaschannel="1" min="-0.308502" max="0.285828" rms="0.040471"/>
+					<pcmaliasblockfile summaryfile="e000054c.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="262144" aliaslen="262144" aliaschannel="1" min="-0.308502" max="0.285828" rms="0.040471"/>
 				</waveblock>
 				<waveblock start="524288">
-					<pcmaliasblockfile summaryfile="e00001c6.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="524288" aliaslen="262144" aliaschannel="1" min="-0.313629" max="0.382416" rms="0.047633"/>
+					<pcmaliasblockfile summaryfile="e00001c6.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="524288" aliaslen="262144" aliaschannel="1" min="-0.313629" max="0.382416" rms="0.047633"/>
 				</waveblock>
 				<waveblock start="786432">
-					<pcmaliasblockfile summaryfile="e0000c08.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="786432" aliaslen="262144" aliaschannel="1" min="-0.288147" max="0.31366" rms="0.038849"/>
+					<pcmaliasblockfile summaryfile="e0000c08.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="786432" aliaslen="262144" aliaschannel="1" min="-0.288147" max="0.31366" rms="0.038849"/>
 				</waveblock>
 				<waveblock start="1048576">
-					<pcmaliasblockfile summaryfile="e0000581.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="1048576" aliaslen="262144" aliaschannel="1" min="-0.088837" max="0.082428" rms="0.015174"/>
+					<pcmaliasblockfile summaryfile="e0000581.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="1048576" aliaslen="262144" aliaschannel="1" min="-0.088837" max="0.082428" rms="0.015174"/>
 				</waveblock>
 				<waveblock start="1310720">
-					<pcmaliasblockfile summaryfile="e0000153.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="1310720" aliaslen="262144" aliaschannel="1" min="-0.271179" max="0.261627" rms="0.04888"/>
+					<pcmaliasblockfile summaryfile="e0000153.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="1310720" aliaslen="262144" aliaschannel="1" min="-0.271179" max="0.261627" rms="0.04888"/>
 				</waveblock>
 				<waveblock start="1572864">
-					<pcmaliasblockfile summaryfile="e0000746.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="1572864" aliaslen="262144" aliaschannel="1" min="-0.348938" max="0.36261" rms="0.054641"/>
+					<pcmaliasblockfile summaryfile="e0000746.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="1572864" aliaslen="262144" aliaschannel="1" min="-0.348938" max="0.36261" rms="0.054641"/>
 				</waveblock>
 				<waveblock start="1835008">
-					<pcmaliasblockfile summaryfile="e0000a28.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="1835008" aliaslen="262144" aliaschannel="1" min="-0.349792" max="0.390869" rms="0.055639"/>
+					<pcmaliasblockfile summaryfile="e0000a28.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="1835008" aliaslen="262144" aliaschannel="1" min="-0.349792" max="0.390869" rms="0.055639"/>
 				</waveblock>
 				<waveblock start="2097152">
-					<pcmaliasblockfile summaryfile="e0000997.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="2097152" aliaslen="262144" aliaschannel="1" min="-0.355133" max="0.405945" rms="0.055789"/>
+					<pcmaliasblockfile summaryfile="e0000997.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="2097152" aliaslen="262144" aliaschannel="1" min="-0.355133" max="0.405945" rms="0.055789"/>
 				</waveblock>
 				<waveblock start="2359296">
-					<pcmaliasblockfile summaryfile="e0000fd9.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="2359296" aliaslen="262144" aliaschannel="1" min="-0.345764" max="0.400055" rms="0.056747"/>
+					<pcmaliasblockfile summaryfile="e0000fd9.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="2359296" aliaslen="262144" aliaschannel="1" min="-0.345764" max="0.400055" rms="0.056747"/>
 				</waveblock>
 				<waveblock start="2621440">
-					<pcmaliasblockfile summaryfile="e0000928.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="2621440" aliaslen="262144" aliaschannel="1" min="-0.340851" max="0.366272" rms="0.053139"/>
+					<pcmaliasblockfile summaryfile="e0000928.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="2621440" aliaslen="262144" aliaschannel="1" min="-0.340851" max="0.366272" rms="0.053139"/>
 				</waveblock>
 				<waveblock start="2883584">
-					<pcmaliasblockfile summaryfile="e00004cc.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="2883584" aliaslen="262144" aliaschannel="1" min="-0.362976" max="0.334351" rms="0.050348"/>
+					<pcmaliasblockfile summaryfile="e00004cc.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="2883584" aliaslen="262144" aliaschannel="1" min="-0.362976" max="0.334351" rms="0.050348"/>
 				</waveblock>
 				<waveblock start="3145728">
-					<pcmaliasblockfile summaryfile="e0000bbc.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="3145728" aliaslen="262144" aliaschannel="1" min="-0.325836" max="0.361176" rms="0.052219"/>
+					<pcmaliasblockfile summaryfile="e0000bbc.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="3145728" aliaslen="262144" aliaschannel="1" min="-0.325836" max="0.361176" rms="0.052219"/>
 				</waveblock>
 				<waveblock start="3407872">
-					<pcmaliasblockfile summaryfile="e0000e08.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="3407872" aliaslen="262144" aliaschannel="1" min="-0.405304" max="0.43396" rms="0.059069"/>
+					<pcmaliasblockfile summaryfile="e0000e08.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="3407872" aliaslen="262144" aliaschannel="1" min="-0.405304" max="0.43396" rms="0.059069"/>
 				</waveblock>
 				<waveblock start="3670016">
-					<pcmaliasblockfile summaryfile="e00009fa.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="3670016" aliaslen="262144" aliaschannel="1" min="-0.378998" max="0.341156" rms="0.056272"/>
+					<pcmaliasblockfile summaryfile="e00009fa.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="3670016" aliaslen="262144" aliaschannel="1" min="-0.378998" max="0.341156" rms="0.056272"/>
 				</waveblock>
 				<waveblock start="3932160">
-					<pcmaliasblockfile summaryfile="e0000009.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="3932160" aliaslen="262144" aliaschannel="1" min="-0.369904" max="0.314514" rms="0.056324"/>
+					<pcmaliasblockfile summaryfile="e0000009.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="3932160" aliaslen="262144" aliaschannel="1" min="-0.369904" max="0.314514" rms="0.056324"/>
 				</waveblock>
 				<waveblock start="4194304">
-					<pcmaliasblockfile summaryfile="e00006de.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="4194304" aliaslen="262144" aliaschannel="1" min="-0.370026" max="0.381409" rms="0.056851"/>
+					<pcmaliasblockfile summaryfile="e00006de.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="4194304" aliaslen="262144" aliaschannel="1" min="-0.370026" max="0.381409" rms="0.056851"/>
 				</waveblock>
 				<waveblock start="4456448">
-					<pcmaliasblockfile summaryfile="e0000558.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="4456448" aliaslen="262144" aliaschannel="1" min="-0.320801" max="0.319458" rms="0.031498"/>
+					<pcmaliasblockfile summaryfile="e0000558.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="4456448" aliaslen="262144" aliaschannel="1" min="-0.320801" max="0.319458" rms="0.031498"/>
 				</waveblock>
 				<waveblock start="4718592">
-					<pcmaliasblockfile summaryfile="e0000f1d.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="4718592" aliaslen="262144" aliaschannel="1" min="-0.136566" max="0.137878" rms="0.019951"/>
+					<pcmaliasblockfile summaryfile="e0000f1d.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="4718592" aliaslen="262144" aliaschannel="1" min="-0.136566" max="0.137878" rms="0.019951"/>
 				</waveblock>
 				<waveblock start="4980736">
-					<pcmaliasblockfile summaryfile="e0000d6f.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="4980736" aliaslen="262144" aliaschannel="1" min="-0.175629" max="0.162567" rms="0.028882"/>
+					<pcmaliasblockfile summaryfile="e0000d6f.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="4980736" aliaslen="262144" aliaschannel="1" min="-0.175629" max="0.162567" rms="0.028882"/>
 				</waveblock>
 				<waveblock start="5242880">
-					<pcmaliasblockfile summaryfile="e0000326.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="5242880" aliaslen="262144" aliaschannel="1" min="-0.399902" max="0.338501" rms="0.055937"/>
+					<pcmaliasblockfile summaryfile="e0000326.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="5242880" aliaslen="262144" aliaschannel="1" min="-0.399902" max="0.338501" rms="0.055937"/>
 				</waveblock>
 				<waveblock start="5505024">
-					<pcmaliasblockfile summaryfile="e0000a63.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="5505024" aliaslen="262144" aliaschannel="1" min="-0.412354" max="0.38623" rms="0.07078"/>
+					<pcmaliasblockfile summaryfile="e0000a63.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="5505024" aliaslen="262144" aliaschannel="1" min="-0.412354" max="0.38623" rms="0.07078"/>
 				</waveblock>
 				<waveblock start="5767168">
-					<pcmaliasblockfile summaryfile="e0000618.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="5767168" aliaslen="262144" aliaschannel="1" min="-0.522156" max="0.459473" rms="0.076902"/>
+					<pcmaliasblockfile summaryfile="e0000618.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="5767168" aliaslen="262144" aliaschannel="1" min="-0.522156" max="0.459473" rms="0.076902"/>
 				</waveblock>
 				<waveblock start="6029312">
-					<pcmaliasblockfile summaryfile="e0000bd6.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="6029312" aliaslen="262144" aliaschannel="1" min="-0.575226" max="0.501953" rms="0.079701"/>
+					<pcmaliasblockfile summaryfile="e0000bd6.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="6029312" aliaslen="262144" aliaschannel="1" min="-0.575226" max="0.501953" rms="0.079701"/>
 				</waveblock>
 				<waveblock start="6291456">
-					<pcmaliasblockfile summaryfile="e000044d.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="6291456" aliaslen="262144" aliaschannel="1" min="-0.485474" max="0.528595" rms="0.076007"/>
+					<pcmaliasblockfile summaryfile="e000044d.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="6291456" aliaslen="262144" aliaschannel="1" min="-0.485474" max="0.528595" rms="0.076007"/>
 				</waveblock>
 				<waveblock start="6553600">
-					<pcmaliasblockfile summaryfile="e0000db3.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="6553600" aliaslen="262144" aliaschannel="1" min="-0.543427" max="0.449493" rms="0.079876"/>
+					<pcmaliasblockfile summaryfile="e0000db3.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="6553600" aliaslen="262144" aliaschannel="1" min="-0.543427" max="0.449493" rms="0.079876"/>
 				</waveblock>
 				<waveblock start="6815744">
-					<pcmaliasblockfile summaryfile="e0000be5.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="6815744" aliaslen="262144" aliaschannel="1" min="-0.527832" max="0.509766" rms="0.079457"/>
+					<pcmaliasblockfile summaryfile="e0000be5.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="6815744" aliaslen="262144" aliaschannel="1" min="-0.527832" max="0.509766" rms="0.079457"/>
 				</waveblock>
 				<waveblock start="7077888">
-					<pcmaliasblockfile summaryfile="e000092e.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="7077888" aliaslen="262144" aliaschannel="1" min="-0.51178" max="0.547241" rms="0.079515"/>
+					<pcmaliasblockfile summaryfile="e000092e.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="7077888" aliaslen="262144" aliaschannel="1" min="-0.51178" max="0.547241" rms="0.079515"/>
 				</waveblock>
 				<waveblock start="7340032">
-					<pcmaliasblockfile summaryfile="e00009e3.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="7340032" aliaslen="262144" aliaschannel="1" min="-0.497314" max="0.360931" rms="0.066727"/>
+					<pcmaliasblockfile summaryfile="e00009e3.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="7340032" aliaslen="262144" aliaschannel="1" min="-0.497314" max="0.360931" rms="0.066727"/>
 				</waveblock>
 				<waveblock start="7602176">
-					<pcmaliasblockfile summaryfile="e0000e92.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="7602176" aliaslen="262144" aliaschannel="1" min="-0.425293" max="0.368378" rms="0.066129"/>
+					<pcmaliasblockfile summaryfile="e0000e92.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="7602176" aliaslen="262144" aliaschannel="1" min="-0.425293" max="0.368378" rms="0.066129"/>
 				</waveblock>
 				<waveblock start="7864320">
-					<pcmaliasblockfile summaryfile="e000014c.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="7864320" aliaslen="262144" aliaschannel="1" min="-0.480042" max="0.472778" rms="0.06884"/>
+					<pcmaliasblockfile summaryfile="e000014c.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="7864320" aliaslen="262144" aliaschannel="1" min="-0.480042" max="0.472778" rms="0.06884"/>
 				</waveblock>
 				<waveblock start="8126464">
-					<pcmaliasblockfile summaryfile="e0000fba.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="8126464" aliaslen="262144" aliaschannel="1" min="-0.524231" max="0.474915" rms="0.081228"/>
+					<pcmaliasblockfile summaryfile="e0000fba.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="8126464" aliaslen="262144" aliaschannel="1" min="-0.524231" max="0.474915" rms="0.081228"/>
 				</waveblock>
 				<waveblock start="8388608">
-					<pcmaliasblockfile summaryfile="e0000298.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="8388608" aliaslen="262144" aliaschannel="1" min="-0.526245" max="0.484558" rms="0.077235"/>
+					<pcmaliasblockfile summaryfile="e0000298.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="8388608" aliaslen="262144" aliaschannel="1" min="-0.526245" max="0.484558" rms="0.077235"/>
 				</waveblock>
 				<waveblock start="8650752">
-					<pcmaliasblockfile summaryfile="e000030a.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="8650752" aliaslen="262144" aliaschannel="1" min="-0.542419" max="0.583832" rms="0.075286"/>
+					<pcmaliasblockfile summaryfile="e000030a.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="8650752" aliaslen="262144" aliaschannel="1" min="-0.542419" max="0.583832" rms="0.075286"/>
 				</waveblock>
 				<waveblock start="8912896">
-					<pcmaliasblockfile summaryfile="e0000f1e.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="8912896" aliaslen="262144" aliaschannel="1" min="-0.387604" max="0.28949" rms="0.028746"/>
+					<pcmaliasblockfile summaryfile="e0000f1e.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="8912896" aliaslen="262144" aliaschannel="1" min="-0.387604" max="0.28949" rms="0.028746"/>
 				</waveblock>
 				<waveblock start="9175040">
-					<pcmaliasblockfile summaryfile="e000036d.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="9175040" aliaslen="262144" aliaschannel="1" min="-0.348206" max="0.365997" rms="0.036238"/>
+					<pcmaliasblockfile summaryfile="e000036d.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="9175040" aliaslen="262144" aliaschannel="1" min="-0.348206" max="0.365997" rms="0.036238"/>
 				</waveblock>
 				<waveblock start="9437184">
-					<pcmaliasblockfile summaryfile="e00003b2.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="9437184" aliaslen="262144" aliaschannel="1" min="-0.362457" max="0.357544" rms="0.036379"/>
+					<pcmaliasblockfile summaryfile="e00003b2.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="9437184" aliaslen="262144" aliaschannel="1" min="-0.362457" max="0.357544" rms="0.036379"/>
 				</waveblock>
 				<waveblock start="9699328">
-					<pcmaliasblockfile summaryfile="e0000b89.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="9699328" aliaslen="262144" aliaschannel="1" min="-0.402161" max="0.350128" rms="0.048678"/>
+					<pcmaliasblockfile summaryfile="e0000b89.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="9699328" aliaslen="262144" aliaschannel="1" min="-0.402161" max="0.350128" rms="0.048678"/>
 				</waveblock>
 				<waveblock start="9961472">
-					<pcmaliasblockfile summaryfile="e00000f2.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="9961472" aliaslen="262144" aliaschannel="1" min="-0.382141" max="0.346954" rms="0.048394"/>
+					<pcmaliasblockfile summaryfile="e00000f2.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="9961472" aliaslen="262144" aliaschannel="1" min="-0.382141" max="0.346954" rms="0.048394"/>
 				</waveblock>
 				<waveblock start="10223616">
-					<pcmaliasblockfile summaryfile="e000085d.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="10223616" aliaslen="262144" aliaschannel="1" min="-0.440796" max="0.347504" rms="0.045688"/>
+					<pcmaliasblockfile summaryfile="e000085d.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="10223616" aliaslen="262144" aliaschannel="1" min="-0.440796" max="0.347504" rms="0.045688"/>
 				</waveblock>
 				<waveblock start="10485760">
-					<pcmaliasblockfile summaryfile="e0000ef1.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="10485760" aliaslen="262144" aliaschannel="1" min="-0.226471" max="0.243622" rms="0.03569"/>
+					<pcmaliasblockfile summaryfile="e0000ef1.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="10485760" aliaslen="262144" aliaschannel="1" min="-0.226471" max="0.243622" rms="0.03569"/>
 				</waveblock>
 				<waveblock start="10747904">
-					<pcmaliasblockfile summaryfile="e0000e55.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="10747904" aliaslen="262144" aliaschannel="1" min="-0.216736" max="0.229767" rms="0.035558"/>
+					<pcmaliasblockfile summaryfile="e0000e55.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="10747904" aliaslen="262144" aliaschannel="1" min="-0.216736" max="0.229767" rms="0.035558"/>
 				</waveblock>
 				<waveblock start="11010048">
-					<pcmaliasblockfile summaryfile="e0000ecf.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="11010048" aliaslen="262144" aliaschannel="1" min="-0.528717" max="0.469299" rms="0.068238"/>
+					<pcmaliasblockfile summaryfile="e0000ecf.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="11010048" aliaslen="262144" aliaschannel="1" min="-0.528717" max="0.469299" rms="0.068238"/>
 				</waveblock>
 				<waveblock start="11272192">
-					<pcmaliasblockfile summaryfile="e0000b82.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="11272192" aliaslen="262144" aliaschannel="1" min="-0.502075" max="0.498749" rms="0.08204"/>
+					<pcmaliasblockfile summaryfile="e0000b82.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="11272192" aliaslen="262144" aliaschannel="1" min="-0.502075" max="0.498749" rms="0.08204"/>
 				</waveblock>
 				<waveblock start="11534336">
-					<pcmaliasblockfile summaryfile="e00002b4.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="11534336" aliaslen="262144" aliaschannel="1" min="-0.443298" max="0.449127" rms="0.082085"/>
+					<pcmaliasblockfile summaryfile="e00002b4.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="11534336" aliaslen="262144" aliaschannel="1" min="-0.443298" max="0.449127" rms="0.082085"/>
 				</waveblock>
 				<waveblock start="11796480">
-					<pcmaliasblockfile summaryfile="e0000379.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="11796480" aliaslen="262144" aliaschannel="1" min="-0.472778" max="0.483612" rms="0.086889"/>
+					<pcmaliasblockfile summaryfile="e0000379.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="11796480" aliaslen="262144" aliaschannel="1" min="-0.472778" max="0.483612" rms="0.086889"/>
 				</waveblock>
 				<waveblock start="12058624">
-					<pcmaliasblockfile summaryfile="e0000cb4.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="12058624" aliaslen="262144" aliaschannel="1" min="-0.457031" max="0.497131" rms="0.083248"/>
+					<pcmaliasblockfile summaryfile="e0000cb4.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="12058624" aliaslen="262144" aliaschannel="1" min="-0.457031" max="0.497131" rms="0.083248"/>
 				</waveblock>
 				<waveblock start="12320768">
-					<pcmaliasblockfile summaryfile="e000095d.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="12320768" aliaslen="262144" aliaschannel="1" min="-0.477753" max="0.498749" rms="0.080727"/>
+					<pcmaliasblockfile summaryfile="e000095d.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="12320768" aliaslen="262144" aliaschannel="1" min="-0.477753" max="0.498749" rms="0.080727"/>
 				</waveblock>
 				<waveblock start="12582912">
-					<pcmaliasblockfile summaryfile="e0000d19.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="12582912" aliaslen="262144" aliaschannel="1" min="-0.41629" max="0.465179" rms="0.048513"/>
+					<pcmaliasblockfile summaryfile="e0000d19.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="12582912" aliaslen="262144" aliaschannel="1" min="-0.41629" max="0.465179" rms="0.048513"/>
 				</waveblock>
 				<waveblock start="12845056">
-					<pcmaliasblockfile summaryfile="e000048e.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="12845056" aliaslen="262144" aliaschannel="1" min="-0.383362" max="0.437958" rms="0.043727"/>
+					<pcmaliasblockfile summaryfile="e000048e.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="12845056" aliaslen="262144" aliaschannel="1" min="-0.383362" max="0.437958" rms="0.043727"/>
 				</waveblock>
 				<waveblock start="13107200">
-					<pcmaliasblockfile summaryfile="e000009e.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="13107200" aliaslen="262144" aliaschannel="1" min="-0.384888" max="0.452789" rms="0.072645"/>
+					<pcmaliasblockfile summaryfile="e000009e.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="13107200" aliaslen="262144" aliaschannel="1" min="-0.384888" max="0.452789" rms="0.072645"/>
 				</waveblock>
 				<waveblock start="13369344">
-					<pcmaliasblockfile summaryfile="e0000483.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="13369344" aliaslen="262144" aliaschannel="1" min="-0.405731" max="0.472748" rms="0.075746"/>
+					<pcmaliasblockfile summaryfile="e0000483.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="13369344" aliaslen="262144" aliaschannel="1" min="-0.405731" max="0.472748" rms="0.075746"/>
 				</waveblock>
 				<waveblock start="13631488">
-					<pcmaliasblockfile summaryfile="e0000704.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="13631488" aliaslen="262144" aliaschannel="1" min="-0.478363" max="0.47699" rms="0.074009"/>
+					<pcmaliasblockfile summaryfile="e0000704.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="13631488" aliaslen="262144" aliaschannel="1" min="-0.478363" max="0.47699" rms="0.074009"/>
 				</waveblock>
 				<waveblock start="13893632">
-					<pcmaliasblockfile summaryfile="e000004a.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="13893632" aliaslen="262144" aliaschannel="1" min="-0.427795" max="0.484253" rms="0.077426"/>
+					<pcmaliasblockfile summaryfile="e000004a.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="13893632" aliaslen="262144" aliaschannel="1" min="-0.427795" max="0.484253" rms="0.077426"/>
 				</waveblock>
 				<waveblock start="14155776">
-					<pcmaliasblockfile summaryfile="e000029e.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="14155776" aliaslen="262144" aliaschannel="1" min="-0.443848" max="0.484436" rms="0.074542"/>
+					<pcmaliasblockfile summaryfile="e000029e.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="14155776" aliaslen="262144" aliaschannel="1" min="-0.443848" max="0.484436" rms="0.074542"/>
 				</waveblock>
 				<waveblock start="14417920">
-					<pcmaliasblockfile summaryfile="e0000631.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="14417920" aliaslen="262144" aliaschannel="1" min="-0.454559" max="0.441528" rms="0.057485"/>
+					<pcmaliasblockfile summaryfile="e0000631.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="14417920" aliaslen="262144" aliaschannel="1" min="-0.454559" max="0.441528" rms="0.057485"/>
 				</waveblock>
 				<waveblock start="14680064">
-					<pcmaliasblockfile summaryfile="e0000937.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="14680064" aliaslen="262144" aliaschannel="1" min="-0.108368" max="0.124542" rms="0.008326"/>
+					<pcmaliasblockfile summaryfile="e0000937.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="14680064" aliaslen="262144" aliaschannel="1" min="-0.108368" max="0.124542" rms="0.008326"/>
 				</waveblock>
 				<waveblock start="14942208">
-					<pcmaliasblockfile summaryfile="e0000814.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="14942208" aliaslen="262144" aliaschannel="1" min="-0.458069" max="0.511017" rms="0.084244"/>
+					<pcmaliasblockfile summaryfile="e0000814.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="14942208" aliaslen="262144" aliaschannel="1" min="-0.458069" max="0.511017" rms="0.084244"/>
 				</waveblock>
 				<waveblock start="15204352">
-					<pcmaliasblockfile summaryfile="e00006ea.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="15204352" aliaslen="262144" aliaschannel="1" min="-0.49881" max="0.437836" rms="0.082191"/>
+					<pcmaliasblockfile summaryfile="e00006ea.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="15204352" aliaslen="262144" aliaschannel="1" min="-0.49881" max="0.437836" rms="0.082191"/>
 				</waveblock>
 				<waveblock start="15466496">
-					<pcmaliasblockfile summaryfile="e00008da.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="15466496" aliaslen="262144" aliaschannel="1" min="-0.448517" max="0.528381" rms="0.0842"/>
+					<pcmaliasblockfile summaryfile="e00008da.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="15466496" aliaslen="262144" aliaschannel="1" min="-0.448517" max="0.528381" rms="0.0842"/>
 				</waveblock>
 				<waveblock start="15728640">
-					<pcmaliasblockfile summaryfile="e0000b5d.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="15728640" aliaslen="262144" aliaschannel="1" min="-0.532745" max="0.45459" rms="0.08203"/>
+					<pcmaliasblockfile summaryfile="e0000b5d.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="15728640" aliaslen="262144" aliaschannel="1" min="-0.532745" max="0.45459" rms="0.08203"/>
 				</waveblock>
 				<waveblock start="15990784">
-					<pcmaliasblockfile summaryfile="e0000790.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="15990784" aliaslen="262144" aliaschannel="1" min="-0.530731" max="0.501465" rms="0.086156"/>
+					<pcmaliasblockfile summaryfile="e0000790.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="15990784" aliaslen="262144" aliaschannel="1" min="-0.530731" max="0.501465" rms="0.086156"/>
 				</waveblock>
 				<waveblock start="16252928">
-					<pcmaliasblockfile summaryfile="e00001e7.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="16252928" aliaslen="262144" aliaschannel="1" min="-0.501068" max="0.526825" rms="0.075964"/>
+					<pcmaliasblockfile summaryfile="e00001e7.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="16252928" aliaslen="262144" aliaschannel="1" min="-0.501068" max="0.526825" rms="0.075964"/>
 				</waveblock>
 				<waveblock start="16515072">
-					<pcmaliasblockfile summaryfile="e0000cb7.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="16515072" aliaslen="262144" aliaschannel="1" min="-0.120575" max="0.145752" rms="0.014842"/>
+					<pcmaliasblockfile summaryfile="e0000cb7.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="16515072" aliaslen="262144" aliaschannel="1" min="-0.120575" max="0.145752" rms="0.014842"/>
 				</waveblock>
 				<waveblock start="16777216">
-					<pcmaliasblockfile summaryfile="e0000d1c.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="16777216" aliaslen="262144" aliaschannel="1" min="-0.388489" max="0.463165" rms="0.06401"/>
+					<pcmaliasblockfile summaryfile="e0000d1c.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="16777216" aliaslen="262144" aliaschannel="1" min="-0.388489" max="0.463165" rms="0.06401"/>
 				</waveblock>
 				<waveblock start="17039360">
-					<pcmaliasblockfile summaryfile="e0000088.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="17039360" aliaslen="262144" aliaschannel="1" min="-0.40979" max="0.458099" rms="0.075792"/>
+					<pcmaliasblockfile summaryfile="e0000088.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="17039360" aliaslen="262144" aliaschannel="1" min="-0.40979" max="0.458099" rms="0.075792"/>
 				</waveblock>
 				<waveblock start="17301504">
-					<pcmaliasblockfile summaryfile="e0000f0c.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="17301504" aliaslen="262144" aliaschannel="1" min="-0.391602" max="0.446198" rms="0.071516"/>
+					<pcmaliasblockfile summaryfile="e0000f0c.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="17301504" aliaslen="262144" aliaschannel="1" min="-0.391602" max="0.446198" rms="0.071516"/>
 				</waveblock>
 				<waveblock start="17563648">
-					<pcmaliasblockfile summaryfile="e00004a7.auf" aliasfile="D:\tim\Music\netradioDNB\d000-018.wav" aliasstart="17563648" aliaslen="81920" aliaschannel="1" min="-0.385468" max="0.427063" rms="0.069266"/>
+					<pcmaliasblockfile summaryfile="e00004a7.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d000-018.wav" aliasstart="17563648" aliaslen="81920" aliaschannel="1" min="-0.385468" max="0.427063" rms="0.069266"/>
 				</waveblock>
 			</sequence>
 			<envelope numpoints="0"/>
@@ -438,247 +442,247 @@
 		<waveclip offset="1102.84800000">
 			<sequence maxsamples="262144" sampleformat="262159" numsamples="21082112">
 				<waveblock start="0">
-					<pcmaliasblockfile summaryfile="e0000922.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="0" aliaslen="262144" aliaschannel="0" min="-0.163269" max="0.211609" rms="0.036729"/>
+					<pcmaliasblockfile summaryfile="e0000922.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="0" aliaslen="262144" aliaschannel="0" min="-0.163269" max="0.211609" rms="0.036729"/>
 				</waveblock>
 				<waveblock start="262144">
-					<pcmaliasblockfile summaryfile="e00002c7.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="262144" aliaslen="262144" aliaschannel="0" min="-0.175568" max="0.190857" rms="0.038716"/>
+					<pcmaliasblockfile summaryfile="e00002c7.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="262144" aliaslen="262144" aliaschannel="0" min="-0.175568" max="0.190857" rms="0.038716"/>
 				</waveblock>
 				<waveblock start="524288">
-					<pcmaliasblockfile summaryfile="e0000ceb.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="524288" aliaslen="262144" aliaschannel="0" min="-0.16864" max="0.22345" rms="0.041658"/>
+					<pcmaliasblockfile summaryfile="e0000ceb.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="524288" aliaslen="262144" aliaschannel="0" min="-0.16864" max="0.22345" rms="0.041658"/>
 				</waveblock>
 				<waveblock start="786432">
-					<pcmaliasblockfile summaryfile="e0000735.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="786432" aliaslen="262144" aliaschannel="0" min="-0.174896" max="0.225372" rms="0.040382"/>
+					<pcmaliasblockfile summaryfile="e0000735.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="786432" aliaslen="262144" aliaschannel="0" min="-0.174896" max="0.225372" rms="0.040382"/>
 				</waveblock>
 				<waveblock start="1048576">
-					<pcmaliasblockfile summaryfile="e000023c.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="1048576" aliaslen="262144" aliaschannel="0" min="-0.192657" max="0.290009" rms="0.041811"/>
+					<pcmaliasblockfile summaryfile="e000023c.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="1048576" aliaslen="262144" aliaschannel="0" min="-0.192657" max="0.290009" rms="0.041811"/>
 				</waveblock>
 				<waveblock start="1310720">
-					<pcmaliasblockfile summaryfile="e0000913.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="1310720" aliaslen="262144" aliaschannel="0" min="-0.248779" max="0.277802" rms="0.042707"/>
+					<pcmaliasblockfile summaryfile="e0000913.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="1310720" aliaslen="262144" aliaschannel="0" min="-0.248779" max="0.277802" rms="0.042707"/>
 				</waveblock>
 				<waveblock start="1572864">
-					<pcmaliasblockfile summaryfile="e000074b.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="1572864" aliaslen="262144" aliaschannel="0" min="-0.148865" max="0.212769" rms="0.038587"/>
+					<pcmaliasblockfile summaryfile="e000074b.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="1572864" aliaslen="262144" aliaschannel="0" min="-0.148865" max="0.212769" rms="0.038587"/>
 				</waveblock>
 				<waveblock start="1835008">
-					<pcmaliasblockfile summaryfile="e000003a.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="1835008" aliaslen="262144" aliaschannel="0" min="-0.369995" max="0.36969" rms="0.054684"/>
+					<pcmaliasblockfile summaryfile="e000003a.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="1835008" aliaslen="262144" aliaschannel="0" min="-0.369995" max="0.36969" rms="0.054684"/>
 				</waveblock>
 				<waveblock start="2097152">
-					<pcmaliasblockfile summaryfile="e0000a5e.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="2097152" aliaslen="262144" aliaschannel="0" min="-0.408173" max="0.413177" rms="0.069501"/>
+					<pcmaliasblockfile summaryfile="e0000a5e.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="2097152" aliaslen="262144" aliaschannel="0" min="-0.408173" max="0.413177" rms="0.069501"/>
 				</waveblock>
 				<waveblock start="2359296">
-					<pcmaliasblockfile summaryfile="e0000152.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="2359296" aliaslen="262144" aliaschannel="0" min="-0.45639" max="0.397369" rms="0.068402"/>
+					<pcmaliasblockfile summaryfile="e0000152.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="2359296" aliaslen="262144" aliaschannel="0" min="-0.45639" max="0.397369" rms="0.068402"/>
 				</waveblock>
 				<waveblock start="2621440">
-					<pcmaliasblockfile summaryfile="e0000b2f.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="2621440" aliaslen="262144" aliaschannel="0" min="-0.390289" max="0.368927" rms="0.065331"/>
+					<pcmaliasblockfile summaryfile="e0000b2f.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="2621440" aliaslen="262144" aliaschannel="0" min="-0.390289" max="0.368927" rms="0.065331"/>
 				</waveblock>
 				<waveblock start="2883584">
-					<pcmaliasblockfile summaryfile="e0000e5a.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="2883584" aliaslen="262144" aliaschannel="0" min="-0.409576" max="0.386658" rms="0.06685"/>
+					<pcmaliasblockfile summaryfile="e0000e5a.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="2883584" aliaslen="262144" aliaschannel="0" min="-0.409576" max="0.386658" rms="0.06685"/>
 				</waveblock>
 				<waveblock start="3145728">
-					<pcmaliasblockfile summaryfile="e00003b9.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="3145728" aliaslen="262144" aliaschannel="0" min="-0.404053" max="0.376312" rms="0.06786"/>
+					<pcmaliasblockfile summaryfile="e00003b9.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="3145728" aliaslen="262144" aliaschannel="0" min="-0.404053" max="0.376312" rms="0.06786"/>
 				</waveblock>
 				<waveblock start="3407872">
-					<pcmaliasblockfile summaryfile="e00009d3.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="3407872" aliaslen="262144" aliaschannel="0" min="-0.383972" max="0.323547" rms="0.061457"/>
+					<pcmaliasblockfile summaryfile="e00009d3.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="3407872" aliaslen="262144" aliaschannel="0" min="-0.383972" max="0.323547" rms="0.061457"/>
 				</waveblock>
 				<waveblock start="3670016">
-					<pcmaliasblockfile summaryfile="e00008ea.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="3670016" aliaslen="262144" aliaschannel="0" min="-0.393707" max="0.364136" rms="0.067255"/>
+					<pcmaliasblockfile summaryfile="e00008ea.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="3670016" aliaslen="262144" aliaschannel="0" min="-0.393707" max="0.364136" rms="0.067255"/>
 				</waveblock>
 				<waveblock start="3932160">
-					<pcmaliasblockfile summaryfile="e000011f.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="3932160" aliaslen="262144" aliaschannel="0" min="-0.380035" max="0.403656" rms="0.067912"/>
+					<pcmaliasblockfile summaryfile="e000011f.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="3932160" aliaslen="262144" aliaschannel="0" min="-0.380035" max="0.403656" rms="0.067912"/>
 				</waveblock>
 				<waveblock start="4194304">
-					<pcmaliasblockfile summaryfile="e0000bc5.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="4194304" aliaslen="262144" aliaschannel="0" min="-0.226837" max="0.241455" rms="0.042174"/>
+					<pcmaliasblockfile summaryfile="e0000bc5.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="4194304" aliaslen="262144" aliaschannel="0" min="-0.226837" max="0.241455" rms="0.042174"/>
 				</waveblock>
 				<waveblock start="4456448">
-					<pcmaliasblockfile summaryfile="e0000a7f.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="4456448" aliaslen="262144" aliaschannel="0" min="-0.382233" max="0.346893" rms="0.057458"/>
+					<pcmaliasblockfile summaryfile="e0000a7f.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="4456448" aliaslen="262144" aliaschannel="0" min="-0.382233" max="0.346893" rms="0.057458"/>
 				</waveblock>
 				<waveblock start="4718592">
-					<pcmaliasblockfile summaryfile="e0000b61.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="4718592" aliaslen="262144" aliaschannel="0" min="-0.403076" max="0.401001" rms="0.068343"/>
+					<pcmaliasblockfile summaryfile="e0000b61.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="4718592" aliaslen="262144" aliaschannel="0" min="-0.403076" max="0.401001" rms="0.068343"/>
 				</waveblock>
 				<waveblock start="4980736">
-					<pcmaliasblockfile summaryfile="e0000b3a.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="4980736" aliaslen="262144" aliaschannel="0" min="-0.423767" max="0.393311" rms="0.068892"/>
+					<pcmaliasblockfile summaryfile="e0000b3a.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="4980736" aliaslen="262144" aliaschannel="0" min="-0.423767" max="0.393311" rms="0.068892"/>
 				</waveblock>
 				<waveblock start="5242880">
-					<pcmaliasblockfile summaryfile="e0000058.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="5242880" aliaslen="262144" aliaschannel="0" min="-0.416595" max="0.373444" rms="0.067546"/>
+					<pcmaliasblockfile summaryfile="e0000058.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="5242880" aliaslen="262144" aliaschannel="0" min="-0.416595" max="0.373444" rms="0.067546"/>
 				</waveblock>
 				<waveblock start="5505024">
-					<pcmaliasblockfile summaryfile="e0000271.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="5505024" aliaslen="262144" aliaschannel="0" min="-0.424164" max="0.397186" rms="0.068091"/>
+					<pcmaliasblockfile summaryfile="e0000271.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="5505024" aliaslen="262144" aliaschannel="0" min="-0.424164" max="0.397186" rms="0.068091"/>
 				</waveblock>
 				<waveblock start="5767168">
-					<pcmaliasblockfile summaryfile="e000021c.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="5767168" aliaslen="262144" aliaschannel="0" min="-0.389465" max="0.375641" rms="0.068403"/>
+					<pcmaliasblockfile summaryfile="e000021c.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="5767168" aliaslen="262144" aliaschannel="0" min="-0.389465" max="0.375641" rms="0.068403"/>
 				</waveblock>
 				<waveblock start="6029312">
-					<pcmaliasblockfile summaryfile="e0000d13.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="6029312" aliaslen="262144" aliaschannel="0" min="-0.32608" max="0.362885" rms="0.063415"/>
+					<pcmaliasblockfile summaryfile="e0000d13.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="6029312" aliaslen="262144" aliaschannel="0" min="-0.32608" max="0.362885" rms="0.063415"/>
 				</waveblock>
 				<waveblock start="6291456">
-					<pcmaliasblockfile summaryfile="e0000eb1.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="6291456" aliaslen="262144" aliaschannel="0" min="-0.28421" max="0.355804" rms="0.062553"/>
+					<pcmaliasblockfile summaryfile="e0000eb1.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="6291456" aliaslen="262144" aliaschannel="0" min="-0.28421" max="0.355804" rms="0.062553"/>
 				</waveblock>
 				<waveblock start="6553600">
-					<pcmaliasblockfile summaryfile="e0000f81.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="6553600" aliaslen="262144" aliaschannel="0" min="-0.345886" max="0.302917" rms="0.061362"/>
+					<pcmaliasblockfile summaryfile="e0000f81.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="6553600" aliaslen="262144" aliaschannel="0" min="-0.345886" max="0.302917" rms="0.061362"/>
 				</waveblock>
 				<waveblock start="6815744">
-					<pcmaliasblockfile summaryfile="e0000555.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="6815744" aliaslen="262144" aliaschannel="0" min="-0.285126" max="0.267029" rms="0.027374"/>
+					<pcmaliasblockfile summaryfile="e0000555.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="6815744" aliaslen="262144" aliaschannel="0" min="-0.285126" max="0.267029" rms="0.027374"/>
 				</waveblock>
 				<waveblock start="7077888">
-					<pcmaliasblockfile summaryfile="e0000955.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="7077888" aliaslen="262144" aliaschannel="0" min="-0.091187" max="0.088562" rms="0.018105"/>
+					<pcmaliasblockfile summaryfile="e0000955.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="7077888" aliaslen="262144" aliaschannel="0" min="-0.091187" max="0.088562" rms="0.018105"/>
 				</waveblock>
 				<waveblock start="7340032">
-					<pcmaliasblockfile summaryfile="e0000c89.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="7340032" aliaslen="262144" aliaschannel="0" min="-0.085358" max="0.068359" rms="0.011617"/>
+					<pcmaliasblockfile summaryfile="e0000c89.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="7340032" aliaslen="262144" aliaschannel="0" min="-0.085358" max="0.068359" rms="0.011617"/>
 				</waveblock>
 				<waveblock start="7602176">
-					<pcmaliasblockfile summaryfile="e0000fd5.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="7602176" aliaslen="262144" aliaschannel="0" min="-0.39743" max="0.365173" rms="0.041346"/>
+					<pcmaliasblockfile summaryfile="e0000fd5.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="7602176" aliaslen="262144" aliaschannel="0" min="-0.39743" max="0.365173" rms="0.041346"/>
 				</waveblock>
 				<waveblock start="7864320">
-					<pcmaliasblockfile summaryfile="e0000409.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="7864320" aliaslen="262144" aliaschannel="0" min="-0.359344" max="0.30191" rms="0.050781"/>
+					<pcmaliasblockfile summaryfile="e0000409.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="7864320" aliaslen="262144" aliaschannel="0" min="-0.359344" max="0.30191" rms="0.050781"/>
 				</waveblock>
 				<waveblock start="8126464">
-					<pcmaliasblockfile summaryfile="e0000387.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="8126464" aliaslen="262144" aliaschannel="0" min="-0.36615" max="0.39679" rms="0.037477"/>
+					<pcmaliasblockfile summaryfile="e0000387.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="8126464" aliaslen="262144" aliaschannel="0" min="-0.36615" max="0.39679" rms="0.037477"/>
 				</waveblock>
 				<waveblock start="8388608">
-					<pcmaliasblockfile summaryfile="e0000b26.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="8388608" aliaslen="262144" aliaschannel="0" min="-0.346893" max="0.298126" rms="0.03368"/>
+					<pcmaliasblockfile summaryfile="e0000b26.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="8388608" aliaslen="262144" aliaschannel="0" min="-0.346893" max="0.298126" rms="0.03368"/>
 				</waveblock>
 				<waveblock start="8650752">
-					<pcmaliasblockfile summaryfile="e0000d74.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="8650752" aliaslen="262144" aliaschannel="0" min="-0.240356" max="0.264648" rms="0.031409"/>
+					<pcmaliasblockfile summaryfile="e0000d74.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="8650752" aliaslen="262144" aliaschannel="0" min="-0.240356" max="0.264648" rms="0.031409"/>
 				</waveblock>
 				<waveblock start="8912896">
-					<pcmaliasblockfile summaryfile="e0000c09.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="8912896" aliaslen="262144" aliaschannel="0" min="-0.465271" max="0.41745" rms="0.053576"/>
+					<pcmaliasblockfile summaryfile="e0000c09.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="8912896" aliaslen="262144" aliaschannel="0" min="-0.465271" max="0.41745" rms="0.053576"/>
 				</waveblock>
 				<waveblock start="9175040">
-					<pcmaliasblockfile summaryfile="e0000891.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="9175040" aliaslen="262144" aliaschannel="0" min="-0.492828" max="0.449982" rms="0.068507"/>
+					<pcmaliasblockfile summaryfile="e0000891.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="9175040" aliaslen="262144" aliaschannel="0" min="-0.492828" max="0.449982" rms="0.068507"/>
 				</waveblock>
 				<waveblock start="9437184">
-					<pcmaliasblockfile summaryfile="e0000464.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="9437184" aliaslen="262144" aliaschannel="0" min="-0.574829" max="0.521454" rms="0.082813"/>
+					<pcmaliasblockfile summaryfile="e0000464.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="9437184" aliaslen="262144" aliaschannel="0" min="-0.574829" max="0.521454" rms="0.082813"/>
 				</waveblock>
 				<waveblock start="9699328">
-					<pcmaliasblockfile summaryfile="e00003d0.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="9699328" aliaslen="262144" aliaschannel="0" min="-0.518463" max="0.514618" rms="0.09161"/>
+					<pcmaliasblockfile summaryfile="e00003d0.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="9699328" aliaslen="262144" aliaschannel="0" min="-0.518463" max="0.514618" rms="0.09161"/>
 				</waveblock>
 				<waveblock start="9961472">
-					<pcmaliasblockfile summaryfile="e0000c04.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="9961472" aliaslen="262144" aliaschannel="0" min="-0.50824" max="0.525116" rms="0.096297"/>
+					<pcmaliasblockfile summaryfile="e0000c04.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="9961472" aliaslen="262144" aliaschannel="0" min="-0.50824" max="0.525116" rms="0.096297"/>
 				</waveblock>
 				<waveblock start="10223616">
-					<pcmaliasblockfile summaryfile="e0000156.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="10223616" aliaslen="262144" aliaschannel="0" min="-0.553711" max="0.511108" rms="0.093956"/>
+					<pcmaliasblockfile summaryfile="e0000156.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="10223616" aliaslen="262144" aliaschannel="0" min="-0.553711" max="0.511108" rms="0.093956"/>
 				</waveblock>
 				<waveblock start="10485760">
-					<pcmaliasblockfile summaryfile="e00001ce.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="10485760" aliaslen="262144" aliaschannel="0" min="-0.548859" max="0.495789" rms="0.092476"/>
+					<pcmaliasblockfile summaryfile="e00001ce.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="10485760" aliaslen="262144" aliaschannel="0" min="-0.548859" max="0.495789" rms="0.092476"/>
 				</waveblock>
 				<waveblock start="10747904">
-					<pcmaliasblockfile summaryfile="e0000f5c.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="10747904" aliaslen="262144" aliaschannel="0" min="-0.552338" max="0.513611" rms="0.090603"/>
+					<pcmaliasblockfile summaryfile="e0000f5c.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="10747904" aliaslen="262144" aliaschannel="0" min="-0.552338" max="0.513611" rms="0.090603"/>
 				</waveblock>
 				<waveblock start="11010048">
-					<pcmaliasblockfile summaryfile="e0000fa1.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="11010048" aliaslen="262144" aliaschannel="0" min="-0.51474" max="0.527435" rms="0.080779"/>
+					<pcmaliasblockfile summaryfile="e0000fa1.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="11010048" aliaslen="262144" aliaschannel="0" min="-0.51474" max="0.527435" rms="0.080779"/>
 				</waveblock>
 				<waveblock start="11272192">
-					<pcmaliasblockfile summaryfile="e0000f3c.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="11272192" aliaslen="262144" aliaschannel="0" min="-0.39328" max="0.391327" rms="0.043424"/>
+					<pcmaliasblockfile summaryfile="e0000f3c.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="11272192" aliaslen="262144" aliaschannel="0" min="-0.39328" max="0.391327" rms="0.043424"/>
 				</waveblock>
 				<waveblock start="11534336">
-					<pcmaliasblockfile summaryfile="e0000da7.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="11534336" aliaslen="262144" aliaschannel="0" min="-0.339813" max="0.338074" rms="0.042442"/>
+					<pcmaliasblockfile summaryfile="e0000da7.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="11534336" aliaslen="262144" aliaschannel="0" min="-0.339813" max="0.338074" rms="0.042442"/>
 				</waveblock>
 				<waveblock start="11796480">
-					<pcmaliasblockfile summaryfile="e0000719.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="11796480" aliaslen="262144" aliaschannel="0" min="-0.440369" max="0.433411" rms="0.052521"/>
+					<pcmaliasblockfile summaryfile="e0000719.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="11796480" aliaslen="262144" aliaschannel="0" min="-0.440369" max="0.433411" rms="0.052521"/>
 				</waveblock>
 				<waveblock start="12058624">
-					<pcmaliasblockfile summaryfile="e0000586.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="12058624" aliaslen="262144" aliaschannel="0" min="-0.499451" max="0.491241" rms="0.080673"/>
+					<pcmaliasblockfile summaryfile="e0000586.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="12058624" aliaslen="262144" aliaschannel="0" min="-0.499451" max="0.491241" rms="0.080673"/>
 				</waveblock>
 				<waveblock start="12320768">
-					<pcmaliasblockfile summaryfile="e00007b0.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="12320768" aliaslen="262144" aliaschannel="0" min="-0.551331" max="0.511322" rms="0.084459"/>
+					<pcmaliasblockfile summaryfile="e00007b0.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="12320768" aliaslen="262144" aliaschannel="0" min="-0.551331" max="0.511322" rms="0.084459"/>
 				</waveblock>
 				<waveblock start="12582912">
-					<pcmaliasblockfile summaryfile="e00004ce.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="12582912" aliaslen="262144" aliaschannel="0" min="-0.512787" max="0.547211" rms="0.092452"/>
+					<pcmaliasblockfile summaryfile="e00004ce.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="12582912" aliaslen="262144" aliaschannel="0" min="-0.512787" max="0.547211" rms="0.092452"/>
 				</waveblock>
 				<waveblock start="12845056">
-					<pcmaliasblockfile summaryfile="e0000ff2.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="12845056" aliaslen="262144" aliaschannel="0" min="-0.554474" max="0.471588" rms="0.096263"/>
+					<pcmaliasblockfile summaryfile="e0000ff2.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="12845056" aliaslen="262144" aliaschannel="0" min="-0.554474" max="0.471588" rms="0.096263"/>
 				</waveblock>
 				<waveblock start="13107200">
-					<pcmaliasblockfile summaryfile="e0000f4e.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="13107200" aliaslen="262144" aliaschannel="0" min="-0.541687" max="0.533844" rms="0.100188"/>
+					<pcmaliasblockfile summaryfile="e0000f4e.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="13107200" aliaslen="262144" aliaschannel="0" min="-0.541687" max="0.533844" rms="0.100188"/>
 				</waveblock>
 				<waveblock start="13369344">
-					<pcmaliasblockfile summaryfile="e00002bb.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="13369344" aliaslen="262144" aliaschannel="0" min="-0.57019" max="0.527588" rms="0.101027"/>
+					<pcmaliasblockfile summaryfile="e00002bb.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="13369344" aliaslen="262144" aliaschannel="0" min="-0.57019" max="0.527588" rms="0.101027"/>
 				</waveblock>
 				<waveblock start="13631488">
-					<pcmaliasblockfile summaryfile="e000065a.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="13631488" aliaslen="262144" aliaschannel="0" min="-0.561066" max="0.523407" rms="0.097703"/>
+					<pcmaliasblockfile summaryfile="e000065a.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="13631488" aliaslen="262144" aliaschannel="0" min="-0.561066" max="0.523407" rms="0.097703"/>
 				</waveblock>
 				<waveblock start="13893632">
-					<pcmaliasblockfile summaryfile="e00004d4.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="13893632" aliaslen="262144" aliaschannel="0" min="-0.517517" max="0.552704" rms="0.100037"/>
+					<pcmaliasblockfile summaryfile="e00004d4.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="13893632" aliaslen="262144" aliaschannel="0" min="-0.517517" max="0.552704" rms="0.100037"/>
 				</waveblock>
 				<waveblock start="14155776">
-					<pcmaliasblockfile summaryfile="e0000b1b.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="14155776" aliaslen="262144" aliaschannel="0" min="-0.547638" max="0.514404" rms="0.098096"/>
+					<pcmaliasblockfile summaryfile="e0000b1b.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="14155776" aliaslen="262144" aliaschannel="0" min="-0.547638" max="0.514404" rms="0.098096"/>
 				</waveblock>
 				<waveblock start="14417920">
-					<pcmaliasblockfile summaryfile="e00006e2.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="14417920" aliaslen="262144" aliaschannel="0" min="-0.521484" max="0.491516" rms="0.093181"/>
+					<pcmaliasblockfile summaryfile="e00006e2.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="14417920" aliaslen="262144" aliaschannel="0" min="-0.521484" max="0.491516" rms="0.093181"/>
 				</waveblock>
 				<waveblock start="14680064">
-					<pcmaliasblockfile summaryfile="e0000a8a.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="14680064" aliaslen="262144" aliaschannel="0" min="-0.53125" max="0.464508" rms="0.090475"/>
+					<pcmaliasblockfile summaryfile="e0000a8a.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="14680064" aliaslen="262144" aliaschannel="0" min="-0.53125" max="0.464508" rms="0.090475"/>
 				</waveblock>
 				<waveblock start="14942208">
-					<pcmaliasblockfile summaryfile="e0000efb.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="14942208" aliaslen="262144" aliaschannel="0" min="-0.511536" max="0.497345" rms="0.081774"/>
+					<pcmaliasblockfile summaryfile="e0000efb.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="14942208" aliaslen="262144" aliaschannel="0" min="-0.511536" max="0.497345" rms="0.081774"/>
 				</waveblock>
 				<waveblock start="15204352">
-					<pcmaliasblockfile summaryfile="e00007fc.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="15204352" aliaslen="262144" aliaschannel="0" min="-0.488739" max="0.481201" rms="0.076521"/>
+					<pcmaliasblockfile summaryfile="e00007fc.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="15204352" aliaslen="262144" aliaschannel="0" min="-0.488739" max="0.481201" rms="0.076521"/>
 				</waveblock>
 				<waveblock start="15466496">
-					<pcmaliasblockfile summaryfile="e0000bd2.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="15466496" aliaslen="262144" aliaschannel="0" min="-0.531403" max="0.501678" rms="0.076781"/>
+					<pcmaliasblockfile summaryfile="e0000bd2.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="15466496" aliaslen="262144" aliaschannel="0" min="-0.531403" max="0.501678" rms="0.076781"/>
 				</waveblock>
 				<waveblock start="15728640">
-					<pcmaliasblockfile summaryfile="e0001d84.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="15728640" aliaslen="262144" aliaschannel="0" min="-0.478241" max="0.482178" rms="0.066443"/>
+					<pcmaliasblockfile summaryfile="e0001d84.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="15728640" aliaslen="262144" aliaschannel="0" min="-0.478241" max="0.482178" rms="0.066443"/>
 				</waveblock>
 				<waveblock start="15990784">
-					<pcmaliasblockfile summaryfile="e0001be5.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="15990784" aliaslen="262144" aliaschannel="0" min="-0.532135" max="0.442047" rms="0.063963"/>
+					<pcmaliasblockfile summaryfile="e0001be5.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="15990784" aliaslen="262144" aliaschannel="0" min="-0.532135" max="0.442047" rms="0.063963"/>
 				</waveblock>
 				<waveblock start="16252928">
-					<pcmaliasblockfile summaryfile="e000108e.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="16252928" aliaslen="262144" aliaschannel="0" min="-0.567413" max="0.552155" rms="0.088189"/>
+					<pcmaliasblockfile summaryfile="e000108e.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="16252928" aliaslen="262144" aliaschannel="0" min="-0.567413" max="0.552155" rms="0.088189"/>
 				</waveblock>
 				<waveblock start="16515072">
-					<pcmaliasblockfile summaryfile="e0001b32.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="16515072" aliaslen="262144" aliaschannel="0" min="-0.491943" max="0.543701" rms="0.099421"/>
+					<pcmaliasblockfile summaryfile="e0001b32.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="16515072" aliaslen="262144" aliaschannel="0" min="-0.491943" max="0.543701" rms="0.099421"/>
 				</waveblock>
 				<waveblock start="16777216">
-					<pcmaliasblockfile summaryfile="e0001150.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="16777216" aliaslen="262144" aliaschannel="0" min="-0.516602" max="0.526733" rms="0.101027"/>
+					<pcmaliasblockfile summaryfile="e0001150.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="16777216" aliaslen="262144" aliaschannel="0" min="-0.516602" max="0.526733" rms="0.101027"/>
 				</waveblock>
 				<waveblock start="17039360">
-					<pcmaliasblockfile summaryfile="e00011f8.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="17039360" aliaslen="262144" aliaschannel="0" min="-0.529083" max="0.565308" rms="0.107427"/>
+					<pcmaliasblockfile summaryfile="e00011f8.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="17039360" aliaslen="262144" aliaschannel="0" min="-0.529083" max="0.565308" rms="0.107427"/>
 				</waveblock>
 				<waveblock start="17301504">
-					<pcmaliasblockfile summaryfile="e0001377.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="17301504" aliaslen="262144" aliaschannel="0" min="-0.632996" max="0.576691" rms="0.107109"/>
+					<pcmaliasblockfile summaryfile="e0001377.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="17301504" aliaslen="262144" aliaschannel="0" min="-0.632996" max="0.576691" rms="0.107109"/>
 				</waveblock>
 				<waveblock start="17563648">
-					<pcmaliasblockfile summaryfile="e00016f8.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="17563648" aliaslen="262144" aliaschannel="0" min="-0.60553" max="0.604218" rms="0.113479"/>
+					<pcmaliasblockfile summaryfile="e00016f8.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="17563648" aliaslen="262144" aliaschannel="0" min="-0.60553" max="0.604218" rms="0.113479"/>
 				</waveblock>
 				<waveblock start="17825792">
-					<pcmaliasblockfile summaryfile="e00016a7.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="17825792" aliaslen="262144" aliaschannel="0" min="-0.612854" max="0.587646" rms="0.120078"/>
+					<pcmaliasblockfile summaryfile="e00016a7.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="17825792" aliaslen="262144" aliaschannel="0" min="-0.612854" max="0.587646" rms="0.120078"/>
 				</waveblock>
 				<waveblock start="18087936">
-					<pcmaliasblockfile summaryfile="e0001fcb.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="18087936" aliaslen="262144" aliaschannel="0" min="-0.583832" max="0.605408" rms="0.114636"/>
+					<pcmaliasblockfile summaryfile="e0001fcb.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="18087936" aliaslen="262144" aliaschannel="0" min="-0.583832" max="0.605408" rms="0.114636"/>
 				</waveblock>
 				<waveblock start="18350080">
-					<pcmaliasblockfile summaryfile="e0001d36.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="18350080" aliaslen="262144" aliaschannel="0" min="-0.597168" max="0.542572" rms="0.110377"/>
+					<pcmaliasblockfile summaryfile="e0001d36.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="18350080" aliaslen="262144" aliaschannel="0" min="-0.597168" max="0.542572" rms="0.110377"/>
 				</waveblock>
 				<waveblock start="18612224">
-					<pcmaliasblockfile summaryfile="e00011b4.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="18612224" aliaslen="262144" aliaschannel="0" min="-0.594482" max="0.609619" rms="0.11035"/>
+					<pcmaliasblockfile summaryfile="e00011b4.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="18612224" aliaslen="262144" aliaschannel="0" min="-0.594482" max="0.609619" rms="0.11035"/>
 				</waveblock>
 				<waveblock start="18874368">
-					<pcmaliasblockfile summaryfile="e00017c0.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="18874368" aliaslen="262144" aliaschannel="0" min="-0.457153" max="0.481049" rms="0.101947"/>
+					<pcmaliasblockfile summaryfile="e00017c0.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="18874368" aliaslen="262144" aliaschannel="0" min="-0.457153" max="0.481049" rms="0.101947"/>
 				</waveblock>
 				<waveblock start="19136512">
-					<pcmaliasblockfile summaryfile="e0001d7d.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="19136512" aliaslen="262144" aliaschannel="0" min="-0.63092" max="0.582184" rms="0.113713"/>
+					<pcmaliasblockfile summaryfile="e0001d7d.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="19136512" aliaslen="262144" aliaschannel="0" min="-0.63092" max="0.582184" rms="0.113713"/>
 				</waveblock>
 				<waveblock start="19398656">
-					<pcmaliasblockfile summaryfile="e00013f1.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="19398656" aliaslen="262144" aliaschannel="0" min="-0.618713" max="0.587128" rms="0.104194"/>
+					<pcmaliasblockfile summaryfile="e00013f1.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="19398656" aliaslen="262144" aliaschannel="0" min="-0.618713" max="0.587128" rms="0.104194"/>
 				</waveblock>
 				<waveblock start="19660800">
-					<pcmaliasblockfile summaryfile="e00018e3.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="19660800" aliaslen="262144" aliaschannel="0" min="-0.436035" max="0.440796" rms="0.094708"/>
+					<pcmaliasblockfile summaryfile="e00018e3.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="19660800" aliaslen="262144" aliaschannel="0" min="-0.436035" max="0.440796" rms="0.094708"/>
 				</waveblock>
 				<waveblock start="19922944">
-					<pcmaliasblockfile summaryfile="e0001525.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="19922944" aliaslen="262144" aliaschannel="0" min="-0.462677" max="0.462128" rms="0.095767"/>
+					<pcmaliasblockfile summaryfile="e0001525.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="19922944" aliaslen="262144" aliaschannel="0" min="-0.462677" max="0.462128" rms="0.095767"/>
 				</waveblock>
 				<waveblock start="20185088">
-					<pcmaliasblockfile summaryfile="e0001ffe.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="20185088" aliaslen="262144" aliaschannel="0" min="-0.471649" max="0.498932" rms="0.099756"/>
+					<pcmaliasblockfile summaryfile="e0001ffe.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="20185088" aliaslen="262144" aliaschannel="0" min="-0.471649" max="0.498932" rms="0.099756"/>
 				</waveblock>
 				<waveblock start="20447232">
-					<pcmaliasblockfile summaryfile="e0001548.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="20447232" aliaslen="262144" aliaschannel="0" min="-0.610931" max="0.623779" rms="0.106073"/>
+					<pcmaliasblockfile summaryfile="e0001548.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="20447232" aliaslen="262144" aliaschannel="0" min="-0.610931" max="0.623779" rms="0.106073"/>
 				</waveblock>
 				<waveblock start="20709376">
-					<pcmaliasblockfile summaryfile="e000113f.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="20709376" aliaslen="262144" aliaschannel="0" min="-0.565155" max="0.558624" rms="0.112959"/>
+					<pcmaliasblockfile summaryfile="e000113f.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="20709376" aliaslen="262144" aliaschannel="0" min="-0.565155" max="0.558624" rms="0.112959"/>
 				</waveblock>
 				<waveblock start="20971520">
-					<pcmaliasblockfile summaryfile="e0001480.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="20971520" aliaslen="110592" aliaschannel="0" min="-0.44577" max="0.421234" rms="0.067184"/>
+					<pcmaliasblockfile summaryfile="e0001480.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="20971520" aliaslen="110592" aliaschannel="0" min="-0.44577" max="0.421234" rms="0.067184"/>
 				</waveblock>
 			</sequence>
 			<envelope numpoints="0"/>
@@ -688,247 +692,247 @@
 		<waveclip offset="1102.84800000">
 			<sequence maxsamples="262144" sampleformat="262159" numsamples="21082112">
 				<waveblock start="0">
-					<pcmaliasblockfile summaryfile="e0000186.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="0" aliaslen="262144" aliaschannel="1" min="-0.117188" max="0.173126" rms="0.029342"/>
+					<pcmaliasblockfile summaryfile="e0000186.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="0" aliaslen="262144" aliaschannel="1" min="-0.117188" max="0.173126" rms="0.029342"/>
 				</waveblock>
 				<waveblock start="262144">
-					<pcmaliasblockfile summaryfile="e00003f7.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="262144" aliaslen="262144" aliaschannel="1" min="-0.113953" max="0.170166" rms="0.03009"/>
+					<pcmaliasblockfile summaryfile="e00003f7.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="262144" aliaslen="262144" aliaschannel="1" min="-0.113953" max="0.170166" rms="0.03009"/>
 				</waveblock>
 				<waveblock start="524288">
-					<pcmaliasblockfile summaryfile="e0000267.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="524288" aliaslen="262144" aliaschannel="1" min="-0.133942" max="0.184296" rms="0.031966"/>
+					<pcmaliasblockfile summaryfile="e0000267.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="524288" aliaslen="262144" aliaschannel="1" min="-0.133942" max="0.184296" rms="0.031966"/>
 				</waveblock>
 				<waveblock start="786432">
-					<pcmaliasblockfile summaryfile="e0000e1a.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="786432" aliaslen="262144" aliaschannel="1" min="-0.128296" max="0.18631" rms="0.032097"/>
+					<pcmaliasblockfile summaryfile="e0000e1a.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="786432" aliaslen="262144" aliaschannel="1" min="-0.128296" max="0.18631" rms="0.032097"/>
 				</waveblock>
 				<waveblock start="1048576">
-					<pcmaliasblockfile summaryfile="e000092a.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="1048576" aliaslen="262144" aliaschannel="1" min="-0.139313" max="0.221954" rms="0.033248"/>
+					<pcmaliasblockfile summaryfile="e000092a.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="1048576" aliaslen="262144" aliaschannel="1" min="-0.139313" max="0.221954" rms="0.033248"/>
 				</waveblock>
 				<waveblock start="1310720">
-					<pcmaliasblockfile summaryfile="e0000738.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="1310720" aliaslen="262144" aliaschannel="1" min="-0.132904" max="0.190186" rms="0.032048"/>
+					<pcmaliasblockfile summaryfile="e0000738.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="1310720" aliaslen="262144" aliaschannel="1" min="-0.132904" max="0.190186" rms="0.032048"/>
 				</waveblock>
 				<waveblock start="1572864">
-					<pcmaliasblockfile summaryfile="e000032e.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="1572864" aliaslen="262144" aliaschannel="1" min="-0.108551" max="0.17334" rms="0.030219"/>
+					<pcmaliasblockfile summaryfile="e000032e.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="1572864" aliaslen="262144" aliaschannel="1" min="-0.108551" max="0.17334" rms="0.030219"/>
 				</waveblock>
 				<waveblock start="1835008">
-					<pcmaliasblockfile summaryfile="e0000fd1.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="1835008" aliaslen="262144" aliaschannel="1" min="-0.391174" max="0.367859" rms="0.048682"/>
+					<pcmaliasblockfile summaryfile="e0000fd1.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="1835008" aliaslen="262144" aliaschannel="1" min="-0.391174" max="0.367859" rms="0.048682"/>
 				</waveblock>
 				<waveblock start="2097152">
-					<pcmaliasblockfile summaryfile="e0000e44.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="2097152" aliaslen="262144" aliaschannel="1" min="-0.378876" max="0.393555" rms="0.062991"/>
+					<pcmaliasblockfile summaryfile="e0000e44.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="2097152" aliaslen="262144" aliaschannel="1" min="-0.378876" max="0.393555" rms="0.062991"/>
 				</waveblock>
 				<waveblock start="2359296">
-					<pcmaliasblockfile summaryfile="e000079f.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="2359296" aliaslen="262144" aliaschannel="1" min="-0.36203" max="0.346039" rms="0.061668"/>
+					<pcmaliasblockfile summaryfile="e000079f.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="2359296" aliaslen="262144" aliaschannel="1" min="-0.36203" max="0.346039" rms="0.061668"/>
 				</waveblock>
 				<waveblock start="2621440">
-					<pcmaliasblockfile summaryfile="e0000680.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="2621440" aliaslen="262144" aliaschannel="1" min="-0.376709" max="0.361359" rms="0.058987"/>
+					<pcmaliasblockfile summaryfile="e0000680.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="2621440" aliaslen="262144" aliaschannel="1" min="-0.376709" max="0.361359" rms="0.058987"/>
 				</waveblock>
 				<waveblock start="2883584">
-					<pcmaliasblockfile summaryfile="e0000dff.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="2883584" aliaslen="262144" aliaschannel="1" min="-0.371094" max="0.39798" rms="0.060714"/>
+					<pcmaliasblockfile summaryfile="e0000dff.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="2883584" aliaslen="262144" aliaschannel="1" min="-0.371094" max="0.39798" rms="0.060714"/>
 				</waveblock>
 				<waveblock start="3145728">
-					<pcmaliasblockfile summaryfile="e0000dd5.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="3145728" aliaslen="262144" aliaschannel="1" min="-0.355194" max="0.383423" rms="0.060903"/>
+					<pcmaliasblockfile summaryfile="e0000dd5.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="3145728" aliaslen="262144" aliaschannel="1" min="-0.355194" max="0.383423" rms="0.060903"/>
 				</waveblock>
 				<waveblock start="3407872">
-					<pcmaliasblockfile summaryfile="e0000a58.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="3407872" aliaslen="262144" aliaschannel="1" min="-0.340759" max="0.330017" rms="0.054482"/>
+					<pcmaliasblockfile summaryfile="e0000a58.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="3407872" aliaslen="262144" aliaschannel="1" min="-0.340759" max="0.330017" rms="0.054482"/>
 				</waveblock>
 				<waveblock start="3670016">
-					<pcmaliasblockfile summaryfile="e0000bf5.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="3670016" aliaslen="262144" aliaschannel="1" min="-0.352844" max="0.342804" rms="0.060914"/>
+					<pcmaliasblockfile summaryfile="e0000bf5.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="3670016" aliaslen="262144" aliaschannel="1" min="-0.352844" max="0.342804" rms="0.060914"/>
 				</waveblock>
 				<waveblock start="3932160">
-					<pcmaliasblockfile summaryfile="e0000f18.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="3932160" aliaslen="262144" aliaschannel="1" min="-0.351105" max="0.377197" rms="0.06062"/>
+					<pcmaliasblockfile summaryfile="e0000f18.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="3932160" aliaslen="262144" aliaschannel="1" min="-0.351105" max="0.377197" rms="0.06062"/>
 				</waveblock>
 				<waveblock start="4194304">
-					<pcmaliasblockfile summaryfile="e0000cfe.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="4194304" aliaslen="262144" aliaschannel="1" min="-0.209839" max="0.219055" rms="0.03456"/>
+					<pcmaliasblockfile summaryfile="e0000cfe.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="4194304" aliaslen="262144" aliaschannel="1" min="-0.209839" max="0.219055" rms="0.03456"/>
 				</waveblock>
 				<waveblock start="4456448">
-					<pcmaliasblockfile summaryfile="e00001af.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="4456448" aliaslen="262144" aliaschannel="1" min="-0.387238" max="0.345673" rms="0.050883"/>
+					<pcmaliasblockfile summaryfile="e00001af.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="4456448" aliaslen="262144" aliaschannel="1" min="-0.387238" max="0.345673" rms="0.050883"/>
 				</waveblock>
 				<waveblock start="4718592">
-					<pcmaliasblockfile summaryfile="e0000d6b.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="4718592" aliaslen="262144" aliaschannel="1" min="-0.352692" max="0.375977" rms="0.062163"/>
+					<pcmaliasblockfile summaryfile="e0000d6b.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="4718592" aliaslen="262144" aliaschannel="1" min="-0.352692" max="0.375977" rms="0.062163"/>
 				</waveblock>
 				<waveblock start="4980736">
-					<pcmaliasblockfile summaryfile="e0000a19.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="4980736" aliaslen="262144" aliaschannel="1" min="-0.342987" max="0.357056" rms="0.06221"/>
+					<pcmaliasblockfile summaryfile="e0000a19.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="4980736" aliaslen="262144" aliaschannel="1" min="-0.342987" max="0.357056" rms="0.06221"/>
 				</waveblock>
 				<waveblock start="5242880">
-					<pcmaliasblockfile summaryfile="e00009d1.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="5242880" aliaslen="262144" aliaschannel="1" min="-0.360809" max="0.373322" rms="0.060772"/>
+					<pcmaliasblockfile summaryfile="e00009d1.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="5242880" aliaslen="262144" aliaschannel="1" min="-0.360809" max="0.373322" rms="0.060772"/>
 				</waveblock>
 				<waveblock start="5505024">
-					<pcmaliasblockfile summaryfile="e0000468.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="5505024" aliaslen="262144" aliaschannel="1" min="-0.372345" max="0.375336" rms="0.062389"/>
+					<pcmaliasblockfile summaryfile="e0000468.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="5505024" aliaslen="262144" aliaschannel="1" min="-0.372345" max="0.375336" rms="0.062389"/>
 				</waveblock>
 				<waveblock start="5767168">
-					<pcmaliasblockfile summaryfile="e00000dc.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="5767168" aliaslen="262144" aliaschannel="1" min="-0.381195" max="0.366699" rms="0.062005"/>
+					<pcmaliasblockfile summaryfile="e00000dc.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="5767168" aliaslen="262144" aliaschannel="1" min="-0.381195" max="0.366699" rms="0.062005"/>
 				</waveblock>
 				<waveblock start="6029312">
-					<pcmaliasblockfile summaryfile="e00006dd.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="6029312" aliaslen="262144" aliaschannel="1" min="-0.255005" max="0.326263" rms="0.055004"/>
+					<pcmaliasblockfile summaryfile="e00006dd.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="6029312" aliaslen="262144" aliaschannel="1" min="-0.255005" max="0.326263" rms="0.055004"/>
 				</waveblock>
 				<waveblock start="6291456">
-					<pcmaliasblockfile summaryfile="e0000e21.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="6291456" aliaslen="262144" aliaschannel="1" min="-0.269257" max="0.298798" rms="0.054671"/>
+					<pcmaliasblockfile summaryfile="e0000e21.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="6291456" aliaslen="262144" aliaschannel="1" min="-0.269257" max="0.298798" rms="0.054671"/>
 				</waveblock>
 				<waveblock start="6553600">
-					<pcmaliasblockfile summaryfile="e0000709.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="6553600" aliaslen="262144" aliaschannel="1" min="-0.255615" max="0.286621" rms="0.053629"/>
+					<pcmaliasblockfile summaryfile="e0000709.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="6553600" aliaslen="262144" aliaschannel="1" min="-0.255615" max="0.286621" rms="0.053629"/>
 				</waveblock>
 				<waveblock start="6815744">
-					<pcmaliasblockfile summaryfile="e0000c29.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="6815744" aliaslen="262144" aliaschannel="1" min="-0.249878" max="0.268951" rms="0.021684"/>
+					<pcmaliasblockfile summaryfile="e0000c29.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="6815744" aliaslen="262144" aliaschannel="1" min="-0.249878" max="0.268951" rms="0.021684"/>
 				</waveblock>
 				<waveblock start="7077888">
-					<pcmaliasblockfile summaryfile="e000006d.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="7077888" aliaslen="262144" aliaschannel="1" min="-0.047638" max="0.047241" rms="0.010524"/>
+					<pcmaliasblockfile summaryfile="e000006d.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="7077888" aliaslen="262144" aliaschannel="1" min="-0.047638" max="0.047241" rms="0.010524"/>
 				</waveblock>
 				<waveblock start="7340032">
-					<pcmaliasblockfile summaryfile="e0000451.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="7340032" aliaslen="262144" aliaschannel="1" min="-0.048767" max="0.042358" rms="0.007066"/>
+					<pcmaliasblockfile summaryfile="e0000451.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="7340032" aliaslen="262144" aliaschannel="1" min="-0.048767" max="0.042358" rms="0.007066"/>
 				</waveblock>
 				<waveblock start="7602176">
-					<pcmaliasblockfile summaryfile="e000072f.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="7602176" aliaslen="262144" aliaschannel="1" min="-0.339172" max="0.326904" rms="0.035375"/>
+					<pcmaliasblockfile summaryfile="e000072f.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="7602176" aliaslen="262144" aliaschannel="1" min="-0.339172" max="0.326904" rms="0.035375"/>
 				</waveblock>
 				<waveblock start="7864320">
-					<pcmaliasblockfile summaryfile="e0000aea.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="7864320" aliaslen="262144" aliaschannel="1" min="-0.313019" max="0.278748" rms="0.042632"/>
+					<pcmaliasblockfile summaryfile="e0000aea.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="7864320" aliaslen="262144" aliaschannel="1" min="-0.313019" max="0.278748" rms="0.042632"/>
 				</waveblock>
 				<waveblock start="8126464">
-					<pcmaliasblockfile summaryfile="e000094c.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="8126464" aliaslen="262144" aliaschannel="1" min="-0.278046" max="0.291016" rms="0.029822"/>
+					<pcmaliasblockfile summaryfile="e000094c.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="8126464" aliaslen="262144" aliaschannel="1" min="-0.278046" max="0.291016" rms="0.029822"/>
 				</waveblock>
 				<waveblock start="8388608">
-					<pcmaliasblockfile summaryfile="e0000e24.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="8388608" aliaslen="262144" aliaschannel="1" min="-0.245453" max="0.22699" rms="0.027889"/>
+					<pcmaliasblockfile summaryfile="e0000e24.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="8388608" aliaslen="262144" aliaschannel="1" min="-0.245453" max="0.22699" rms="0.027889"/>
 				</waveblock>
 				<waveblock start="8650752">
-					<pcmaliasblockfile summaryfile="e00008d9.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="8650752" aliaslen="262144" aliaschannel="1" min="-0.215332" max="0.232147" rms="0.026723"/>
+					<pcmaliasblockfile summaryfile="e00008d9.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="8650752" aliaslen="262144" aliaschannel="1" min="-0.215332" max="0.232147" rms="0.026723"/>
 				</waveblock>
 				<waveblock start="8912896">
-					<pcmaliasblockfile summaryfile="e0000641.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="8912896" aliaslen="262144" aliaschannel="1" min="-0.330139" max="0.327362" rms="0.041976"/>
+					<pcmaliasblockfile summaryfile="e0000641.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="8912896" aliaslen="262144" aliaschannel="1" min="-0.330139" max="0.327362" rms="0.041976"/>
 				</waveblock>
 				<waveblock start="9175040">
-					<pcmaliasblockfile summaryfile="e00001ca.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="9175040" aliaslen="262144" aliaschannel="1" min="-0.366486" max="0.37912" rms="0.05253"/>
+					<pcmaliasblockfile summaryfile="e00001ca.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="9175040" aliaslen="262144" aliaschannel="1" min="-0.366486" max="0.37912" rms="0.05253"/>
 				</waveblock>
 				<waveblock start="9437184">
-					<pcmaliasblockfile summaryfile="e0000d8f.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="9437184" aliaslen="262144" aliaschannel="1" min="-0.380676" max="0.387817" rms="0.064901"/>
+					<pcmaliasblockfile summaryfile="e0000d8f.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="9437184" aliaslen="262144" aliaschannel="1" min="-0.380676" max="0.387817" rms="0.064901"/>
 				</waveblock>
 				<waveblock start="9699328">
-					<pcmaliasblockfile summaryfile="e00005bd.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="9699328" aliaslen="262144" aliaschannel="1" min="-0.408569" max="0.425568" rms="0.071051"/>
+					<pcmaliasblockfile summaryfile="e00005bd.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="9699328" aliaslen="262144" aliaschannel="1" min="-0.408569" max="0.425568" rms="0.071051"/>
 				</waveblock>
 				<waveblock start="9961472">
-					<pcmaliasblockfile summaryfile="e0000eaa.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="9961472" aliaslen="262144" aliaschannel="1" min="-0.423248" max="0.390991" rms="0.074455"/>
+					<pcmaliasblockfile summaryfile="e0000eaa.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="9961472" aliaslen="262144" aliaschannel="1" min="-0.423248" max="0.390991" rms="0.074455"/>
 				</waveblock>
 				<waveblock start="10223616">
-					<pcmaliasblockfile summaryfile="e0000054.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="10223616" aliaslen="262144" aliaschannel="1" min="-0.393219" max="0.424377" rms="0.072555"/>
+					<pcmaliasblockfile summaryfile="e0000054.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="10223616" aliaslen="262144" aliaschannel="1" min="-0.393219" max="0.424377" rms="0.072555"/>
 				</waveblock>
 				<waveblock start="10485760">
-					<pcmaliasblockfile summaryfile="e0000f86.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="10485760" aliaslen="262144" aliaschannel="1" min="-0.44046" max="0.396484" rms="0.071294"/>
+					<pcmaliasblockfile summaryfile="e0000f86.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="10485760" aliaslen="262144" aliaschannel="1" min="-0.44046" max="0.396484" rms="0.071294"/>
 				</waveblock>
 				<waveblock start="10747904">
-					<pcmaliasblockfile summaryfile="e0000e93.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="10747904" aliaslen="262144" aliaschannel="1" min="-0.442505" max="0.425415" rms="0.069736"/>
+					<pcmaliasblockfile summaryfile="e0000e93.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="10747904" aliaslen="262144" aliaschannel="1" min="-0.442505" max="0.425415" rms="0.069736"/>
 				</waveblock>
 				<waveblock start="11010048">
-					<pcmaliasblockfile summaryfile="e00007c6.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="11010048" aliaslen="262144" aliaschannel="1" min="-0.373474" max="0.422913" rms="0.062661"/>
+					<pcmaliasblockfile summaryfile="e00007c6.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="11010048" aliaslen="262144" aliaschannel="1" min="-0.373474" max="0.422913" rms="0.062661"/>
 				</waveblock>
 				<waveblock start="11272192">
-					<pcmaliasblockfile summaryfile="e0000bc4.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="11272192" aliaslen="262144" aliaschannel="1" min="-0.342072" max="0.354889" rms="0.037542"/>
+					<pcmaliasblockfile summaryfile="e0000bc4.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="11272192" aliaslen="262144" aliaschannel="1" min="-0.342072" max="0.354889" rms="0.037542"/>
 				</waveblock>
 				<waveblock start="11534336">
-					<pcmaliasblockfile summaryfile="e00008cf.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="11534336" aliaslen="262144" aliaschannel="1" min="-0.281097" max="0.248352" rms="0.035194"/>
+					<pcmaliasblockfile summaryfile="e00008cf.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="11534336" aliaslen="262144" aliaschannel="1" min="-0.281097" max="0.248352" rms="0.035194"/>
 				</waveblock>
 				<waveblock start="11796480">
-					<pcmaliasblockfile summaryfile="e0000e6a.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="11796480" aliaslen="262144" aliaschannel="1" min="-0.36203" max="0.337006" rms="0.041706"/>
+					<pcmaliasblockfile summaryfile="e0000e6a.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="11796480" aliaslen="262144" aliaschannel="1" min="-0.36203" max="0.337006" rms="0.041706"/>
 				</waveblock>
 				<waveblock start="12058624">
-					<pcmaliasblockfile summaryfile="e00002c1.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="12058624" aliaslen="262144" aliaschannel="1" min="-0.390442" max="0.404907" rms="0.06383"/>
+					<pcmaliasblockfile summaryfile="e00002c1.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="12058624" aliaslen="262144" aliaschannel="1" min="-0.390442" max="0.404907" rms="0.06383"/>
 				</waveblock>
 				<waveblock start="12320768">
-					<pcmaliasblockfile summaryfile="e0000dfd.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="12320768" aliaslen="262144" aliaschannel="1" min="-0.441803" max="0.426514" rms="0.065411"/>
+					<pcmaliasblockfile summaryfile="e0000dfd.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="12320768" aliaslen="262144" aliaschannel="1" min="-0.441803" max="0.426514" rms="0.065411"/>
 				</waveblock>
 				<waveblock start="12582912">
-					<pcmaliasblockfile summaryfile="e0000026.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="12582912" aliaslen="262144" aliaschannel="1" min="-0.407745" max="0.422058" rms="0.071362"/>
+					<pcmaliasblockfile summaryfile="e0000026.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="12582912" aliaslen="262144" aliaschannel="1" min="-0.407745" max="0.422058" rms="0.071362"/>
 				</waveblock>
 				<waveblock start="12845056">
-					<pcmaliasblockfile summaryfile="e0000f6b.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="12845056" aliaslen="262144" aliaschannel="1" min="-0.400238" max="0.440369" rms="0.075208"/>
+					<pcmaliasblockfile summaryfile="e0000f6b.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="12845056" aliaslen="262144" aliaschannel="1" min="-0.400238" max="0.440369" rms="0.075208"/>
 				</waveblock>
 				<waveblock start="13107200">
-					<pcmaliasblockfile summaryfile="e0000c0b.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="13107200" aliaslen="262144" aliaschannel="1" min="-0.415955" max="0.459717" rms="0.077817"/>
+					<pcmaliasblockfile summaryfile="e0000c0b.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="13107200" aliaslen="262144" aliaschannel="1" min="-0.415955" max="0.459717" rms="0.077817"/>
 				</waveblock>
 				<waveblock start="13369344">
-					<pcmaliasblockfile summaryfile="e00009b9.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="13369344" aliaslen="262144" aliaschannel="1" min="-0.451111" max="0.431183" rms="0.079094"/>
+					<pcmaliasblockfile summaryfile="e00009b9.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="13369344" aliaslen="262144" aliaschannel="1" min="-0.451111" max="0.431183" rms="0.079094"/>
 				</waveblock>
 				<waveblock start="13631488">
-					<pcmaliasblockfile summaryfile="e0000b51.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="13631488" aliaslen="262144" aliaschannel="1" min="-0.423676" max="0.423035" rms="0.075904"/>
+					<pcmaliasblockfile summaryfile="e0000b51.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="13631488" aliaslen="262144" aliaschannel="1" min="-0.423676" max="0.423035" rms="0.075904"/>
 				</waveblock>
 				<waveblock start="13893632">
-					<pcmaliasblockfile summaryfile="e0000c2e.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="13893632" aliaslen="262144" aliaschannel="1" min="-0.396301" max="0.445251" rms="0.078695"/>
+					<pcmaliasblockfile summaryfile="e0000c2e.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="13893632" aliaslen="262144" aliaschannel="1" min="-0.396301" max="0.445251" rms="0.078695"/>
 				</waveblock>
 				<waveblock start="14155776">
-					<pcmaliasblockfile summaryfile="e0000574.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="14155776" aliaslen="262144" aliaschannel="1" min="-0.488403" max="0.387207" rms="0.075427"/>
+					<pcmaliasblockfile summaryfile="e0000574.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="14155776" aliaslen="262144" aliaschannel="1" min="-0.488403" max="0.387207" rms="0.075427"/>
 				</waveblock>
 				<waveblock start="14417920">
-					<pcmaliasblockfile summaryfile="e00007ae.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="14417920" aliaslen="262144" aliaschannel="1" min="-0.37973" max="0.396332" rms="0.071323"/>
+					<pcmaliasblockfile summaryfile="e00007ae.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="14417920" aliaslen="262144" aliaschannel="1" min="-0.37973" max="0.396332" rms="0.071323"/>
 				</waveblock>
 				<waveblock start="14680064">
-					<pcmaliasblockfile summaryfile="e0000ca6.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="14680064" aliaslen="262144" aliaschannel="1" min="-0.382782" max="0.403809" rms="0.069768"/>
+					<pcmaliasblockfile summaryfile="e0000ca6.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="14680064" aliaslen="262144" aliaschannel="1" min="-0.382782" max="0.403809" rms="0.069768"/>
 				</waveblock>
 				<waveblock start="14942208">
-					<pcmaliasblockfile summaryfile="e0000bdd.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="14942208" aliaslen="262144" aliaschannel="1" min="-0.388855" max="0.41684" rms="0.062204"/>
+					<pcmaliasblockfile summaryfile="e0000bdd.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="14942208" aliaslen="262144" aliaschannel="1" min="-0.388855" max="0.41684" rms="0.062204"/>
 				</waveblock>
 				<waveblock start="15204352">
-					<pcmaliasblockfile summaryfile="e000081d.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="15204352" aliaslen="262144" aliaschannel="1" min="-0.405151" max="0.40213" rms="0.05823"/>
+					<pcmaliasblockfile summaryfile="e000081d.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="15204352" aliaslen="262144" aliaschannel="1" min="-0.405151" max="0.40213" rms="0.05823"/>
 				</waveblock>
 				<waveblock start="15466496">
-					<pcmaliasblockfile summaryfile="e00007aa.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="15466496" aliaslen="262144" aliaschannel="1" min="-0.367889" max="0.379242" rms="0.058423"/>
+					<pcmaliasblockfile summaryfile="e00007aa.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="15466496" aliaslen="262144" aliaschannel="1" min="-0.367889" max="0.379242" rms="0.058423"/>
 				</waveblock>
 				<waveblock start="15728640">
-					<pcmaliasblockfile summaryfile="e0001d00.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="15728640" aliaslen="262144" aliaschannel="1" min="-0.392365" max="0.401031" rms="0.050357"/>
+					<pcmaliasblockfile summaryfile="e0001d00.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="15728640" aliaslen="262144" aliaschannel="1" min="-0.392365" max="0.401031" rms="0.050357"/>
 				</waveblock>
 				<waveblock start="15990784">
-					<pcmaliasblockfile summaryfile="e0001dc7.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="15990784" aliaslen="262144" aliaschannel="1" min="-0.360565" max="0.391907" rms="0.048525"/>
+					<pcmaliasblockfile summaryfile="e0001dc7.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="15990784" aliaslen="262144" aliaschannel="1" min="-0.360565" max="0.391907" rms="0.048525"/>
 				</waveblock>
 				<waveblock start="16252928">
-					<pcmaliasblockfile summaryfile="e0001a7f.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="16252928" aliaslen="262144" aliaschannel="1" min="-0.414185" max="0.429779" rms="0.061872"/>
+					<pcmaliasblockfile summaryfile="e0001a7f.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="16252928" aliaslen="262144" aliaschannel="1" min="-0.414185" max="0.429779" rms="0.061872"/>
 				</waveblock>
 				<waveblock start="16515072">
-					<pcmaliasblockfile summaryfile="e0001584.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="16515072" aliaslen="262144" aliaschannel="1" min="-0.351898" max="0.378632" rms="0.065863"/>
+					<pcmaliasblockfile summaryfile="e0001584.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="16515072" aliaslen="262144" aliaschannel="1" min="-0.351898" max="0.378632" rms="0.065863"/>
 				</waveblock>
 				<waveblock start="16777216">
-					<pcmaliasblockfile summaryfile="e0001597.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="16777216" aliaslen="262144" aliaschannel="1" min="-0.355347" max="0.381409" rms="0.065027"/>
+					<pcmaliasblockfile summaryfile="e0001597.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="16777216" aliaslen="262144" aliaschannel="1" min="-0.355347" max="0.381409" rms="0.065027"/>
 				</waveblock>
 				<waveblock start="17039360">
-					<pcmaliasblockfile summaryfile="e0001892.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="17039360" aliaslen="262144" aliaschannel="1" min="-0.340057" max="0.369995" rms="0.07057"/>
+					<pcmaliasblockfile summaryfile="e0001892.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="17039360" aliaslen="262144" aliaschannel="1" min="-0.340057" max="0.369995" rms="0.07057"/>
 				</waveblock>
 				<waveblock start="17301504">
-					<pcmaliasblockfile summaryfile="e00018f8.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="17301504" aliaslen="262144" aliaschannel="1" min="-0.450684" max="0.42038" rms="0.072429"/>
+					<pcmaliasblockfile summaryfile="e00018f8.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="17301504" aliaslen="262144" aliaschannel="1" min="-0.450684" max="0.42038" rms="0.072429"/>
 				</waveblock>
 				<waveblock start="17563648">
-					<pcmaliasblockfile summaryfile="e0001630.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="17563648" aliaslen="262144" aliaschannel="1" min="-0.446289" max="0.489319" rms="0.077284"/>
+					<pcmaliasblockfile summaryfile="e0001630.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="17563648" aliaslen="262144" aliaschannel="1" min="-0.446289" max="0.489319" rms="0.077284"/>
 				</waveblock>
 				<waveblock start="17825792">
-					<pcmaliasblockfile summaryfile="e0001595.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="17825792" aliaslen="262144" aliaschannel="1" min="-0.51355" max="0.417114" rms="0.082271"/>
+					<pcmaliasblockfile summaryfile="e0001595.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="17825792" aliaslen="262144" aliaschannel="1" min="-0.51355" max="0.417114" rms="0.082271"/>
 				</waveblock>
 				<waveblock start="18087936">
-					<pcmaliasblockfile summaryfile="e0001c42.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="18087936" aliaslen="262144" aliaschannel="1" min="-0.408875" max="0.459106" rms="0.076891"/>
+					<pcmaliasblockfile summaryfile="e0001c42.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="18087936" aliaslen="262144" aliaschannel="1" min="-0.408875" max="0.459106" rms="0.076891"/>
 				</waveblock>
 				<waveblock start="18350080">
-					<pcmaliasblockfile summaryfile="e000185e.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="18350080" aliaslen="262144" aliaschannel="1" min="-0.436493" max="0.358093" rms="0.072322"/>
+					<pcmaliasblockfile summaryfile="e000185e.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="18350080" aliaslen="262144" aliaschannel="1" min="-0.436493" max="0.358093" rms="0.072322"/>
 				</waveblock>
 				<waveblock start="18612224">
-					<pcmaliasblockfile summaryfile="e0001ecb.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="18612224" aliaslen="262144" aliaschannel="1" min="-0.42984" max="0.424438" rms="0.074093"/>
+					<pcmaliasblockfile summaryfile="e0001ecb.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="18612224" aliaslen="262144" aliaschannel="1" min="-0.42984" max="0.424438" rms="0.074093"/>
 				</waveblock>
 				<waveblock start="18874368">
-					<pcmaliasblockfile summaryfile="e000119f.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="18874368" aliaslen="262144" aliaschannel="1" min="-0.328796" max="0.401672" rms="0.06893"/>
+					<pcmaliasblockfile summaryfile="e000119f.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="18874368" aliaslen="262144" aliaschannel="1" min="-0.328796" max="0.401672" rms="0.06893"/>
 				</waveblock>
 				<waveblock start="19136512">
-					<pcmaliasblockfile summaryfile="e0001e51.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="19136512" aliaslen="262144" aliaschannel="1" min="-0.459381" max="0.439301" rms="0.076186"/>
+					<pcmaliasblockfile summaryfile="e0001e51.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="19136512" aliaslen="262144" aliaschannel="1" min="-0.459381" max="0.439301" rms="0.076186"/>
 				</waveblock>
 				<waveblock start="19398656">
-					<pcmaliasblockfile summaryfile="e000128b.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="19398656" aliaslen="262144" aliaschannel="1" min="-0.433716" max="0.411835" rms="0.068861"/>
+					<pcmaliasblockfile summaryfile="e000128b.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="19398656" aliaslen="262144" aliaschannel="1" min="-0.433716" max="0.411835" rms="0.068861"/>
 				</waveblock>
 				<waveblock start="19660800">
-					<pcmaliasblockfile summaryfile="e00015ab.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="19660800" aliaslen="262144" aliaschannel="1" min="-0.357239" max="0.317627" rms="0.063459"/>
+					<pcmaliasblockfile summaryfile="e00015ab.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="19660800" aliaslen="262144" aliaschannel="1" min="-0.357239" max="0.317627" rms="0.063459"/>
 				</waveblock>
 				<waveblock start="19922944">
-					<pcmaliasblockfile summaryfile="e0001d69.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="19922944" aliaslen="262144" aliaschannel="1" min="-0.32077" max="0.337677" rms="0.064461"/>
+					<pcmaliasblockfile summaryfile="e0001d69.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="19922944" aliaslen="262144" aliaschannel="1" min="-0.32077" max="0.337677" rms="0.064461"/>
 				</waveblock>
 				<waveblock start="20185088">
-					<pcmaliasblockfile summaryfile="e0001fb8.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="20185088" aliaslen="262144" aliaschannel="1" min="-0.383209" max="0.374146" rms="0.068457"/>
+					<pcmaliasblockfile summaryfile="e0001fb8.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="20185088" aliaslen="262144" aliaschannel="1" min="-0.383209" max="0.374146" rms="0.068457"/>
 				</waveblock>
 				<waveblock start="20447232">
-					<pcmaliasblockfile summaryfile="e0001cf1.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="20447232" aliaslen="262144" aliaschannel="1" min="-0.404846" max="0.492737" rms="0.073084"/>
+					<pcmaliasblockfile summaryfile="e0001cf1.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="20447232" aliaslen="262144" aliaschannel="1" min="-0.404846" max="0.492737" rms="0.073084"/>
 				</waveblock>
 				<waveblock start="20709376">
-					<pcmaliasblockfile summaryfile="e0001d74.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="20709376" aliaslen="262144" aliaschannel="1" min="-0.472443" max="0.446106" rms="0.078348"/>
+					<pcmaliasblockfile summaryfile="e0001d74.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="20709376" aliaslen="262144" aliaschannel="1" min="-0.472443" max="0.446106" rms="0.078348"/>
 				</waveblock>
 				<waveblock start="20971520">
-					<pcmaliasblockfile summaryfile="e0001f48.auf" aliasfile="D:\tim\Music\netradioDNB\d019-040.wav" aliasstart="20971520" aliaslen="110592" aliaschannel="1" min="-0.271851" max="0.298523" rms="0.046501"/>
+					<pcmaliasblockfile summaryfile="e0001f48.auf" aliasfile="/net/freenas/mnt/Reliant/Media/Music/_new/jaz_links/d019-040.wav" aliasstart="20971520" aliaslen="110592" aliaschannel="1" min="-0.271851" max="0.298523" rms="0.046501"/>
 				</waveblock>
 			</sequence>
 			<envelope numpoints="0"/>
