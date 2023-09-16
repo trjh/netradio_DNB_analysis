@@ -51,7 +51,7 @@ unless (defined($ARGV[0])) {
 }
 my $input = $ARGV[0];
 
-open IN, $input or die;
+open IN, $input or die "Can't open $input";
 my ($wavetrackname, $offset) = ("", -1); # current wavetrack values
 
 while (<IN>) {
