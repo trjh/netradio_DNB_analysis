@@ -26,4 +26,5 @@ _$*
 *.ln
 core
 *.aup3
+audacity/*_data
 # CVS default ignores end
