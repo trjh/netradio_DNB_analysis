@@ -9,7 +9,7 @@ for f in $src $dst; do
     tmp=/tmp/cmp.${f##*/}
     if [[ -e $tmp ]]; then /bin/rm $tmp; fi
     perl -pe 's/(\.\d{8})\d+/\1/g' $f | \
-    egrep -v "[\<\/](waveblock|pcmaliasblockfile)" > $tmp
+    egrep -v "[\<\/](waveblock|pcmaliasblockfile|simpleblockfile)" > $tmp
 done
 
 diff -uwb /tmp/cmp.${src##*/} /tmp/cmp.${dst##*/}
