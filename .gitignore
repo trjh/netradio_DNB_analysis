@@ -25,6 +25,9 @@ _$*
 *.elc
 *.ln
 core
+# CVS default ignores end
 *.aup3
 audacity/*_data
-# CVS default ignores end
+*.swp
+*.swo
+sources
