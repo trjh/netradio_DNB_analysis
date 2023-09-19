@@ -1,0 +1,39 @@
+0.000000	0.000000	start001: ID: promo1
+0.000000	0.000000	file sync: d000-018: 0.0
+35.298848	35.298848	start002: ID: promo2
+59.525020	59.525020	track sync: start 003.mp3 start here for audio start align
+59.910324	59.910324	start003: ID: Jamie Myserson - Sky Blue
+83.929783	83.929783	track sync: 1 162bpm
+285.129433	285.129433	track sync - last drop
+289.018776	289.018776	track sync - original last drop
+303.949206	303.949206	start004: ID: Jamie Myerson - Everything is Gonna Be Alright
+303.949206	303.949206	track sync: start 004.mp3
+304.236105	304.236105	sync align 1
+328.019592	328.019592	track sync add sax + drum
+328.109569	328.109569	track sync orig add sax + drum
+331.636011	331.636011	backwards skip 6.811 sec?
+338.446536	338.446536	track sync add sax + drum again
+351.631383	353.544127	track sync orig lyrics start "I'll be the"
+361.888798	363.781224	lyrics start "I'll be the"
+423.705392	428.210063	orig sync - "Everything is gonna be alright"
+433.690703	438.195374	track sync - "Everything is gonna be alright"
+480.420862	480.983946	track sync - beat sax start beat
+552.809070	554.295147	track sync - sax end beat start fade
+573.694689	573.694689	orig004: track end
+573.866737	573.866737	start005: ID: You're My Life
+588.695791	588.695791	start006: ID: Unity Gain
+607.215642	607.215642	track sync - aligned with 006.mp3, though does not stay in alignment
+647.372229	647.372229	track sync - start 005.mp3
+647.372229	647.372229	start005: ID: You're My Life
+695.495895	697.025071	track sync - first bigger drop
+1053.756372	1055.822948	track sync - begin last verse
+1101.276009	1102.848000	track sync - fade cymbal
+1102.848000	1102.848000	file sync: 1102.848
+1102.848000	1102.848000	file sync: end d000-018 start 019-040
+695.614598	697.143775	track sync orig - first bigger drop
+760.741354	760.741354	track sync - start 006.mp3
+775.296686	775.296686	track sync - start 005.mp3
+1012.452945	1012.452945	track sync - end 005.mp3
+1055.288889	1057.355465	track sync orig - begin last verse
+1065.146252	1065.146252	track sync - end 006.mp3
+1102.994286	1109.066304	track sync orig - fade cymbal
