@@ -24,13 +24,13 @@ help in summarizing and cross-referencing the information.
 
 ## What's here
 
-* [tracklog-1998.txt] -- The text file I used in 1998 to try and ensure I'd recorded the entire stream
-* [tracklist-2017.txt] -- Notes on stream details, tracklist, and clues to unknown songs
-* [audacity] -- Audacity version 2.1.x metadata files from 2017.  Audacity 3.3 stores data in one big file,
+* [tracklog-1998.txt](./tracklog-1998.txt) -- The text file I used in 1998 to try and ensure I'd recorded the entire stream
+* [tracklist-2017.txt](./tracklist-2017.txt) -- Notes on stream details, tracklist, and clues to unknown songs
+* [audacity](./audacity) -- Audacity version 2.1.x metadata files from 2017.  Audacity 3.3 stores data in one big file,
   so these remain as 2017 artifacts.
-* [labels] -- Audacity 3.x label export files -- notes on file start/stop, track start/stop, sync points with original tracks, etc.
-* [logo] -- netradio.com logo files retrieved from archive.org and other places
-* [scripts] -- misc. helper scripts mostly oriented around Audacity 2.1.x metadata files
+* [labels](./labels) -- Audacity 3.x label export files -- notes on file start/stop, track start/stop, sync points with original tracks, etc.
+* [logo](./logo) -- netradio.com logo files retrieved from archive.org and other places
+* [scripts](./scripts) -- misc. helper scripts mostly oriented around Audacity 2.1.x metadata files
 
 ## TODO
 
