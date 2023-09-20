@@ -1,0 +1,133 @@
+file:
+A - jazdnb1/dnb019-040 - starts here					
+
+minutes  time     desc.                                    date		file+time
+  0.00   0:00:00  promo1: from acid jazz...                Nov-05-18+
+  0.58   0:00:35  promo2: yo, you're listening to club...  Nov-04-20+
+  1.00   0:01:00  first song                               Nov-04-20+
+  5.07   0:05:04  ns: I'll be the ground that you stand... Oct-30-03+
+  9.57	 0:09:34  ns                                       +
+ 18.38   0:18:23  ns: [church bells]                       Nov-05-18+	A:00.00
+ 26.33   0:26:20  promo3: from acid jazz ... peace         Oct-30-04+
+ 26.93   0:26:54  ns                                       Nov-05-19+
+         0:27:36  skip?					   +
+         0:35:50  (she's a darkheart)                      Nov-05-19
+         0:40:21  ns: raise your face to the sun...        +
+         0:46:02  transition: we are destined to gain ...  +
+	 0:46:38  (we are destined to gain knowledge from  +
+         0:52:59  transition: ooh, baby; come on just let  +
+ 55      0:55:00  (it's all in your imagination -- if you  Oct-30-15
+ 55.60   0:55:36  (it's all in your imag                   Nov-05-19
+ 65      1:05:00  ns                                       Nov-03-21
+ 67      1:07:00  (oh! Ma see yoo -- ah-han)               Nov-03-21
+ 70      1:10:00  start of dnb-26484                       Nov-05-19
+ 71      1:11:00  ns: it's all in my mind (oh no, no       Nov-03-21
+ 84      1:24:00  (my name's bond, james bond)             Nov-03-21
+ 94      1:34:00  ns?                                      Nov-03-21
+111      1:51:00  ns: [baby noises]                        Nov-03-21
+116      1:56:00  ns                                       Nov-03-21
+121      2:01:00  fade out, then new song                  Nov-03-21
+126.90   2:06:54  ns                                       Nov-04-23
+127      2:07:00  ns: [flute & drum -- jungle-like]        Nov-03-22
+132      2:12:00  ns: queen of the ghetto                  Nov-03-22
+137      2:17:00  ns                                       Nov-03-22
+137.45   2:17:27  ns: queen of the ghetto                  Nov-04-23
+144      2:24:00  ns: (dreaming of you..take me up,        Nov-03-22
+144      2:24:00  promo4: you're listening to club groove.. Nov-03-22
+151      2:31:00  ns: [cymbals & stutter]                  Nov-03-22
+156      2:36:00  ns                                       Nov-03-22
+159      2:39:00  (please hang up, and try again)          Oct-30-17
+160      2:40:00  (please hang up, and try again... rock r Oct-30-17
+164      2:44:00  ns                                       Nov-03-22
+172      2:52:00  ns                                       Nov-03-22
+177      2:57:00  ns                                       Nov-03-22
+186      3:06:00  ns (I gave my heart / when to shav       Oct-30-17
+188      3:08:00  (I gave my heart...<mumble>)             Nov-03-23
+189      3:09:00  (how to shit, when to shave, when to sho Nov-03-23
+195      3:15:00  ns: (you attack...authorization)         Nov-03-23
+195      3:15:00  promo5: from acid jazz ... peace         Oct-30-18
+206      3:26:00  (attack...)                              Nov-03-23
+213      3:33:00  (all that we see ... is but a dream with Nov-02-16
+214      3:34:00  (but in the process...)                  Nov-02-16
+218      3:38:00  (and the true rebels always walk alone a Nov-03-23
+219      3:39:00  (an the true rebels always walk alone an Nov-02-16
+226      3:46:00  transition?                              Nov-03-23
+242      4:02:00  [weow-weow-weow] (by the guard(?)...)    Nov-02-17
+245      4:05:00  ns                                       Nov-02-17
+246.45	 4:06:27  ([1st] la...only, only...da...)          Nov-13-00
+253.12   4:13:07  ([1st] the ultimate creature)            Nov-13-01
+258      4:18:00  (night -- rider)                         Nov-04-00
+261      4:21:00  (I am the night rider!)                  Nov-04-00
+267      4:27:00  transition [sound of a gun battle]       Nov-04-00
+268      4:28:00  promo6: yo, you're listening to club groo Nov-04-0:
+268.75   4:28:45  ns: (you dream of -- hey man)            Nov-13-01
+275      4:35:00  ns                                       Nov-02-17
+276.27	 4:36:16  (there is a secret soul)                 Nov-13-01
+279      4:39:00  (dark blood of the golden secret heart)  Nov-02-17
+283.75   4:43:45  ns                                       Nov-13-01
+284      4:44:00  ns                                       Nov-02-17
+290      4:50:00  ns                                       Nov-02-17
+294      4:54:00  ns                                       Nov-02-17
+294.73   4:54:44  (I've got... (so much love)              Nov-13-01
+295.35   4:55:21  ...deep inside of me)                    Nov-13-01
+308      5:08:00  ns                                       Nov-04-17
+316      5:16:00  ns                                       Nov-04-17
+318.40   5:18:24  (this is a warning -- warning -- warning Nov-13-02
+322      5:22:00  ns                                       Nov-04-17
+330      5:30:00  ns                                       Nov-04-17
+335.57   5:35:34  ns (yea y'all...ah-ha)                   Nov-05-15
+338      5:38:00  ++ yea y'all...yea-yea-yea...ah-ha       Nov-05-15
+342.42   5:42:25  promo7: from acid jazz...                Nov-05-15
+338.50   5:38:30  ns (post promo7)                         Nov-13-02
+343      5:43:00  ++ ns (ahhh[woman/tenor]...yeaaa[bass]   Nov-05-15
+348      5:48:00  ++ (...forever...fish in the see...maybe Nov-05-15
+354      5:54:00  (hey man, you want a tune? -- yea - I go Nov-04-17
+354.68   5:54:41  transition                               Nov-05-15
+356      5:56:00  ++ (oh oh oh au...cool ool ool yea ea ea Nov-05-15
+   358   5:58:00  (hey man, you want a                     Nov-05-15
+366.57   6:06:34  (creating a whole form of urban style mu Nov-05-17
+368.48   6:08:29  (urban -- style -- music)                Nov-05-17
+376.98   6:16:59  (your sound)                             Nov-05-16
+   382   6:22:00  ++ ([woman:] space inside of me...       Nov-05-16
+389.92   6:29:55  ns                                       Nov-05-17
+389.93   6:29:56  ns                                       Nov-05-16
+396.93   6:36:56  transition?                              Nov-05-16
+397.02   6:37:01  ns?                                      Nov-05-17
+405.70   6:45:42  *(down on your stick                     Nov-05-16
+   406   6:46:00  *+-30s  ...stick...stick?                Nov-05-16
+407.00   6:47:00  (thinkaboutgettoyo...)                   Nov-04-2:
+412.88   6:52:53  *ns/transition                           Nov-05-16
+412.98   6:52:59  ns?                                      Nov-04-2:
+   424   7:03:00  (i always wanted to touch the outer limi Nov-09-15
+429.08   7:09:05  transition (I always wanted to touch the Nov-04-  
+436.20   7:16:12  promo8: yo, you're list                  Nov-05-17
+436.28   7:16:17  promo8: yo, you're listening to... [fade Nov-04-  
+436.72   7:16:43  ns (** kudasai...)                       Nov-05-17
+436.82   7:16:49  ns [strange words]                       Nov-04-  
+   443   7:23:00     grunting (eeh-yuh)                    Nov-05-17
+446.23   7:26:14  transition                               Nov-05-17
+   464   7:44:00  ++ [spacy sounds]                        Nov-05-17
+465.60   7:45:36     (reservation...)                      Nov-05-17
+467.83   7:47:50  transition                               Nov-05-17
+472.00   7:52:00  (I've chained my body to steel)          Nov-04-3:
+   473   7:52:00  (i've chained my body.                   Nov-06-19
+477.77   7:57:46  (i've chained my body..                  Nov-05-17
+   478   7:58:00  ns (eu-u-wa my dear..                    Nov-06-19
+478.00   7:58:00  ns (aaa-uuu-wa my dear, aaa-uuu-wa       Nov-04-3:
+   483   8:03:00  ns (eu-u-wah                             Nov-05-17
+496.01   8:16:01  ns                                       Nov-05-18
+   498   8:18:00  start recording                          Nov-06-19
+499.00   8:19:00  transition?                              Nov-04-4:
+503.52   8:23:31  (free your mind                          Nov-05-18
+   504   8:24:00  ++ (and some...)                         Nov-05-18
+   505   8:25:00  ++ [quiet "eid.l.viss"]                  Nov-05-18
+507.30   8:27:18  transition?                              Nov-05-18
+514.30   8:34:18  [mumbling, but words]                    Nov-05-18
+521.20   8:41:12  (ooh ooh waa...                          Nov-05-18
+   522   8:42:00  ++ (started with waaa..., repeats)       Nov-05-18
+527.00            [end with a crash/splash]                Nov-04-20
+527.00   8:47:00  promo9: yo, you're listening to club groo Nov-04-4:
+531.30   8:51:18  [ending crash/splash]                    Nov-05-18
+531.42   8:51:25  promo1: from acid jazz.                  Nov-05-18
+532.00   8:52:00  promo2: yo, you're...                    Nov-05-18
+532.42   8:52:25  ns (i'll be the ground                   Nov-05-18
