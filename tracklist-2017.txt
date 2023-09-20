@@ -1,14 +1,203 @@
-from ../jaz DNB cd8/jazdnb5/d-14Nov10-e.tracklist.txt
 Timing
+
+TODO: check youtube, google play, itunes playlists for notes
+      finish youtube playlist:
+	  https://www.discogs.com/Various-No-Categories-A-Ubiquity-Compilation/master/112579
+      listen (re: Mask / Mad Professor)
+	  https://www.discogs.com/Various-Wayz-Of-The-Dragon/master/80881
+
+REVIEW:
+x   d-14Nov10-a
+x   d-14Nov10-b
+x   d-14Nov10-c
+x   d-14Nov10-d
+x   d-14Nov10-e
+x   d-14Nov10-f
+x   d-14Nov10-h
+    d-25-000b.wav
+    d-25-005b.wav
+x   d000-018.wav
+x   d001-026b.wav
+    d006-025.wav
+x   d019-040.wav
+    d026-045.wav
+.   d026-073b.wav
+x   d041-064.wav
+    d046-065.wav
+    d064-083b.wav
+.   d065-087.wav
+    d066-085.wav
+    d069-086.wav
+    d084-103b.wav
+    d086-105.wav
+    d087-121.wav
+    d088-107.wav
+    d104-108b.wav
+    d106-125.wav
+    d107-121b.wav
+    d122-144.wav
+    d122-144b.wav
+    d126-145.wav
+    d145-164.wav
+    d145-164b.wav
+    d146.wav
+    d165-186.wav
+    d165-186b.wav
+    d187-200.wav
+    d187-216b.wav
+    d217-242.wav
+    d228-247.wav
+    d242-268.wav
+    d248-258.wav
+    d268-287.wav
+    d269-271b.wav
+    d276-293b.wav
+    d288-307.wav
+    d308-327.wav
+    d316-335.wav
+    d328-342.wav
+    d336-355.wav
+    d356-375.wav
+    d376-395.wav
+    d396-415.wav
+    d416-435.wav
+    d425-438b.wav
+    d425-444.wav
+    d436-455.wav
+    d445-464.wav
+    d456-470.wav
+    d465-484.wav
+    d472-491.wav
+    d485-504.wav
+    d492-511.wav
+    d505-524.wav
+    d505-531b.wav
+    d512-005.wav
+    d525-532.wav
+.   dnb-14Nov02-a.au
+.   dnb-14Nov02-b.au
+    dnb-14Nov02-c.au
+
+:: definitive track listing
+-- other definitive note
+.. annotation, not a definitive marker
+?? query
+
+	d000-018
+	--------
+000:00	00:00 :: promo1: from acid jazz to hip hop, house music to trip hop,
+		 and everything inbetween, check out club groove on netradio.
+		 www.netradio.net -- peace.
+000:35	00:35 :: promo2: yo you're listening to club groove on netradio.
+		 www.netradio.net -- peace.
+	00:55 ---- d001-026b starts
+001:00	01:00 :: Sky Blue / Jamie Myerson
+	---------- d001-026b 0:05
+005:04	05:04 :: Everything Is Gonna Be Alright / Jamie Myerson
+	---------- d001-026b 4:09[in sync]
+009:33	09:33 :: Unity Gain / Jamie Myerson
+		 mixed in with You're My Life / Jamie Myerson
+	---------- d001-026b 8:39[in sync]
+	09:48 .. skip?
+	---------- d001-026b 8:54[in sync]
+018:23	18:23 -- END
+
+	d019-040
+	--------
+018:23	00:00 :: Crucial / Jamie Myerson
+	---------- d001-026b 17:28[in sync]
+026:19	07:56 :: promo3: (promo1)
+		 from acid jazz to hip hop, house music to trip hop,
+		 and everything inbetween, check out club groove on netradio.
+		 www.netradio.net -- peace.
+	---------- d001-026b 25:25[in sync]
+026:54	08:31 :: Artificial Life / Odyssey / Earth, Vol. 2
+		 (8:41, track 3 on cd)
+	---------- d001-026b 25:59[in sync]
+	---------- d001-026b 26:15 -- END
+	17:04 .. begin transition
+035:40	17:17 :: Piano (The Green Stinky Mix) / Tricky 
+		 https://www.discogs.com/Tricky-Makes-Me-Wanna-Die/release/38468
+		 https://www.youtube.com/watch?v=rE7xKiY-pQg
+		    5:18 in length, starts really at :12
+		    ...so 22:35 if full, but ends at 21:57
+		 https://www.azlyrics.com/lyrics/tricky/piano.html
+		 "...Take me cunning, she's darker
+		 Never saw, never saw
+		 She's lifelike to the heartbeat
+		 Can't feel the heartbeat"
+		 (via http://audiotag.info/index.php, 
+		  http://homepage/d019-040024.mp3)
+		    sox d041-064.wav d041-064.mp3 trim 0 45 : newfile : restart
+		    scp *.mp3 homepage
+		    perl -e '$t=0; for ($i=1; $i<=33; $i++) { $end=$t+45;
+		    printf "file %2d: %02d:%02d - %02d:%02d\n", $i,
+		    int($t/60), $t%60, int($end/60), $end%60; $t=$end }'
+
+	21:58 -- END
+
+	d041-064
+	--------
+040:21	00:00 :: Arboleda De Manzanitas (Drum and Bass Mix) / Eighty Mile Beach
+		 https://itunes.apple.com/de/album/arboleda-de-manzanitas-drum-bass-mix/id439852478?i=439852488&app=music&upsell=true&ign-mpt=uo%3D5
+		 https://www.discogs.com/Eighty-Mile-Beach-Arboleda-De-Manzanitas/release/118242
+		 https://www.discogs.com/Various-Lost-In-Space-Divaz-n-Bass/master/113537
+		 https://www.youtube.com/watch?v=Yx0tPOvhaic&feature=player_embedded
+		 (5:53)
+	05:41 .. transition starts
+	05:45 :: Senses / DJ Addiction / Earth, Vol. 2
+		 (7:10, track 8 on cd) -- so 12:45?
+>>	11:52 :: transition starts, mixing in:
+		 [chunk 16]
+		 Me'shell Ndegeocello "Stay" / Peace Beyond Passion
+		 https://www.youtube.com/watch?v=A0H2xYgndls
+		 found via
+		 http://www.nytimes.com/1996/06/08/arts/music-in-review-002283.html
+		 ID ATTEMPTS: shazam, audiotag.info, soundhound, musicid
+		 [nothing more specific identified by 
+		 (4:30, track 9 on cd)
+>>	12:24 .. brief revive of "Senses"
+		 [chunk 17]
+		 tried 17, 18, 19, 20, 21
+>>	12:39 .. another transition
+>>	14:13 .. transition (C'mon c'mon c'mon c'mon -- from Stay?)
+		 just let me ... get you off my mind .. turn me on tur
+	15:13 :: Mind Games / DJ Crystl / Earth, Vol. 2
+		 [chunk 21]
+		 (10:47, track 9 on cd) -- so 26:01?
+	15:37 .. end mix-in from Stay
+	24:25 :: END
+
+	d065-047
+	--------
+064:46	00:00 .. continuing Mind Games
+	01:00 .. transition
+	01:12 :: The Rope-A-Dope / Skyjuice / No Categories: A Ubiquity Compilation 
+		 https://www.discogs.com/Various-No-Categories-A-Ubiquity-Compilation/master/112579
+		 https://www.youtube.com/watch?v=v23Lm9Bva0k
+		 (5:40 on youtube, track 2-4 on cd) -- so 06:52?
+	05:33 .. transition?
+[listen more here]
+	(all in my mind ... oh no no no no ... erykah badu blu mar ten?)
+	10:xx transitions?
+	14:xx another transition (all rebel rebel in my mind)
+
 
 tracklg	d-14Nov10-a [181?-201?]
 min	-----------
 181?	00:00 -- shazam unknown
+	[09:05/189 - 9: 180m; 14:21/195 - 14: 181m
 	05:14 .. transition
 	05:20 -- transition
 	07:38 ..."give" 07:40 "i give my heart each smoking gold, oh give"
-[NEED FURTHER LISTENING HERE]
-	13:06 ..."i give my heart each smoking gold, oh give"
+	08:51 .. transition noise, bacground mutters start
+189?	09:05 .. "where to go, what to do. how to shit, when to shave, when to
+		  shower.  when to eat.  when to masturbate and how to
+		  masturbate"
+	09:25 .. monk sounds start
+	11:12 .. garbled voice, ends in screaming -- video game?
+	12:.. .. more dialog
+	13:07 ..."i give my heart each smoking gold, oh give"
 	14:13 ..."would you... like to be m-m-m-m-modified"
 	14:20 ...end
 195	14:21 -- from acid jazz to hip hop, house music to trip hop, and
@@ -16,64 +205,91 @@ min	-----------
 		 www.netradio.net.  peace.
 	14:55 -- helicopter noises
 	19:48 .. "attack ... you attack" [SAME AS 10:30 in dnb-14Nov02-a.au"
-???		this could be 195 or 206 in tracklog
-197?	20:00	 (end)
+???		this could be 195 or 206 in tracklog... but neither agrees
+		with the earlier two cues
+201?	20:00	 (end)
+	[209 or 210 from first cues]
 
 	d-14Nov10-b [
 	-----------
-197?	00:00 .. (continues from previous)
-[NEED FURTHER LISTENING HERE]
+201?	00:00 .. (continues from previous)
+		 [210 from last file cues,
 	05:26 .. repeat: "attack ... you attack"
+	10:47 -- transition 
+213?	12:14 .. "all that we see or seem, is but a dream, within a dream"
+		 17:18 in dnb-14Nov02-a.au
+	12:44 .. transition
+	12:59 .. "but in the process" ... "renegades"
+	13:46 .. "all that we see or seem, is but a dream"
+	14:.. 	 (repeat)
+	14:..	 ...process..
+	16:04 -- transition
 	17:12 .. "sad, that in the 20th century -- in the 1990s..."
-	214      3:34:00  (but in the process...)                  Nov-02-16
-214	17:35 .. "but in the process..."
-[NEED FURTHER LISTENING HERE]
+214?	17:35 .. "but in the process..."
+	17:42 .. start sax bit
+221?	20:00	 (end)
+
 
 	d-14Nov10-c [
 	-----------
+221?	00:00 .. (continues from previous)
+	01:18 .. "some of these guys will never make a dime -- but in the
+		  process, they've been the true renegades.
+	         ...01:34 "and the true rebels always walk alone anyway"
+	03:5x transition
+	04:4x transition
+[NEED FURTHER LISTENING HERE]
+241?	20:00	 (end)
+
+	d-14Nov10-d [
+	-----------
+241?	00:00 .. (continues from previous)
+	01:27 .. "me, I'm going to die alone"
 [NEED FURTHER LISTENING HERE]
 	03:51 .. (in the middle of the Friends bit about man in the subway who
 		  eats his own face)
 	03:50 .. last "me, I'm going to die alone"
 	04:05 -- new song
 246.45	05:32 .. "da... only only"
-
-	d-14Nov10-d [
-	-----------
-
+[NEED FURTHER LISTENING HERE]
+261?	20:00	 (end)
 
 	d-14Nov10-e
 	-----------
-	00:00 -- "the night rider"
+261?	00:00 -- "the night rider"
 	03:42 -- "murder / murder / murder"
 		    "the vigilante killer continues his daily diet of murder murder
 		    murder"
 	07:10 -- battle sounds
-	07:20 -- yo you're listening to club groove on net-radio
+268	07:23 -- yo, you're listening to club groove -- on net radio -- www
+		 dot netradio dot net.  Peace.
 	07:48 -- Dreams of Heaven / Codename John (6:07, t1 on cd)
 	13:54 -- Secrets / John B (8:58, t2 on cd)
 		    Hellraiser III: 
-	20:00 -- END
+281?	20:00 -- END
 
-	(-f)
-	02:49 -- Grey Odyssey / Optical (6:12, t3 on cd)
+	d-14Nov10-f
+	-----------
+281?	02:49 -- Grey Odyssey / Optical (6:12, t3 on cd)
 	08:57 -- Mute / Matrix (4:22, t4 on cd)
 	13:20 -- Deep Inside / Codename John (7:52, t5 on cd)
 	[does not complete]
-	20:00 -- END
+301?	20:00 -- END
 
-	(-h)
-	00:00 -- (in progress) Warned / Codename John (6:12 on cd, track
+	d-14Nov10-h (there is no -g)
+	-----------
+301?	00:00 -- (in progress) Warned / Codename John (6:12 on cd, track
 	02:17 -- Still / Boymerang (7:54 on cd)
 	10:10 -- Locust / Ed Rush & Fierce (8:50 on cd)
-	13:05 -- END
+314?	13:05 -- END
 
 	dnb-14Nov02-a.au
 	----------------
-	00:00 -- Strength / Sonar Circle (9:03 on cd)
+198?	00:00 -- Strength / Sonar Circle (9:03 on cd)
 	    https://www.youtube.com/watch?v=BfTHIGzhh4Y
 	    http://www.junodownload.com/products/reinforced-presents-the-next-chapter/1345222-02/
 	    https://www.discogs.com/Various-Reinforced-The-Next-Chapter/release/4168
+	    [nothing else from this cd]
 	08:15 .. transition starts?
 	08:37 .. definite transition SONG UNKNOWN
 	08:48 .. transition step up
@@ -82,7 +298,7 @@ min	-----------
 	11:18 .. transition?
 	13:07 .. transition?
 	13:46 .. "
-	15:51 -- Waves (Guardians of Dalliance Remix) / Dave Wallace (8:02 on single)
+213?	15:51 -- Waves (Guardians of Dalliance Remix) / Dave Wallace (8:02 on single)
 	    17:18 "all that we see or seem, is but a dream, within a dream"
 	    (either the itunes single is mislabeled, or this youtube clip is)
 	    https://www.youtube.com/watch?v=MCambHJEedM
@@ -92,15 +308,17 @@ min	-----------
 	    18:51 "all that we see or seem..."
 	19:25 .. transition?
 	19:5? .. transition?
-	20:00 -- END
+218?	20:00 -- END
 
 	(-b)
+218?	00:00
 	00:45 -- transition: Retro / EZ-Rollers (4:04, track 14 on cd)
 	    2:16 "sad, that in the 20th century..."
 	08:12 .. transition
 	08:32 .. transition
 	08:57 -- transition: Mask / Mad Professor
 			     or It's All Gone Sideways / Dr. S. Gachet
+		    https://www.discogs.com/Various-Wayz-Of-The-Dragon/master/80881
 
 	13:10 -- transition: The Beckoning (Original Mix) / Arcon 2
 		    (starts around 12:00?)
