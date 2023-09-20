@@ -31,3 +31,5 @@ audacity/*_data
 *.swp
 *.swo
 sources
+dropbox
+._*
