@@ -33,3 +33,4 @@ audacity/*_data
 sources
 dropbox
 ._*
+.DS_Store
