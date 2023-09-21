@@ -27,6 +27,7 @@ _$*
 core
 # CVS default ignores end
 *.aup3
+*.aup3-wal
 audacity/*_data
 *.swp
 *.swo
