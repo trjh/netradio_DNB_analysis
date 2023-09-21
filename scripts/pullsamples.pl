@@ -13,9 +13,9 @@ if ($0 =~ /readlabel/) {
 my $debug = 1;
     
 #                     (via http://audiotag.info/index.php,
-#                      http://indigo.ie/~trjh/OldHome/d019-040024.mp3)
+#                      http://homepage/d019-040024.mp3)
 #                     sox d041-064.wav d041-064.mp3 trim 0 45 : newfile : restart
-#                     scp *.mp3 homepages00:trjh/public_html/OldHome
+#                     scp *.mp3 homepage
 #                     perl -e '$t=0; for ($i=1; $i<=33; $i++) { $end=$t+45;
 #                     printf "file %2d: %02d:%02d - %02d:%02d\n", $i,
 #                     int($t/60), $t%60, int($end/60), $end%60; $t=$end }'

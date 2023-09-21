@@ -1,0 +1,1235 @@
+Timing
+
+TODO:
+	check youtube, google play, itunes playlists for notes
+	listen (re: Mask / Mad Professor)
+	    https://www.discogs.com/Various-Wayz-Of-The-Dragon/master/80881
+x	finish youtube playlist:
+x	    https://www.discogs.com/Various-No-Categories-A-Ubiquity-Compilation/master/112579
+
+REVIEW:
+.   d-14Nov10-a
+.   d-14Nov10-b
+.   d-14Nov10-c
+.   d-14Nov10-d
+.   d-14Nov10-e
+.   d-14Nov10-f
+.   d-14Nov10-h
+    d-25-000b.wav
+    d-25-005b.wav
+x   d000-018.wav
+x   d001-026b.wav
+    d006-025.wav
+x   d019-040.wav
+    d026-045.wav
+x   d026-073b.wav
+x   d041-064.wav
+    d046-065.wav
+    d064-083b.wav
+x   d065-087.wav
+    d066-085.wav
+    d069-086.wav
+    d084-103b.wav
+    d086-105.wav
+    d087-121.wav
+x   d088-107.wav
+    d104-108b.wav
+    d106-125.wav
+x   d107-121b.wav
+.   d122-144.wav
+    d122-144b.wav
+    d126-145.wav
+.   d145-164.wav
+    d145-164b.wav
+    d146.wav
+    d165-186.wav
+    d165-186b.wav
+    d187-200.wav
+    d187-216b.wav
+    d217-242.wav
+    d228-247.wav
+    d242-268.wav
+    d248-258.wav
+    d268-287.wav
+    d269-271b.wav
+    d276-293b.wav
+    d288-307.wav
+    d308-327.wav
+    d316-335.wav
+    d328-342.wav
+    d336-355.wav
+    d356-375.wav
+    d376-395.wav
+    d396-415.wav
+    d416-435.wav
+    d425-438b.wav
+    d425-444.wav
+    d436-455.wav
+    d445-464.wav
+    d456-470.wav
+    d465-484.wav
+    d472-491.wav
+    d485-504.wav
+    d492-511.wav
+    d505-524.wav
+    d505-531b.wav
+    d512-005.wav
+    d525-532.wav
+.   dnb-14Nov02-a.au
+.   dnb-14Nov02-b.au
+    dnb-14Nov02-c.au
+
+:: definitive track listing
+-- other definitive note
+.. annotation, not a definitive marker
+?? query
+
+	d000-018
+	--------
+000:00.000  00:00.000	START
+000:00	00:00.000 :: promo1: from acid jazz to hip hop, house music to trip hop,
+		     and everything inbetween, check out club groove on
+		     netradio.  www.netradio.net -- peace.
+000:35	00:35.299 :: promo2: yo you're listening to club groove on netradio.
+		     www.netradio.net -- peace.
+000:55	------------ d001-026b -- START
+000:59	00:59.903 :: Sky Blue / Jamie Myerson
+		  :: / The Listen Project (1998, S3)
+		     (4:10, track 1 on cd)
+	https://www.discogs.com/Jamie-Myerson-The-Listen-Project/release/376822
+005:04	05:04.210 :: Everything Is Gonna Be Alright / Jamie Myerson
+		  :: / The Listen Project (1998, S3)
+		     (4:29, track 3 on cd)
+	05:31.636 .. "skip" to lone piano then 5:38.447 other instruments return
+005:31  ------------ d006-025.wav -- START
+009:33	09:33.867 :: You're My Life / Jamie Myerson / The Listen Project
+		     (7:45, track 5 on cd)
+		     ...only 15 sec here!
+	09:48.696 .. abrupt 'skip' to Unity Gain
+009:48	09:48.696 :: Unity Gain / Jamie Myerson
+		  :: / The Listen Project (1998, S3)
+		     (5:05, track 4 on cd... starting 7 seconds in)
+		     (on cd, unity gain takes 0:22 to get to wow-wow wobble)
+010:47	10:47.197 :: You're My Life / Jamie Myerson
+		  :: / The Listen Project (1998, S3)
+		     (7:45, track 5 on cd)
+		     starting of beginning of track again
+018:22.848 18:22.848 -- END
+
+
+	d019-040
+	--------
+018:22.848  00:00.000	START
+018:22	00:00 :: Crucial / Jamie Myerson / The Listen Project
+	18:22.848
+        ------------ d006-025.wav -- END 20:00
+        ------------ d026-045.wav -- START
+026:19	07:56.812 :: promo3: (promo1)
+		     from acid jazz to hip hop, house music to trip hop,
+		     and everything inbetween, check out club groove on
+		     netradio.
+		     www.netradio.net -- peace.
+	------------ d026-073b.wav -- START (in the middle of promo3)
+026:53	08:30.923 :: Artificial Life / Odyssey
+		  :: / Earth, Vol. 2 (1997, Earth / Good Looking)
+		     (8:41, track 3 on cd)
+	        https://www.discogs.com/LTJ-Bukem-Earth-Volume-Two/master/32006
+	------------ d001-026b -- END 26:15
+	17:01.780 .. begin transition (first vocalization)
+	17:12.524 .. last beats of Artificial Life end
+035:35	17:12.524 :: Piano (The Green Stinky Mix) / Tricky
+		  :: / Makes Me Wanna Die (cd single, 1997, 4th & Broadway)
+	https://www.discogs.com/Tricky-Makes-Me-Wanna-Die/release/38468
+		     https://www.youtube.com/watch?v=rE7xKiY-pQg
+			5:18 in length, starts really at :12
+			...so 22:35 if full, but ends at 21:57
+		     https://www.azlyrics.com/lyrics/tricky/piano.html
+		     "...Take me cunning, she's darker
+		     Never saw, never saw
+		     She's lifelike to the heartbeat
+		     Can't feel the heartbeat"
+		     [found with audiotag.info]
+	17:14.653 .. drum kicks in
+040:20.480	21:57.632 -- END
+
+	d041-064
+	--------
+040:20.480  00:00.000 START
+040:20	00:00 :: Arboleda De Manzanitas (Drum and Bass Mix) / Eighty Mile Beach
+	      :: / Eighty Mile Beach (12", 1997, OM Records)
+		 https://itunes.apple.com/de/album/arboleda-de-manzanitas-drum-bass-mix/id439852478?i=439852488&app=music&upsell=true&ign-mpt=uo%3D5
+		 https://www.discogs.com/Eighty-Mile-Beach-Arboleda-De-Manzanitas/release/118242
+		 https://www.discogs.com/Various-Lost-In-Space-Divaz-n-Bass/master/113537
+		 https://www.youtube.com/watch?v=Yx0tPOvhaic&feature=player_embedded
+		 (5:53, track A2)
+	---------- d026-045.wav -- END 20:00
+	---------- d046-065.wav -- START
+	05:40.908 .. transition starts
+046:04	05:44.192 :: Senses / DJ Addiction
+		  :: / Earth, Vol. 2 (1997, Earth / Good Looking)
+		     (7:10, track 8 on cd)
+	11:52.612 .. transition starts ("ooh")
+	---------- d026-073b.wav 25:40[in sync]
+	12:12.296 .. transition Stay groove and then "say it"
+	12:36.750 .. end of last "my soul is at last -- free"
+052:57	12:36.750 :: Stay (The Midnight Rockers Remix) / Me'shell Ndegeocello
+		  :: / Stay (cd single, 1996, Maverick)
+		     (5:19, track 4 on cd)
+	  https://www.discogs.com/MeShell-Ndeg%C3%A9Ocello-Stay/release/1640975
+	        http://www.leradioclub.com/leradioclub-dj-mix-de-nagra-podcast/
+		     12:00-13:40
+		     https://www.youtube.com/watch?v=A0H2xYgndls
+		     (original version of tune)
+		     [see Appendix Mystery Track 1]
+	13:12.523 .. organ kicks in again
+	14:12.808 .. transition (break & C'mon c'mon c'mon c'mon)
+		     just let me ... get you off my mind .. turn me on tur
+055:33	15:13.405 :: Mind Games / DJ Crystl
+		  :: / Earth, Vol. 2 (1997, Earth / Good Looking)
+		     (10:47, track 9 on cd)
+		     ...point where "It's all in your imagination" starts
+	15:36.187 .. end mix-in from Stay
+	---------- d064-083b.wav -- START
+064:46.208	24:25.728 -- END
+
+
+	d065-087
+	--------
+064:46.208  00:00.000 START
+064:46	00:00.000 .. continuing Mind Games
+	01:00.714 .. transition
+065:59	01:12.854 :: The Rope-A-Dope / Skyjuice
+		  :: / No Categories: A Ubiquity Compilation (1998, Ubiquity)
+		     (5:40 on youtube, track 2-4 on cd)
+	https://www.discogs.com/Various-No-Categories-A-Ubiquity-Compilation/master/112579
+		     https://www.youtube.com/watch?v=v23Lm9Bva0k
+	05:37.392 .. restart after false stop
+	05:41.176 .. "brilliant" continued muttering
+		     (this is part of rope-a-dope)
+070:54	06:08.104 :: On & On (Blu Mar Ten Remix) / Erykah Badu
+		  :: / On & On (12", 1997, Universal Records)
+		     (7:52, track B2)
+		     https://www.discogs.com/Erykah-Badu-On-On/release/226192
+		     https://www.youtube.com/watch?v=JCv3Vs_CFjQ
+		     chords start at 0:35, length 7:52
+	06:13.902 .. transition / deep beats stop
+	06:42.286 .. chords come in
+	---------- d026-073b.wav -- END 47:27
+	13:54.555 .. transition starts (instrumental elements)
+078:50	14:04.452 :: The Oracle (Extended Instrumental Remix) / Bugs
+		  :: / No Categories: A Ubiquity Compilation (1998, Ubiquity)
+		     (7:36, track 1-5)
+		     http://classic.beatport.com/track/the-oracle-extended-instrumental-remix-original-mix/6145974
+		     (change marked by cymbal hit)
+		     all (ray) ... mine
+	14:24.089 .. new bassline starts
+	14:49.883 .. good-bayy!
+	18:59.049 .. transition [Oracle bassline ends]
+        ---------- d064-083b.wav -- END 20:00
+	19:20.279 .. last "to mind" from Oracle (starts, lasts ~5 sec)
+	19:31.680 .. first clear xylephone theme after end of 'to mind',
+		     calling this the proper start of James Bond
+084:17	19:31.680 :: Monty Norman / James Bond Theme (Stephane Malca Remix)
+		  :: / Serialement Vôtre (1997, Commando!)
+		     (4:02, track 11)
+	https://www.discogs.com/Various-Serialement-V%C3%B4tre/master/74270
+		     Shazam detects this but I can't find any clips online to
+		     verify
+	19:55.711 .. cymbals start [James Bond]
+	20:20.167 .. first clear "My name's Bond. James Bond."
+	22:44.750 .. begin wind down (cymbals stop)
+087:46.560  23:00.352 -- END
+
+	d088-107
+	--------
+087:46.560  00:00.000 -- START
+087:46	00:00.000 :: Angelo Badalamenti & David Lynch / Twin Peaks (Alëem Remix)
+		  :: / Serialement Vôtre (1997, Commando!)
+		     (4:03, track 12)
+		     ...mostly the quote, but a bit of the tune, lasts 19sec
+		     https://www.youtube.com/watch?v=XiwAhL9gNgg
+		     "s'il comprend une fois pour tout une fois..."
+087:48	00:01.930 :: J-Walkin' / Blame / Earth, Vol. 2 (1997)
+		  :: / Earth, Vol. 2 (1997, Earth / Good Looking)
+		     (7:01, track 4)
+094:52	07:05.941 :: Junkle I / Callisto
+		  :: / the paradigm ep (12", 1997, Guidance Recordings GDR 017)
+		     (6:23, track A1)
+		     https://www.youtube.com/watch?v=y6F5mPZNTXI
+		   https://www.discogs.com/Callisto-The-Paradigm-EP/release/410
+  https://www.discogs.com/Various-Chillout-Adventures-In-Leisure/release/264985
+		     (track 2, 6:23)
+		     [latter on iTunes -- nothing else there though]
+		     (j-walkin' beats stop here)
+		     [length 6:18 here]
+101:09	13:23.161 :: 63rd Suite / The Amalgamation Of Soundz
+		  :: / Amalgamation Of Soundz (1997, Filter FILT020CD)
+		     (6:28, track 6)
+		     https://www.discogs.com/The-Amalgamation-Of-Soundz-Amalgamation-Of-Soundz/release/40027
+		 https://soundcloud.com/the-amalgamation-of-soundz/63rd-suite
+105:00.152  17:13.592 -- START d107-121b
+107:36	19:49.739 -- Shoeshiner / Crash / Various: Shake The Bones
+		     (see d107-121b for full details, full track)
+108:10.392  20:23.832 -- END
+
+	d107-121b
+	--------
+105:00.152  00:00.000 -- START near the end of 63rd Suite
+107:36	02:36.147 :: Shoeshiner / Crash
+		  :: / Shake The Bones (1997, Hydrogen Dukebox  Duke 033CD)
+		     (3:35, track 6)
+		  https://www.discogs.com/Various-Shake-The-Bones/master/161814
+		     (nothing else relevent from that CD)
+111:08	06:08.793 :: Happy Baby / Spring Heel Jack
+		  :: / Busy Curious Thirsty (1997, Trade 2  TRDCD 1004)
+		     (5:47, track 6)
+     https://www.discogs.com/Spring-Heel-Jack-Busy-Curious-Thirsty/master/44701
+		     (happy baby noises)
+		     [transition is cymbal hit/change in beat]
+	11:35.035 .. fast beats stop
+	11:39.400 .. transition starts [~4 sec into new track]
+		  .. barely audible first bell
+	11;47.344 .. cymball hit
+116:53	11:53.076 :: Serious Intent / Endemic Void
+		  :: / Equations (1996, Language  WORD D4)
+		     (5:45, track 3)
+		     (cymbal hit marks 'new track' -- 00:18 into track itself?)
+		  https://www.discogs.com/Endemic-Void-Equations/master/156406
+		     (nothing else from this album)
+	12:10.208 .. piano (00:35 into track itself)
+	13:18.805 .. (track 1:43 'restart' of piano -- in sync)
+	14:11.313 .. (track 2:36 flute? starts solo -- in sync)
+		  .. fades out to end at 17:17
+122:17.080  17:16.928 -- END
+
+	d122-144.wav
+	------------
+	(direct transition from d107-121b)
+122:17.080  00:00.000 -- START
+122:17	00:00.000 :: Cruzer / Cujo
+		  :: / Adventures in Foam (1997, NINEBARecords  NOZACD03)
+		     (14:28, track 14)
+	https://www.discogs.com/Cujo-Adventures-In-Foam/release/10351551
+		     https://www.youtube.com/watch?v=XjGbXbKVgAY
+		     only 9:57 on youtube
+		     youtube: 5:34 last piano note
+		     youtube: 8:18 weird yawing noises start
+		     (nothing else from this album, though "on the track" is
+		     quite good. https://www.youtube.com/watch?v=Ia8Pj3KIacQ )
+	05:34.067 .. last piano note
+127:54	05:37.087 :: At Home With The Snake / Spaceways / Trad (1996)
+[RESUME TITLE UPDATE HERE]
+[START FORENSIC HERE -- check youtube links, length compare,
+ listen to whole album, listen to album audio vs. stream audio]
+		    00:07 first note
+		    00:32 flute kicks in
+	06:03.395 .. drum/flute start
+	10:30.261 .. transition
+	10:35.388 .. new drum starts
+132:52	10:35.388 :: Queen of the Ghetto (Ghetto Defendant) / Rockers Hi-Fi
+		  :: Mish Mash (1997)
+		     track 13, 5:04
+		     listen to whole album?
+		     https://www.youtube.com/watch?v=Nq2UCKwUzu4
+		     [sampled it at AllMusic, nothing else relevant]
+	15:21.506 .. transition / new cymbal
+137:38	15:21.506 :: Crusoe Takes A Trip / Red Snapper / Prince Blimey (1996)
+		     https://www.allmusic.com/album/prince-blimey-mw0000968323
+		     [sampled it at AllMusic, nothing else relevant]
+	15:27.142 .. new bassline starts
+	      .. song ends at 21:59
+144:16.376  21:59.296 -- END
+
+	d145-164
+	--------
+144:16.376  00:00.000 -- START
+144:16	00:00.000 :: promo4: (promo2)
+144:41	00:24.628 :: Crystal Blue / Skycutter & Kiki Mojo
+		  :: / VA: Infinite Beat Vol. 1 (1997)
+	    https://www.discogs.com/Various-Infinite-Beat-Vol-1/release/4075
+*******	02:17.836 -- SKIP
+151:22	07:06.131 :: Problem Child / Squarepusher
+		  :: / VA: Infinite Beat Vol. 1 (1997)
+157:03	12:47.400 :: You Talking To Me? / The Advocate
+		  :: / VA: Infinite Beat Vol. 1 (1997)
+		     https://www.youtube.com/watch?v=rZ812CQ-uSY
+	    https://www.discogs.com/Various-Infinite-Beat-Vol-1/master/276254
+		     https://soundhound.com/?al=300251022838056088&_branch_match_id=442339538919379736
+164:36.344  20:19.968 -- END
+
+	d165-186
+	--------
+164:36.344  00:00.000 -- START
+164:36	00:00.000 :: Circuit Breaker / Decoder
+		  :: / VA: Infinite Beat Vol. 1 (1997)
+		     https://www.youtube.com/watch?v=388XcMyl5t8
+172:19	07:42.974 :: The Reckoning / Slak & Snuggles
+		  :: / VA: Infinite Beat Vol. 1 (1997)
+178:09	13:33.581 :: Input / Fierce & Nico
+		  :: / VA: Infinite Beat Vol. 1 (1997)
+		     https://www.youtube.com/watch?v=jh320xZDz68
+	...fade to end of file
+186:16.760  21:40.416 -- END
+
+	d187-200
+	--------
+186:16.760  00:00.000 -- START
+186:16	00:00.073 -- Dark Fader / Friends, Lovers & Family
+		  -- / VA: Infinite Beat Vol. 1 (1997)
+	02:13.893 .. "give ... i give my heart each smoking gold, oh give"
+	03:28.242 .. talking in background
+	03:40.278 .. "where to go, what to do. how to shit, when to shave,
+		      when to shower. when to eat. when to masturbate and
+		      how to masturbate."
+	...song does not complete?  no clear endpoint.
+192:56.119	06:39.359 -- END
+
+	d-14Nov10-a
+min	-----------
+180:52.184  00:00.000 -- START
+186:16.833  05:24.649 -- Dark Fader
+186:16	05:24.649 :: Dark Fader / Friends, Lovers & Family
+		  :: / VA: Infinite Beat Vol. 1 (1997)
+	07:38.468 .. "give ... i give my heart each smoking gold, oh give"
+	08:52.818 .. talking in background
+	09:04.853 .. "where to go, what to do. how to shit, when to shave,
+		      when to shower. when to eat. when to masturbate and
+		      how to masturbate."
+	12:03.568 .. "when I think of the idea of heaven, I think of"
+	13:07.955 .. "i give my heart each smoking gold, oh give"
+	14:13.136 .. "would you... like to be m-m-m-m-modified"
+195:13	14:21.697 :: promo5: (promo1)
+195:47	14:55.785 :: Hopeless / David Kristian
+		  :: / VA: Ultra Mix Drum & Bass (1997)
+		     3:33-34 on CD tracklist
+		     Holy Shit the next 72 minutes is this album:
+	       https://www.allmusic.com/album/ultra-mix-drum-bass-mw0000028754
+	   https://www.discogs.com/Various-Ultra-Mix-Drum-Bass/release/1002688
+	   timings from:
+	  https://musicbrainz.org/release/189e5d0d-2edc-44fd-a2c0-a9dd75a78dd8
+	14:55.785 .. (helicopter noises)
+	15:04.300 .. distinct start of notes
+	15:36.863 .. slowed "Could you make my voice sound good?"
+	15:47.676 .. first beat
+	16:15.032 .. whirring sounds start
+	16:26.495 .. whiney sounds start
+	17:21.281 .. louder birring beeps
+[pick better breakpoints than just those using values from musicbrainz]
+
+199:21	 1109.768 :: Strength / Sonar Circle
+		  :: / VA: Ultra Mix Drum & Bass (1997)
+		     5:30 on CD tracklist
+		  [see Appendix for notes from YouTube]
+	19:48.468 .. "To attack without knowing the enemy's strength is
+		      foolish. After being warned, to still attack is stupid."
+		     https://www.youtube.com/watch?v=6SP8eWckYl0
+		     [SAME AS 10:30 in dnb-14Nov02-a.au?]
+		     this could be 195 or 206 in tracklog... but neither
+		     agrees with the earlier two cues
+		     (this is 2:19 in youtube)
+		     also at 6:30 after a break in the rhythm
+200:52.184	20:00.000 -- END
+
+	d-14Nov10-b
+	-----------
+	(direct transition from d-14Nov10-a)
+200:52.184  00:00.000 -- START
+204:51	  239.768 :: ~Science of Industry / Justin Tewn & Hunter A.D.
+		  :: / VA: Ultra Mix Drum & Bass (1997)
+		     7:01 on cd tracklist
+211:52	  660.768 :: ~Waves (Kid Loops remix) / Dave Wallace
+		  :: / VA: Ultra Mix Drum & Bass (1997)
+216:57	  965.767 :: ~Retro / E-Z Rollers
+		  :: / VA: Ultra Mix Drum & Bass (1997)
+		     7:50 on cd tracklist
+	05:26 .. repeat: "attack ... you attack"
+      	10:47 -. transition 
+	12:14 .. "all that we see or seem, is but a dream, within a dream"
+		 17:18 in dnb-14Nov02-a.au
+	12:44 .. transition
+	12:59 .. "but in the process" ... "renegades"
+	13:46 .. "all that we see or seem, is but a dream"
+	14:.. 	 (repeat)
+	14:..	 ...process..
+      	16:04 -. transition
+	17:12 .. "sad, in the 20th century -- in the 1990s, we have
+		  to still go the same official route -- that other
+		  artists had to go to get acceptance.  If it wasn't
+		  for the independents -- if it wasn't for the small
+		  little cities.. and the few little ghetto guys
+		  trying to make music, it would have never happened.
+		  Some of these guys will never make a dime.  Some
+		  of these guys will be poor and die -- alone.  But
+		  in the process, they've been the true renegades.
+		  And the true rebels always walk alone anyway."
+	17:35 .. "but in the process..."
+	17:42 .. start sax bit
+220:52.184  20:00.000 -- END
+
+	d-14Nov10-c 
+	-----------
+	(direct transition from d-14Nov10-b)
+220:52.184  00:00.000 -- START
+	01:18 .. "some of these guys will never make a dime -- but in the
+		  process, they've been the true renegades.
+	         ...01:34 "and the true rebels always walk alone anyway"
+	03:5x transition
+	04:4x transition
+224:47	  235.767 :: ~It's All Gone Sideways / Dr. S. Gachet
+		  :: / VA: Ultra Mix Drum & Bass (1997)
+		     5:00 on cd tracklist
+229:47	  535.767 :: ~The Beckoning / Arcon 2
+		  :: / VA: Ultra Mix Drum & Bass (1997)
+		     5:32 on cd tracklist
+235:19	  867.767 :: ~ Realism / Alpha Omega
+		  :: / VA: Ultra Mix Drum & Bass (1997)
+		     6:47 on cd tracklist
+240:52.184  20:00.000 -- END
+
+	d-14Nov10-d
+	-----------
+	(direct transition from d-14Nov10-c)
+240:52.184  00:00.000 -- START
+242:06	   74.767 :: ~Her Spectre Above Me Look / Downpour
+		  :: / VA: Ultra Mix Drum & Bass (1997)
+		     2:58 on cd tracklist
+245:04	  252.767 :: ~Falling / G-Money
+		  :: / VA: Ultra Mix Drum & Bass (1997)
+		     7:31 on cd tracklist
+252:35	  703.767 :: ~Cairo / DJ 3D
+		  :: / VA: Ultra Mix Drum & Bass (1997)
+		     6:00 on cd tracklist
+258:35	 1063.767 :: ~Nightrider / E-Sassin
+		  :: / VA: Ultra Mix Drum & Bass (1997)
+		     5:30 on cd tracklist
+	01:27 .. "me, I'm going to die alone"
+	03:51 .. (in the middle of the Friends bit about man in the subway who
+		  eats his own face)
+	03:50 .. last "me, I'm going to die alone"
+      	04:05 -. new song
+	05:32 .. "da... only only"
+260:52.184  20:00.000 -- END
+
+	d-14Nov10-e
+	-----------
+	(direct transition from d-14Nov10-e)
+260:52.184  00:00.000 -- START
+	(continuing Nightrider)
+264:05	  193.767 :: ~Diet for Murder / B-Boy 3000
+		  :: / VA: Ultra Mix Drum & Bass (1997)
+		     4:20 on cd tracklist
+      	03:42 -. "murder / murder / murder"
+		    "the vigilante killer continues his daily diet of murder
+		    murder murder"
+      	07:10 -. battle sounds
+268:15	  443.451 :: promo6: (promo2)
+268:40	  468.272 :: Dreams of Heaven / Codename John
+		  :: / Grooverider Presents: The Prototype Years
+		     (6:06, t1 on cd)
+274:46	  834.598 :: Secrets / John B
+		  :: / Grooverider Presents: The Prototype Years
+		     (8:58, t2 on cd)
+		    Hellraiser III: 
+280:52.184  20:00.000 -- END
+
+	d-14Nov10-f
+	-----------
+	(direct transition from d-14Nov10-f)
+	(continuation of Secrets)
+280:52.184  00:00.000 -- START
+283:40	02:47.965 :: Grey Odyssey / Optical
+		  :: / Grooverider Presents: The Prototype Years
+		     (6:12, t3 on cd)
+289:49	08:57.113 -- Mute / Matrix (4:22, t4 on cd)
+294:12	13:19.991 -- Deep Inside / Codename John (7:52, t5 on cd)
+	(incomplete)
+300:52.184  20:00.000 -- END
+
+	d288-307.wav
+	------------
+	(midst of Grey Odyssey)
+	d-14Nov10-f + 6:23.712 -- files entirely in sync during overlap
+287:15.896  00:00.000 -- START
+289:49	02:33.401 :: Mute / Matrix
+		  :: / Grooverider Presents: The Prototype Years
+		     (4:22, t4 on cd)
+		     (also has skip that d-14Nov10-f has)
+294:12	06:56.279 :: Deep Inside / Codename John
+		  :: / Grooverider Presents: The Prototype Years
+		     (7:52, t5 on cd)
+302:03	14:47.979 :: Silver Blade / Dillinja
+		  :: / Grooverider Presents: The Prototype Years
+		     (6:10, t6 on cd)
+307:15.896  20:00.000 -- END
+	
+	d308-327.wav
+	------------
+307:15.896  00:00.000 -- START
+	(direct transition from d288-307)
+	(continuation of Silver Blade)
+308:13	00:57.198 :: Locust / Ed Rush & Fierce
+		  :: / Grooverider Presents: The Prototype Years
+		     (8:50, t7 on cd)
+317:01	09:45.142 :: Warned / Codename John feat. Grooverider
+		  :: / Grooverider Presents: The Prototype Years
+		     (6:12, t8 on cd)
+323:09	15:53.381 :: Still / Boymerang
+		  :: / Grooverider Presents: The Prototype Years
+		     (7:54, t9 on cd)
+	(track does not complete)
+327:15.896  20:00.000 -- END
+
+	d328-342
+	--------
+	(direct transition from d308-327)
+	(continuation of Still)
+327:15.896  00:00.000 -- START
+331:03	03:47.155 :: City Lights / Lemon D
+		  :: / Grooverider Presents: The Prototype Years
+		     (6:49, t10 on cd)
+337:50	10:34.865 :: promo7: (promo1)
+338:24	11:08.935 -- ?? new track, Shazam / SoundHound / MusicID not getting
+341:54.008	14:38.112 -- END
+
+	d336-355
+	--------
+	(midst of City Lights)
+331:14.552  00:00.000 -- START
+	d328-342 + 3:58.656 -- out of sync until this file City Lights skip
+337:50.761  06:36.209 -- ALIGNMENT
+337:50	06:36.209 -- promo7
+338:24	07:10.279 :: Make Me Feel / Dr. Know
+		  :: / Make Me Feel / One Star (1995, Deep Red Recordings)
+	    https://www.discogs.com/Dr-Know-Make-Me-Feel-One-Star/master/265894
+		     https://www.youtube.com/watch?v=Gw954zoOA80
+		     (see Appendix, was Mystery Track 2)
+343:56	12:41.477 :: Free La Funk (PFM Remix) / JMJ & Richie
+		  :: / JMJ & Richie: Free La Funk / Universal Horn (1996)
+		     JMJ & Richie - Free La Funk (PFM Remix)
+		     https://www.youtube.com/watch?v=w32ZIR43GX0
+		     0:00 ...11:59.101?
+		     0:24 synth strings enter		..12:23.101?
+		     0:44 "forever"			..12:42.101?
+		     0:52 bawp-bo-bau-bow
+		     1:35 proper bassline		[sync point]
+		     3:12 drumline break, big bass note	..15:11.101?
+		     3:36 horn solo
+		     4:00 synth restart
+		     4:24 get your mind together
+		     4:39 maybe it could be mine forever
+		     4:48 you could go pressing the sea
+		     5:12 bassline restart		..17:11.101?
+	12:43.304 .. first bawp-bo-bau-bow
+	13:34.101 .. bassline starts
+	13:09.512 .. bassline stop/change [end of last song?]
+	13:34.101 .. Free La Funk bassline starts
+
+350:08	18:53.762 :: Mystery Track 3
+		  :: ?? Coo-ooo-ooh-ooh yeah song
+		     no hits
+351:14.552  20:00.000 -- END
+
+	dnb356-375
+	----------
+	(direct transition from d336-355)
+	(continuation of Mystery Track 3)
+351:14.552  00:00.000 -- START
+353:12	01:57.839 :: Mystery Track 4
+		  :: ?? Hey Man You Want A Tune song
+		     no hits
+		     https://youtu.be/2_7TKSx7t8Y :: Angel Heart 1:26:30
+			 "Hey man, do you want a tune?
+			  Yeah, I got a tune for you."
+	05:38.556 .. end of Mystery Track 4 drumline
+356:53	05:38.556 :: Hypnotising / PFM
+		     https://vimeo.com/106319553 (length 6:12)
+			 1:04 first 'hypnotising'
+			 1:33 drums				[sync point]
+			 2:43 organ comes in
+			 3:27 pause and longer lyrics
+			 3:53 synth 'raindrops'
+			 4:16 drums return
+			 5:13 transition but drums remain
+			 5:38 echo-y plunks
+	06:15.965 .. drums start
+	08:15.584 .. pause & longer lyrics
+361:43	10:29.223 :: Urban Style (Original Mix) / Dead Calm
+		     https://www.youtube.com/watch?v=5L3WGy1n3NY
+			0:24 "to create a whole form of urban style music..."
+			0:47 bass drops in
+			1:13 start hearing faint drums
+			1:34 drums at full, first drum 'skip'
+			2:20 'urban. style. music. [aaah-ah]'
+			3:11 'urban. style. ... music.' [first since 2:20]
+			3:59 drums stopped / swooning synth
+		    After aligning the tracks in audacity, I think the version
+		    in the mix is just slightly slowed down.
+367:02	15:48.249 :: Fokus / On Line (Original Mix)
+		     https://www.youtube.com/watch?v=glE8S3hrMD0
+			0:14 first wah-wah-wah
+			0:21 cymbal shift to
+			0:35 first 'ah-aah'
+			0:48 drumline starts
+			1:54 -2:00 break in drums, wah-oh-ah-oooh...aaah-ah-a-ah
+	29:38.584 .. Your Sound quiet fade-in starts
+	29:56.339 .. first Your Sound knock-knock
+371:14.552	20:00.000 -- END
+
+	d376-395
+	--------
+	(direct transition from dnb356-375)
+	(continuation of Your Sound)
+371:14.552	00:00.000 -- START
+371:33	00:19.214 :: Your Sound / J Majik
+		     https://www.youtube.com/watch?v=fQ_dQHJetkE
+			0:00			29:28
+			0:24 knock knock knock	29:52
+			0:39 stuttered knocks	00:09.188
+			0:48 drums kick in
+			1:37 "Your Sound"	01:05.939	[sync]
+	04:39.608 .. transition starts -- OTR piano audible
+	04:49.742 .. OTR volume increases
+376:04	04:49.742 :: On The Roof / Hidden Agenda
+		     https://www.youtube.com/watch?v=cnd2ZcJe40M
+			0:47.433 drums start		       (03:15.752calc)
+			1:34.028 piano melody starts	       (04:49.780calc)
+			1:57.693 horn/synth wah-wah section	05:13.445[sync]
+			3:07.140 last beat before drum break	06:23.960[+1.1]
+			4:30.041 last sig beat b/f drum break	07:47.797[+2.0]
+			4:55.156 "in a restroom"		08:13.196[+2.3]
+			6:13.504 last beat
+	05:28.189 .. end of Your Sound
+	09:32.453 .. last OTR beat
+380:47	09:32.453 :: Mystery Track 5
+			"space inside of me"
+385:17	14:03.150 :: Sea of Tears / Goldie
+		     https://www.youtube.com/watch?v=BY37izMpcsc
+		     14:51.190 guitar enters	[in sync 0:48.334]
+		     16:06.230 drums enter	[in sync]
+		     18:08.223 guitar lick	[-0.220]
+		     18:53.858 first "tears"	[-0.280]
+	15:12.604 .. SKIP back 26.998 seconds
+        18:46.002 .. start overlap
+	18:53.759 .. drumline change
+390:08	18:53.759 :: Mystery Track 6 (drumline change)
+	19:41.709 .. last "tears"
+	19:50.597 .. "what are you doing here"
+	19:51.518 .. end Sea of Tears
+391:14.552  20:00.000 -- END
+
+	d396-415
+	--------
+	(direct transition from d376-395)
+	(continuation of Mystery Track 6)
+391:14.552  00:00.000 -- START
+395:18	04:03.852 :: The Angels Fell / Dillinja
+399:27	08:12.994 :: Ja Know Ya Big / Dillinja
+404:35	13:20.829 :: The Flute Tune / Hidden Agenda
+	~15:31	  :: Is It Love?
+		     zip transition is in original at 1:43
+411:14.552	20:00.000 -- END
+
+	d416-435
+	--------
+	(direct transition from d396-415)
+	(continuation of Is It Love?)
+411:14.552	00:00.000 -- START
+	~01:01	  :: The Spectrum / Wax Doctor
+	~04:35	  :: Universal Horn (J. Majik Remix) / JMJ & Richie 
+	~09:19	  :: Alien Resident / Kid Loops
+	    https://www.beatport.com/track/alien-resident-original-mix/6154091
+			https://soundcloud.com/kidloopsofficial/alien-resident
+	~12:40	  :: Pass Agent / Luger
+		     transition at 12:40-12:46 matches 3:10 in track
+	~15:19	  :: Mystery Track 7 (15:21.776 in new aup)
+431:14.552	20:00.000 -- END
+
+	d435-455
+	--------
+	(direct transition from d415-435)
+	(continuation of Mystery Track 7)
+431:14.552	00:00.000 -- START
+431:38	00:23.540 -- promo8
+432:02	00:48.107 :: Mystery Track 8
+	~06:28	  :: Mystery Track 9
+	~10:13	  :: Rite of Spring (Doc Scott Remix) / System 7
+		     https://soundcloud.com/kf81-1/the-ikon-drum-n-bass-show-live-on-dnbradiocom-12
+		      from 1:07:10~ until 1:11:10
+		      https://www.mixcloud.com/ThePhurious/all-cruze-part-2/
+		      from 17:36
+      https://soundcloud.com/sonicrampage/surgical-sounds-the-doc-scott-tribute
+	~16:38	  :: Omen (Director's Cut) / Makai (vs. Nico)
+		     https://www.youtube.com/watch?v=7DTg6hwrbOg
+		     6:53 on youtube ... to 23:31?
+			6:18 wrap-up ... hard drums only
+			6:46 tick tick tick out
+		     https://www.youtube.com/watch?v=5UmIBBCx0qE
+			8:39, similar exit, no tick tick tick
+		     https://www.youtube.com/watch?v=YSAYYA2zCCw
+			Definitely not this mix (Omen (Remix))
+		     https://www.youtube.com/watch?v=qIuu6hBK67w
+			8:42, "unfair cut", sharp exit
+451:14.552	20:00.000 -- END
+
+	d456-470
+	--------
+	(direct transition from d435-455)
+	(continuation of Omen)
+451:14.552	00:00.000 -- START
+	~01:09	  :: Mystery Track 10
+	~04:42	  :: Home (Jedi Knights Remix (Drowning In Time)) /
+		     Depeche Mode
+	    https://www.youtube.com/watch?v=qTdPqqNa3gY
+	    https://www.youtube.com/watch?v=Yqzylc0cREI
+	~07:27	  :: Mystery Track 11
+	    NOT: The Trip / Logistics
+	    NOT: P.F.O.S.H (Original Mix) / reckei
+465:50.455	14:35.903 -- END
+
+	d465-484
+	--------
+	(midst? of Mystery Track 11)
+	.00:00.000 -- START
+	d456-470 + 9:10.848
+	21:49.745 .. [-d456 start] "I've chained my body to steel..."
+	23:51.009 .. [-d456 start] "Standing by for flight status"
+480:25	29:10.848 -- [-d456 start] END
+
+	d485-504
+	--------
+	(direct transition from d465-484)
+480:25	29:10.848 -- [-d456 start] START
+500:25	49:10.848 -- [-d456 start] END
+
+
+	next thread:
+	d505-524
+	d525-532
+	**END**
+
+[CONTINUE HERE]
+
+	d-14Nov10-h (-g is missing?)
+	-----------
+	00:00 -. (in progress) Warned / Codename John (6:12 on cd, track
+      	02:17 -. Still / Boymerang (7:54 on cd)
+      	10:10 -. Locust / Ed Rush & Fierce (8:50 on cd)
+	13:05.920
+
+	dnb-14Nov02-a.au
+	----------------
+198?	00:00 -. Strength / Sonar Circle (9:03 on cd)
+	    https://www.youtube.com/watch?v=BfTHIGzhh4Y
+	    http://www.junodownload.com/products/reinforced-presents-the-next-chapter/1345222-02/
+	    https://www.discogs.com/Various-Reinforced-The-Next-Chapter/release/4168
+	    [nothing else from this cd]
+	08:15 .. transition starts?
+	08:37 .. definite transition SONG UNKNOWN
+	08:48 .. transition step up
+	    10:30 "attack ... you attack without ( ) strength ... foolish
+		    (be warned?) still attack"
+	11:18 .. transition?
+	13:07 .. transition?
+	13:46 .. "
+213?	15:51 -. Waves (Guardians of Dalliance Remix) / Dave Wallace (8:02 on single)
+	    17:18 "all that we see or seem, is but a dream, within a dream"
+	    (either the itunes single is mislabeled, or this youtube clip is)
+	    https://www.youtube.com/watch?v=MCambHJEedM
+	    https://itun.es/ie/DDAIg?i=109684497
+	17:53 .. transition?
+	    18:04 "but in the process...[repeat]... they became the true renegades"
+	    18:51 "all that we see or seem..."
+	19:25 .. transition?
+	19:5? .. transition?
+218?	20:00 -. END
+
+	(-b)
+218?	00:00
+      	00:45 -. transition: Retro / EZ-Rollers (4:04, track 14 on cd)
+	    2:16 "sad, that in the 20th century..."
+	08:12 .. transition
+	08:32 .. transition
+      	08:57 -. transition: Mask / Mad Professor
+			     or It's All Gone Sideways / Dr. S. Gachet
+		    https://www.discogs.com/Various-Wayz-Of-The-Dragon/master/80881
+
+      	13:10 -. transition: The Beckoning (Original Mix) / Arcon 2
+		    (starts around 12:00?)
+		
+OVERLAP FILES
+
+xxx:xx  xx:xx ---- (file) -- START
+		    00:19 ...
+              ---- (file) -- END (time)
+
+.00:55	00:55 ---- d001-026b -- START
+	---------- d001-026b 0:05 Sky Blue
+	---------- d001-026b 4:09 Everything is Gonna Be Alright
+	---------- d001-026b 8:39 You're My Life
+	---------- d001-026b 8:54 Unity Gain
+	---------- d001-026b 17:28 Crucial
+	---------- d001-026b 25:25 promo3
+	---------- d001-026b 25:59 Artificial Life
+.27:10	---------- d001-026b 26:15 -- END
+
+.26:34	------------ d026-073b.wav -- START (in the middle of promo3)
+	---------- d026-073b.wav 00:20 Artificial Life
+	------------ d026-073b.wav 08:50 (first voc)
+	---------- d026-073b.wav 09:03 Piano
+	---------- d026-073b.wav 13:47 Arboleda de Manzanitas
+	---------- d026-073b.wav 19:32 Senses (transition 19:28)
+	---------- d026-073b.wav 29:01 Mind Games
+	---------- d026-073b.wav 39:14 ..transition
+	---------- d026-073b.wav 39:26 Rope a Dope
+	---------- d026-073b.wav 43:47 ..transition?
+	---------- d026-073b.wav 44:56 (On & On) .. chords come in
+
+.63:49  ---------- d064-083b.wav -- START
+        ---------- d064-083b.wav 00:57 ..transition
+        ---------- d064-083b.wav  2:09 Rope a Dope [sync point]
+.74:59  10:13 ---- d064-083b.wav 11:10 SKIP
+069:12  04:26 ---- d064-083b.wav 05:23-05:25 SKIPPING (not in d065-087)
+	---------- d064-083b.wav 07:34 (On & On) .. chords come in
+074:59  10:13 ---- d064-083b.wav 11:10 SKIP (not in d065-087)
+	---------- d064-083b.wav 14:49 (The Oracle) new bassline starts
+        ---------- d064-083b.wav 16:28-16:29 SKIPPING (not in d065-087)
+        ---------- d064-083b.wav 19:23 SKIPPING (not in d065-087)
+        ---------- d064-083b.wav 19:32 SKIPPING (not in d065-087)
+        ---------- d064-083b.wav 19:36 SKIPPING (not in d065-087)
+.83:49  19:03 ---- d064-083b.wav -- END 20:00
+		    19:34 oracle bassline ends
+		    to mind 19:50
+083:49  19:03 ---- d084-103b.wav -- START [terrible quality]
+		    00:19 SKIP
+		    00:24 cymbals start (sync point)
+		    00:48 first Bond
+		    01:46 SKIP
+		    03:10 wind down
+		    03:26 french
+		    03:28 J-Walkin'
+		    03:34 SKIP
+		    04:08 SKIP
+		    ...more skipping
+		    09:44 Junkle I
+		    ...more skipping
+		    13:59 63rd Suite
+		    18:40 Shoeshiner
+              ---- d084-103b.wav -- END 20:00
+              ---- d104-108b.wav -- START
+		    01:25 Happy Baby
+		    ...skips
+		    (does not complete)
+              ---- d104-108b.wav -- END 04:42
+
+.05:31  05:04 ---- d006-025.wav -- START
+		    timestamp					theorytamp
+								absolute-5:31
+		    00:00 "skip" to lone piano, 00:07 other ins	-
+		    04:02 You're My Life [cymbal hit]		04:02*
+		    04:17 Unity Gain ['skip' to start]		04:17*
+		    05:16 You're My Life			05:16*
+		    12:52 Crucial				12:52*
+       .25:31 ---- d006-025.wav -- END 20:00
+       .25:31 ---- d026-045.wav -- START [direct transition from previous]
+		    00:48 promo3				00:48*
+		    01:23 Artificial Life			01:23*
+		    09:53 ..first tricky voice			-11s*
+		    10:04 Piano (last Artifical beat)		10:04*
+		    10:06 ..drum kicks in			+2s*
+		    14:50 Arboleda De Manzanitas
+       .45:31 ---- d026-045.wav -- END 20:00
+       .45:31 ---- d046-065.wav -- START
+		    00:31 transition starts
+		    00:35 Senses
+		    06:43 .."ooh" transition starts
+		    07:02 ..transition Stay groove and then 'say it'
+		    07:27 ..end of last "my soul is at last -- free"
+		    07:27 Stay
+		    08:03 ..organ kicks in again
+		    10:03 Mind Games
+		    10:26 ..end Stay mix-in
+       .65:31 ---- d046-065.wav -- END 20:00
+       .65:31 ---- d066-085.wav -- START
+		    00:00 *tiny* overlap/skip at the start
+		    00:17 ..transition starts
+		    00:29 The Rope-A-Dope
+		    05:24 On & On
+		    05:24 ..transition starts?
+		    05:29 ..rope-a-dope baseline ends
+		    12:58 .. cymbal shake
+		    13:11 .. start sounds of Oracle?
+		    13:20 The Oracle (cymbal hit)
+		    13:27 .. "all -- -- ...
+		    13:27 .. bassline change
+		    13:40 .. new bassline starts
+		    18:18 .. transition (Oracle bassline ends)
+		    18:36 .. last "to mind" from Oracle (starts, lasts
+		    18:54 .. cymbals start [James Bond]
+			?? recompare these
+		    19:36 .. first clear "My name's Bond. James Bond."
+			?? recompare these
+       .85:31 ---- d066-085.wav -- END 20:00
+       .85:31 ---- d086-105.wav -- START
+		    (smooth transition)
+		    02:01 .. begin wind down
+		    02:16 Twin Peaks
+		    02:18 J-Walkin'
+		    09:22 Junkle I
+		    15:39 63rd Suite
+		    19:17 SKIP?
+       .105:31 ---- d086-105.wav -- END 20:00
+       .105:31 ---- d106-125.wav -- START
+		    (smooth transition)
+		    01:59 Shoeshiner
+		    05:31 Happy Baby
+		    11:10? Serious Intent
+		    16:41 Cruzer
+       .125:31 ---- d106-125.wav -- END 20:00
+       .125:31 ---- d126-145.wav -- START
+		    (smooth transition)
+		    02:17 At Home with the Snake
+		    07:10 transition
+		    07:15 Queen of the Ghetto
+		    12:01 Crusoe Takes A Trip
+		    18:39 promo4
+		    19:03 Crystal Blue
+       .145:31 ---- d126-145.wav -- END 20:00 
+
+       .145:31 ---- d145-164.wav -- START
+		    [break in continuity]
+		    00:00 promo4 (ish)
+		    00:24 Crystal Blue
+		    02:17 SKIP
+		    07:06 Problem Child
+		    NEW LOGGING HERE
+		    12:47 You Talking To Me? [clean break]
+		    ...fade to end
+	.165:51 ---- d145-164.wav -- END 20:20
+	.165:51 ---- d165-186.wav -- START
+		    (smooth transition? new song start)
+		    00:00 Circuit Breaker
+		    07:43 The Reckoning
+		    13:33 Input
+		    ...fade to end
+	.187:31 ---- d165-186.wav -- END 21:40
+	.187:31 ---- d187-200.wav -- START
+		    (smooth transition/new song start)
+		    00:00 Friends, Lovers & Family 	Dark Fader
+		    03:28 .. talking in background
+		    03:40 .. "where to go, what to do. how to shit, when to
+			      shave, when to shower. when to eat. when to
+			      masturbate and how to masturbate."
+		    (song does not complete)
+	.202:07 ---- d187-200.wav -- END 14:36
+
+xxx:xx  xx:xx ---- d069-086 -- START
+		    timestamp					theorytamp
+								absolute-5:31
+		    oh my seeya
+		    00:00 .. middle of rope-a-dope
+		    00:19 ...
+		    01:06 .. end of bassline
+		    01:35 .. cymbal shake
+		    On & On
+		    02:00/01 .. chords come in
+		    02:49 .. drums get assertive
+		    05:38 .. transition / deep beats stop
+		    06:03 .. chords come in
+		    08:47 .. transition starts (instrumental elements)
+		    08:57 The Oracle (cymbal hit)
+		    09:17 .. new bassline starts
+		    13:52 .. Oracle basslien ends
+		    14:13 .. last "to mind"
+		    14:48 .. cymbals start James Bond
+		    15:13 James Bond Theme (first "My Name's...")
+		    17:38 .. wind down [to end of file]
+xxx:xx  xx:xx ---- d069-086 -- END 17:53
+xxx:xx  xx:xx ---- d087-121 -- START
+		    [aligned with d088-107 when d088-107 shifted forward by
+		    2.135-2.031 seconds]
+		    (smooth transition/new song start)
+		    00:00.000 Twin Peaks
+		    00:02.135 J-Walkin'
+		    06:26.377-06:27.772 .. speed/skip to the end?
+		    06:27.772 mid-Junkle I (missing approx 26.9 sec)
+		    12:17.993 63rd Suite
+		    18:44.549 Shoeshiner
+		    22:17.191 Happy Baby
+		    27:43.837 .. fast beats stop
+		    28:01.496 Serious Intent
+		    [resume from 30:00]
+		    28:18.611 .. piano (00:35 into track itself)
+		    29:27.213 .. (track 1:43 'restart' of piano -- in sync)
+		    30:20.269 .. (track 2:36 flute? starts solo -- in sync)
+		      .. fades out to end at 33:25
+xxx:xx  xx:xx ---- d087-121 -- END 33:25.248
+              ---- d069-086 -- END 17:53
+
+		    
+
+Notes from investigating:
+'mine forever' track starts 1:11
+1:12:10 bad bad remix -- original J J & Richie, Free the Funk
+jmj & richie- free la funk
+
+https://www.youtube.com/watch?v=VwjUontBWjo
+
+possible linked tunes:
+
+https://www.youtube.com/watch?v=3gngU2K8yMs [b-side]
+
+https://www.discogs.com/Various-Hardstep-Jungle-Vibe/release/508818
+
+https://www.discogs.com/Various-100-Drum-Bass/master/242705
+
+https://www.discogs.com/Various-Moving-Shadow-History-Pt-2-1995-1997/release/1895594
+
+https://www.discogs.com/Roger-Sanchez-Dave-Clarke-Fabio-Muzik-Masters/master/350936
+
+https://www.discogs.com/Various-Hardstep-Jungle-Vibe-Presents-More-Badd-Tracks-1996/release/915169
+
+further lists to investigate:
+https://www.youtube.com/channel/UCIpEUxGPapUSIUMgRIBeslA
+    YouTube Rare Cuts channel
+https://www.youtube.com/watch?v=5_sJWCphX9c 
+
+
+APPENDIX
+========
+
+Audiotag.Info tagging:
+    (via http://audiotag.info/index.php, 
+    http://(homepage)/d019-040024.mp3)
+    sox d041-064.wav d041-064.mp3 trim 0 45 : newfile : restart
+    scp *.mp3 (homepage)
+    perl -e '$t=0; for ($i=1; $i<=33; $i++) { $end=$t+45;
+	     printf "file %2d: %02d:%02d - %02d:%02d\n", $i,
+	     int($t/60), $t%60, int($end/60), $end%60; $t=$end }'
+
+     curl -T "ms200[1-8].mp3" -u $user:$pass ftp://(homepage)/
+		    
+Strength / Sonar Circle notes from YouTube
+    9:03 on cd
+    https://www.youtube.com/watch?v=BfTHIGzhh4Y
+    00:00 just drumline
+    00:30 first cymbal shuffle/brush break
+    00:53 first spacey zap noise
+    01:20 drumline gets an echo
+    01:44 drumline + scattering drums
+    02:10 deep bassline
+    02:25 "to attack..."
+    03:21 add tamborine
+    04:09 long notes come in
+    06:31 bassline stops
+    06:36 "to attack"
+    06:40-41 all comes back
+    08:16 false stop
+    08:27 .. 
+
+Mystery Track 1:
+    052:57
+    found via
+    http://www.nytimes.com/1996/06/08/arts/music-in-review-002283.html
+    ID ATTEMPTS: shazam, audiotag.info, soundhound, musicid
+    unknown remix of 
+    Stay / Me'shell Ndegeocello / Peace Beyond Passion (1996)
+
+Mystery Track 2:
+    d336-355 / 07:10.279
+    tried whole track with:
+	shazam, MusicID, 
+
+    a LOT of mixes found on shazam under "Free La Funk (PFM Remix)"
+    start going through them?
+
+    Tried Shazam / SoundHound / MusicID
+    searching remix albums that free la funk (pfm remix) is on -- eliminating
+    the track before free la funk
+    NO: mixmag 21
+	    Source Direct	Exit 9
+    NO: Roger Sanchez,  Dave Clarke.. -- Muzik Masters
+	    Frank De Wulf	Drums In A Grip (Wax Doctor Mix)
+    NO: Various -- Hardstep Jungle Vibe
+	    Foul Play / Stepper
+    NO: Various -- 10.07
+	    DJ Pulse	Stay Calm (Foul Play Remix)
+    NO: Various -- 100% Drum & Bass
+	    Aqua Sky*	Dezires (DJ Krust Remix)
+	    https://www.youtube.com/watch?v=nZdOz2UcFao
+    NO: Various -- Moving Shadow The Chronicles Of Hardcore
+	    Dead Dred	Dred Bass
+	    https://www.youtube.com/watch?v=Uj7EO2uVfDQ
+    NO: Various -- Blueprint (The Definitive Moving Shadow
+			      Album)
+	    Hoax	Incident On Main Street
+	    https://www.youtube.com/watch?v=8z2AbsXt3vE
+	    whole 3-cd album on itunes, only match is free
+	    la funk and 'retro'
+    NO: Various -- Moving Shadow History Pt. 2 1995-1997
+	    DJ Pulse	Let You In
+	    https://www.youtube.com/watch?v=sI9F-MUScSs
+    NO: Dieselboy -- Supreme
+	    Aquasky	Images
+    NO: Bailey* -- (Intelligence)
+	    The Sentinel	Genesis
+    NO: Various -- Hardstep Jungle Vibe Presents
+		   More Badd Tracks 1996
+	    Doc Scott	Machines
+    audiotag.info doesn't get it either
+    sox d336-355.wav sample0_497.mp3 trim 497 45
+    sox d336-355.wav sample1_672.mp3 trim 672 45
+
+    other autotag.info samplings
+    sox d336-355.wav sample2_1154.mp3 trim 1154 45
+    # no
+    sox d356-375.wav sample3_22.mp3 trim 22 45
+    # no
+    sox d356-375.wav sample4_141.mp3 trim 141 45
+    # no
+    sox d356-375.wav sample5_1046.mp3 trim 1046 45
+    # no
+    sox d356-375.wav sample6_1169.mp3 trim 1169 45
+    # no
+    sox d376-395.wav sample7_90.mp3 trim 90 45
+    # no
+    sox d376-395.wav sample8_520.mp3 trim 520 45
+    # no
+    sox d376-395.wav sample9_870.mp3 trim 870 45
+    # shazam: Sea of Tears / Goldie; audio tag agrees -- FINALLY
+    sox d376-395.wav sample10_1133.mp3 trim 1133
+    # no
+    http://www.tuneid.com/register.php
+
+Looking for the artist/title of this track, recorded as part of a nine hour
+stream in 1998.  Source quality isn't great -- 16kHz stream.
+
+In 1998 I discovered Drum & Bass courtesy of a netradio.com station called something like "Drum & Bass ISDN". I was coping with something huge and these dark intelligent quiet/driving tunes completely hit the spot.  The thing was, a lot of music was long DJ mixes and there were no annotations.  I became obsessed, documented a lot of it by sounds and clips of lyrics, and wrote some hacky code to record the RealAudio stream on my Sun workstation.
+
+The station was an almost nine hour loop of music, and I've listened to the dozens of 20 minute mp3s I made a lot over the last 20 years. I'd eventually learned what some of the songs were and own the cds, but I recently sat down to use Shazam & other tools to document the entire tracklist.  I can see now that it's all mostly from 1995-1997.  I'm about six hours in and have only found five songs I can't identify -- tuneid.com resolved one!
+
+This is the [third|fourth|fifth|sizth]
+
+The tracks around it (by minutes into the stream)
+268: promo6
+269: the entirety of "Grooverider Presents: The Prototype Years
+337: promo7
+338: Make Me Feel / Dr. Know
+343: Free La Funk (PFM Remix) / JMJ & Richie
+349: Mystery Track 3
+         Coo-ooo-ooh-ooh yeah song
+352: Mystery Track 4
+         Hey Man You Want A Tune song (quote from Angel Heart)
+356: Hypnotising / PFM
+361: Urban Style (Original Mix) / Dead Calm
+367: Fokus / On Line (Original Mix)
+372: Your Sound / J Majik
+376: On The Roof / Hidden Agenda
+380: Mystery Track 5
+	"space inside of me"
+385: Sea of Tears / Goldie
+390: Mystery Track 6
+395: The Angels Fell / Dillinja
+399: Ja Know Ya Big / Dillinja
+404: The Flute Tune / Hidden Agenda
+
+#Downtempo #unknown "#Track ID" #netradio
