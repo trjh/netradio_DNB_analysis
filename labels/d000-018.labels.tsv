@@ -1,50 +1,50 @@
-59.910324	59.910324	orig003 sync: A start
-276.948073	276.948073	orig003: B drop after synth end
-338.446536	338.446536	orig004 sync: A
-553.662404	555.148481	orig004 sync: B sax ended beat start fade
-585.631732	585.631732	orig006 start: A
-607.215642	607.215642	orig006 sync: A
-646.528777	647.342247	orig006 sync: B
-890.036630	890.036630	orig006 end: A
 0.000000	0.000000	file start sync: d000-018.wav 0.0
 0.000000	0.000000	start001: ID: promo1 
 35.298848	35.298848	start002: ID: promo2
 59.525020	59.525020	orig003 start: A sync point
+59.910324	59.910324	orig003 sync: A start
 59.910324	59.910324	start003: ID: Jamie Myserson - Sky Blue
 59.910324	59.910324	track sync: A start
 61.702662	61.702662	orig003 start: B sync
 83.929783	83.929783	note: 162bpm
+276.948073	276.948073	orig003: B drop after synth end
 279.125714	279.125714	track sync: B drop after synth end
 285.129433	285.129433	last drop
-303.949206	303.949206	start004: ID: Jamie Myerson - Everything is Gonna Be Alright
 303.949206	303.949206	note: start 004.mp3 for start align, pre-glitch
+303.949206	303.949206	start004: ID: Jamie Myerson - Everything is Gonna Be Alright
 311.580530	311.580530	orig003 end: A
 313.469524	313.469524	orig004 start: B
 314.322857	314.322857	orig004 start: A
 328.019592	328.019592	note: add sax + drum
 331.636011	331.636011	file note: backwards skip 6.811 sec?
+338.446536	338.446536	orig004 sync: A
 338.446536	338.446536	track sync; A add sax + drum again
-361.888798	363.781224	lyrics start "I'll be the"
+361.888798	363.781224	lyrics start "I\'ll be the"
 433.690703	438.195374	"Everything is gonna be alright"
 480.420862	480.983946	beat sax start beat
 552.809070	554.295147	track sync: B sax ended beat start fade
+553.662404	555.148481	orig004 sync: B sax ended beat start fade
 573.866737	573.866737	start005: ID: Jamie Myerson - You're My Life (incomplete)
 585.496154	585.496154	orig006 start: B
 585.631732	585.631732	orig006 start: A
+585.631732	585.631732	orig006 start: A
 586.753878	586.753878	orig004 end: A
 588.695791	588.695791	start006: ID: Jamie Myerson - Unity Gain (incomplete)
+607.215642	607.215642	orig006 sync: A
 607.215642	607.215642	track sync: A drop
 645.656419	645.656419	orig005 start: B
 646.393199	647.206669	track sync: B
+646.528777	647.342247	orig006 sync: B
 647.372229	647.372229	start005: ID: You're My Life
 647.435875	647.435875	orig005 start: A
-647.691361	647.691361	track sync: A open cymbals
-695.495895	697.025071	note; first bigger drop
-1053.756372	1055.822948	track sync - begin last verse
-1101.276009	1102.848000	track sync: B cymbal fade out
-1102.848000	1102.848000	file sync start: d019-040.wav
-1102.848000	1102.848000	file end; d000-018.wav
 647.435875	647.435875	orig005 start: A
 647.691361	647.691361	orig005 sync: A open cymbals
+647.691361	647.691361	track sync: A open cymbals
+695.495895	697.025071	note; first bigger drop
+890.036630	890.036630	orig006 end: A
+1053.756372	1055.822948	track sync - begin last verse
+1101.276009	1102.848000	track sync: B cymbal fade out
+1102.848000	1102.848000	file end; d000-018.wav
+1102.848000	1102.848000	file sync start: d019-040.wav 1102.848000
 1103.055465	1104.627456	orig005 sync: B cymbal fade out
 1111.161589	1111.161589	orig005 end: A
