@@ -52,34 +52,53 @@ function processDataManually() {
       }
       filename = match[2];
       masterOffset = parseFloat(match[3]);
+      note = filename + " " + masterOffset
     }
     // Detect track and original sync labels
-    else if (trackSyncMatch = /track\s+sync:\s+(.)/.exec(label)) {
+    else if (trackSyncMatch = /track\s+sync:\s+(.)(.*)/.exec(label)) {
       synclabel = 'track' + trackSyncMatch[1];
       if (!(trackNum in syncPoints)) { syncPoints[trackNum] = {}; }
       syncPoints[trackNum][synclabel] = parseFloat(timestamp);
       entryType = 'Track Sync'
+      note = trackSyncMatch[1] + trackSyncMatch[2]
     }
-    else if (origMatch = /orig(\d+)\s+sync:\s+(.)/.exec(label)) {
+    else if (origMatch = /orig(\d+)\s+sync:\s+(.)(.*)/.exec(label)) {
       synclabel = 'orig' + origMatch[2];
       if (!(origMatch[1] in syncPoints)) { syncPoints[origMatch[1]] = {}; }
       syncPoints[origMatch[1]][synclabel] = parseFloat(timestamp);
       entryType = 'Orig Sync'
+      note = origMatch[1] + " " + origMatch[2] + origMatch[3]
     }
-    else if (match = /[Oo]rig(\d+)\s+sync:\s+(.)(.*)/.exec(label)) {
-      entryType = 'Fix Me'
+    else if (match = /orig(\d+)\s+start:\s+(.*)/.exec(label)) {
+      entryType = 'Orig Start'
+      note = match[1] + ": " + match[2]
+    }
+    else if (match = /orig(\d+)\s+end:\s+(.*)/.exec(label)) {
+      entryType = 'Orig End'
+      note = match[1] + ": " + match[2]
+    }
+    else if (match = /file note: (.*)/.exec(label)) {
+      entryType = 'File Note';
+      note = match[1];
+    }
+    else if (match = /file (start|end): (.*)/.exec(label)) {
+      entryType = 'File ' + match[1].charAt(0).toUpperCase() + match[1].slice(1)
+      note = match[2]
     }
     else {
       entryType = 'Note';
-      note = label;
+      if (label.slice(0,6) == 'note: ') {
+        note = label.slice(6)
+      } else {
+        note = label;
+      }
     }
 
     if (trackNum in syncPoints) {
       // Calculate speed difference when you have all four values
       var syncPoint = syncPoints[trackNum];
-      // if (syncPoint.origA && syncPoint.origB && syncPoint.trackA && syncPoint.trackB) 
       console.log('keys in syncPoints[' + trackNum + ']: ' + Object.keys(syncPoint).length + ' : ' + Object.keys(syncPoint))
-      if (false) {
+      if (Object.keys(syncPoint).length == 4) {
         var speedDiff = (syncPoint.trackB - syncPoint.trackA) / (syncPoint.origB - syncPoint.origA);
         // Store or log the speed difference as needed
         Logger.log('Track ' + trackNum + ' Speed Difference: ' + speedDiff);
