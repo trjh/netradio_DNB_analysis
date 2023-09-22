@@ -1,11 +1,11 @@
 0.000000	0.000000	file start sync: d019-040.wav 1102.848000
 -0.305237	-0.305237	orig007 start: A
 0.000063	0.000063	start007: ID: Jamie Myerson - Crucial
-0.060095	0.060095	file sync: A start of track
 0.060095	0.060095	orig007 sync: A
+0.060095	0.060095	track sync: A start of track
 6.582630	6.582630	orig007 start: B
 421.547048	421.547048	orig007 sync: B
-428.434915	428.434915	file sync: B outro starts
+428.434915	428.434915	track sync: B outro starts
 430.945814	430.945814	right & left track switched?
 474.627008	474.627008	orig007 end: A
 476.812163	476.812163	start008: ID: promo 3
