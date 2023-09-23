@@ -1,35 +1,73 @@
-function processDataManually() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var data = sheet.getDataRange().getValues();
-  
+// Define global variables
+var repoUrl = 'https://api.github.com/repos/trjh/netradio_DNB_analysis/contents/labels';
+var data = [];
+var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+
+// Initialize a dictionary-like structure to store sync points
+var syncPoints = {};
+
+function GithubImport() {
+  // Fetch the list of files in the GitHub repository
+  var repoResponse = UrlFetchApp.fetch(repoUrl);
+  var repoData = JSON.parse(repoResponse.getContentText());
+
+  // Loop through each file in the repository
+  for (var i = 0; i < repoData.length; i++) {
+    var file = repoData[i];
+
+    // Check if the file is a .tsv file
+    if (file.name.endsWith('.tsv')) {
+      console.log('Reading file: ' + file.name)
+
+      // Get the raw content of the .tsv file
+      var fileContentResponse = UrlFetchApp.fetch(file.download_url);
+      var fileContent = fileContentResponse.getContentText();
+
+      // Call ParseTSV to process the file content
+      ParseTSV(fileContent);
+    }
+  }
+
+  // Call updatesheet to write data to the sheet
+  updatesheet();
+}
+
+function ParseTSV(fileContent) {
+  var tsvRows = fileContent.split('\n');
   var masterOffset = 0;
   var trackNum = '';
   var trackTitle = '';
-  var filename = '';
-  var setfields = [1, 5, 6, 7, 8, 9, 10];
+  var wavFilename = '';
 
-  // Initialize a dictionary-like structure to store sync points
-  var syncPoints = {};
+  for (var j = 0; j < tsvRows.length; j++) {
+    var tsvRow = tsvRows[j].split('\t');
+    if (tsvRow.length < 3) {
+      console.log('Not enough fields in line: j=' + j + ' data:' + tsvRow)
+      continue
+    }
 
-  // Loop through each row in the spreadsheet
-  for (var i = 1; i < data.length; i++) {
-    var row = data[i];
-    
     // Parse the columns
-    var timestamp = row[1];
-    var label = row[3];
+    var timestamp = tsvRow[0];
+    var label = tsvRow[2];
+
+    // Set default entry type, note, synclabel for computing speed difference,
+    // and default match result
     var entryType = '';
     var note = '';
     var synclabel = '';
-    console.log('Processing row ' + i + ' ts ' + timestamp + ' entry ' + label)
-    
-    // Extract track number and title from the third column (e.g., "start001: ID: promo1")
     var match = '';
-    
+    var speedDiff = '';
+
+    // Log data
+    console.log('Processing line ' + j + ' ts ' + timestamp + ' entry ' + label)
+    if (isNotFloat(timestamp)) {
+      console.log('Problem line: j=' + j + ' data:' + tsvRow);
+      continue;
+    }
+
     if (label == '') {
-      for (var f = 0; f < setfields.length; f++) {
-        sheet.getRange(i + 1, setfields[f]).setValue("");
-      }
+      var rowData = ['', '', '', '', '', '', '', '', '', ''];
+      data.push(rowData);
       continue;
     }
     else if (match = /start(\d+):\s*ID:\s*(.+)/.exec(label)) {
@@ -50,24 +88,24 @@ function processDataManually() {
       } else {
         entryType = 'File Sync'
       }
-      filename = match[2];
+      wavFilename = match[2];
       masterOffset = parseFloat(match[3]);
-      note = filename + " " + masterOffset
+      note = wavFilename + " " + masterOffset
     }
     // Detect track and original sync labels
-    else if (trackSyncMatch = /track\s+sync:\s+(.)(.*)/.exec(label)) {
-      synclabel = 'track' + trackSyncMatch[1];
+    else if (match = /track\s+sync:\s+(.)(.*)/.exec(label)) {
+      synclabel = 'track' + match[1];
       if (!(trackNum in syncPoints)) { syncPoints[trackNum] = {}; }
       syncPoints[trackNum][synclabel] = parseFloat(timestamp);
       entryType = 'Track Sync'
-      note = trackSyncMatch[1] + trackSyncMatch[2]
+      note = match[1] + match[2]
     }
-    else if (origMatch = /orig(\d+)\s+sync:\s+(.)(.*)/.exec(label)) {
-      synclabel = 'orig' + origMatch[2];
-      if (!(origMatch[1] in syncPoints)) { syncPoints[origMatch[1]] = {}; }
-      syncPoints[origMatch[1]][synclabel] = parseFloat(timestamp);
+    else if (match = /orig(\d+)\s+sync:\s+(.)(.*)/.exec(label)) {
+      synclabel = 'orig' + match[2];
+      if (!(match[1] in syncPoints)) { syncPoints[match[1]] = {}; }
+      syncPoints[match[1]][synclabel] = parseFloat(timestamp);
       entryType = 'Orig Sync'
-      note = origMatch[1] + " " + origMatch[2] + origMatch[3]
+      note = match[1] + " " + match[2] + match[3]
     }
     else if (match = /orig(\d+)\s+start:\s+(.*)/.exec(label)) {
       entryType = 'Orig Start'
@@ -94,25 +132,49 @@ function processDataManually() {
       }
     }
 
+    // Calculate speed difference when you have all four values
     if (trackNum in syncPoints) {
-      // Calculate speed difference when you have all four values
       var syncPoint = syncPoints[trackNum];
       console.log('keys in syncPoints[' + trackNum + ']: ' + Object.keys(syncPoint).length + ' : ' + Object.keys(syncPoint))
       if (Object.keys(syncPoint).length == 4) {
-        var speedDiff = (syncPoint.trackB - syncPoint.trackA) / (syncPoint.origB - syncPoint.origA);
+        speedDiff = (syncPoint.trackB - syncPoint.trackA) / (syncPoint.origB - syncPoint.origA);
         // Store or log the speed difference as needed
         Logger.log('Track ' + trackNum + ' Speed Difference: ' + speedDiff);
-        sheet.getRange(i + 1, 11).setValue(speedDiff);
       }
     }
 
-    // Populate the spreadsheet columns
-    sheet.getRange(i + 1, 1).setValue(masterOffset + parseFloat(row[1]));
-    sheet.getRange(i + 1, 5).setValue(filename);
-    sheet.getRange(i + 1, 6).setValue(trackNum);
-    sheet.getRange(i + 1, 7).setValue(entryType);
-    sheet.getRange(i + 1, 8).setValue(note);
-    sheet.getRange(i + 1, 9).setValue(trackName);
-    sheet.getRange(i + 1, 10).setValue(trackArtist);
+    // Instead of using 'sheet.getRange', you can push data into an array and set the values in one go
+    var rowData = [
+      masterOffset + parseFloat(timestamp),
+      parsefloat(tsvRow[0]),
+      parsefloat(tsvRow[1]),
+      tsvRow[2],
+      wavFilename,
+      trackNum,
+      entryType,
+      note,
+      trackName,
+      trackArtist,
+      speedDiff,
+    ];
+
+    // Push the row data into the data array
+    data.push(rowData);
   }
+}
+
+function updatesheet() {
+  // Set the values in the sheet in one batch operation
+  sheet.getRange(2, 1, data.length, data[0].length).setValues(data);
+}
+
+// Call GithubImport to start the process
+GithubImport();
+
+function isNotFloat(value) {
+  // Use parseFloat to attempt to convert the value to a floating-point number
+  var floatValue = parseFloat(value);
+
+  // Check if the conversion result is NaN (Not-a-Number) and if it's not equal to the original value
+  return isNaN(floatValue) || floatValue.toString() !== value.toString();
 }
