@@ -26,6 +26,10 @@ if len(sys.argv) > 1:
 else:
     filename = None
 
+# Change filename extension if necessary
+if filename.endswith("txt"):
+    filename=filename[:-3] + "tsv"
+
 # Create a backup of the original file if a filename is provided
 if filename:
     backup_filename = filename + ".bak"
