@@ -1,8 +1,28 @@
-0.0	0.0	file start sync; d041-064.wav 2420.480
--4.593769000000066	-4.593769000000066	orig011 start: A
-0.0	0.0	orig011 note; d041-064 start
-0.5067759999999453	3.362830000000031	note: d014-064 track sync A raise your face to the sun
-0.5067759999999453	3.362830000000031	note: orig011 sync A
-8.925171999999975	8.925171999999975	orig010 end: A
-9.39013	9.39013	orig010 end: B
-348.35534699999994	348.35534699999994	orig011 end: A
+0.000000	0.000000	file start sync; d041-064.wav 2420.480
+-4.593769	-4.593769	orig011 start: A
+-0.532290	-0.532290	orig011 note; d041-064 start
+-0.025514	2.830540	orig011 sync: A
+0.000000	0.000000	start011: ID: Eighty Mile Beach - Arboleda de Manzanitas (Drum & Bass Mix)
+0.506776	3.362830	track sync: A raise your face to the sun
+8.392882	8.392882	orig010 end: A
+8.857840	8.857840	orig010 end: B
+322.530680	328.962608	orig011 sync: B
+323.453968	329.885896	track sync: B last horn hehoohahoo
+328.198240	329.576054	note: hehoohahoo
+329.885896	330.179773	note: last your
+330.179773	330.179773	file note: skip
+339.229224	341.797732	track sync: C last put your fire to the ground
+339.229224	341.797732	orig011 sync: C put your fire to the ground
+340.908210	340.908210	start012: ID: DJ Addiction - Senses
+345.738425	345.738425	note: 011 end in mix
+347.823057	347.823057	orig011 end: C post-skip
+347.823057	347.823057	orig011 end: A
+348.355331	348.355331	orig011 end: A
+348.746345	348.746345	orig011 end: B
+712.611761	712.611761	..transition ("ooh")
+732.295601	732.296276	..transition (groove/say it)
+756.750087	756.750087	Stay
+792.523207	792.523207	...organ kicks in
+852.807887	852.807887	..transition (break/c'mon)
+913.405372	913.405372	Mind Games
+936.187000	936.187000	..end mix-in from Stay
