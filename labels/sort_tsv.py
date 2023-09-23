@@ -26,12 +26,14 @@ if len(sys.argv) > 1:
 else:
     filename = None
 
-# Change filename extension if necessary
-if filename.endswith("txt"):
-    filename=filename[:-3] + "tsv"
-
 # Create a backup of the original file if a filename is provided
 if filename:
+    # If we have a .txt extension, move it to .tsv
+    if filename.endswith("txt"):
+        moveresult = shutil.move(filename, filename[:-3] + "tsv")
+        print(f"Moved {filename} to {moveresult}")
+        filename=filename[:-3] + "tsv"
+
     backup_filename = filename + ".bak"
     shutil.copy(filename, backup_filename)
 
@@ -45,8 +47,9 @@ keyword_patterns = [
     r"file (start)? sync: (.+):? ([0-9.]+)",
     r"file (start|end): (.+)",
     r"start(\d+):\s*ID:\s*(.+)",
-    r"track\s+sync:\s+(.)(.*)",
-    r"orig(\d+)\s+(sync|start|end):\s+(.)(.*)",
+    r"track(\d+)?\s+sync:\s+(.)(.*)",
+    r"orig(\d+)\s+(sync|start|end|note):\s+(.)(.*)",
+    r"mix\s+(start|end):\s+(.+)",
     r"(file )?note: (.*)",
 ]
 
@@ -59,6 +62,10 @@ def process_line(line):
     global adjust_value
     line_number += 1
     parts = line.strip().split('\t')
+    if (len(parts) < 3):
+        print(f"Warning: Unrecognized line - less than 3 fields - {line.strip()}")
+        return
+
 
     if re.match(r"file start", parts[2]):
         adjust_value = float(parts[0])
@@ -81,7 +88,7 @@ def process_line(line):
         first_float = float(parts[0])
         sort_lines.append((first_float, line))
     except ValueError:
-        print(f"Warning: Unrecognized line - {line.strip()}")
+        print(f"Warning: Unrecognized line - first value not a float - {line.strip()}")
 
 
 # Process input based on whether a filename is provided or not
