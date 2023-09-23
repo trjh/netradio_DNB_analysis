@@ -3,6 +3,22 @@
 import shutil
 import re
 import sys
+import argparse
+
+# Initialize the argument parser
+parser = argparse.ArgumentParser(description='Process and adjust input data.')
+parser.add_argument('filename', nargs='?', help='Input filename (optional)')
+parser.add_argument('--adjust', action='store_true', help='Subtract timestamp of last "file start" entry from all entries')
+
+# Parse the command-line arguments
+args = parser.parse_args()
+
+# Check if the '--adjust' flag is provided
+do_adjustment = args.adjust
+adjust_value = 0
+
+# Get the filename from the command-line arguments
+filename = args.filename
 
 # Check if a filename is provided as a command-line argument
 if len(sys.argv) > 1:
@@ -36,11 +52,13 @@ keyword_regexes = [re.compile(pattern) for pattern in keyword_patterns]
 # Function to process lines
 def process_line(line):
     global line_number
+    global adjust_value
     line_number += 1
     parts = line.strip().split('\t')
 
     if re.match(r"file start", parts[2]):
-        print(f"FIRST: {line.strip()}")
+        adjust_value = float(parts[0])
+        print(f"FIRST: adj({adjust_value}) {line.strip()}")
         file_start_lines.append(line)
         return
         
@@ -74,6 +92,21 @@ else:
 
 # Sort the sort_lines by timestamp
 sort_lines.sort(key=lambda x: x[0])
+
+# adjust timestamps if appropriate
+def adjust_line(line):
+    global adjust_value
+    parts = line.split('\t')
+    for i in range(2):
+        print("i {i} - {parts[i]} - adjust {adjust_value}")
+        parts[i] = float(parts[i])
+        parts[i] -= adjust_value
+        parts[i] = str(parts[i])
+    return "\t".join(parts)
+
+if do_adjustment:
+    file_start_lines = list(map(adjust_line, file_start_lines))
+    sort_lines = [(number, adjust_line(line)) for number, line in sort_lines]
 
 # Write the sorted lines and file start lines to the appropriate output
 if filename:
