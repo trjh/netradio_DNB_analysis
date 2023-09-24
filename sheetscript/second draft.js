@@ -120,11 +120,3 @@ function processDataManually() {
     sheet.getRange(i + 1, 10).setValue(trackArtist);
   }
 }
-
-function isNotFloat(value) {
-  // Use parseFloat to attempt to convert the value to a floating-point number
-  var floatValue = parseFloat(value);
-
-  // Check if the conversion result is NaN (Not-a-Number) and if it's not equal to the original value
-  return isNaN(floatValue) || floatValue.toString() !== value.toString();
-}
