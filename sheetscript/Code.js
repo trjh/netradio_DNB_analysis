@@ -78,11 +78,15 @@ function ParseTSV(fileContent) {
       data.push(rowData);
       continue;
     }
-    else if (match = /start(\d+):\s*ID:\s*(.+)/.exec(label)) {
+    else if (match = /(start(\d+):\s*)?ID(\d+)?:\s*(.+)/.exec(label)) {
       console.log('DEBUG: found track ' + label)
-      trackNum = match[1];
-      trackTitle = match[2];
-      entryType = 'TrackStart'
+      trackNum = match[2] || match[3];
+      trackTitle = match[4];
+      if (match[1] !== undefined) {
+        entryType = 'TrackStart'
+      } else {
+        entryType = 'TrackID'
+      }
 
       // Split trackTitle into name and artist if possible
       var titleParts = trackTitle.split(' - ');
@@ -101,19 +105,19 @@ function ParseTSV(fileContent) {
       note = wavFilename + " " + masterOffset
     }
     // Detect track and original sync labels
-    else if (match = /track\s+sync:\s+(.)(.*)/.exec(label)) {
-      synclabel = 'track' + match[1];
-      if (!(trackNum in syncPoints)) { syncPoints[trackNum] = {}; }
-      syncPoints[trackNum][synclabel] = parseFloat(timestamp);
-      entryType = 'Track Sync'
-      note = match[1] + match[2]
-    }
-    else if (match = /orig(\d+)\s+sync:\s+(.)(.*)/.exec(label)) {
-      synclabel = 'orig' + match[2];
-      if (!(match[1] in syncPoints)) { syncPoints[match[1]] = {}; }
-      syncPoints[match[1]][synclabel] = parseFloat(timestamp);
-      entryType = 'Orig Sync'
-      note = match[1] + " " + match[2] + match[3]
+    // match:         1 2      3      4     5                6  7
+    else if (match = /((track)(\d+)?|(orig)(\d+))\s+sync:\s+(.)(.*)/.exec(label)) {
+      entryType = match[2] ? 'Track Sync' : 'Orig Sync';
+      synclabel = (match[2] || match[4]) + match[6];
+      pointnum = (match[5] || match[3] || trackNum)
+      note = pointnum + " " + match[6] + match[7]
+
+      // only calculate using track points A and B
+      if (match[6] == "A" || match[6] == "B") {
+        // make sure the first level is defined
+        syncPoints[pointnum] = syncPoints[pointnum] || {};
+        syncPoints[pointnum][synclabel] = parseFloat(timestamp);
+      }
     }
     else if (match = /orig(\d+)\s+start:\s+(.*)/.exec(label)) {
       entryType = 'Orig Start'
