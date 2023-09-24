@@ -7,17 +7,25 @@ var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
 var syncPoints = {};
 
 function GithubImport() {
+  // Get the PAT from the "SECRETS" sheet, assuming it's stored in cell A2
+  var secretsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('SECRETS');
+  var authToken = secretsSheet.getRange('A2').getValue();
+
   // Fetch the list of files in the GitHub repository
-  var repoResponse = UrlFetchApp.fetch(repoUrl);
+  var headers = { 'Authorization': 'token ' + authToken };
+  var options = { 'method': 'GET', 'headers': headers };
+
+  var repoResponse = UrlFetchApp.fetch(repoUrl, options);
   var repoData = JSON.parse(repoResponse.getContentText());
 
+  console.log("INFO: repoData = " + repoData)
   // Loop through each file in the repository
   for (var i = 0; i < repoData.length; i++) {
     var file = repoData[i];
 
     // Check if the file is a .tsv file
     if (file.name.endsWith('.tsv')) {
-      console.log('Reading file: ' + file.name)
+      console.log('INFO: Reading file: ' + file.name)
 
       // Get the raw content of the .tsv file
       var fileContentResponse = UrlFetchApp.fetch(file.download_url);
@@ -59,9 +67,9 @@ function ParseTSV(fileContent) {
     var speedDiff = '';
 
     // Log data
-    console.log('Processing line ' + j + ' ts ' + timestamp + ' entry ' + label)
+    console.log('DEBUG: Processing line ' + j + ' ts ' + timestamp + ' entry ' + label)
     if (isNotFloat(timestamp)) {
-      console.log('Problem line: j=' + j + ' data:' + tsvRow);
+      console.log('WARN: Timestamp [' + timestamp + '] is not a float, j=' + j + ' data:' + tsvRow);
       continue;
     }
 
@@ -71,18 +79,18 @@ function ParseTSV(fileContent) {
       continue;
     }
     else if (match = /start(\d+):\s*ID:\s*(.+)/.exec(label)) {
-      console.log('found track ' + label)
+      console.log('DEBUG: found track ' + label)
       trackNum = match[1];
       trackTitle = match[2];
       entryType = 'TrackStart'
-    
+
       // Split trackTitle into name and artist if possible
       var titleParts = trackTitle.split(' - ');
       var trackName = (titleParts.length > 1) ? titleParts[1] : trackTitle;
       var trackArtist = (titleParts.length > 1) ? titleParts[0] : '';
     }
     else if (match = /file (start)? sync: (.+):? ([0-9.]+)/.exec(label)) {
-      console.log('found file (start) sync')
+      console.log('DEBUG: found file (start) sync')
       if (match[1] == "start") {
         entryType = 'File Start Sync'
       } else {
@@ -135,19 +143,19 @@ function ParseTSV(fileContent) {
     // Calculate speed difference when you have all four values
     if (trackNum in syncPoints) {
       var syncPoint = syncPoints[trackNum];
-      console.log('keys in syncPoints[' + trackNum + ']: ' + Object.keys(syncPoint).length + ' : ' + Object.keys(syncPoint))
+      console.log('DEBUG: keys in syncPoints[' + trackNum + ']: ' + Object.keys(syncPoint).length + ' : ' + Object.keys(syncPoint))
       if (Object.keys(syncPoint).length == 4) {
         speedDiff = (syncPoint.trackB - syncPoint.trackA) / (syncPoint.origB - syncPoint.origA);
         // Store or log the speed difference as needed
-        Logger.log('Track ' + trackNum + ' Speed Difference: ' + speedDiff);
+        Logger.log('DEBUG: Track ' + trackNum + ' Speed Difference: ' + speedDiff);
       }
     }
 
     // Instead of using 'sheet.getRange', you can push data into an array and set the values in one go
     var rowData = [
       masterOffset + parseFloat(timestamp),
-      parsefloat(tsvRow[0]),
-      parsefloat(tsvRow[1]),
+      parseFloat(tsvRow[0]),
+      parseFloat(tsvRow[1]),
       tsvRow[2],
       wavFilename,
       trackNum,
@@ -169,12 +177,15 @@ function updatesheet() {
 }
 
 // Call GithubImport to start the process
-GithubImport();
+// GithubImport();
 
 function isNotFloat(value) {
   // Use parseFloat to attempt to convert the value to a floating-point number
   var floatValue = parseFloat(value);
 
   // Check if the conversion result is NaN (Not-a-Number) and if it's not equal to the original value
-  return isNaN(floatValue) || floatValue.toString() !== value.toString();
+  // return isNaN(floatValue) || floatValue.toString() !== value.toString();
+
+  // the above doesn't work as audacity pads with trailing zeros, so just return isNan
+  return isNaN(floatValue);
 }
