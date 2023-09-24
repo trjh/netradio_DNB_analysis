@@ -20,12 +20,6 @@ adjust_value = 0
 # Get the filename from the command-line arguments
 filename = args.filename
 
-# Check if a filename is provided as a command-line argument
-if len(sys.argv) > 1:
-    filename = sys.argv[1]
-else:
-    filename = None
-
 # Create a backup of the original file if a filename is provided
 if filename:
     # If we have a .txt extension, move it to .tsv
@@ -109,11 +103,10 @@ def adjust_line(line):
     global adjust_value
     parts = line.split('\t')
     for i in range(2):
-        print("i {i} - {parts[i]} - adjust {adjust_value}")
         parts[i] = float(parts[i])
         parts[i] -= adjust_value
-        parts[i] = str(parts[i])
-    return "\t".join(parts)
+    return f"{parts[0]:.6f}\t{parts[1]:.6f}\t{parts[2]}"
+
 
 if do_adjustment:
     file_start_lines = list(map(adjust_line, file_start_lines))
