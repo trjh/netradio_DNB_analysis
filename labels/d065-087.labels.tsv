@@ -1,7 +1,7 @@
 0.000000	0.000000	file start sync: d065-087.wav 3886.208
 -5.823696	-5.232237	orig014 sync: C start of d065
+0.000000	0.000000	ID014: DJ Crystl - Mind Games
 0.000000	0.591459	track sync: C start of d065
-0.000000	0.000000	ID014: DJ Crystl – Mind Games
 37.117072	37.117072	orig015 start: 0
 37.256573	48.814717	orig015 note: range not in mix
 37.256573	37.256573	orig015 start: A
@@ -12,8 +12,8 @@
 60.713774	60.713774	note: ..transition
 60.853275	61.716817	orig15 sync: 0 first drop
 72.854050	75.859595	orig015 sync: A
-72.854050	72.854050	start015: ID: Skyjuice - The Rope-A-Dope 
 72.854050	75.859595	track sync: A
+72.854050	72.854050	start015: ID: Skyjuice - The Rope-A-Dope 
 74.936325	75.859595	note: thrill me
 89.770239	90.413687	orig014 sync: D end
 94.541045	94.541045	orig014 end: as viewed in d065-087
@@ -103,13 +103,14 @@
 1374.000982	1374.000982	orig018 end: A
 1374.097504	1374.097504	note: file start d087-121
 1374.201504	1383.393086	note: 109 french speech
-1375.496487	1380.279662	note: where did this run-down/transition come from - seems like 018, but not on orig and not on 019 or 020
 1375.496487	1375.496487	note: 018 audio ends here sync B - seems to be length 4:02 on all discogs versions
+1375.496487	1380.279662	note: where did this run-down/transition come from - seems like 018, but not on orig and not on 019 or 020
 1377.181265	1377.663987	orig019 sync: A plait
 1377.181265	1377.663987	track019 sync: A plait
 1380.151478	1380.151478	orig018 end: B
-1380.352000	1380.352000	note: file start d088-107
 1380.352000	1380.352000	file end: d065-087.wav
+1380.352000	1380.352000	note: file start d088-107
+1380.352000	1380.352000	start019: ID: Angelo Badalamenti & David Lynch - Twin Peaks (Alëem Remix)
 1390.215405	1392.319734	orig019 note: organ start
 1399.792259	1622.346549	orig019 note: not used in mix
 1399.792259	1399.792259	note: organ stops wah-wah enters
