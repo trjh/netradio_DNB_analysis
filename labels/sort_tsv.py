@@ -9,6 +9,7 @@ import argparse
 parser = argparse.ArgumentParser(description='Process and adjust input data.')
 parser.add_argument('filename', nargs='?', help='Input filename (optional)')
 parser.add_argument('--adjust', action='store_true', help='Subtract timestamp of last "file start" entry from all entries')
+parser.add_argument('--test',   action='store_true', help='Test mode -- do not write or move files, just show notes')
 
 # Parse the command-line arguments
 args = parser.parse_args()
@@ -17,11 +18,14 @@ args = parser.parse_args()
 do_adjustment = args.adjust
 adjust_value = 0
 
+# Check for testing-only
+test_mode = args.test
+
 # Get the filename from the command-line arguments
 filename = args.filename
 
 # Create a backup of the original file if a filename is provided
-if filename:
+if filename and not test_mode:
     # If we have a .txt extension, move it to .tsv
     if filename.endswith("txt"):
         moveresult = shutil.move(filename, filename[:-3] + "tsv")
@@ -38,13 +42,12 @@ line_number = 0
 
 # Define regular expressions for matching keywords
 keyword_patterns = [
+    r"(start(\d+):\s*)?ID(\d+)?:\s*(.+)",
     r"file (start)? sync: (.+):? ([0-9.]+)",
-    r"file (start|end): (.+)",
-    r"start(\d+):\s*ID:\s*(.+)",
-    r"track(\d+)?\s+sync:\s+(.)(.*)",
-    r"orig(\d+)\s+(sync|start|end|note):\s+(.)(.*)",
-    r"mix\s+(start|end):\s+(.+)",
-    r"(file )?note: (.*)",
+    r"((track)(\d+)?|(orig)(\d+))\s+sync:\s+(.)(.*)",
+    r"orig(\d+)\s+(start|end|note):\s+(.*)",
+    r"(file|mix) (start|end|note): (.*)",
+    r"note: (.*)",
 ]
 
 # Compile regular expressions
@@ -113,13 +116,13 @@ if do_adjustment:
     sort_lines = [(number, adjust_line(line)) for number, line in sort_lines]
 
 # Write the sorted lines and file start lines to the appropriate output
-if filename:
+if filename and not test_mode:
     with open(filename, 'w') as output_file:
         for line in file_start_lines:
             output_file.write(line)
         for _, line in sort_lines:
             output_file.write(line)
-else:
+elif not test_mode:
     # Write to stdout
     for line in file_start_lines:
         sys.stdout.write(line)
