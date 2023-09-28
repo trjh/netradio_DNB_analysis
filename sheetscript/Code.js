@@ -50,7 +50,7 @@ function ParseTSV(fileContent) {
   for (var j = 0; j < tsvRows.length; j++) {
     var tsvRow = tsvRows[j].split('\t');
     if (tsvRow.length < 3) {
-      console.log('Not enough fields in line: j=' + j + ' data:' + tsvRow)
+      console.log('WARN: Not enough fields in line: j=' + j + ' data:' + tsvRow)
       continue
     }
 
@@ -58,13 +58,16 @@ function ParseTSV(fileContent) {
     var timestamp = tsvRow[0];
     var label = tsvRow[2];
 
-    // Set default entry type, note, synclabel for computing speed difference,
+    // Set default entry type, note,
+    // syncLabel/syncTrack/syncDiff for computing speed difference,
     // and default match result
     var entryType = '';
     var note = '';
-    var synclabel = '';
+    var syncLabel = '';
+    var syncDiff = '';
+    var syncNum = undefined;
     var match = '';
-    var speedDiff = '';
+    
 
     // Log data
     console.log('DEBUG: Processing line ' + j + ' ts ' + timestamp + ' entry ' + label)
@@ -108,32 +111,27 @@ function ParseTSV(fileContent) {
     // match:         1 2      3      4     5                6  7
     else if (match = /((track)(\d+)?|(orig)(\d+))\s+sync:\s+(.)(.*)/.exec(label)) {
       entryType = match[2] ? 'Track Sync' : 'Orig Sync';
-      synclabel = (match[2] || match[4]) + match[6];
-      pointnum = (match[5] || match[3] || trackNum)
-      note = pointnum + " " + match[6] + match[7]
+      syncLabel = (match[2] || match[4]) + match[6];
+      syncNum = (match[5] || match[3] || trackNum)
+      note = syncNum + " " + match[6] + match[7]
 
       // only calculate using track points A and B
       if (match[6] == "A" || match[6] == "B") {
         // make sure the first level is defined
-        syncPoints[pointnum] = syncPoints[pointnum] || {};
-        syncPoints[pointnum][synclabel] = parseFloat(timestamp);
+        syncPoints[syncNum] = syncPoints[syncNum] || {};
+        syncPoints[syncNum][syncLabel] = parseFloat(timestamp);
+        console.log("DEBUG: added syncPoints[" + syncNum + "][" + syncLabel + "] = " + timestamp)
       }
     }
-    else if (match = /orig(\d+)\s+start:\s+(.*)/.exec(label)) {
-      entryType = 'Orig Start'
-      note = match[1] + ": " + match[2]
+    else if (match = /orig(\d+)\s+(start|end|note):\s+(.*)/.exec(label)) {
+      entryType = 'Orig ' + match[2].charAt(0).toUpperCase() + match[2].slice(1)
+      note = match[1] + ": " + match[3]
     }
-    else if (match = /orig(\d+)\s+end:\s+(.*)/.exec(label)) {
-      entryType = 'Orig End'
-      note = match[1] + ": " + match[2]
-    }
-    else if (match = /file note: (.*)/.exec(label)) {
-      entryType = 'File Note';
-      note = match[1];
-    }
-    else if (match = /file (start|end): (.*)/.exec(label)) {
-      entryType = 'File ' + match[1].charAt(0).toUpperCase() + match[1].slice(1)
-      note = match[2]
+    else if (match = /(file|mix) (start|end|note): (.*)/.exec(label)) {
+      // any other valid type that is just a note
+      entryType = match[1].charAt(0).toUpperCase() + match[1].slice(1) + ' ' +
+                  match[2].charAt(0).toUpperCase() + match[2].slice(1)
+      note = match[3];
     }
     else {
       entryType = 'Note';
@@ -145,13 +143,13 @@ function ParseTSV(fileContent) {
     }
 
     // Calculate speed difference when you have all four values
-    if (trackNum in syncPoints) {
-      var syncPoint = syncPoints[trackNum];
-      console.log('DEBUG: keys in syncPoints[' + trackNum + ']: ' + Object.keys(syncPoint).length + ' : ' + Object.keys(syncPoint))
+    if (syncNum && (syncNum in syncPoints)) {
+      var syncPoint = syncPoints[syncNum];
+      console.log('DEBUG: keys in syncPoints[' + syncNum + ']: ' + Object.keys(syncPoint).length + ' : ' + Object.keys(syncPoint))
       if (Object.keys(syncPoint).length == 4) {
-        speedDiff = (syncPoint.trackB - syncPoint.trackA) / (syncPoint.origB - syncPoint.origA);
+        syncDiff = (syncPoint.trackB - syncPoint.trackA) / (syncPoint.origB - syncPoint.origA);
         // Store or log the speed difference as needed
-        Logger.log('DEBUG: Track ' + trackNum + ' Speed Difference: ' + speedDiff);
+        Logger.log('DEBUG: Track ' + syncNum + ' Speed Difference: ' + syncDiff);
       }
     }
 
@@ -162,12 +160,12 @@ function ParseTSV(fileContent) {
       parseFloat(tsvRow[1]),
       tsvRow[2],
       wavFilename,
-      trackNum,
+      (syncNum || trackNum),
       entryType,
       note,
-      trackName,
-      trackArtist,
-      speedDiff,
+      (syncNum == undefined) ? trackName : "",
+      (syncNum == undefined) ? trackArtist : "",
+      (syncNum == undefined) ? "" : syncDiff,
     ];
 
     // Push the row data into the data array
