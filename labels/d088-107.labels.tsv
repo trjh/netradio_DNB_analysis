@@ -1,9 +1,50 @@
-0.000000	0.000000	file start sync: d088-107.wav 5266.56
+-0.000000	-0.000000	file start sync: d088-107.wav 5266.56
 -6.389417	-6.389417	orig019 start: A
--3.170735	-2.688013	orig019 sync: A plait
 -3.170735	-2.688013	track019 sync: A plait
-0.000000	0.000000	start019: ID: Angelo Badalamenti & David Lynch - Twin Peaks (Alëem Remix)
+-3.170735	-2.688013	orig019 sync: A plait
+-0.000000	-0.000000	start019: ID: Angelo Badalamenti & David Lynch - Twin Peaks (Alëem Remix)
+1.885941	1.885941	orig020 start: A
+1.885941	1.885941	orig020 start: A
+1.930000	1.930000	start020: ID: Blame - J-Walkin'
+2.352263	2.723936	orig020 sync: A better
+2.352263	2.723936	track sync: A
+2.644240	2.644240	note: sync A2
 9.863405	11.967734	orig019 note: organ start
-19.440259	241.994549	orig019 note: not used in mix
 19.440259	19.440259	note: organ stops wah-wah enters
+19.440259	241.994549	orig019 note: not used in mix
 241.994549	241.994549	orig019 end: A
+415.099300	416.571277	orig020 sync: B
+416.627032	418.099009	track sync: B last bass note
+425.697145	425.697145	orig021 start: 1
+425.799753	425.799753	orig021 start: A
+425.799753	425.799753	orig021 start: A
+425.799753	425.799753	start021: ID: Castillo - Junkle I
+426.043174	426.526347	orig021 sync: A
+426.043174	426.526347	track sync: A opening
+429.144717	429.144717	orig020 end: A
+430.672449	430.672449	orig020 end: B
+459.421774	460.738189	track sync: 1
+459.524382	460.840797	orig021 sync: 1
+792.942038	802.869390	orig021 sync: B
+793.233648	803.057848	track sync: B end
+803.057848	806.317053	orig022 sync: A start
+803.057848	803.057848	orig022 start: A
+803.057849	806.317053	track sync: A start
+803.057849	803.057849	orig022 start: A
+803.057849	803.057849	start022: ID: The Amalgamation of Soundz - 63rd Suite
+809.034741	809.034741	orig021 end: B
+1033.592000	1033.592000	note: file start sync: d107-121b.wav
+1159.999290	1161.256798	orig022 sync: 1
+1160.819404	1162.076911	track sync: 1
+1187.073614	1187.828119	orig022 sync: B
+1187.945814	1188.700318	track sync: B end
+1189.379001	1189.379001	orig023 start: A
+1189.379001	1189.379001	start023: ID: Crash - Shoeshiner
+1189.379001	1189.379001	orig023 start: A
+1189.738778	1189.917833	orig023 sync: A
+1189.738778	1189.917833	track sync: A start
+1194.057848	1194.057848	orig022 end: A
+1194.877962	1194.877962	orig022 end: 1
+1194.930048	1194.930048	orig022 end: B
+1223.831500	1223.831500	file end: d088-107
+1404.767668	1404.767668	orig023 end: A
