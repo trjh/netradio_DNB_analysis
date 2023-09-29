@@ -48,13 +48,13 @@
 588.695791	588.695791	start006: ID: Jamie Myerson - Unity Gain (incomplete)
 607.215642	607.215642	orig006 sync: A
 607.215642	607.215642	track sync: A drop
-645.656419	645.656419	orig005 start: B
+645.656419	645.656419	orig007 start: B
 646.393199	647.206669	track sync: B
 646.528777	647.342247	orig006 sync: B
-647.372229	647.372229	start005: ID: Jamie Myerson - You're My Life
-647.435875	647.435875	orig005 start: A
-647.435875	647.435875	orig005 start: A
-647.691361	647.691361	orig005 sync: A open cymbals
+647.372229	647.372229	start007: ID: Jamie Myerson - You're My Life
+647.435875	647.435875	orig007 start: A
+647.435875	647.435875	orig007 start: A
+647.691361	647.691361	orig007 sync: A open cymbals
 647.691361	647.691361	track sync: A open cymbals
 695.495895	697.025071	note: first bigger drop
 890.036630	890.036630	orig006 end: A
@@ -62,7 +62,7 @@
 1101.276009	1102.848000	track sync: B cymbal fade out
 1102.848000	1102.848000	file end: d000-018.wav
 1102.848000	1102.848000	note: file sync start: d019-040.wav 1102.848000
-1103.055465	1104.627456	orig005 sync: B cymbal fade out
-1111.161589	1111.161589	orig005 end: A
+1103.055465	1104.627456	orig007 sync: B cymbal fade out
+1111.161589	1111.161589	orig007 end: A
 1530.938636	1530.938636	note: file end d006-025
 1629.080000	1629.080000	note: file end d001-026b
