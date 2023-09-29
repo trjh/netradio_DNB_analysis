@@ -1,0 +1,13 @@
+-1505.031929	-1505.031929	file start: d-25-005b.wav
+0.000000	0.000000	file sync: d-25-005b.wav 0.0
+0.000000	0.000000	start001: ID: promo1 
+8.016179	8.020490	note: start sync wav
+8.018384	8.018384	note: zero cross
+35.298848	35.298848	start002: ID: promo2
+59.525020	59.525020	orig003 start: A sync point
+59.910324	59.910324	orig003 sync: A start
+59.910324	59.910324	start003: ID: Jamie Myserson - Sky Blue
+59.910324	59.910324	track sync: A start
+61.702662	61.702662	orig003 start: B sync
+83.929783	83.929783	note: 162bpm
+124.985682	124.985682	file end: d-25-005b.wav

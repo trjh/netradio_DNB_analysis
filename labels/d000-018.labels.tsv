@@ -1,7 +1,11 @@
 0.000000	0.000000	file start sync: d000-018.wav 0.0
 -1511.944000	-1511.944000	note: file start d-25-000b.wav
+-1505.031929	-1505.031929	note: file start d-25-005b.wav
+0.000000	0.000000	note: file sync: d-25-005b.wav 0.0
 0.000000	0.000000	note: file sync: d-25-000b.wav 0.0
 0.000000	0.000000	start001: ID: promo1 
+8.016179	8.020490	note: start sync wav
+8.018384	8.018384	note: zero cross
 18.584000	18.584000	note: file end d-25-000b.wav
 35.298848	35.298848	start002: ID: promo2
 59.525020	59.525020	orig003 start: A sync point
@@ -10,6 +14,7 @@
 59.910324	59.910324	track sync: A start
 61.702662	61.702662	orig003 start: B sync
 83.929783	83.929783	note: 162bpm
+124.985682	124.985682	note: file end d-25-005b.wav
 276.948073	276.948073	orig003 sync: B drop after synth end
 279.125714	279.125714	track sync: B drop after synth end
 285.129433	285.129433	note: last drop
@@ -19,9 +24,11 @@
 313.469524	313.469524	orig004 start: B
 314.322857	314.322857	orig004 start: A
 328.019592	328.019592	note: add sax + drum
+331.636011	331.636011	file note: same skip in d-25-005b.wav
 331.636011	331.636011	file note: backwards skip 6.811 sec?
 338.446536	338.446536	orig004 sync: A
 338.446536	338.446536	track sync: A add sax + drum again
+348.056071	348.056071	note: file end d-25-005b.wav
 361.888798	363.781224	note: lyrics start "I'll be the"
 433.690703	438.195374	note: "Everything is gonna be alright"
 480.420862	480.983946	note: beat sax start beat
