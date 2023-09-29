@@ -8,11 +8,11 @@
 8.018384	8.018384	note: zero cross
 18.584000	18.584000	note: file end d-25-000b.wav
 35.298848	35.298848	start002: ID: promo2
-54.392000	54.392000	note: file start sync d001-026b
+54.392000	54.392000	note: file start sync d001-026b 54.392
 59.525020	59.525020	orig003 start: A sync point
 59.910324	59.910324	orig003 sync: A start
-59.910324	59.910324	start003: ID: Jamie Myserson - Sky Blue
 59.910324	59.910324	track sync: A start
+59.910324	59.910324	start003: ID: Jamie Myserson - Sky Blue
 61.702662	61.702662	orig003 start: B sync
 83.929783	83.929783	note: 162bpm
 83.938352	83.943757	note: file sync wave
@@ -27,6 +27,8 @@
 313.469524	313.469524	orig004 start: B
 314.322857	314.322857	orig004 start: A
 328.019592	328.019592	note: add sax + drum
+330.938636	330.938636	note: file sync start d006-025
+331.636011	331.636011	note: same 6.811 sec backwards skip as d000-018
 331.636011	331.636011	note: same backwards skip in d001-026b as in d000-018
 331.636011	331.636011	file note: same skip in d-25-005b.wav
 331.636011	331.636011	file note: backwards skip 6.811 sec?
@@ -58,8 +60,9 @@
 890.036630	890.036630	orig006 end: A
 1053.756372	1055.822948	note: begin last verse
 1101.276009	1102.848000	track sync: B cymbal fade out
-1102.848000	1102.848000	note: file sync start: d019-040.wav 1102.848000
 1102.848000	1102.848000	file end: d000-018.wav
+1102.848000	1102.848000	note: file sync start: d019-040.wav 1102.848000
 1103.055465	1104.627456	orig005 sync: B cymbal fade out
 1111.161589	1111.161589	orig005 end: A
+1530.938636	1530.938636	note: file end d006-025
 1629.080000	1629.080000	note: file end d001-026b
