@@ -8,19 +8,31 @@ x	finish youtube playlist:
 x	    https://www.discogs.com/Various-No-Categories-A-Ubiquity-Compilation/master/112579
 
 REVIEW:
-.   d-14Nov10-a
-.   d-14Nov10-b
-.   d-14Nov10-c
-.   d-14Nov10-d
-.   d-14Nov10-e
-.   d-14Nov10-f
-.   d-14Nov10-h
+.   d-14Nov10-a		180-200
+.   d-14Nov10-b		200-220
+.   d-14Nov10-c		220-240
+.   d-14Nov10-d		240-260
+.   d-14Nov10-e		260-280
+.   d-14Nov10-f		280-300
+.   d-14Nov10-h		~300-~320
     d-25-000b.wav
     d-25-005b.wav
 x   d000-018.wav
+	overlaps:
+	x d-25-000b.wav
+	x d-25-005b.wav
+	x d001-026b.wav
+	x d006-025.wav
 x   d001-026b.wav
+	overlaps (only from 18-26)
+	  d006-025.wav
+	  d019-040.wav
+	  d026-045.wav
+	  d026-073b.wav
     d006-025.wav
+	overlaps all covered above
 x   d019-040.wav
+	overlaps (only from 26-40)
     d026-045.wav
 x   d026-073b.wav
 x   d041-064.wav
@@ -75,9 +87,9 @@ x   d107-121b.wav
     d505-531b.wav
     d512-005.wav
     d525-532.wav
-.   dnb-14Nov02-a.au
-.   dnb-14Nov02-b.au
-    dnb-14Nov02-c.au
+.   dnb-14Nov02-a.au	~198-~218
+.   dnb-14Nov02-b.au	~218-~228
+    dnb-14Nov02-c.au	~228-~248
 
 :: definitive track listing
 -- other definitive note
@@ -221,6 +233,7 @@ x   d107-121b.wav
 		  :: / No Categories: A Ubiquity Compilation (1998, Ubiquity)
 		     (7:36, track 1-5)
 		     http://classic.beatport.com/track/the-oracle-extended-instrumental-remix-original-mix/6145974
+		     https://music.apple.com/ie/album/the-oracle-extended-instrumental-remix/1523400564?i=1523400571
 		     (change marked by cymbal hit)
 		     all (ray) ... mine
 	14:24.089 .. new bassline starts
@@ -259,6 +272,7 @@ x   d107-121b.wav
 		     https://www.youtube.com/watch?v=y6F5mPZNTXI
 		   https://www.discogs.com/Callisto-The-Paradigm-EP/release/410
   https://www.discogs.com/Various-Chillout-Adventures-In-Leisure/release/264985
+		     https://music.apple.com/ie/album/junkle-i/995101816?i=995101825
 		     (track 2, 6:23)
 		     [latter on iTunes -- nothing else there though]
 		     (j-walkin' beats stop here)
@@ -268,6 +282,7 @@ x   d107-121b.wav
 		     (6:28, track 6)
 		     https://www.discogs.com/The-Amalgamation-Of-Soundz-Amalgamation-Of-Soundz/release/40027
 		 https://soundcloud.com/the-amalgamation-of-soundz/63rd-suite
+		 https://music.apple.com/ie/album/63rd-suite/5575733?i=5575727
 105:00.152  17:13.592 -- START d107-121b
 107:36	19:49.739 -- Shoeshiner / Crash / Various: Shake The Bones
 		     (see d107-121b for full details, full track)
@@ -333,6 +348,7 @@ x   d107-121b.wav
 		     listen to whole album?
 		     https://www.youtube.com/watch?v=Nq2UCKwUzu4
 		     [sampled it at AllMusic, nothing else relevant]
+		     1:09:55 - 1:15:02 (end)
 	15:21.506 .. transition / new cymbal
 137:38	15:21.506 :: Crusoe Takes A Trip / Red Snapper / Prince Blimey (1996)
 		     https://www.allmusic.com/album/prince-blimey-mw0000968323
