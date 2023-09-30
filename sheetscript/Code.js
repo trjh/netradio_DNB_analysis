@@ -132,6 +132,10 @@ function ParseTSV(fileContent) {
       entryType = match[1].charAt(0).toUpperCase() + match[1].slice(1) + ' ' +
                   match[2].charAt(0).toUpperCase() + match[2].slice(1)
       note = match[3];
+      if (entryType == "File Start") {
+        wavFilename = note;
+        note = ""
+      }
     }
     else {
       entryType = 'Note';
