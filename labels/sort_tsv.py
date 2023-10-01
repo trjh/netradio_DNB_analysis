@@ -99,7 +99,7 @@ else:
         process_line(line)
 
 # Sort the sort_lines by timestamp
-sort_lines.sort(key=lambda x: x[0])
+sort_lines.sort(key=lambda x: (x[0], x[1]))
 
 # adjust timestamps if appropriate
 def adjust_line(line):
