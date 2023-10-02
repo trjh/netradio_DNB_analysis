@@ -1,14 +1,19 @@
-0.000000	0.000000	file start sync: d019-040.wav 1102.848000
+0.000000	0.000000	file start sync: d019-040.wav 1102.848000 verified d006-025
 -0.305237	-0.305237	orig007 start: A
 0.000063	0.000063	start008: ID: Jamie Myerson - Crucial
 0.060095	0.060095	orig008 sync: A
 0.060095	0.060095	track sync: A start of track
 6.582630	6.582630	orig008 start: B
 421.547048	421.547048	orig008 sync: B
+428.090540	1317.632000	file_d026-045: file note: in sync with d019-040.wav over this range
+428.090540	428.090540	file_d026-045: file start sync: d026-045.wav NEEDMASTER
 428.434915	428.434915	track sync: B outro starts
 430.945814	430.945814	note: right & left track switched?
 474.627008	474.627008	orig008 end: A
-476.812163	476.812163	start009: ID: Net Radio - Promo3 Club Groove
+476.812163	476.812163	start009: ID: promo 3
+484.656876	484.659416	file_d026-045: note: file sync wave
+484.656876	484.659416	note: file sync wave
+491.000006	491.000006	note: file sync start: d026-073b verified d019-040
 509.828182	509.828182	orig010 start: A
 510.922582	510.922582	start010: ID: Odyssey - Artificial Life
 512.108277	514.108763	track sync: A start
@@ -32,13 +37,21 @@
 1313.038231	1313.038231	orig012 start: A
 1314.989329	1316.637946	orig011 sync: B beat out
 1315.454287	1317.102904	track sync: B beat out
-1317.632000	1317.632000	note: file start d041-064
+1317.632000	1317.632000	file end: d019-040.wav COMPLETED
+1317.632000	1317.632000	note: file start sync: d041-064.wav 2420.48 verified d026-045
 1317.632000	1317.632000	orig012 note: d041-064 start
-1317.632000	1317.632000	file end: d019-040.wav
-1317.632000	1317.632000	note: d041-064 clean transition here
-1318.138776	1320.994830	note: d014-064 track sync A raise your face to the sun
-1318.138776	1320.994830	note: orig012 sync A
+1317.632000	1628.090540	file_d026-045: file note: in sync with d026-073b.wav over this range
+1318.138776	1320.994830	note: file_d014-064: track sync A raise your face to the sun
+1318.138776	1320.994830	orig012 note: orig012 sync A
 1326.557172	1326.557172	orig011 end: A
 1327.022130	1327.022130	orig011 end: B
+1628.434915	1628.434915	file_d026-045: file end: d026-045.wav
+1647.710878	1647.710878	note: d026-073b: d041-064 skips ahead here
+1647.710878	1647.710878	note: file_d041-064: file note: skip starts
+1647.710878	1648.670941	note: file_d041-064: file note: skip span
+1648.670941	1648.670941	note: file_d041-064: file note: skip destination (post-split-and-sync)
+1650.155100	1650.159542	note: d026-073b: sync with d041-064 post-skip
 1665.987347	1665.987347	orig012 end: A
-2783.360000	2783.360000	note: file end d041-064
+2783.360000	2783.360000	note: d026-073b: file end d041-064 (before skip)
+2816.204250	2816.204250	note: file end d041-064 (after skip)
+3338.168006	3338.168006	note: file end d026-073b
