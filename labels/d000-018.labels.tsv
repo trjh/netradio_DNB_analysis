@@ -1,14 +1,17 @@
 0.000000	0.000000	file start sync: d000-018.wav 0.0 verified SELF-INIT
 -1511.944000	-1511.944000	note: file start d-25-000b.wav
--1505.031929	-1505.031929	note: file start d-25-005b.wav
-0.000000	0.000000	note: file sync: d-25-005b.wav 0.0 verified d000-018
-0.000000	0.000000	note: file sync: d-25-000b.wav 0.0 verified d000-018
+-1281.961603	-1281.961603	note: file start d-25-005b.wav
+0.000000	0.000000	note: d-25-000b: file sync: d-25-000b.wav 0.0 verified d000-018
+0.000000	0.000000	note: d-25-005b: file sync: d-25-005b.wav 0.0 verified d000-018
 0.000000	0.000000	start001: ID: Net Radio - Promo1 Club Groove
+0.000000	18.584000	note: d-25-000b: in sync with d000-018 over this range
+0.000000	348.056000	note: d-25-005b: file note: in sync with d000-018 over this range
 8.016179	8.020490	note: start sync wav
 8.018384	8.018384	note: zero cross
 18.584000	18.584000	note: file end d-25-000b.wav
 35.298848	35.298848	start002: ID: Net Radio - Promo2 Peace
-54.392000	54.392000	note: file start sync d001-026b 54.392 verified d000-018
+54.392000	1102.848000	file_d001-026b: in sync with d000-018 over this range
+54.392000	54.392000	file_d001-026b: file start sync d001-026b.wav 54.392 verified d000-018
 59.525020	59.525020	orig003 start: A sync point
 59.910324	59.910324	orig003 sync: A start
 59.910324	59.910324	start003: ID: Jamie Myserson - Sky Blue
@@ -17,21 +20,22 @@
 83.929783	83.929783	note: 162bpm
 83.938352	83.943757	note: file sync wave
 83.940254	83.940254	note: file sync wave lower crossover
-124.985682	124.985682	note: file end d-25-005b.wav
 276.948073	276.948073	orig003 sync: B drop after synth end
 279.125714	279.125714	track sync: B drop after synth end
 285.129433	285.129433	note: last drop
-303.949206	303.949206	start004: ID: Jamie Myerson - Everything is Gonna Be Alright
 303.949206	303.949206	orig004 start: pre-glitch start alignment
+303.949206	303.949206	start004: ID: Jamie Myerson - Everything is Gonna Be Alright
 311.580530	311.580530	orig003 end: A
 313.469524	313.469524	orig004 start: B
 314.322857	314.322857	orig004 start: A
 328.019592	328.019592	note: add sax + drum
-330.938636	330.938636	note: file sync start d006-025 verified d000-018
+330.938636	330.938636	file_d006-025: file sync start: d006-025.wav verified d000-018
+330.939000	1102.848000	file_d006-025: file note: in sync with d000-018 over this range
 331.636011	331.636011	note: backwards skip 6.811? (d000-018, d001-026b, d-25-000b, d-25-005b)
 338.446536	338.446536	orig004 sync: A
 338.446536	338.446536	track sync: A add sax + drum again
-348.056071	348.056071	note: file end d-25-005b.wav
+348.056008	348.056008	note: file end d-25-005b.wav
+348.056008	348.056008	note: file end d-25-005b.wav
 361.888798	363.781224	note: lyrics start "I'll be the"
 433.690703	438.195374	note: "Everything is gonna be alright"
 480.420862	480.983946	note: beat sax start beat
@@ -57,9 +61,11 @@
 890.036630	890.036630	orig006 end: A
 1053.756372	1055.822948	note: begin last verse
 1101.276009	1102.848000	track sync: B cymbal fade out
-1102.848000	1102.848000	note: file sync start: d019-040.wav 1102.848000 verified d006-025
 1102.848000	1102.848000	file end: d000-018.wav COMPLETED
+1102.848000	1102.848000	note: file sync start: d019-040.wav 1102.848000 verified d006-025
+1102.848000	1530.938636	file_d006-025: file note: in sync with d019-040 over this range
+1102.848000	1629.080000	file_d001-026b: in sync with d019-041 over this range
 1103.055465	1104.627456	orig007 sync: B cymbal fade out
 1111.161589	1111.161589	orig007 end: A
-1530.938636	1530.938636	note: file end d006-025
-1629.080000	1629.080000	note: file end d001-026b
+1530.938636	1530.938636	file_d006-025: file end d006-025
+1629.080000	1629.080000	file_d001-026b: file end d001-026b.wav
