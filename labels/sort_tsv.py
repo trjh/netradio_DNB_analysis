@@ -47,7 +47,7 @@ keyword_patterns = [
     r"((track)(\d+)?|(orig)(\d+))\s+sync:\s+(.)(.*)",
     r"orig(\d+)\s+(start|end|note):\s+(.*)",
     r"(file|mix) (start|end|note): (.*)",
-    r"note: (.*)",
+    r"note(\s\S+?)?: (.*)",
 ]
 
 # Compile regular expressions
