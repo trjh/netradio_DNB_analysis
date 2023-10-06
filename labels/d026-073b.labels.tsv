@@ -1,5 +1,4 @@
 0.000000	0.000000	file start sync: d026-073b 1593.848006 verified d019-040
-0.000000	0.000000	file start sync: d026-073b 1593.848006 verified d019-040
 0.000000	0.000000	ID11: Tricky - Piano (The Green Stinky Mix)
 0.000000	826.631994	file note: in sync with d019-040.wav over this range
 822.038225	822.038225	orig012 start: A
@@ -65,7 +64,7 @@
 2287.496364	2288.087823	orig015 sync: C start of d065
 2291.152134	2292.602326	track sync: B you can be capable
 2292.359994	2292.359994	note: file end d041-064 (before skip)
-2293.320060	2293.320060	note d065-087: file start sync: d065-087.wav NEEDMARK verified by d026-073b
+2293.320060	2293.320060	note d065-087: file start sync: d065-087.wav NEEDMARKINOWNFILE verified by d026-073b
 2293.320060	2293.911519	note d065-087: track sync: C start of d065
 2293.320060	2847.168000	file note: in sync with d065-087 over this range
 2325.204244	2325.204244	note: file end d041-064 (after skip)
@@ -76,7 +75,7 @@
 2847.168000	2847.168000	file end: d026-073b.wav COMPLETE
 3436.896012	3436.896012	note: file end d06-083b pre-skips
 3462.912039	3462.912039	note: file end d064-083b post-all-skips
-3673.672060	3673.672060	note: end file d065-087
+3673.672060	3673.672060	note: end file d065-087 (PRIMARY FILE)
 2600.159997	2600.159997	file start sync: d069-086.wav 1593.848006 verified d026-073b
 2600.159997	2847.168000	file note: in sync with d026-073b over this range
 2847.168000	3673.567997	file note: in sync with d065-087 over this range
@@ -105,8 +104,8 @@
 3439.496289	3439.881723	file note: skip10 resumes brief out of sync
 3462.912039	3462.912039	file end: d064-083b COMPLETE
 1137.090596	1137.090596	file start sync: d046-064.wav 1593.848006 verified d026-073b
-2334.751119	2334.751119	file end: d046-065.wav COMPLETE
 1137.090596	2334.751119	file note: in sync with d026-073b.wav over this range
+2334.751119	2334.751119	file end: d046-065.wav COMPLETE
 826.631994	826.631994	file start sync: d041-064.wav 2420.48 verified d026-073b
 826.631994	2293.320060	file note: in sync with d026-073b over this range (not including skips)
 1156.710872	1157.670935	file note: skip ahead 0.960063s
