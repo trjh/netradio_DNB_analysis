@@ -87,7 +87,7 @@ def process_entry(parts):
             break
 
     if not matched_keyword:
-        sys.stderr.write(f"Warning: Unrecognized keywords ({parts[2]}) at line {parts[3]} ts {parts[0]}\n")
+        sys.stderr.write(f"WARNING: Unrecognized keywords ({parts[2]}) at line {parts[3]} ts {parts[0]}\n")
 
     if re.match(r"file start", parts[2]):
         if (adjust_value < 0):
@@ -95,6 +95,15 @@ def process_entry(parts):
             sys.stderr.write(f".FIRST: adj({adjust_value}) :: {parts[2]}\n")
         else:
             sys.stderr.write(f".Not using adjust {parts[0]} as adjust_value already set ({adjust_value})\n")
+
+    # sanity checks for downstream
+    if re.match(r"file (start)? sync", parts[2]):
+        if not re.search(r"verified", parts[2]):
+            sys.stderr.write(f"NOTICE: Sync entry found without 'verified' tag: {parts[2]}, line {parts[3]}\n")
+
+    if re.match(r"file end", parts[2]):
+        if not re.search(r"COMPLETE", parts[2]):
+            sys.stderr.write(f"NOTICE: File end -- not COMPLETE?  {parts[2]}, line {parts[3]}\n")
 
     sort_lines.append((parts))
 
@@ -143,7 +152,7 @@ sort_lines.sort(key=tracksort)
 write_lines.extend(sort_lines)
 sort_lines=[]
 for sf in secondfiles:
-    sys.stderr.write(f"Processing secondary entries for file {sf}\n")
+    sys.stderr.write(f"---\nProcessing secondary entries for file {sf}\n")
     for entry in secondfiles[sf]:
         process_entry(entry)
     sort_lines.sort(key=tracksort)
