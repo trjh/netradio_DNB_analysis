@@ -61,11 +61,11 @@
 1102.848000	1102.848000	note: file sync start: d019-040.wav 1102.848000 verified d006-025
 1103.055465	1104.627456	orig007 sync: B cymbal fade out
 1111.161589	1111.161589	orig007 end: A
-54.392000	54.392000	file start sync: d001-026b.wav 54.392 verified d000-018
+54.392000	54.392000	file start sync: d001-026b.wav 0.0 verified d000-018
 54.392000	1102.848000	file note: in sync with d000-018 over this range
 1102.848000	1629.080000	file note: in sync with d019-041 over this range
 1629.080000	1629.080000	file end: d001-026b.wav COMPLETE
-330.938636	330.938636	file start sync: d006-025.wav 330.938636 verified d000-018
+330.938636	330.938636	file start sync: d006-025.wav 0.0 verified d000-018
 330.939000	1102.848000	file note: in sync with d000-018 over this range
 1102.848000	1530.938636	file note: in sync with d019-040 over this range
 1530.938636	1530.938636	file end: d006-025.wav COMPLETE
