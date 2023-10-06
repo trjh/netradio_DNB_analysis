@@ -17,7 +17,7 @@ args = parser.parse_args()
 
 # Check if the '--adjust' flag is provided
 do_adjustment = args.adjust
-adjust_value = 0
+adjust_value = -1
 
 # Check for testing-only
 test_mode = args.test
@@ -38,6 +38,9 @@ if filename and not test_mode:
 
 # Initialize lists to store lines to be sorted and unrecognized lines
 sort_lines = []         # stores entries of the form (timestamp1, timestamp2, label, line number)
+                        # in preparation for sorting/writing
+write_lines = []        # entries ready for writing
+secondfiles = dict()    # entries for additional wav files, key is wav filename, value is list of timestamp/label entries
 line_number = 0
 
 # Define regular expressions for matching keywords
@@ -66,7 +69,14 @@ def tracksort(entry):
 def process_entry(parts):
     global adjust_value
 
-    # first, is this a "secondary file" entry?
+    # is this a 'second file' entry?
+    if match := re.match(r"file_([^:]+):\s+(.+)",parts[2]):
+        secondfile = match.group(1)
+        label = match.group(2)
+        if secondfile not in secondfiles:
+            secondfiles[secondfile] = []
+        secondfiles[secondfile].append((parts[0],parts[1],label,parts[3]))
+        return
 
     matched_keyword = None
     # Check for keywords in the text portion of the line
@@ -80,8 +90,11 @@ def process_entry(parts):
         sys.stderr.write(f"Warning: Unrecognized keywords ({parts[2]}) at line {parts[3]} ts {parts[0]}\n")
 
     if re.match(r"file start", parts[2]):
-        adjust_value = float(parts[0])
-        sys.stderr.write(f"FIRST: adj({adjust_value}) {line.strip()}\n")
+        if (adjust_value < 0):
+            adjust_value = parts[0]
+            sys.stderr.write(f".FIRST: adj({adjust_value}) :: {parts[2]}\n")
+        else:
+            sys.stderr.write(f".Not using adjust {parts[0]} as adjust_value already set ({adjust_value})\n")
 
     sort_lines.append((parts))
 
@@ -118,6 +131,7 @@ def adjust_line(entry):
 ## MAIN ##
 
 # Process input based on whether a filename is provided or not
+sys.stderr.write("Processing primary entries\n")
 with contextlib.ExitStack() as stack:
     input = stack.enter_context(open(filename, 'r')) if filename else sys.stdin
     for line in input:
@@ -125,14 +139,26 @@ with contextlib.ExitStack() as stack:
 
 sort_lines.sort(key=tracksort)
 
+# now copy entries into write_lines, and process any secondary files similarly
+write_lines.extend(sort_lines)
+sort_lines=[]
+for sf in secondfiles:
+    sys.stderr.write(f"Processing secondary entries for file {sf}\n")
+    for entry in secondfiles[sf]:
+        process_entry(entry)
+    sort_lines.sort(key=tracksort)
+    write_lines.extend(sort_lines)
+    sort_lines=[]
+
+# adjust all lines we are writing
 if do_adjustment:
-    sort_lines = map(adjust_line, sort_lines)
+    write_lines = map(adjust_line, write_lines)
 
 # Write the sorted lines and file start lines to the appropriate output
 if not test_mode:
     with contextlib.ExitStack() as stack:
         output = stack.enter_context(open(filename, 'w')) if filename else sys.stdout
-        for entry in sort_lines:
+        for entry in write_lines:
             output.write("{:.6f}\t{:.6f}\t{}\n".format(*entry))
 
 sys.stderr.write("Processing complete.\n")
