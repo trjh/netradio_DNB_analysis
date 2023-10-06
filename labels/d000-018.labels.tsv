@@ -10,8 +10,6 @@
 8.018384	8.018384	note: zero cross
 18.584000	18.584000	note: file end d-25-000b.wav
 35.298848	35.298848	start002: ID: Net Radio - Promo2 Peace
-54.392000	1102.848000	file_d001-026b: in sync with d000-018 over this range
-54.392000	54.392000	file_d001-026b: file start sync d001-026b.wav 54.392 verified d000-018
 59.525020	59.525020	orig003 start: A sync point
 59.910324	59.910324	orig003 sync: A start
 59.910324	59.910324	start003: ID: Jamie Myserson - Sky Blue
@@ -29,8 +27,6 @@
 313.469524	313.469524	orig004 start: B
 314.322857	314.322857	orig004 start: A
 328.019592	328.019592	note: add sax + drum
-330.938636	330.938636	file_d006-025: file sync start: d006-025.wav verified d000-018
-330.939000	1102.848000	file_d006-025: file note: in sync with d000-018 over this range
 331.636011	331.636011	note: backwards skip 6.811? (d000-018, d001-026b, d-25-000b, d-25-005b)
 338.446536	338.446536	orig004 sync: A
 338.446536	338.446536	track sync: A add sax + drum again
@@ -63,9 +59,13 @@
 1101.276009	1102.848000	track sync: B cymbal fade out
 1102.848000	1102.848000	file end: d000-018.wav COMPLETED
 1102.848000	1102.848000	note: file sync start: d019-040.wav 1102.848000 verified d006-025
-1102.848000	1530.938636	file_d006-025: file note: in sync with d019-040 over this range
-1102.848000	1629.080000	file_d001-026b: in sync with d019-041 over this range
 1103.055465	1104.627456	orig007 sync: B cymbal fade out
 1111.161589	1111.161589	orig007 end: A
-1530.938636	1530.938636	file_d006-025: file end d006-025
-1629.080000	1629.080000	file_d001-026b: file end d001-026b.wav
+54.392000	54.392000	file start sync: d001-026b.wav 54.392 verified d000-018
+54.392000	1102.848000	file note: in sync with d000-018 over this range
+1102.848000	1629.080000	file note: in sync with d019-041 over this range
+1629.080000	1629.080000	file end: d001-026b.wav COMPLETE
+330.938636	330.938636	file start sync: d006-025.wav 330.938636 verified d000-018
+330.939000	1102.848000	file note: in sync with d000-018 over this range
+1102.848000	1530.938636	file note: in sync with d019-040 over this range
+1530.938636	1530.938636	file end: d006-025.wav COMPLETE
