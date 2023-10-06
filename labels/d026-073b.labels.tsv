@@ -1,0 +1,119 @@
+0.000000	0.000000	file start sync: d026-073b 1593.848006 verified d019-040
+0.000000	0.000000	file start sync: d026-073b 1593.848006 verified d019-040
+0.000000	0.000000	ID11: Tricky - Piano (The Green Stinky Mix)
+0.000000	826.631994	file note: in sync with d019-040.wav over this range
+822.038225	822.038225	orig012 start: A
+822.038225	822.038225	orig012 start: A
+822.429221	822.429221	orig012 start: B
+826.631994	826.631994	note: file end: d019-040.wav COMPLETED
+826.631994	826.631994	orig012 note: d041-064 start
+826.631994	1168.500060	start012: ID: Eighty Mile Beach - Arboleda de Manzanitas (Drum & Bass Mix)
+827.138770	829.994824	orig012 sync: A
+827.138770	829.994824	track sync: A raise your face to the sun
+835.557166	835.557166	orig011 end: A
+836.022124	836.022124	orig011 end: B
+1137.090596	1137.090596	note: file start d046-065
+1149.694966	1156.126893	orig012 sync: B
+1150.085962	1156.517890	track sync: B last horn hehoohahoo
+1154.830234	1156.208048	note: hehoohahoo
+1157.477956	1157.771833	note: last your
+1159.155094	1159.159536	note: sync with d041-064 post-skip
+1166.393510	1168.962018	orig012 sync: C put your fire to the ground
+1166.821284	1169.389792	track sync: C last put your fire to the ground
+1168.368773	1168.368773	orig013 start: 0 imprecise start sync
+1168.382674	1168.382674	orig013 start: A
+1168.382674	1168.382674	orig013 start: A
+1168.500270	1559.515060	start013: ID: DJ Addiction - Senses
+1168.516755	1168.516755	orig013 start: 1
+1169.455123	1169.455123	orig013 start: B
+1172.355193	1172.355193	mix end: 012
+1174.987341	1174.987341	orig012 end: A
+1174.987341	1174.987341	orig012 end: A
+1175.378337	1175.378337	orig012 end: B
+1175.415117	1175.415117	orig012 end: C
+1175.947391	1175.947391	orig012 end: A
+1189.501320	1198.096328	orig013 sync: A
+1189.501320	1198.096328	track sync: A
+1192.276228	1193.213210	note: horn start
+1204.526822	1209.240473	orig013 sync: 1 we are destined... hard to get this sync right
+1204.660904	1209.374554	track sync: 1 we are destined to gain knowledge from our wildest dreams
+1540.142515	1540.142515	mix start: 014 ooh
+1557.647011	1559.402677	orig013 sync: B last big beat
+1557.759394	1559.515060	track sync: B last big beat
+1559.515060	1740.959003	start014: ID: Me'Shell NdegéOcello – Stay (The Midnight Rockers Remix)
+1561.008350	1562.248587	note: first "stay"
+1571.668987	1584.783342	orig013 sync: 2
+1571.803003	1584.917358	track013 sync: 2 last "we are destined..."
+1579.795663	1580.644643	orig013 note: forest tree
+1580.217548	1580.568749	note: tree
+1585.089505	1585.089505	mix end: 013
+1598.671109	1598.671109	orig013 end: A
+1598.671653	1598.671653	orig013 end: A
+1599.744102	1599.744102	orig013 end: B
+1599.765735	1599.765735	orig013 end: 2
+1620.115267	1620.115267	note: ...organ kicks in
+1680.399947	1680.399947	note: ..transition (break/c'mon)
+1740.808044	1740.808044	orig015 start: A
+1740.808044	1740.808044	orig015 start: A
+1740.959003	1748.858537	orig015 sync: A it's all in your
+1740.959003	1748.858537	track sync: A it's all in your imagination
+1740.959003	2366.159003	start015: ID: DJ Crystl – Mind Games
+1763.779060	1763.779060	mix end: 014
+2236.896012	2236.896012	note: file start d064-083b
+2263.525499	2263.525499	note: d064-083b mark
+2285.353585	2286.803180	orig015 sync: B
+2287.496364	2288.087823	orig015 sync: C start of d065
+2291.152134	2292.602326	track sync: B you can be capable
+2292.359994	2292.359994	note: file end d041-064 (before skip)
+2293.320060	2293.320060	note d065-087: file start sync: d065-087.wav NEEDMARK verified by d026-073b
+2293.320060	2293.911519	note d065-087: track sync: C start of d065
+2293.320060	2847.168000	file note: in sync with d065-087 over this range
+2325.204244	2325.204244	note: file end d041-064 (after skip)
+2337.090597	2337.090597	note: file start d066-085
+2387.861105	2387.861105	orig015 end: A
+2393.659653	2393.659653	orig015 end: B
+2600.159997	2600.159997	note: file start d069-086
+2847.168000	2847.168000	file end: d026-073b.wav COMPLETE
+3436.896012	3436.896012	note: file end d06-083b pre-skips
+3462.912039	3462.912039	note: file end d064-083b post-all-skips
+3673.672060	3673.672060	note: end file d065-087
+2600.159997	2600.159997	file start sync: d069-086.wav 1593.848006 verified d026-073b
+2600.159997	2847.168000	file note: in sync with d026-073b over this range
+2847.168000	3673.567997	file note: in sync with d065-087 over this range
+3673.567997	3673.567997	file end: d069-086.wav COMPLETE
+2337.090597	2337.090597	file start sync: d066-085.wav 1593.848006 verified d026-073b
+2337.090597	3537.090535	file note: in sync with d065-087 over this range
+3537.090544	3537.090544	file end: d066-085.wav COMPLETE
+2236.896012	2236.896012	file start sync: d064-083b.wav 1593.848006 verified d026-073b
+2470.757762	2470.949762	file note: skip1 0.192s
+2470.949762	2470.949762	file note: resume from skip1
+2560.993503	2565.889503	file note: skip2 ahead 4.896s
+2565.889502	2565.889502	file note: resume from skip2
+2802.145752	2802.529814	file note: skip3 ahead 0.384s
+2802.529814	2802.529814	file note: resume from skip3
+2912.935439	2918.119439	file note: skip4 span 5.184s
+2918.119439	2918.119439	file note: resume from skip4
+2945.862439	2946.918456	file note: skip5 ahead 1.056s
+2946.918439	2950.940357	file note: resume from skip5, 1.05s not in sync
+3139.875751	3140.643752	file note: skip6 ahead 0.768s
+3140.643752	3140.643752	file note: resume from skip6
+3237.889864	3240.001939	file note: skip7 ahead 2.112s
+3240.001939	3240.001939	file note: resume from skip7
+3414.729796	3420.777723	file note: skip8 ahead 6.048s
+3430.179723	3430.563785	file note: skip9 ahead 0.384s
+3434.504348	3439.496289	file note: skip10 ahead 4.992s
+3439.496289	3439.881723	file note: skip10 resumes brief out of sync
+3462.912039	3462.912039	file end: d064-083b COMPLETE
+1137.090596	1137.090596	file start sync: d046-064.wav 1593.848006 verified d026-073b
+2334.751119	2334.751119	file end: d046-065.wav COMPLETE
+1137.090596	2334.751119	file note: in sync with d026-073b.wav over this range
+826.631994	826.631994	file start sync: d041-064.wav 2420.48 verified d026-073b
+826.631994	2293.320060	file note: in sync with d026-073b over this range (not including skips)
+1156.710872	1157.670935	file note: skip ahead 0.960063s
+1157.670935	1157.670935	file note: skip destination (post-split-and-sync)
+2293.320060	2293.320060	file end: d041-064.wav COMPLETE
+-62.909466	-62.909466	file start sync: d026-045.wav 1530.93854 verified d019-040
+-62.909466	826.631994	file note: in sync with d019-040.wav over this range
+-6.343130	-6.340590	note: file sync wave
+826.631994	1137.090534	file note: in sync with d026-073b.wav over this range
+1137.434909	1137.434909	file end: d026-045.wav COMPLETED
