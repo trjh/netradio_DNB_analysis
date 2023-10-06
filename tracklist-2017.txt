@@ -17,38 +17,63 @@ REVIEW:
 .   d-14Nov10-h		~300-~320
     d-25-000b.wav
     d-25-005b.wav
-x   d000-018.wav
-	overlaps:
+x   d000-018.wav	PRIMARY FILE
+	overlaps (000-018)
 	x d-25-000b.wav
 	x d-25-005b.wav
 	x d001-026b.wav
 	x d006-025.wav
-x   d001-026b.wav
-	overlaps (only from 18-26)
-	  d006-025.wav
-	  d019-040.wav
+x   d001-026b.wav	SECONDARY FILE
+	synced with d000-018 and d019-040 in d000-018.labels
+x   d006-025.wav	SECONDARY FILE
+	synced with d000-018 and d019-040 in d000-018.labels
+x   d019-040.wav	PRIMARY FILE
+	overlaps (026-040)
 	  d026-045.wav
-	  d026-073b.wav
-    d006-025.wav
-	overlaps all covered above
-x   d019-040.wav
-	overlaps (only from 26-40)
-    d026-045.wav
-x   d026-073b.wav
-x   d041-064.wav
+          d026-073b.wav
+x   d026-045.wav	SECONDARY FILE
+	in sync with d019-040 and d026-073b in d026-073b.labels
+    d026-073b.wav	PRIMARY FILE -- copy over data from d041-064
+	overlaps (040-073)
+	. d041-064.wav
+        . d046-065.wav
+        . d064-083b.wav
+        . d066-085.wav
+        . d069-086.wav
+    d041-064.wav	SECONDARY FILE -- demoted, as contains skip
+	TO SYNC WITH synced with d026-073b
+	in d026-073b.labels
     d046-065.wav
+	TO SYNC WITH d026-073b.wav
     d064-083b.wav
-x   d065-087.wav
+	TO SYNC WITH d026-073b.wav
+    d065-087.wav	PRIMARY FILE
+	overlaps (073-087)
+	. d084-103b.wav
+	. d086-105.wav
+	. d087-121.wav
     d066-085.wav
+	TO SYNC WITH d026-073b.wav
     d069-086.wav
+	TO SYNC WITH d026-073b.wav
     d084-103b.wav
+	TO SYNC WITH d065-087.wav
     d086-105.wav
+	TO SYNC WITH d065-087.wav
     d087-121.wav
-x   d088-107.wav
+	TO SYNC WITH d065-087.wav
+    d088-107.wav	PRIMARY FILE
+	overlaps (088-107)
+	  d104-108b.wav
+	  d106-125.wav
     d104-108b.wav
+	TO SYNC WITH d088-107.wav
     d106-125.wav
-x   d107-121b.wav
-.   d122-144.wav
+	TO SYNC WITH d088-107.wav
+    d107-121b.wav	PRIMARY FILE
+	overlaps (108-121)
+	  none?
+    d122-144.wav	PRIMARY FILE
     d122-144b.wav
     d126-145.wav
 .   d145-164.wav
