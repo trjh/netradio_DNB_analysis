@@ -128,7 +128,7 @@
 1782.176978	1783.530459	note d087-121: multiple skips -- start stop unknown
 1833.253791	1833.253791	note d087-121: resume from multiple skips
 1833.253791	2604.183500	note d087-121: file note: in sync with d088-107 over this range
-3450.775978	3450.775978	file end: d087-121 not complete in d065-087.labels
+3450.775978	3450.775978	note d087-121: file end: d087-121 not complete in d065-087.labels
 1243.770628	1243.770628	file start sync: d086-105.wav 3887.168066 verified by d065-087 double-checked
 1243.770628	1380.352000	file note: in sync with d065-087 over this range
 1244.008235	1244.010744	note: verify point d065-087
