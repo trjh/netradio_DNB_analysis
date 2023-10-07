@@ -96,7 +96,7 @@ function ParseTSV(fileContent) {
       var trackName = (titleParts.length > 1) ? titleParts[1] : trackTitle;
       var trackArtist = (titleParts.length > 1) ? titleParts[0] : '';
     }
-    else if (match = /file (start)? sync: (.+):? ([0-9.]+)/.exec(label)) {
+    else if (match = /^file (start)? sync: (.+):? ([0-9.]+)\s*(.*)/.exec(label)) {
       console.log('DEBUG: found file (start) sync')
       if (match[1] == "start") {
         entryType = 'File Start Sync'
@@ -105,7 +105,9 @@ function ParseTSV(fileContent) {
       }
       wavFilename = match[2];
       masterOffset = parseFloat(match[3]);
-      note = wavFilename + " " + masterOffset
+      note = wavFilename + " " + masterOffset + " " +match[4]
+      trackNum = ""
+      trackName = ""
     }
     // Detect track and original sync labels
     // match:         1 2      3      4     5                6  7
@@ -127,7 +129,7 @@ function ParseTSV(fileContent) {
       entryType = 'Orig ' + match[2].charAt(0).toUpperCase() + match[2].slice(1)
       note = match[1] + ": " + match[3]
     }
-    else if (match = /(file|mix) (start|end|note): (.*)/.exec(label)) {
+    else if (match = /^(file|mix) (start|end|note): (.*)/.exec(label)) {
       // any other valid type that is just a note
       entryType = match[1].charAt(0).toUpperCase() + match[1].slice(1) + ' ' +
                   match[2].charAt(0).toUpperCase() + match[2].slice(1)
@@ -135,6 +137,8 @@ function ParseTSV(fileContent) {
       if (entryType == "File Start") {
         wavFilename = note;
         note = ""
+        trackNum = ""
+        trackName = ""
       }
     }
     else {
