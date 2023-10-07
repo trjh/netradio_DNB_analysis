@@ -1,4 +1,4 @@
--0.000000	-0.000000	file start sync: d088-107.wav 5266.56
+-0.000000	-0.000000	file start sync: d088-107.wav 5267.520066 verified by d086-105 double-checked
 -6.389417	-6.389417	orig020 start: A
 -3.170735	-2.688013	orig020 sync: A plait
 -3.170735	-2.688013	track020 sync: A plait
@@ -10,15 +10,15 @@
 2.352263	2.723936	track sync: A
 2.644240	2.644240	note: sync A2
 9.863405	11.967734	orig020 note: organ start
-19.440259	241.994549	orig020 note: not used in mix
 19.440259	19.440259	note: organ stops wah-wah enters
+19.440259	241.994549	orig020 note: not used in mix
 241.994549	241.994549	orig020 end: A
 415.099300	416.571277	orig021 sync: B
 416.627032	418.099009	track sync: B last bass note
 425.697145	425.697145	orig022 start: 1
 425.799753	425.799753	orig022 start: A
-425.799753	803.058000	start022: ID: Castillo - Junkle I
 425.799753	425.799753	orig022 start: A
+425.799753	803.058000	start022: ID: Castillo - Junkle I
 426.043174	426.526347	orig022 sync: A
 426.043174	426.526347	track sync: A opening
 429.144717	429.144717	orig021 end: A
@@ -29,22 +29,38 @@
 793.233648	803.057848	track sync: B end
 803.057848	803.057848	orig023 start: A
 803.057848	806.317053	orig023 sync: A start
-803.057849	806.317053	track023 sync: A start
-803.057849	1183.380000	start023: ID: The Amalgamation of Soundz - 63rd Suite
 803.057849	803.057849	orig023 start: A
+803.057849	806.317053	track sync: A start
+803.057849	1189.379001	start023: ID: The Amalgamation of Soundz - 63rd Suite
 809.034741	809.034741	orig022 end: B
+1033.592000	1033.592000	note d107-121b: file start sync: d107-121b.wav MARK verified by d088-107
 1033.592000	1033.592000	note: file start sync: d107-121b.wav
+1070.840000	1070.840000	note d107-121b: file start sync: d106-125.wav MARK verified by d107-121
+1070.840000	1070.840000	note: file start sync: d106-125.wav
 1159.999290	1161.256798	orig023 sync: 1
 1160.819404	1162.076911	track sync: 1
 1187.073614	1187.828119	orig023 sync: B
 1187.945814	1188.700318	track sync: B end
 1189.379001	1189.379001	orig024 start: A
 1189.379001	1189.379001	orig024 start: A
-1189.379001	1223.830000	start024: ID: Crash - Shoeshiner
+1189.379001	1223.831439	start024: ID: Crash - Shoeshiner
 1189.738778	1189.917833	orig024 sync: A
 1189.738778	1189.917833	track sync: A start
 1194.057848	1194.057848	orig023 end: A
 1194.877962	1194.877962	orig023 end: 1
 1194.930048	1194.930048	orig023 end: B
-1223.831500	1223.831500	file end: d088-107
+1223.831439	1223.831439	file end: d088-107 COMPLETE
+1327.831937	1327.831937	note d107-121b: start d104-108b
 1404.767668	1404.767668	orig024 end: A
+1499.678379	1499.679200	note d107-121b: sync point with d104-108
+2070.520000	2070.520000	note d107-121b: file end
+-0.104000	-0.104000	file start sync: d087-121.wav 5267.520066 verified by d065-087 double-checked
+-0.104000	0.000022	file note: in sync with d065-087 over this range
+0.000022	386.268373	file note: in sync with d088-107 over this range
+0.080836	0.083902	note: sync point with d088-107
+386.268373	386.268373	file note: skip from here to multiple skip range
+401.825000	403.178481	file note: multiple skips -- start stop unknown
+452.901813	452.901813	file note: resume from multiple skips
+452.901813	1223.831522	file note: in sync with d088-107 over this range
+1223.831522	2070.423876	file note: in sync with d107-121b over this range
+2070.423876	2070.423876	file end: d087-121 COMPLETE
