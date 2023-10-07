@@ -106,12 +106,12 @@
 1137.090596	1137.090596	file start sync: d046-065.wav 1593.848006 verified d026-073b
 1137.090596	2334.751119	file note: in sync with d026-073b.wav over this range
 2334.751119	2334.751119	file end: d046-065.wav COMPLETE
-826.631994	826.631994	file start sync: d041-064.wav 2420.48 verified d026-073b
+826.631994	826.631994	file start sync: d041-064.wav 1593.848006 verified d026-073b
 826.631994	2293.320060	file note: in sync with d026-073b over this range (not including skips)
 1156.710872	1157.670935	file note: skip ahead 0.960063s
 1157.670935	1157.670935	file note: skip destination (post-split-and-sync)
 2293.320060	2293.320060	file end: d041-064.wav COMPLETE
--62.909466	-62.909466	file start sync: d026-045.wav 1530.93854 verified d019-040
+-62.909466	-62.909466	file start sync: d026-045.wav 1593.848006 verified d019-040
 -62.909466	826.631994	file note: in sync with d019-040.wav over this range
 -6.343130	-6.340590	note: file sync wave
 826.631994	1137.090534	file note: in sync with d026-073b.wav over this range
