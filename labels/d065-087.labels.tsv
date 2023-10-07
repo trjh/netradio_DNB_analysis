@@ -1,10 +1,10 @@
-0.000000	0.000000	file start sync: d065-087.wav 3886.208
+0.000000	0.000000	file start sync: d065-087.wav 3887.168066 verified by d026-073b
 -5.823696	-5.232237	orig015 sync: C start of d065
 0.000000	0.591459	track sync: C start of d065
 0.000000	72.854000	ID015: DJ Crystl - Mind Games
 37.117072	37.117072	orig016 start: 0
-37.256573	48.814717	orig016 note: range not in mix
 37.256573	37.256573	orig016 start: A
+37.256573	48.814717	orig016 note: range not in mix
 38.202129	38.202129	orig016 sync: 1
 40.591926	41.523017	orig016 note: thrill me
 48.814717	49.696485	orig016 sync: 0 first drop
@@ -12,12 +12,12 @@
 60.713774	60.713774	note: ..transition
 60.853275	61.716817	orig016 sync: 0 first drop
 72.854050	75.859595	orig016 sync: A
-72.854050	368.104000	start016: ID: Skyjuice - The Rope-A-Dope 
 72.854050	75.859595	track sync: A
+72.854050	368.104000	start016: ID: Skyjuice - The Rope-A-Dope
 74.936325	75.859595	note: thrill me
 89.770239	90.413687	orig015 sync: D end
-94.541045	94.541045	orig015 end: as viewed in d065-087
 94.541045	94.541045	orig015 end: A
+94.541045	94.541045	orig015 end: as viewed in d065-087
 96.674774	97.318222	track015 sync: D end
 100.339594	100.339594	orig015 end: B
 100.364741	100.364741	orig015 end: C
@@ -27,8 +27,8 @@
 337.391713	337.391713	note: ..restart after false stop
 341.175730	341.175730	note: .."brilliant"
 367.394454	371.761772	orig016 sync: B
-367.935046	367.935046	orig017 start: A - note this is the 7.52 min version
 367.935046	367.935046	orig017 start: A
+367.935046	367.935046	orig017 start: A - note this is the 7.52 min version
 368.104286	844.452000	start017: ID: Erykah Badu - On & On (Blu Mar Ten Remix)
 368.894754	368.894754	orig017 start: 1
 370.740100	375.107419	track016 sync: B fade out last thrill me
@@ -37,8 +37,8 @@
 376.552446	376.552446	orig016 end: 1
 378.952537	378.952537	orig016 end: B
 383.427192	383.427192	orig017 start: B
-402.285615	405.077177	orig017 sync: A chords start - v hard to get good sync - mix noticeably slowed
 402.285615	402.285615	note: .. chords come in
+402.285615	405.077177	orig017 sync: A chords start - v hard to get good sync - mix noticeably slowed
 402.295319	405.086881	track sync: A chords start
 425.491692	434.463543	orig017 sync: 1 first bass hit
 426.451401	435.423251	track sync: 1 first bass hit
@@ -78,17 +78,20 @@
 1157.477071	1159.565026	orig018 note: cymbals al-reada-ready
 1160.279415	1160.279415	note: .. last "to mind"
 1165.447220	1170.161955	orig018 note: to my-my-mind
+1169.592020	1169.592020	note: file start d084-103b
 1171.680181	1380.350000	start019: ID: Monty Norman - James Bond Theme (Stephane Malca Remix)
 1172.176588	1178.297932	note: bwowww string plucks from 017
 1176.657017	1177.893403	track018 sync: B pentultimate string plucks
 1178.872990	1183.969395	orig018 note: bwowww string plucks
 1180.939683	1185.314813	mix end: 018
 1182.659260	1183.895645	orig018 sync: B pentultimate string plucks
+1188.989310	1188.989310	note: skip in 084-103b
 1190.986258	1287.568980	orig018 note: not in mix
 1195.711329	1195.711329	note: ..cymbals start
 1197.642128	1201.975195	orig018 note: new beat/funky
 1203.782510	1205.196931	orig018 note: good byyye
 1220.167319	1220.167319	note: .."My Name's Bond, James Bond"
+1243.770753	1243.770753	note: file start d086-105
 1243.893973	1244.803560	orig018 note: good byye
 1281.566737	1281.566737	orig018 end: B
 1284.326531	1284.326531	orig018 end: 1
@@ -101,17 +104,49 @@
 1372.840653	1372.840653	note: peak
 1373.962583	1373.962583	orig020 start: A
 1374.000982	1374.000982	orig019 end: A
-1374.097504	1374.097504	note: file start d087-121
-1374.201504	1383.393086	note: 109 french speech
-1375.496487	1380.279662	note: where did this run-down/transition come from - seems like 019, but not on orig and not on 020 or 021
+1374.201504	1383.393086	note d088-107: 019 french speech
 1375.496487	1375.496487	note: 019 audio ends here sync B - seems to be length 4:02 on all discogs versions
-1377.181265	1377.663987	track020 sync: A plait
+1375.496487	1380.279662	note: where did this run-down/transition come from - seems like 019, but not on orig and not on 020 or 021
 1377.181265	1377.663987	orig020 sync: A plait
+1377.181265	1377.663987	track020 sync: A plait
 1380.151478	1380.151478	orig019 end: B
-1380.352000	1380.352000	start020: ID: Angelo Badalamenti & David Lynch - Twin Peaks (Alëem Remix)
+1380.247978	1380.247978	note d087-121: file start sync: d087-121.wav 3887.168066 verified by d065-087 double-checked - to be recorded in later file
+1380.247978	1380.247978	note: file start d087-121
+1380.247978	1380.352000	note d087-121: file note: in sync with d065-087 over this range
+1380.302311	1380.305867	note d087-121: note: verify point d065-087
+1380.352000	1380.352000	file end: d065-087.wav COMPLETE
+1380.352000	1380.352000	note d088-107: file start: d088-107.wav 3887.168066 verified by d086-105 double-checked
+1380.352000	1380.352000	note d088-107: start020: ID: Angelo Badalamenti & David Lynch - Twin Peaks (Alëem Remix)
 1380.352000	1380.352000	note: file start d088-107
-1380.352000	1380.352000	file end: d065-087.wav
+1380.352000	1766.620351	note d087-121: file note: in sync with d088-107 over this range
+1380.432849	1380.435915	note d088-107: sync with d087-121
 1390.215405	1392.319734	orig020 note: organ start
-1399.792259	1399.792259	note: organ stops wah-wah enters
+1399.792259	1399.792259	note d088-107: note: organ stops wah-wah enters
 1399.792259	1622.346549	orig020 note: not used in mix
 1622.346549	1622.346549	orig020 end: A
+1766.620351	1766.620351	note d087-121: skip from here to multiple skip range
+1782.176978	1783.530459	note d087-121: multiple skips -- start stop unknown
+1833.253791	1833.253791	note d087-121: resume from multiple skips
+1833.253791	2604.183500	note d087-121: file note: in sync with d088-107 over this range
+3450.775978	3450.775978	file end: d087-121 not complete in d065-087.labels
+1243.770628	1243.770628	file start sync: d086-105.wav 3887.168066 verified by d065-087 double-checked
+1243.770628	1380.352000	file note: in sync with d065-087 over this range
+1244.008235	1244.010744	note: verify point d065-087
+1245.643489	1245.649116	note: verify point2 d065-087
+1380.352000	2451.196003	file note: in sync with d088-107 over this range
+2400.954378	2408.379753	file note: skip1 7.425s
+2408.379753	2408.379753	file note: resume from skip1
+2451.196003	2451.196003	file end: d086-105.wav COMPLETE
+1169.592020	1169.592020	file start sync: d084-103b.wav 3887.168066 verified by d065-087
+1169.592020	1380.352000	file note: in sync (except for skips) with d065-087 over this range
+1188.989333	1190.621333	file note: skip1 1.632s
+1190.621333	1190.621333	file note: resume from skip1
+1239.678787	1240.350833	file note: skip2 0.672s
+1240.350833	1240.350833	file note: resume from skip2
+1278.557694	1279.805645	file note: skip3 1.248s
+1279.805645	1279.805645	file note: resume from skip3
+1304.376796	1305.624833	file note: skip4 1.248s
+1305.624833	1305.624833	file note: resume from skip4
+1380.352000	2374.391958	file note: presume contains further skips beyond skip5 -- not bothering to check
+1386.609901	1391.476097	file note: skip5 in this range
+2374.391958	2374.391958	file end: d084-103b.wav COMPLETE -- PRESUME MORE SKIPS DO NOT USE
