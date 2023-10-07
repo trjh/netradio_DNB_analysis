@@ -37,3 +37,4 @@ dropbox
 .DS_Store
 Makefile
 jaz_links
+scripts/__pycache__/
