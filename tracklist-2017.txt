@@ -33,37 +33,36 @@ x   d019-040.wav	PRIMARY FILE
           d026-073b.wav
 x   d026-045.wav	SECONDARY FILE
 	in sync with d019-040 and d026-073b in d026-073b.labels
-    d026-073b.wav	PRIMARY FILE -- copy over data from d041-064
+x   d026-073b.wav	PRIMARY FILE -- copy over data from d041-064
 	overlaps (040-073)
 	. d041-064.wav
         . d046-065.wav
         . d064-083b.wav
         . d066-085.wav
         . d069-086.wav
-    d041-064.wav	SECONDARY FILE -- demoted, as contains skip
-	TO SYNC WITH synced with d026-073b
-	in d026-073b.labels
-    d046-065.wav
-	TO SYNC WITH d026-073b.wav
-    d064-083b.wav
-	TO SYNC WITH d026-073b.wav
-    d065-087.wav	PRIMARY FILE
+x   d041-064.wav	SECONDARY FILE -- demoted, as contains skip
+	in sync with d026-073b in d026-073b.labels
+x   d046-065.wav
+	in sync with d026-073b in d026-073b.labels
+x   d064-083b.wav
+	in sync with d026-073b and d065-087.wav in d026-073b.labels (FULL OF SKIPS)
+x   d065-087.wav	PRIMARY FILE
 	overlaps (073-087)
 	. d084-103b.wav
 	. d086-105.wav
-	. d087-121.wav
-    d066-085.wav
-	TO SYNC WITH d026-073b.wav
-    d069-086.wav
-	TO SYNC WITH d026-073b.wav
-    d084-103b.wav
+x   d066-085.wav
+	in sync with d026-073b in d026-073b.labels
+x   d069-086.wav
+	in sync with d026-073b and d065-087.wav in d026-073b.labels
+x   d084-103b.wav
 	TO SYNC WITH d065-087.wav
-    d086-105.wav
+x   d086-105.wav
 	TO SYNC WITH d065-087.wav
-    d087-121.wav
-	TO SYNC WITH d065-087.wav
-    d088-107.wav	PRIMARY FILE
+x   d087-121.wav
+	TO SYNC WITH d065-087.wav / d088-107.wav
+_   d088-107.wav	PRIMARY FILE
 	overlaps (088-107)
+	. d087-121.wav
 	  d104-108b.wav
 	  d106-125.wav
     d104-108b.wav
@@ -74,8 +73,13 @@ x   d026-045.wav	SECONDARY FILE
 	overlaps (108-121)
 	  none?
     d122-144.wav	PRIMARY FILE
+	overlaps (122-144)
+	  d122-144b.wav
+	  d126-145.wav
     d122-144b.wav
+	TO SYNC WITH d122-144
     d126-145.wav
+	TO SYNC WITH d122-144
 .   d145-164.wav
     d145-164b.wav
     d146.wav
