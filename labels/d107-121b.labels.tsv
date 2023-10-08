@@ -1,26 +1,99 @@
-0.000000	0.000000	file start sync: d107-121b.wav 6300.152
+0.000000	0.000000	file start sync: d107-121b.wav 6301.112066 verified by d088-107
 -230.534152	-230.534152	orig023 start: A
 -230.534152	-227.274947	orig023 sync: A start
 -230.534151	-230.534151	start023: ID: The Amalgamation of Soundz - 63rd Suite
-0.000000	0.000000	ID: The Amalgamation of Soundz - 63rd Suite
+0.000000	0.000000	ID023: The Amalgamation of Soundz - 63rd Suite
+37.248000	37.248000	note: file start d106-125.wav verified d107-121b
 126.407290	127.664798	orig023 sync: 1
 127.227404	128.484911	track sync: 1
+128.034691	128.037060	note: file sync wave
 153.481614	154.236119	orig023 sync: B
 154.353814	155.108318	track sync: B end
 155.787001	155.787001	orig024 start: A
+155.787001	155.787001	orig024 start: A
 155.787001	155.787001	start024: ID: Crash - Shoeshiner
-155.787001	155.787001	orig023 start: A
-156.146778	156.325833	track sync: A start
 156.146778	156.325833	orig024 sync: A
+156.146778	156.325833	track sync: A start
 160.465848	160.465848	orig023 end: A
 161.285962	161.285962	orig023 end: 1
 161.338048	161.338048	orig023 end: B
-368.793261	368.793261	start025: ID: Spring Heel Jack - Happy Baby
+364.742585	367.470538	track sync: B end
+364.890648	367.618601	orig024 sync: B
+365.009933	365.011505	note: low peak to 2nd zero
+365.157996	365.159567	orig024 note: maybe low peak
+367.601810	367.601810	orig025 start: A
+367.601810	367.601810	orig025 start: A
+368.656050	368.656050	start025: ID: Spring Heel Jack - Happy Baby
+368.767980	368.988156	orig025 sync: A
+368.767980	368.988156	track sync: A first beat
+369.665203	369.665203	mix end: 024
+371.027605	371.027605	orig024 end: B
 371.175668	371.175668	orig024 end: A
-695.035000	695.035000	note: ..fast beats stop
-699.400408	699.400408	note: ..transition (barely audible first bell)
+371.175668	371.175668	orig024 end: A
+693.642060	694.851014	orig025 sync: B last cymbals
+693.950995	695.159948	track sync: B percussion stops
+694.074764	694.601395	note: closest area of B sync
+695.688458	695.688458	orig026 start: A
+695.688458	695.688458	orig026 start: A
+697.578321	697.578321	mix start: 026 ..transition (barely audible first bell)
 707.343745	707.343745	note: ..cymbal hit
+707.343745	708.075547	orig026 sync: A start
+707.343745	708.075547	track026 sync: A start
+708.069067	708.075547	note: sync big hit
+708.069077	708.075547	orig026 note: big hit sync visual
 713.076127	713.076127	start026: ID: Endemic Void - Serious Intent
+715.250971	715.250971	orig025 end: A
+715.267762	715.267762	orig025 end: A
+715.559906	715.559906	orig025 end: B
 730.207640	730.207640	note: ..piano
 798.804483	798.804483	note: ..piano restart
 851.313023	851.313249	note: ..solo flute
+1021.247157	1026.306657	track sync: B last mezzo-forte piano
+1021.394212	1021.394212	note: sync peak
+1021.822719	1026.882219	orig026 sync: B
+1029.479564	1036.928000	note: track muted down in mix
+1036.835064	1036.835064	note d122-144: file start sync: d1221-144.wav 6301.112066 verified by d106-125
+1036.835064	1036.835064	note: file start d122-144.wav verified by d106-125 d107-121b
+1036.915528	1036.915528	orig027 start: A
+1036.915528	1036.915528	orig027 start: B
+1036.928000	1036.928000	file end: d107-121b.wav COMPLETE
+1037.007049	1037.016190	orig027 note: initial wave sync attempt
+1037.033850	1037.033850	note d122-144: start027: ID: Cujo - Cruzer
+1037.033850	1037.033850	orig027 start: A
+1037.125371	1037.134512	note d122-144: initial wave sync
+1038.382540	1040.321406	orig027 sync: A start
+1038.500862	1040.439728	note d122-144: track sync: A start
+1039.620680	1039.633265	note d122-144: file sync point d122-144
+1039.953077	1039.953077	orig026 end: B
+1040.528639	1040.528640	orig026 end: A
+1237.248000	1237.248000	note: end file: d106-125 clean overlap
+1237.248000	1237.248000	note: file end d106-125.wav
+1370.180567	1372.076077	note d122-144: track sync: B last piano note
+1370.180567	1372.076077	orig027 sync: B
+1370.739577	1370.739577	note d122-144: note: B sync peak
+1374.218449	1374.644571	note d122-144: end of Cujo
+1374.644571	1374.644571	note d122-144: start028
+1374.644571	1376.381388	orig028 note: sigh
+1377.121959	1377.121959	note d122-144: mix end: 027 (but no sigh)
+1388.386984	1388.386984	orig027 note: end main track
+1905.609723	1905.609723	orig027 end: A
+2356.131064	2356.131064	note d122-144: file end d122-144.wav
+2356.131064	2356.131064	note: file end d122-144
+37.248000	37.248000	file start: d106-125.wav 6301.112066 verified d107-121b
+37.248000	1036.898685	file note: in sync with d107-121b.wav over this range
+1036.898685	1237.404938	file note: in sync with d122-144.wav over this range
+1039.777618	1039.790203	note: file sync point d106-125
+1237.418188	1237.418188	file end: d106-125.wav COMPLETE
+262.655999	262.655999	file start sync: d104-108b 6301.112066 verified by d107-121b
+274.566250	276.006249	file note: skip1
+276.006249	276.006249	file note: skip1 resume
+280.133749	280.325750	file note: skip2
+280.325750	280.325750	file note: skip2 resume
+295.250440	295.250440	file note: skip3
+295.250500	295.296875	file note: post-skip3 section i can't place
+295.296875	295.680812	file note: skip4
+295.680830	295.680830	file note: post-skip4
+303.081062	304.521125	file note: skip5
+304.521130	304.521130	file note: skip5 resume
+309.605308	309.605308	file note: more skips from here to rest of file - do not use file
+547.968000	547.968000	file end: d104-108b.wav COMPLETE do not use
