@@ -79,12 +79,12 @@
 1905.609723	1905.609723	orig027 end: A
 2356.131064	2356.131064	note d122-144: file end d122-144.wav
 2356.131064	2356.131064	note: file end d122-144
-37.248000	37.248000	file start: d106-125.wav 6301.112066 verified d107-121b
+37.248000	37.248000	file start sync: d106-125.wav 6301.112066 verified d107-121b
 37.248000	1036.898685	file note: in sync with d107-121b.wav over this range
 1036.898685	1237.404938	file note: in sync with d122-144.wav over this range
 1039.777618	1039.790203	note: file sync point d106-125
 1237.418188	1237.418188	file end: d106-125.wav COMPLETE
-262.655999	262.655999	file start sync: d104-108b 6301.112066 verified by d107-121b
+262.655999	262.655999	file start sync: d104-108b.wav 6301.112066 verified by d107-121b
 274.566250	276.006249	file note: skip1
 276.006249	276.006249	file note: skip1 resume
 280.133749	280.325750	file note: skip2
