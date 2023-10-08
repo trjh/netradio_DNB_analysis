@@ -8,13 +8,6 @@ x	finish youtube playlist:
 x	    https://www.discogs.com/Various-No-Categories-A-Ubiquity-Compilation/master/112579
 
 REVIEW:
-.   d-14Nov10-a		180-200
-.   d-14Nov10-b		200-220
-.   d-14Nov10-c		220-240
-.   d-14Nov10-d		240-260
-.   d-14Nov10-e		260-280
-.   d-14Nov10-f		280-300
-.   d-14Nov10-h		~300-~320
     d-25-000b.wav
     d-25-005b.wav
 x   d000-018.wav	PRIMARY FILE
@@ -60,18 +53,17 @@ x   d086-105.wav
 	TO SYNC WITH d065-087.wav
 x   d087-121.wav
 	TO SYNC WITH d065-087.wav / d088-107.wav
-_   d088-107.wav	PRIMARY FILE
+x   d088-107.wav	PRIMARY FILE (actual 087-108)
 	overlaps (088-107)
 	. d087-121.wav
-	  d104-108b.wav
-	  d106-125.wav
-    d104-108b.wav
-	TO SYNC WITH d088-107.wav
-    d106-125.wav
-	TO SYNC WITH d088-107.wav
-    d107-121b.wav	PRIMARY FILE
+x   d107-121b.wav	PRIMARY FILE (actual 105-119)
 	overlaps (108-121)
-	  none?
+	. d104-108b.wav
+	. d106-125.wav
+x   d104-108b.wav (actual 110-114)
+	TO SYNC WITH d107-121b.wav
+x   d106-125.wav
+	TO SYNC WITH d107-121b.wav
     d122-144.wav	PRIMARY FILE
 	overlaps (122-144)
 	  d122-144b.wav
@@ -85,16 +77,26 @@ _   d088-107.wav	PRIMARY FILE
     d146.wav
     d165-186.wav
     d165-186b.wav
+    d-14Nov10-a		180-200
     d187-200.wav
     d187-216b.wav
+.   dnb-14Nov02-a.au	~198-~218
+    d-14Nov10-b		200-220
     d217-242.wav
+.   dnb-14Nov02-b.au	~218-~228
+    d-14Nov10-c		220-240
     d228-247.wav
+    dnb-14Nov02-c.au	~228-~248
+    d-14Nov10-d		240-260
     d242-268.wav
     d248-258.wav
+    d-14Nov10-e		260-280
     d268-287.wav
     d269-271b.wav
     d276-293b.wav
+    d-14Nov10-f		280-300
     d288-307.wav
+    d-14Nov10-h		~300-~320
     d308-327.wav
     d316-335.wav
     d328-342.wav
@@ -116,9 +118,6 @@ _   d088-107.wav	PRIMARY FILE
     d505-531b.wav
     d512-005.wav
     d525-532.wav
-.   dnb-14Nov02-a.au	~198-~218
-.   dnb-14Nov02-b.au	~218-~228
-    dnb-14Nov02-c.au	~228-~248
 
 :: definitive track listing
 -- other definitive note
