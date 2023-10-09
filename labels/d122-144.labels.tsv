@@ -1,0 +1,82 @@
+0.000000	0.000000	file start sync: d1221-144.wav 7337.94713 verified by d106-125 d107-121b
+0.000000	0.199000	ID026: Endemic Void - Serious Intent
+0.080464	0.080464	orig027 start: B
+0.197481	0.197481	orig027 start: A
+0.198786	0.198786	orig027 start: A
+0.198997	337.809502	start027: ID: Cujo - Cruzer
+0.289002	0.298143	orig027 note: initial wave sync attempt
+0.290307	0.299448	note: initial wave sync
+1.664493	3.603359	orig027 sync: A start
+1.665798	3.604664	track sync: A start
+2.785616	2.798201	note: file sync point d122-144
+2.942554	2.955139	note: file sync point d106-125
+3.118013	3.118013	orig026 end: B
+3.693575	3.693576	orig026 end: A
+331.154287	331.154287	orig028 start: A
+331.154287	337.629819	orig028 note: range not in mix
+331.333969	331.333969	orig028 start: A
+333.345503	335.241013	track sync: B last piano note
+333.462520	335.358030	orig027 sync: B
+333.904513	333.904513	note: B sync peak
+334.067047	334.067047	note: ..last piano note
+337.383385	337.809502	note: end of Cujo
+337.809502	635.388000	start028: ID: Spaceways - At Home With The Snake
+337.809507	339.743301	orig027 note: sigh
+340.286895	340.286895	mix end: 027 (but no sigh)
+351.668937	351.668937	orig027 note: end main track
+361.611805	365.270899	orig028 sync: A drum start
+361.791488	365.450581	track sync: A drum start
+363.394655	363.394655	note: ..drum/flute start
+626.398549	628.097024	orig028 sync: B
+626.398549	628.097024	track sync: B
+626.881195	626.893824	note: B sync wave
+630.260639	630.260639	note: ..transition
+631.905104	631.905104	orig029 start: A
+631.905104	631.905104	orig029 start: A
+635.387527	921.506000	start029: ID: Rockers Hi-Fi - Queen of the Ghetto (Ghetto Defendant)
+635.717357	636.458325	orig029 sync: A
+635.717357	636.458325	track sync: A
+636.458325	636.458325	mix end: 028
+636.458325	642.259638	orig028 note: range not in mix
+642.259638	642.259638	orig028 end: B
+642.264899	642.264899	orig028 end: A
+642.439321	642.439321	orig028 end: A
+868.891676	868.891676	orig027 end: A
+919.548247	920.091607	track sync: B
+919.765055	919.838096	note: visible sync range
+919.809810	920.353170	orig029 sync: B
+921.018639	921.018639	orig030 start: B
+921.481497	921.481497	orig030 start: A
+921.481497	921.481497	orig030 start: A
+921.505922	1319.300000	start030: ID: Red Snapper - Crusoe Takes A Trip
+926.603146	927.789367	orig030 sync: A
+926.603146	927.789367	track sync: A
+927.141673	927.141673	note: ..new bassline starts
+927.149767	927.151993	note: A sync wave
+927.789367	927.789367	mix end: 029
+936.996312	936.996312	orig029 end: B
+937.257875	937.257875	orig029 end: A
+937.257875	937.257875	orig029 end: A
+1317.694439	1318.354860	track sync: B
+1317.756262	1317.758510	note: B sync wave
+1318.157296	1318.817717	orig030 sync: B
+1319.295938	1319.295938	file end: d122-144.wav COMPLETE
+1319.295938	1319.295938	note d145-164: file start sync: d145-164.wav 7337.94713 verified d122-144 d126-145 PRIMARY
+1319.295938	1319.295938	note d145-164: start031: Net Radio - Promo4 Peace
+1319.703084	1319.703084	orig030 end: B
+1320.165941	1320.165941	orig030 end: A
+1320.165941	1320.165941	orig030 end: A
+1400.415937	1400.415937	file start sync: d146.wav 7337.94713 verified d145-164
+1400.415937	1409.503438	file note: in sync with d145-164 over entire file
+1409.503438	1409.503438	file end: d146.wav COMPLETE
+1318.879939	1318.879939	file start sync: d145-164b.wav 7337.94713 verified d122-144
+1318.879939	1319.295938	file note: in sync with d122-144 over this range
+1319.295938	2539.231939	file note: in sync with d145-164 over this range
+2539.231939	2539.231939	file end: d145-164b.wav COMPLETE
+200.416125	200.416125	file start sync: d126-145.wav 7337.94713 verified by d122-144
+200.416125	1319.296063	file note: in sync with d122-144 over this range
+1319.296063	1400.415937	file note: in sync with d145-164 over this range
+1400.415937	1400.415937	file end: d126-145.wav COMPLETE
+0.096000	0.096000	file start sync: d122-144b.wav 7337.94713 verified by d122-144
+0.096000	1318.879939	file note: in sync with d122-144 over this range
+1318.879939	1318.879939	file end: d122-144b.wav COMPLETE
