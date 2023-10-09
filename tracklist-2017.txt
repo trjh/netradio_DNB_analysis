@@ -64,17 +64,19 @@ x   d104-108b.wav (actual 110-114)
 	TO SYNC WITH d107-121b.wav
 x   d106-125.wav
 	TO SYNC WITH d107-121b.wav
-    d122-144.wav	PRIMARY FILE
+x   d122-144.wav	PRIMARY FILE
 	overlaps (122-144)
-	  d122-144b.wav
-	  d126-145.wav
-    d122-144b.wav
+	. d122-144b.wav
+	. d126-145.wav
+x   d122-144b.wav
+	in sync with d122-144
+x   d126-145.wav
 	TO SYNC WITH d122-144
-    d126-145.wav
-	TO SYNC WITH d122-144
-.   d145-164.wav
-    d145-164b.wav
-    d146.wav
+.   d145-164.wav PRIMARY FILE
+x   d145-164b.wav
+	in sync with d145-164 (recorded in d122-144)
+x   d146.wav
+	in sync with d145-164 (recorded in d122-144)
     d165-186.wav
     d165-186b.wav
     d-14Nov10-a		180-200
