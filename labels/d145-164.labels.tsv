@@ -86,7 +86,7 @@
 2520.384000	2520.384000	note d165-186: file end: d165-186.wav
 2520.384000	2520.416000	note d-14Nov10-a: in sync with d165-186b over this range (but it is not primary)
 3395.808000	3395.808000	note d-14Nov10-a: file end: d-14Nov10-a.au
-1219.936000	1219.936000	file start sync: d165-186b 8657.243068 verified d145-164 d165-186
+1219.936000	1219.936000	file start sync: d165-186b.wav 8657.243068 verified d145-164 d165-186
 1219.936000	1219.968000	file note: in sync with d145-164 over this range of 0.030 sec
 1219.968000	2520.384000	file note: in sync with d165-186 over this range
 2520.384000	2520.384000	note: end of d165-186.wav
