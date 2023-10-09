@@ -1,0 +1,94 @@
+0.000000	0.000000	file start sync: d145-164.wav 8657.243068 verified d122-144 d126-145 PRIMARY
+0.000000	24.591024	start031: ID: Net Radio - Promo4 Peace
+24.142762	24.142762	orig032 start: B
+24.150857	24.150857	orig032 start: C
+24.150857	24.150857	orig032 start: C
+24.238680	24.238680	orig032 start: A
+24.503201	25.481829	orig032 sync: A
+24.591024	25.569653	track032 sync: A
+24.591024	426.131000	start032: ID: Skycutter & Kiki Mojo - Crystal Blue
+24.810973	24.855426	note: A sync waves try 2 -- inverted from original?
+24.960309	24.964945	note: sync wave A - mix stretch evident even over 0.005 sec
+115.342730	115.795864	track sync: B
+115.350810	115.803945	orig032 sync: B
+115.568442	115.571248	note: sync wave B
+120.859319	120.859319	note: end 1st set yeahs
+126.810511	126.810511	note: end 2nd set yeahs
+132.578600	132.578600	orig032 note: end 3rd set yeahs
+132.694637	132.694637	note: end 3rd set yeahs
+136.433987	136.985955	note: e-yeah-a
+136.436638	136.436638	orig032 note: entering 4th set yeahs
+136.437071	136.989039	orig032 sync: C
+136.437072	136.989040	track sync: C rough sync
+136.471054	136.902568	orig032 note: e-yeah-a
+136.633860	136.633860	note: entering 4th set yeahs
+137.835937	137.835937	orig032 note: skip break left side
+137.835937	140.628870	note: skip back this far (2.793s) with syncs C and D
+137.835946	137.835946	note: track skips back 2.793s (d145-164 and other synced files)
+140.364118	140.364118	orig032 note: split to find skip length
+143.581521	143.599390	orig032 sync: D post-skip
+143.846283	143.864152	track sync: D post-skip
+399.732314	401.211287	orig032 sync: E cymbal end percussion
+399.732314	401.211287	track sync: E cymbal end percussion
+425.895224	425.895224	orig033 start: A
+425.895224	425.895224	orig033 start: A
+426.131091	767.400000	start033: ID: Squarepusher - Problem Child
+426.161016	426.252825	orig033 sync: A
+426.161016	426.252825	track sync: A start
+431.550866	431.550866	orig032 end: E
+431.550866	431.550866	orig32 end: E (split at mix skip)
+431.815628	431.815628	orig032 end: D (split)
+513.062996	513.064438	orig033 sync: 1
+513.062996	515.151930	orig033 note: sync Ato1 delta 2.089
+515.151930	515.153372	track sync: 1
+595.980254	595.980932	orig033 sync: 2
+595.980254	597.976694	orig033 note: sync Ato2 delta 1.996s
+597.976694	597.977372	track sync: 2 (inverted from orig)
+658.993825	659.025950	orig033 sync: 3
+658.993825	660.919494	orig033 note: sync Ato3 delta 1.926
+660.919494	660.951619	track sync: 3
+763.912737	764.084451	orig033 sync: B
+763.912737	765.720878	orig033 note: sync AtoB delta 1.808s
+765.720878	765.892592	track sync: B end knocks
+767.153787	767.153787	orig034 start: A
+767.208104	767.208104	orig033 end: A 7:05
+767.215261	767.215261	orig034 start: 0 - start sync
+767.400036	1219.967938	start034: ID: The Advocate - You Talking To Me?
+768.972086	768.972086	orig034 start: B
+768.972086	768.972086	orig034 start: B
+769.045406	769.045406	orig033 end: A
+769.045406	769.045406	orig033 end: B 12:45
+769.052880	769.052880	orig034 start: 3
+769.162934	769.162934	orig033 end: 3 11:00
+769.233705	769.233705	orig033 end: 2 9:57
+769.286009	769.286009	orig034 start: 2
+769.326199	769.326199	orig033 end: 1 8:35
+769.386100	769.386100	orig034 start: 1
+789.988013	790.488968	track sync: A tones
+789.992416	790.001548	note: tone start
+791.806312	792.307267	orig034 sync: A
+836.963835	837.188221	orig034 sync: 1
+837.377849	837.602235	track sync: 1 strong beat
+924.543219	926.359182	orig034 sync: 2 please hang up
+924.857142	926.673105	track sync: 2 please hang up and try again
+1131.021061	1132.294322	track sync: 3 hauh...
+1203.411038	1204.087458	orig034 sync: last drumbeat
+1203.411038	1204.087458	track sync: B last drumbeat
+1219.967938	1219.967938	file end: d145-164.wav COMPLETE
+1219.968000	1219.968000	note d165-186: file start sync: d165-186.wav 8657.243068 verified d165-186b PRIMARY
+1220.100847	1220.103999	note d165-186: sync wave with d165-186b
+1224.991678	1224.991678	orig034 end: B
+1224.991678	1224.991678	orig034 end: B
+1261.606698	1262.193536	note d165-186: skip?
+1744.249252	1745.318135	note d165-186: skip? (both d165-186 and d165-186b)
+2195.808000	2195.808000	note d-14Nov10-a: file start sync: d-14Nov10-a.au 8657.243068 verified by d165-186 d165-186b
+2195.808000	2520.384000	note d-14Nov10-a: in sync with d165-186 over this range
+2520.384000	2520.384000	note d165-186: file end: d165-186.wav
+2520.384000	2520.416000	note d-14Nov10-a: in sync with d165-186b over this range (but it is not primary)
+3395.808000	3395.808000	note d-14Nov10-a: file end: d-14Nov10-a.au
+1219.936000	1219.936000	file start sync: d165-186b 8657.243068 verified d145-164 d165-186
+1219.936000	1219.968000	file note: in sync with d145-164 over this range of 0.030 sec
+1219.968000	2520.384000	file note: in sync with d165-186 over this range
+2520.384000	2520.384000	note: end of d165-186.wav
+2520.384000	2520.416000	file note: in sync with d-14Nov10-a over this range 1411 samples 0.032 sec
+2520.416000	2520.416000	file end: d165-186b.wav COMPLETE
