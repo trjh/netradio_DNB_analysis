@@ -1,0 +1,23 @@
+0.000000	0.000000	file start sync: d165-186.wav 9877.211068 verified d165-186b PRIMARY
+0.000000	462.974000	start035: ID: Decoder - Circuit Breaker
+5.023678	5.023678	orig034 end: B
+41.638698	42.225536	note: skip?
+462.974231	813.581000	start036: ID: Slak & Snuggles - The Reckoning
+524.281252	525.350135	note: skip? (both d165-186 and d165-186b)
+813.581465	1300.420000	start037: ID: Fierce & Nico - Input
+975.840000	975.840000	note d-14Nov10-a: file start sync: d-14Nov10-a.au 8657.243068 verified by d165-186 d165-186b
+975.840000	975.840000	note: file start d-14Nov10-a
+975.840000	1300.416000	note d-14Nov10-a: file note: in sync with d165-186 over this range
+1300.416000	1300.416000	note: file end: d165-186.wav
+1300.416000	1300.416000	note: file start d187-200
+1300.416000	1300.448000	note d-14Nov10-a: in sync with d165-186b over this range (but it is not primary)
+1300.448000	1300.448000	note d187-216b: file start sync: d187-216b.wav MARK verified d187-200
+1300.448000	2175.840000	note d187-216b: file note: in sync with d-14Nov10-a over this range
+2175.840000	2175.840000	note d-14Nov10-a: file end: d-14Nov10-a.au
+2175.840000	2175.840000	note d-14Nov10-a: file end: d-14Nov10-a.wav
+2175.840000	2175.840000	note d187-216b: file end d-14Nov10-a
+2528.808144	2529.175937	note d187-216b: SKIP
+2568.992000	2568.992000	note d187-216b: file end: d187-216b.wav
+1300.416000	1300.416000	file start sync: d187-200.wav 9877.211068 verified d-14Nov10-a
+1300.416000	1699.775312	file note: in sync with d-14Nov10-a over entire file
+1699.775312	1699.775312	file end: d187-200.wav COMPLETE
