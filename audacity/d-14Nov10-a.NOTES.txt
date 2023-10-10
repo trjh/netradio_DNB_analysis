@@ -1,2 +1,0 @@
-MISSING?
--                <label t="1109.76800000" t1="1439.76800000" title="Strength (5:30)"/>
