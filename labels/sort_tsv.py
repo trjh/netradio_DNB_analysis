@@ -44,6 +44,8 @@ def tracksort(entry):
 def process_entry(parts):
     global adjust_value
     global sort_lines
+    if debug:
+        print(f"process_entry({parts})")
 
     # is this a 'second file' entry?
     if match := re.match(r"file_([^:]+):\s+(.+)",parts[2]):
@@ -91,7 +93,7 @@ def process_line(line):
     parts.append(line_number)
 
     # line validation checks
-    if (len(parts) < 3):
+    if (len(parts) < 4):
         sys.stderr.write(f"Warning: Unrecognized line - less than 3 fields - {line.strip()}\n")
         return
 
@@ -115,18 +117,26 @@ def adjust_line(entry):
 
 # Get labels from filename or stdin
 def read_labels_filepipe(test_mode):
-    global filename
+    global filename, debug
 
     # Create a backup of the original file if a filename is provided
     if filename and not test_mode:
         # If we have a .txt extension, move it to .tsv
         if filename.endswith("txt"):
-            moveresult = shutil.move(filename, filename[:-3] + "tsv")
+            try:
+                moveresult = shutil.move(filename, filename[:-3] + "tsv")
+            except Exception as inst:
+                print(f"Unable to move {filename} {filename[:-3] + 'tsv'}: {inst}")
+                sys.exit('Exiting.')
             sys.stderr.write(f"Moved {filename} to {moveresult}\n")
             filename=filename[:-3] + "tsv"
 
         backup_filename = filename + ".bak"
-        shutil.copy(filename, backup_filename)
+        try:
+            shutil.copy(filename, backup_filename)
+        except Exception as inst:
+            print(f"Unable to copy {filename} to {backup_filename}: {inst}")
+            sys.exit('Exiting.')
         sys.stderr.write(f"Copied {filename} to {backup_filename}\n")
 
     # Process input based on whether a filename is provided or not
@@ -134,6 +144,8 @@ def read_labels_filepipe(test_mode):
     with contextlib.ExitStack() as stack:
         input = stack.enter_context(open(filename, 'r')) if filename else sys.stdin
         for line in input:
+            if debug:
+                print(f"...{line}")
             process_line(line)
 
 # Get labels from current audacity
@@ -260,7 +272,11 @@ def main():
     if not test_mode and not live_mode:
         read_lines = []
         with contextlib.ExitStack() as stack:
-            output = stack.enter_context(open(filename, 'w')) if filename else sys.stdout
+            try:
+                output = stack.enter_context(open(filename, 'w')) if filename else sys.stdout
+            except Exception as inst:
+                print(f"Unable to open {filename}: {inst}")
+                sys.exit('Exiting.')
             for entry in write_lines:
                 output.write("{:.6f}\t{:.6f}\t{}\n".format(*entry))
 
