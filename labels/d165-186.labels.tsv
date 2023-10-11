@@ -1,18 +1,79 @@
 0.000000	0.000000	file start sync: d165-186.wav 9877.211068 verified d165-186b PRIMARY
-0.000000	462.974000	start035: ID: Decoder - Circuit Breaker
+-0.173447	-0.173447	orig035 start: B (pre-skip)
+0.000000	462.966860	start035: ID: Decoder - Circuit Breaker
+0.095734	0.161982	orig035 sync: A start
+0.130768	0.197016	track sync: A start
 5.023678	5.023678	orig034 end: B
-41.638698	42.225536	note: skip?
-462.974231	813.581000	start036: ID: Slak & Snuggles - The Reckoning
-524.281252	525.350135	note: skip? (both d165-186 and d165-186b)
-813.581465	1300.420000	start037: ID: Fierce & Nico - Input
+34.554465	35.032140	orig035 sync: B pre-skip
+34.554465	35.032140	track sync: B pre-skip
+41.827167	41.827167	orig035 note: split to find mix skip length (left)
+41.827167	46.891407	note: skip back 5.064s (with sync B and C) (d165-186 and d165-186b)
+46.431521	46.431521	orig035 note: split to find mix skip (right)
+46.779353	46.784365	orig035 sync: C post-skip
+47.239240	47.244252	track sync: C post-skip
+187.624202	188.881553	orig035 sync: D
+187.921730	189.179081	track sync: D aligned on third wave
+293.396322	294.868825	orig035 sync: E
+293.576753	295.049255	track sync: E
+451.635893	456.357376	orig035 sync: F end post-skip
+451.635893	456.357376	track sync: F end
+462.696760	462.696760	orig036 start: B
+462.766262	462.766262	orig036 start: A
+462.897359	463.505309	orig036 sync: A
+462.966860	463.574810	track036 sync: A start
+462.966860	813.581232	start036: ID: Slak & Snuggles - The Reckoning
+464.074717	464.074717	orig035 end: B
+464.109751	464.109751	orig035 end: A
+468.679070	468.679070	orig035 end: F post-split
+468.679070	468.679070	orig035 end: F post-split
+468.859501	468.859501	orig035 end: E post-split
+468.976599	468.976599	orig035 end: D post-split
+469.138957	469.138957	orig035 end: C post-split
+523.918796	524.546485	orig036 sync: B pre-skip
+523.918796	524.546485	track sync: B pre-skip
+524.772122	524.772122	orig036 note: split to find mix skip length
+524.772122	530.589663	note: skip back 5.818s (both d165-186 and d165-186b)
+530.462080	530.987128	orig036 sync: C post-skip
+530.781921	531.306969	track sync: C post-skip
+652.516183	652.914904	orig036 sync: D post-skip
+652.693689	653.092409	track sync: D
+806.731776	808.834389	orig036 sync: E end
+806.731776	808.834389	track sync: E end
+813.327831	813.327831	orig037 start: B
+813.327831	813.327831	orig037 start: B
+813.365233	813.365233	orig037 start: A
+813.581232	1300.420000	start037: ID: Fierce & Nico - Input
+814.446030	814.830934	orig037 sync: A start
+814.483432	814.868336	track sync: A start
+818.418121	818.418121	orig036 end: E
+818.418121	818.418121	orig036 end: E post-skip
+818.595627	818.595627	orig036 end: D post-skip
+818.737962	818.737962	orig036 end: C post-skip
+848.072554	848.094020	orig037 sync: B pre-skip
+848.072554	848.094020	track sync: B pre-skip
+849.995267	849.995267	orig037 note: split to find mix skip length (left)
+849.995267	854.972530	note: skip back 4.977s (both files)
+855.390141	856.148105	orig037 sync: C post-skip
+855.891153	856.649117	track sync: C post-skip
+916.977172	917.970026	orig037 sync: D
+917.408601	918.401455	track sync: D post-skip
 975.840000	975.840000	note d-14Nov10-a: file start sync: d-14Nov10-a.au 8657.243068 verified by d165-186 d165-186b
 975.840000	975.840000	note: file start d-14Nov10-a
 975.840000	1300.416000	note d-14Nov10-a: file note: in sync with d165-186 over this range
-1300.416000	1300.416000	note: file end: d165-186.wav
+1199.000041	1202.758278	orig037 sync: E
+1199.106640	1202.864877	track sync: E
+1296.706323	1298.153166	orig037 sync: F end
+1296.706323	1298.153166	track sync: F end
+1300.416000	1300.416000	note: file end: d165-186.wav COMPLETE
 1300.416000	1300.416000	note: file start d187-200
 1300.416000	1300.448000	note d-14Nov10-a: in sync with d165-186b over this range (but it is not primary)
 1300.448000	1300.448000	note d187-216b: file start sync: d187-216b.wav MARK verified d187-200
 1300.448000	2175.840000	note d187-216b: file note: in sync with d-14Nov10-a over this range
+1304.463491	1304.463491	orig037 end: F
+1304.465305	1304.465305	orig037 end: F
+1304.571904	1304.571904	orig037 end: E
+1304.894919	1304.894919	orig037 end: D
+1304.966317	1304.966317	orig037 end: C
 2175.840000	2175.840000	note d-14Nov10-a: file end: d-14Nov10-a.au
 2175.840000	2175.840000	note d-14Nov10-a: file end: d-14Nov10-a.wav
 2175.840000	2175.840000	note d187-216b: file end d-14Nov10-a
