@@ -105,7 +105,7 @@
 1442.028383	1442.028383	note d-14Nov10-b: orig041 end: 2
 1442.028383	1442.028383	orig041 end: 2
 2400.000000	2400.000000	note d-14Nov10-b: file end: d-14Nov10-b
-895.776000	895.776000	file start sync: dnb-14Nov02-a 10853.051068 verified d-14Nov02-a d-14Nov10-b
+895.776000	895.776000	file start sync: dnb-14Nov02-a.au 10853.051068 verified d-14Nov02-a d-14Nov10-b
 895.776000	1200.000000	file note: in sync with d-14Nov10-a over this range
 1200.000000	2095.776000	file note: in sync with d-14Nov10-b over this range
 2095.776000	2095.776000	file end: d-14Nov02-a.au COMPLETE
