@@ -1,0 +1,43 @@
+0.000000	0.000000	file start sync: d-14Nov10-b.au 12053.051068 verified d187-216b
+0.000000	239.768000	ID041: The Sonar Circle - Strength
+2.288449	3.206987	orig041 sync: 2 start d-14Nov10-b
+2.325502	3.244039	track sync: 2 start d-14Nov10-b
+86.437042	86.437042	note: return of synth (had been just drums)
+176.952315	176.952315	note: bass gets deeper
+212.836662	212.836662	note: transition
+223.679129	223.679129	note: end of drums
+239.768000	660.768000	start042: ID: Science of Industry (7:01)
+241.991330	241.991330	orig041 end: 1
+242.028383	242.028383	orig041 end: 2
+281.348462	281.348462	note: restart of drums
+305.757573	321.246812	note: wub-wub returns
+326.755961	326.756011	note: "attack"
+333.040777	339.147678	note: "to attack..."
+373.944443	396.378306	note: another drum break
+488.085583	488.085583	note: transition
+625.511811	632.125984	note: ..transition
+647.480761	647.480761	note: breakpoint -- this should be end/start -- next tune comes in
+660.768000	965.768000	start043: ID: Waves (Kid Loops remix)
+717.260141	717.260342	note: flute/trumpet start
+734.999257	740.752748	note: "all that we see or seem, is but a dream, within a dream..."
+780.014954	780.910768	note: "but in the process"
+789.510431	791.931524	note: "but in the process, they've been the true renegades"
+826.841995	830.104417	note: "all that we see or seem, is but a dream"
+849.793820	856.599602	note: "all that we see or seem, is but a dream, within a dream..."
+884.229946	884.229946	note: transition (drum comes back, beat changes)
+895.717296	895.717296	note: more "but in the process"
+895.776130	895.776130	note: file start dnb-14Nov02-b
+919.206801	919.206801	note: start wind-down / transition
+964.448000	964.448000	note d217-242: file start sync: d217-242.wav MARK verified d-14Nov10-b
+964.448000	964.448000	note: file start d217-242
+965.767192	1435.767192	start044: ID: Retro (7:50)
+1032.096109	1062.515525	note: "sad, in the 20th century..."
+1158.005239	1158.005239	note: bassline change
+1200.000000	1200.000000	file end: d-14Nov10-b.au
+1200.000000	1200.000000	note d-14Nov10-c: file start sync: d-14Nov10-c.au MARK verified by dnb-14Nov02-b d217-242
+1200.000000	1435.767192	ID044: Retro (7:50)
+1203.861402	1203.861402	note: bassline change/restart
+2400.000000	2400.000000	note d-14Nov10-c: file end: d-14Nov10-c.au
+2503.904000	2503.904000	note d217-242: file end: d217-242.wav ends after d-14Nov10-c
+895.776000	895.776000	file start sync: dnb-14Nov02-b.au MARK verified d-14Nov10-b
+2095.776000	2095.776000	file end: dnb-14Nov02-b.au
