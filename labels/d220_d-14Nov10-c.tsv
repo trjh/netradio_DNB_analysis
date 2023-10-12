@@ -1,0 +1,39 @@
+0.000000	0.000000	file start sync: d-14Nov10-c.au 13253.051068 verified by dnb-14Nov02-b d217-242
+-235.552000	-235.552000	note d217-242: file start sync: d217-242.wav 13253.051068 verified d-14Nov10-b
+-235.552000	0.000000	note d217-242: file note: in sync with d-14Nov10-b over this range
+0.000000	235.767192	ID044: Retro (7:50)
+0.000000	1200.000000	note d217-242: file note: in sync with d-14Nov10-c over this range
+3.861402	3.861402	note: bassline change/restart
+78.650711	83.000601	note: "some of these guys..."
+92.758462	96.285399	note: "and the true rebels"
+235.767000	535.767000	start045: ID: It's All Gone Sideways (5:00)
+278.940797	280.231769	note: beat/tune transition
+347.745659	347.745659	note: bassline stops, quiet moment
+371.024494	371.024494	note: deep spooky bass starts
+406.569000	406.569000	note: d228-247 post-skip starts here
+479.980594	499.701245	note: ~scrapy drum of Beckoning
+491.896733	491.896733	note: ..sighs from Beckoning start
+514.960112	520.492069	note: ~horn transition
+535.767000	867.767000	start046: ID: The Beckoning (5:32)
+564.300288	569.791568	note: ~drumline stops
+834.283819	844.311268	note: ~transition
+849.659241	867.767000	note: ~more obvious transition
+867.767000	1274.767000	start047: ID: Realism (6:47)
+895.776000	895.776000	note: file end: dnb-14Nov02-b.au
+1200.000000	1200.000000	file end: d-14Nov10-c.au
+1200.000000	1274.767000	note d-14Nov10-d: ID047: Realism (6:47)
+1200.000000	1303.904000	note d217-242: NOTE - NEED SYNC CHECK HERE
+1208.262213	1214.066393	note d-14Nov10-d: ~start of record scratching
+1274.767000	1452.767000	note d-14Nov10-d: start048: ID: Her Spectre Above Me Look (2:58)
+1303.904000	1303.904000	note d217-242: file end: d217-242.wav ends after d-14Nov10-c
+1303.904000	1303.904000	note d217-242: file end: d217-242.wav ends after d-14Nov10-c NOTFINISHED
+1452.767000	1903.767000	note d-14Nov10-d: start049: ID: Falling (7:31)
+1903.767000	2263.767000	note d-14Nov10-d: start050: ID: Cairo (6:00)
+2263.767000	2593.767000	note d-14Nov10-d: start051: ID: Nightrider (5:30)
+895.776000	895.776000	file start sync: dnb-14Nov02-c.au 13253.051068 verified d-14Nov10-c
+962.719500	962.719500	file end: dnb-14Nov02-c.au
+339.234562	339.234562	file start sync: d228-247.wav 13253.051068 verified d-14Nov10-c -- NOT PRECISE START POINT -- this 4.608s contains two clips, not sure of precise location but can be ignored
+343.851519	343.851519	file note: skip (not present in d-14Nov10-c or d217-242)
+406.569000	406.569000	file note: post-skip in sync with d-14Nov10-c from here
+406.569000	406.569000	file note: sync d288-247.wav 13253.051068 verified d-14Nov10-c -- ALIGNED HERE
+1601.952000	1601.952000	file end: d288-247.wav LIKELY CONTAINS MORE SKIPS
