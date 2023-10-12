@@ -80,7 +80,7 @@ x   d145-164b.wav
 	in sync with d145-164 (recorded in d122-144)
 x   d146.wav
 	in sync with d145-164 (recorded in d122-144)
-    d165-186.wav PRIMARY FILE
+x   d165-186.wav PRIMARY FILE
 	overlaps (165-186)
 	x d165-186b.wav
 	. d-14Nov10-a		180-200
@@ -88,20 +88,22 @@ x   d146.wav
 	. d187-216b.wav
 x   d165-186b.wav
 	in sync with d165-186b / d-14Nov10-a (recorded in d145-164)
-.   (d180_d-14Nov10-a		180-200 PRIMARY
+x   d180_d-14Nov10-a		180-200 PRIMARY
 	overlaps (187-200)
 	  d187-216b.wav
 	  dnb-14Nov02-a.au	~198-~218
 	  d-14Nov10-b		200-220
 x   d187-200.wav
 	in sync with d-14Nov-10-a (recorded in d165-185)
-.   d187-216b.wav
+x   d187-216b.wav
 	in sync with d-14Nov-10-b (recorded in d-14Nov10-a)
-.   dnb-14Nov02-a.au	~198-~218
+x   dnb-14Nov02-a.au	~198-~218
 	in sync with d-14Nov10-a,d-14Nov-10-b (recorded in d-14Nov10-a)
-    d-14Nov10-b		200-220
+.   d-14Nov10-b		200-220
 	overlaps (200-220)
-    d217-242.wav
+	  d217-242.wav
+	. dnb-14Nov02-b.au	~218-~228
+.   d217-242.wav
 .   dnb-14Nov02-b.au	~218-~228
     d-14Nov10-c		220-240
     d228-247.wav
