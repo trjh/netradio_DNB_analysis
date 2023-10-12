@@ -1,32 +1,109 @@
 0.000000	0.000000	file start sync: d-14Nov10-a.au 10853.051068 verified by d165-186 d165-186b
 0.000000	324.576000	file note: in sync with d165-186 over this range
-324.576000	324.576000	note: file end: d165-186.wav
+324.379690	324.379690	orig038 start: B
+324.379690	324.379690	orig038 start: B
+324.408375	324.408375	orig038 start: A
+324.557179	325.097016	orig038 sync: A start
 324.576000	324.576000	note: file start d187-200
-324.576000	324.608000	note: in sync with d165-186b over this range (but it is not primary)
-324.649367	324.649367	start038: ID: Friends, Lovers & Family - Dark Fader
+324.585867	325.125701	track038 sync: A
+324.585867	861.696823	start038: ID: Friends, Lovers & Family - Dark Fader
+350.728192	350.914901	orig038 sync: B pre-skip
+350.728192	350.914901	track sync: B pre-skip
+351.515051	351.515051	orig038 note: split to find skip in mix (left)
+351.515051	355.649440	note: skip back 4.134s
+355.081504	355.081504	orig038 note: split to find skip in mix (right)
+361.160746	361.687082	orig038 sync: C post-skip
+361.728683	362.255019	track sync: C post-skip
+452.638081	454.079873	orig038 sync: D post-skip
+453.115904	454.557696	track sync: D post-skip
 458.468589	458.468589	note: .."(oh) give"
 532.818242	532.818242	note: ..talking in background
 544.261924	544.261924	note: .."telling them..."
 544.853469	544.853469	note: .."where to go..."
+553.904553	554.139391	orig038 sync: E post-skip
+554.251605	554.486443	track sync: E post-skip
+710.564777	711.602430	orig038 sync: F post-skip
+710.721536	711.759189	track sync: F post-skip
 723.567731	723.567731	note: .."when I think of the idea of heaven, i think of"
 787.955444	787.955444	note: "I give my heart"
 853.135925	853.135925	note: "would you like to be m-modified"
-861.696823	861.698514	start039: ID: Net Radio - Promo5 Club Groove
-895.785098	895.785098	note: helicopter
-895.785098	1109.767917	start040: ID: David Kristian - Hopeless
+857.287339	858.084693	orig038 sync: G post-skip end
+857.287339	858.084693	track sync: G post-skip end
+861.696823	895.785000	start039: ID: Net Radio - Promo5 Club Groove
+863.404089	863.404089	orig038 end: G post-skip
+863.404089	863.404089	orig038 end: G post-skip
+863.560846	863.560846	orig038 end: F post-skip
+863.881912	863.881912	orig038 end: D post-skip
+863.972026	863.972026	orig038 end: C post-skip
+894.491927	894.491927	orig040 start: B
+894.491927	894.491927	orig040 start: B
+894.543446	894.543446	orig040 start: 1
+894.618481	894.618481	orig040 start: A
+895.785000	1111.920000	start040: ID: David Kristian - Hopeless
+895.785062	895.785062	note: helicopter
 903.718726	904.299704	note: low start, real start of notes
-936.862732	936.862732	note: .."could you make my voice sound good"
+904.173151	905.132593	orig040 sync: A
+904.299704	905.259146	track sync: A first two tones
+936.516340	939.066240	orig040 sync: 1
+936.516340	947.705245	orig040 note: could you make my voice sound good x4 only
+936.567859	939.117759	track sync: 1 "could you make my voice sound good"
+947.347069	948.017116	orig040 sync: B pre-skip
+947.347069	948.017116	track sync: B pre-skip
 947.676240	947.676240	note: first beat
+947.676240	947.676240	note: sound good start 5 (starts 'voice sound good')
+948.017098	948.017098	orig040 note: split to find skip in mix (left)
+948.017120	952.267227	note: skip back 4.250s
+951.764822	951.764822	orig040 note: split to find skip in mix (right)
+951.764822	952.018982	orig040 sync: C post-skip
+952.267227	952.521387	track sync: C post-skip
+974.585894	974.585894	orig040 note: whirry sounds start
 975.032336	975.032336	note: whirry sounds start
-1007.980781	1007.980781	note: first hint of Strength? something drumline
+986.215803	986.215803	orig040 note: cat whirry noises start
+1006.603430	1006.603430	orig040 note: faint new drumline
+1006.783537	1006.783537	note: faint new drumline (old note: first hint of Strength?)
+1032.276689	1032.276689	orig040 note: last beat before break
+1032.526507	1032.526507	note: last beat before break
+1040.953382	1040.953382	orig040 note: louder birring beeps
 1041.281070	1041.281070	note: louder birring beeps
-1056.109253	1056.109253	note: beats from Strength start?
-1099.380000	1099.380000	start041: ID: The Sonar Circle - Strength
-1099.382876	1099.382876	note: ..spacy sounds from Strength 0:53
-1136.578737	1136.578737	note: ...end of sounds from Hopeless?
-1188.468088	1194.602388	note: "to attack without knowing the enemy's strength..."
-1200.000000	1200.000000	file end: d-14Nov10-a.au
+1055.580198	1055.580198	orig040 note: drum restart
+1055.782229	1055.782229	note: drum restart
+1065.893429	1067.717514	orig040 sync: D post-skip cymbal hits again
+1066.041344	1067.865429	track sync: D post-skip cymbal hits again
+1100.726540	1103.016813	orig040 sync: E post-skip ending
+1100.933803	1103.224076	track sync: E post-skip ending
+1111.609839	1111.919858	track sync: F post-skip track end
+1111.620718	1111.620718	orig041 start: 1
+1111.620718	1111.620718	orig041 start: 1
+1111.646891	1111.956910	orig040 sync: F post-skip track end
+1111.657770	1111.657770	orig041 start: 2
+1111.681738	1111.681738	orig041 note: signal starts
+1111.756388	1112.219449	orig041 sync: A start
+1111.895911	1111.895911	orig041 start: 040-F
+1111.903303	1111.903303	orig041 start: A
+1111.919858	1111.919858	start041: ID: The Sonar Circle - Strength
+1111.921006	1111.921006	note: 041 signal inverted from original (also 040)
+1111.932963	1111.932963	orig040 note: start 041 here for continuous mix
+1111.956910	1111.956910	orig040 note: end signal drop
+1111.962578	1111.962578	orig040 end: F
+1111.999630	1111.999630	orig040 end: F
+1112.001921	1112.001921	orig040 end: E
+1112.001921	1112.464982	track sync: A start
+1112.121626	1112.121626	orig040 end: D
+1112.464982	1112.464982	orig040 end: C
+1136.541685	1136.541685	note: ...end of sounds from Hopeless?
+1188.431036	1189.161298	orig041 sync: 1
+1188.431036	1189.161298	track sync: 1
+1188.431036	1194.565335	note: "to attack without knowing the enemy's strength..."
+1199.962948	1199.962948	file end: d-14Nov10-a.au COMPLETE
+1200.000000	1200.000000	note d-14Nov10-b: ID041: The Sonar Circle - Strength
 1200.000000	1200.000000	note d-14Nov10-b: file start sync: d-14Nov10-b.au MARK verified d187-216b
+1202.288449	1203.206987	orig041 sync: 2 start d-14Nov10-b
+1202.325502	1203.244039	note d-14Nov10-b: track sync: 2 start d-14Nov10-b
+1441.991330	1441.991330	note d-14Nov10-b: orig041 end: 1
+1441.991330	1441.991330	orig041 end: 1
+1441.991330	1441.991330	orig041 end: 1
+1442.028383	1442.028383	note d-14Nov10-b: orig041 end: 2
+1442.028383	1442.028383	orig041 end: 2
 2400.000000	2400.000000	note d-14Nov10-b: file end: d-14Nov10-b
 895.776000	895.776000	file start sync: dnb-14Nov02-a 10853.051068 verified d-14Nov02-a d-14Nov10-b
 895.776000	1200.000000	file note: in sync with d-14Nov10-a over this range
