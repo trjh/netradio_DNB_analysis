@@ -28,21 +28,21 @@
 895.717296	895.717296	note: more "but in the process"
 895.776130	895.776130	note: file start dnb-14Nov02-b
 919.206801	919.206801	note: start wind-down / transition
-964.448000	964.448000	note d217-242: file start sync: d217-242.wav MARK verified d-14Nov10-b
+964.448000	964.448000	note d217-242: file start sync: d217-242.wav 12053.051068 verified d-14Nov10-b
 964.448000	964.448000	note: file start d217-242
 964.448000	1200.000000	note d217-242: file note: in sync with d-14Nov10-b over this range
 965.767192	1435.767192	start044: ID: Retro (7:50)
 1032.096109	1062.515525	note: "sad, in the 20th century..."
 1158.005239	1158.005239	note: bassline change
 1200.000000	1200.000000	file end: d-14Nov10-b.au
-1200.000000	1200.000000	note d-14Nov10-c: file start sync: d-14Nov10-c.au MARK verified by dnb-14Nov02-b d217-242
+1200.000000	1200.000000	note d-14Nov10-c: file start sync: d-14Nov10-c.au 12053.051068 verified by dnb-14Nov02-b d217-242
 1200.000000	1435.767192	note d-14Nov10-c: ID044: Retro (7:50)
 1200.000000	2400.000000	note d217-242: file note: in sync with d-14Nov10-c over this range
 1203.861402	1203.861402	note d-14Nov10-c: note: bassline change/restart
 2400.000000	2400.000000	note d-14Nov10-c: file end: d-14Nov10-c.au
 2400.000000	2503.904000	note d217-242: NOTE - NEED SYNC CHECK HERE
 2503.904000	2503.904000	note d217-242: file end: d217-242.wav ends after d-14Nov10-c NOTFINISHED
-895.776000	895.776000	file start sync: dnb-14Nov02-b.au MARK verified d-14Nov10-b
+895.776000	895.776000	file start sync: dnb-14Nov02-b.au 12053.051068 verified d-14Nov10-b
 895.776000	1200.000000	file note: in sync with d-14Nov10-b over this range
 1200.000000	2095.776000	file note: in sync with d-14Nov10-c over this range
 2095.776000	2095.776000	file end: dnb-14Nov02-b.au COMPLETE
