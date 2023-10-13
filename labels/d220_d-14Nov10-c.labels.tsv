@@ -1,8 +1,5 @@
 0.000000	0.000000	file start sync: d-14Nov10-c.au 13253.051068 verified by dnb-14Nov02-b d217-242
--235.552000	-235.552000	note d217-242: file start sync: d217-242.wav 13253.051068 verified d-14Nov10-b
--235.552000	0.000000	note d217-242: file note: in sync with d-14Nov10-b over this range
 0.000000	235.767192	ID044: Retro (7:50)
-0.000000	1200.000000	note d217-242: file note: in sync with d-14Nov10-c over this range
 3.861402	3.861402	note: bassline change/restart
 78.650711	83.000601	note: "some of these guys..."
 92.758462	96.285399	note: "and the true rebels"
@@ -21,19 +18,39 @@
 867.767000	1274.767000	start047: ID: Realism (6:47)
 895.776000	895.776000	note: file end: dnb-14Nov02-b.au
 1200.000000	1200.000000	file end: d-14Nov10-c.au
+1200.000000	1200.000000	note d-14Nov10-d: file start sync: d-14Nov10-d.au 13253.051068 verified d217-242 d228-247
 1200.000000	1274.767000	note d-14Nov10-d: ID047: Realism (6:47)
-1200.000000	1303.904000	note d217-242: NOTE - NEED SYNC CHECK HERE
 1208.262213	1214.066393	note d-14Nov10-d: ~start of record scratching
 1274.767000	1452.767000	note d-14Nov10-d: start048: ID: Her Spectre Above Me Look (2:58)
-1303.904000	1303.904000	note d217-242: file end: d217-242.wav ends after d-14Nov10-c
-1303.904000	1303.904000	note d217-242: file end: d217-242.wav ends after d-14Nov10-c NOTFINISHED
 1452.767000	1903.767000	note d-14Nov10-d: start049: ID: Falling (7:31)
+1499.950520	1503.264107	note d-14Nov10-d: skip? (d-14Nov10-d and d228-247)
 1903.767000	2263.767000	note d-14Nov10-d: start050: ID: Cairo (6:00)
 2263.767000	2593.767000	note d-14Nov10-d: start051: ID: Nightrider (5:30)
+-235.552000	-235.552000	file start sync: d217-242.wav 13253.051068 verified d-14Nov10-b
+-235.552000	0.000000	file note: in sync with d-14Nov10-b over this range
+0.000000	1200.000000	file note: in sync with d-14Nov10-c over this range
+1200.000000	1303.904000	file note: in sync with d-14Nov10-d over this range
+1303.904000	1303.904000	file end: d217-242.wav ends after d-14Nov10-c COMPLETE
 895.776000	895.776000	file start sync: dnb-14Nov02-c.au 13253.051068 verified d-14Nov10-c
-962.719500	962.719500	file end: dnb-14Nov02-c.au
+895.776000	962.719500	file note: in sync with d-14Nov10-c over this range
+962.719500	962.719500	file end: dnb-14Nov02-c.au COMPLETE
 339.234562	339.234562	file start sync: d228-247.wav 13253.051068 verified d-14Nov10-c -- NOT PRECISE START POINT -- this 4.608s contains two clips, not sure of precise location but can be ignored
 343.851519	343.851519	file note: skip (not present in d-14Nov10-c or d217-242)
 406.569000	406.569000	file note: post-skip in sync with d-14Nov10-c from here
-406.569000	406.569000	file note: sync d288-247.wav 13253.051068 verified d-14Nov10-c -- ALIGNED HERE
-1601.952000	1601.952000	file end: d288-247.wav LIKELY CONTAINS MORE SKIPS
+406.569000	406.569000	file note: sync d228-247.wav 13253.051068 verified d-14Nov10-c -- ALIGNED HERE
+406.569000	1200.000000	file note: in sync with d-14Nov10-c over this range
+1200.000000	1372.324437	file note: in sync with d-14Nov10-d over this range
+1200.000000	1391.717062	file note: in sync with d-14Nov10-d over this range
+1372.324437	1374.827250	file note: skip ahead 2.503s (and skipping over orphan .007s)
+1374.814129	1374.820900	file note: orphan .007s between skips, cannot place, just mute (amplify -50)
+1374.827250	1374.827250	file note: resume from skip
+1391.717062	1391.717062	file note: skip
+1392.101063	1392.101063	file note: resume from skip
+1392.101063	1604.832000	file note: in approximate sync with d-14Nov10-d over this range
+1392.198062	1392.200621	note: imprecise sync
+1392.575007	1392.578072	note: imprecise sync
+1392.808924	1392.810969	note: imprecise sync
+1392.910408	1392.913023	note: imprecise
+1392.962610	1392.963608	note: better sync? but still not exact.
+1392.995776	1392.997670	note: precise sync
+1604.832000	1604.832000	file end: d228-247.wav COMPLETE but do not use
