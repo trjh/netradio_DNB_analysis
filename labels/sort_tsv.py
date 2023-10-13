@@ -16,12 +16,12 @@ line_number = 0
 adjust_value = -1       # value for adjusting timestamps if >0
 debug = False           # print debug information
 filename = None         # filename to read/write, is manipulated by read routine to make backups
-live_precision = 2      # how many significant digits of precision we can get from audacity API
+secondaryfile = None    # when processing secondary files, use this to check tag against filename
 
 # Define regular expressions for matching keywords
 keyword_patterns = [
     r"(start(\d+):\s*)?ID(\d+)?:\s*(.+)",
-    r"file (start)? sync: (.+):? ([0-9.]+)",
+    r"file (start )?sync: (.+):? ([0-9.]+)",
     r"((track)(\d+)?|(orig)(\d+))\s+sync:\s+(.)(.*)",
     r"orig(\d+)\s+(start|end|note):\s+(.*)",
     r"(file|mix) (start|end|note): (.*)",
@@ -75,13 +75,21 @@ def process_entry(parts):
             sys.stderr.write(f".Not using adjust {parts[0]} as adjust_value already set ({adjust_value})\n")
 
     # sanity checks for downstream
-    if re.match(r"file (start)? sync", parts[2]):
-        if not re.search(r"verified", parts[2]):
+    if match := re.match(r"file (start )?sync: (.+):? ([0-9.]+)", parts[2]):
+        if 'verified' not in parts[2]:
             sys.stderr.write(f"NOTICE: Sync entry found without 'verified' tag: {parts[2]}, line {parts[3]}\n")
+        if secondaryfile and secondaryfile not in match.group(2):
+            sys.stderr.write(f"WARN: File start -- secondary file ({secondaryfile}) doesn't match end tag {parts[2]}\n")
+        elif secondaryfile and debug:
+            print(f"....SF {secondaryfile} MG1 {match.group(1)}")
 
-    if re.match(r"file end", parts[2]):
+    if match := re.match(r"file end: (\S+)", parts[2]):
         if not re.search(r"COMPLETE", parts[2]):
             sys.stderr.write(f"NOTICE: File end -- not COMPLETE?  {parts[2]}, line {parts[3]}\n")
+        if secondaryfile and secondaryfile not in match.group(1):
+            sys.stderr.write(f"WARN: File end -- secondary file ({secondaryfile}) doesn't match end tag {parts[2]}\n")
+        elif secondaryfile and debug:
+            print(f"....SF {secondaryfile} MG1 {match.group(1)}")
 
     sort_lines.append((parts))
 
@@ -113,6 +121,22 @@ def adjust_line(entry):
     global adjust_value
     for i in range(2):
         entry[i] -= adjust_value
+    if match := re.match(r"file (start )?sync: (.+):? ([0-9.]+)(.*)", entry[2]):
+        # adjust sync time too
+        try:
+            syncfloat = float(match.group(3))
+            syncfloat += adjust_value
+        except:
+            sys.stderr.write(f"ERROR in adjust_line: Unable to make {match.group(3)} into a float: {entry}\n")
+            syncfloat = match.group(3)
+
+        newlabel = f"file {match.group(1)}sync: {match.group(2)} {syncfloat}"
+        if (len(match.groups()) > 3):
+            newlabel += match.group(4)
+        sys.stderr.write(f"ADJUSTED START OLD: {entry[2]}\n")
+        sys.stderr.write(f"ADJUSTED START NEW: {newlabel}\n")
+        entry[2] = newlabel
+
     return entry
 
 # Get labels from filename or stdin
@@ -218,7 +242,7 @@ def floatcmp(a,b):
 ## MAIN ##
 
 def main():
-    global sort_lines, debug, filename
+    global sort_lines, debug, filename, secondaryfile
 
     write_lines = []        # entries ready for writing
 
@@ -258,6 +282,7 @@ def main():
     sort_lines=[]
     for sf in secondfiles:
         sys.stderr.write(f"---\nProcessing secondary entries for file {sf}\n")
+        secondaryfile = sf
         for entry in secondfiles[sf]:
             process_entry(entry)
         sort_lines.sort(key=tracksort)
