@@ -10,6 +10,7 @@
 230.408896	235.342186	note: ~clear transition
 245.289639	246.907111	note: ~new bassline
 252.767000	703.767000	start049: ID: Falling (7:31)
+300.118017	304.366640	SKIP? (also in 242-268)
 332.552257	337.566421	note: ~da, only, only
 622.888493	627.740910	note: ~false stop
 648.363678	658.311132	note: ~transition
@@ -32,6 +33,9 @@
 1668.272100	1668.272100	note d-14Nov10-e: start054: Dreams of Heaven
 2400.000000	2400.000000	note d-14Nov10-e: file end: d-14Nov10-e.au
 404.831938	404.831938	file start sync: d248-258.wav 14453.051068 verified d-14Nov10-d
-1075.354250	1075.354250	file end: d248-258.wav
+404.831938	1087.392000	in sync with d-14Nov10-d over entire file
+1087.392000	1087.392000	file end: d248-258.wav COMPLETE
 103.903920	103.903920	file start sync: d242-268.wav 14453.051068 verified d-14Nov10-d
-1643.423920	1643.423920	file end: d242-268.wav
+103.903920	1200.000000	file note: in sync with d-14Nov10-d over this range
+1200.000000	1643.423920	file note: in sync with d-14Nov10-e over this range
+1643.423920	1643.423920	file end: d242-268.wav COMPLETE
