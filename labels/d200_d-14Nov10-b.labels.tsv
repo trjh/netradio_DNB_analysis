@@ -1,44 +1,114 @@
 0.000000	0.000000	file start sync: d-14Nov10-b.au 12053.051068 verified d187-216b
-0.000000	239.768000	ID041: The Sonar Circle - Strength
-2.288449	3.206987	orig041 sync: 2 start d-14Nov10-b
-2.325502	3.244039	track sync: 2 start d-14Nov10-b
-86.437042	86.437042	note: return of synth (had been just drums)
-176.952315	176.952315	note: bass gets deeper
-212.836662	212.836662	note: transition
-223.679129	223.679129	note: end of drums
-239.768000	660.768000	start042: ID: Science of Industry (7:01)
-241.991330	241.991330	orig041 end: 1
-242.028383	242.028383	orig041 end: 2
-281.348462	281.348462	note: restart of drums
-305.757573	321.246812	note: wub-wub returns
-326.755961	326.756011	note: "attack"
-333.040777	339.147678	note: "to attack..."
-373.944443	396.378306	note: another drum break
-488.085583	488.085583	note: transition
-625.511811	632.125984	note: ..transition
-647.480761	647.480761	note: breakpoint -- this should be end/start -- next tune comes in
-660.768000	965.768000	start043: ID: Waves (Kid Loops remix)
-717.260141	717.260342	note: flute/trumpet start
-734.999257	740.752748	note: "all that we see or seem, is but a dream, within a dream..."
-780.014954	780.910768	note: "but in the process"
-789.510431	791.931524	note: "but in the process, they've been the true renegades"
-826.841995	830.104417	note: "all that we see or seem, is but a dream"
-849.793820	856.599602	note: "all that we see or seem, is but a dream, within a dream..."
-884.229946	884.229946	note: transition (drum comes back, beat changes)
-895.717296	895.717296	note: more "but in the process"
-895.776130	895.776130	note: file start dnb-14Nov02-b
-919.206801	919.206801	note: start wind-down / transition
+0.000000	240.890291	ID041: The Sonar Circle - Strength
+1.227411	2.145949	orig041 sync: 2 start d-14Nov10-b
+2.323510	3.242047	track sync: 2 start d-14Nov10-b
+16.421476	17.914387	orig041 sync: 3
+17.466605	18.959516	track sync: 3
+72.493366	74.293862	orig041 sync: 4
+73.037588	74.838083	track sync: 4
+86.435050	86.435050	note: return of synth (had been just drums)
+130.101760	134.730468	orig041 sync: 5
+130.423918	135.052626	track sync: 5
+176.950323	176.950323	note: bass gets deeper
+212.380813	214.360562	orig041 sync: 6
+212.456505	214.436254	track sync: 6
+212.834670	212.834670	note: transition
+223.677137	223.677137	note: end of drums
+235.363033	238.820622	orig041 sync: B end
+235.363033	238.820622	track sync: B end
+239.546629	239.546629	orig042 start: .
+239.570575	239.570575	orig042 note: first signal, sync point for 041
+240.090927	240.090927	orig042 start: 2
+240.787162	240.787162	orig042 start: A
+240.866346	240.866346	orig041 note: file start 042
+240.890291	240.890291	orig041 note: last signal, sync point with 042
+240.890291	660.197242	start042: ID: Justin Tewn & Hunter A.D. - Science of Industry
+240.930292	240.930292	orig041 end: B
+240.930292	240.930292	orig041 end: B
+241.005983	241.005983	orig041 end: 6 (5-6 1m55)
+241.252450	241.252450	orig041 end: 5 (4-5 57s)
+241.474513	241.474513	orig041 end: 4 (3-4 55s -- maybe skip in there?)
+241.975420	241.975420	orig041 end: 3 (2-3 15s)
+241.989338	241.989338	orig041 end: 1
+242.026391	242.026391	orig041 end: 2
+250.417707	253.257600	orig042 sync: A
+251.658240	254.498133	track sync: A
+281.346470	281.346470	note: restart of drums
+305.755581	321.244820	note: wub-wub returns
+326.753970	326.754020	note: "attack"
+333.038785	339.145687	note: "to attack..."
+370.508166	372.605318	orig042 sync: 1
+371.397973	373.495125	track sync: 1
+373.942452	396.376314	note: another drum break
+486.191575	488.878551	orig042 sync: 2
+486.735872	489.422848	track sync: 2
+488.083592	488.083592	note: transition
+606.584140	607.709175	orig042 sync: 3
+606.743211	607.868245	track sync: 3
+625.509819	632.123993	note: ..transition
+647.478770	647.478770	note: breakpoint
+656.932864	658.388309	orig042 sync: B
+656.932864	658.388309	track sync: B
+659.212649	659.212649	orig043 start: B
+659.212649	659.212649	orig043 start: B
+659.236594	659.236594	orig043 note: sync with 042
+659.254741	659.749674	orig043 sync: A
+660.164158	660.164158	orig043 start: A
+660.173297	660.173297	orig042 note: file start 043 for sync with B
+660.173297	660.173297	orig043 start: align042-B
+660.197242	660.197242	orig042 note: last signal - sync with 043
+660.197242	964.409927	start043: ID: Dave Wallace - Waves (Kid Loops remix)
+660.206251	660.701184	track sync: A
+660.248670	660.248670	orig042 end: B
+660.407740	660.407740	orig042 end: 3
+717.258149	717.258350	note: flute/trumpet start
+734.997265	740.750756	note: "all that we see or seem, is but a dream, within a dream..."
+767.125760	771.090688	orig043 sync: 1
+767.732395	771.697323	track sync: 1
+780.012962	780.908777	note: "but in the process"
+789.508439	791.929532	note: "but in the process, they've been the true renegades"
+826.840003	830.102425	note: "all that we see or seem, is but a dream"
+849.791829	856.597610	note: "all that we see or seem, is but a dream, within a dream..."
+880.386729	887.901523	orig043 sync: 2
+880.629077	888.143872	track sync: 2
+882.955605	883.458048	note: sync wave
+884.227954	884.227954	note: transition (drum comes back, beat changes)
+895.715305	895.715305	note: more "but in the process"
+895.774138	895.774138	note: file start dnb-14Nov02-b
+919.204809	919.204809	note: start wind-down / transition
+961.901227	962.809173	orig043 sync: B
+961.901227	962.809173	track sync: B
+963.620841	963.620841	orig044 start: .
+963.644786	963.644786	orig044 note: sync with 043
+964.056005	964.056005	orig044 start: 1
+964.359451	964.359451	orig044 start: A
+964.385982	964.385982	orig043 note: start sync 044
+964.385982	964.385982	orig044 start: 043-sync-B
+964.409927	964.409927	orig043 note: last signal - 044 sync
+964.409927	1440.967902	start044: ID: E-Z Rollers - Retro
+964.446008	964.446008	note: file start d217-242
 964.448000	964.448000	note d217-242: file start sync: d217-242.wav 12053.051068 verified d-14Nov10-b
-964.448000	964.448000	note: file start d217-242
 964.448000	1200.000000	note d217-242: file note: in sync with d-14Nov10-b over this range
-965.767192	1435.767192	start044: ID: Retro (7:50)
-1032.096109	1062.515525	note: "sad, in the 20th century..."
-1158.005239	1158.005239	note: bassline change
-1200.000000	1200.000000	file end: d-14Nov10-b.au
+964.453465	964.453465	orig043 end: B
+964.453465	964.453465	orig043 end: B
+964.695814	964.695814	orig043 end: 2
+965.060099	965.060099	orig043 end: 1
+965.404975	965.404975	orig043 end: A
+968.284877	969.424930	orig044 sync: A
+969.023488	970.163541	track sync: A
+1032.094118	1062.513534	note: "sad, in the 20th century..."
+1065.324921	1066.425380	orig044 sync: 1
+1065.760085	1066.860544	track sync: 1
+1158.003247	1158.003247	note: bassline change
+1199.998008	1199.998008	file end: d-14Nov10-b.au COMPLETE
 1200.000000	1200.000000	note d-14Nov10-c: file start sync: d-14Nov10-c.au 12053.051068 verified by dnb-14Nov02-b d217-242
-1200.000000	1435.767192	note d-14Nov10-c: ID044: Retro (7:50)
+1200.000000	1435.767192	note d-14Nov10-c: ID044: E-Z Rollers - Retro
 1200.000000	2400.000000	note d217-242: file note: in sync with d-14Nov10-c over this range
+1203.810008	1203.909856	orig044 sync: 2
+1203.811209	1203.911058	track sync: 2
 1203.861402	1203.861402	note d-14Nov10-c: note: bassline change/restart
+1433.641385	1433.641385	orig044 end: 2
+1433.642065	1433.642065	orig044 end: 2
 2400.000000	2400.000000	note d-14Nov10-c: file end: d-14Nov10-c.au
 2400.000000	2503.904000	note d217-242: NOTE - NEED SYNC CHECK HERE
 2503.904000	2503.904000	note d217-242: file end: d217-242.wav ends after d-14Nov10-c NOTFINISHED
