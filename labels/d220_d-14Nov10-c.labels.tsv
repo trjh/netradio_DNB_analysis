@@ -1,26 +1,87 @@
-0.000000	0.000000	file start sync: d-14Nov10-c.au 13253.051068 verified by dnb-14Nov02-b d217-242
-0.000000	235.767192	ID044: Retro (7:50)
-3.861402	3.861402	note: bassline change/restart
-78.650711	83.000601	note: "some of these guys..."
-92.758462	96.285399	note: "and the true rebels"
-235.767000	535.767000	start045: ID: It's All Gone Sideways (5:00)
-278.940797	280.231769	note: beat/tune transition
-347.745659	347.745659	note: bassline stops, quiet moment
-371.024494	371.024494	note: deep spooky bass starts
-406.569000	406.569000	note: d228-247 post-skip starts here
-479.980594	499.701245	note: ~scrapy drum of Beckoning
-491.896733	491.896733	note: ..sighs from Beckoning start
-514.960112	520.492069	note: ~horn transition
-535.767000	867.767000	start046: ID: The Beckoning (5:32)
-564.300288	569.791568	note: ~drumline stops
-834.283819	844.311268	note: ~transition
-849.659241	867.767000	note: ~more obvious transition
-867.767000	1274.767000	start047: ID: Realism (6:47)
-895.776000	895.776000	note: file end: dnb-14Nov02-b.au
-1200.000000	1200.000000	file end: d-14Nov10-c.au
+-0.014277	-0.014277	file start sync: d-14Nov10-c.au 13253.051068 verified by dnb-14Nov02-b d217-242
+-0.014323	232.871081	ID044: E-Z Rollers - Retro
+2.589734	3.689815	orig044 sync: 2
+3.296926	4.397006	track sync: 2
+3.847125	3.847125	note: bassline change/restart
+78.636433	82.986323	note: "some of these guys..."
+92.744184	96.271122	note: "and the true rebels"
+95.812409	96.812409	orig044 sync: 3
+96.225677	97.225677	track sync: 3
+230.436623	231.536623	track sync: B end
+230.450883	231.550883	orig044 sync: B end
+231.920752	231.920752	orig045 start: .
+231.944697	231.944697	orig045 note: sync 044
+232.462018	232.662018	orig045 sync: A start
+232.622665	232.622665	orig045 start: 1
+232.843411	232.843411	orig045 start: A
+232.847113	232.847113	orig045 start: 044-sync-B
+232.861436	232.861436	orig044 note: file start 045 for continuous mix ?
+232.871081	531.770398	start045: ID: Dr S Gachet - It's All Gone Sideways
+232.885381	232.885381	orig044 note: last signal - sync 045
+232.908337	232.908337	orig044 end: B
+232.922660	232.922660	orig044 end: .
+233.335929	233.335929	orig044 end: 3
+233.384677	233.584677	track sync: A start
+233.629851	233.629851	orig044 end: 2
+278.926520	280.217491	note: beat/tune transition
+301.631764	302.531764	orig045 sync: 1
+302.333677	303.233677	track sync: 1
+345.696249	346.417229	orig045 sync: 2
+346.266167	346.987147	track sync: 2
+347.731382	347.731382	note: bassline stops, quiet moment
+371.010217	371.010217	note: deep spooky bass starts
+406.554723	406.554723	note: d228-247 post-skip starts here
+479.966317	499.686968	note: ~scrapy drum of Beckoning
+491.882456	491.882456	note: ..sighs from Beckoning start
+514.945835	520.477792	note: ~horn transition
+529.540677	530.440677	track sync: B
+529.555000	530.455000	orig045 sync: B
+530.417540	530.417540	orig046 start: .
+530.441486	530.441486	orig046 note: sync 045
+531.101395	531.101395	orig046 start: 1
+531.725205	531.725205	orig046 start: A
+531.746429	531.746429	orig046 start: 045-start-sync-B
+531.760752	531.760752	orig045 note: file start 046
+531.770398	862.227163	start046: ID: Arcon 2 - The Beckoning
+531.784698	531.784698	orig045 note: last signal - sync 046
+531.818266	531.818266	orig045 end: B
+531.832589	531.832589	orig045 end: B
+532.302012	533.302012	orig046 sync: A
+532.402506	532.402506	orig045 end: 2
+533.609677	534.609677	track sync: A
+564.286010	569.777291	note: ~drumline stops
+686.747822	687.554822	orig046 sync: 1
+687.431677	688.238677	track sync: 1
+834.269541	844.296991	note: ~transition
+847.390960	848.226622	track sync: B
+847.405283	848.240945	orig046 sync: B
+860.901135	860.901135	orig47 start: .
+860.925081	860.925081	orig047 note: sync 046
+861.779057	861.779057	orig047 start: 1
+862.153875	862.153875	orig047 start: A
+862.203217	862.203217	orig047 start: sync-046-B
+862.217540	862.217540	orig046 note: file start 047
+862.227163	1274.752723	start047: ID: Alpha Omega - Realism
+862.241485	862.241485	orig046 note: last signal sync 047
+862.262809	862.262809	orig046 end: B
+862.277132	862.277132	orig046 end: B
+862.672180	863.868212	orig047 sync: A
+863.924920	865.120952	track sync: A
+864.562307	864.563075	mark
+895.761723	895.761723	note: file end: dnb-14Nov02-b.au
+981.563755	982.392755	orig047 sync: 1
+982.441677	983.270677	track sync: 1
+1153.600542	1154.500542	orig047 sync: 2
+1153.934677	1154.834677	track sync: 2
+1199.981754	1199.981754	file end: d-14Nov10-c.au COMPLETE
 1200.000000	1200.000000	note d-14Nov10-d: file start sync: d-14Nov10-d.au 13253.051068 verified d217-242 d228-247
-1200.000000	1274.767000	note d-14Nov10-d: ID047: Realism (6:47)
+1200.000000	1274.767000	note d-14Nov10-d: ID047: Alpha Omega - Realism
 1208.262213	1214.066393	note d-14Nov10-d: ~start of record scratching
+1262.622037	1266.286592	orig047 sync: B
+1262.622037	1266.286592	track sync: B
+1267.993380	1267.993380	orig047 end: B
+1267.993380	1267.993380	orig047 end: B
+1268.327507	1268.327507	orig047 end: 2
 1274.767000	1452.767000	note d-14Nov10-d: start048: ID: Her Spectre Above Me Look (2:58)
 1452.767000	1903.767000	note d-14Nov10-d: start049: ID: Falling (7:31)
 1499.950520	1503.264107	note d-14Nov10-d: skip? (d-14Nov10-d and d228-247)
@@ -30,11 +91,9 @@
 -235.552000	0.000000	file note: in sync with d-14Nov10-b over this range
 0.000000	1200.000000	file note: in sync with d-14Nov10-c over this range
 1200.000000	1303.904000	file note: in sync with d-14Nov10-d over this range
-1303.904000	1303.904000	file end: d217-242.wav ends after d-14Nov10-c COMPLETE
-895.776000	895.776000	file start sync: dnb-14Nov02-c.au 13253.051068 verified d-14Nov10-c
-895.776000	962.719500	file note: in sync with d-14Nov10-c over this range
-962.719500	962.719500	file end: dnb-14Nov02-c.au COMPLETE
-339.234562	339.234562	file start sync: d228-247.wav 13253.051068 verified d-14Nov10-c -- NOT PRECISE START POINT -- this 4.608s contains two clips, not sure of precise location but can be ignored
+1303.904000	1303.904000	file end: d217-242.wav COMPLETE
+339.234562	339.234562	file start sync: d228-247.wav 13253.051068 verified d-14Nov10-c
+340.000000	340.000000	note:  -- NOT PRECISE START POINT -- this 4.608s contains two clips, not sure of precise location but can be ignored
 343.851519	343.851519	file note: skip (not present in d-14Nov10-c or d217-242)
 406.569000	406.569000	file note: post-skip in sync with d-14Nov10-c from here
 406.569000	406.569000	file note: sync d228-247.wav 13253.051068 verified d-14Nov10-c -- ALIGNED HERE
@@ -54,3 +113,6 @@
 1392.962610	1392.963608	note: better sync? but still not exact.
 1392.995776	1392.997670	note: precise sync
 1604.832000	1604.832000	file end: d228-247.wav COMPLETE but do not use
+895.776000	895.776000	file start sync: dnb-14Nov02-c.au 13253.051068 verified d-14Nov10-c
+895.776000	962.719500	file note: in sync with d-14Nov10-c over this range
+962.719500	962.719500	file end: dnb-14Nov02-c.au COMPLETE
