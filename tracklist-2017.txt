@@ -99,32 +99,32 @@ x   d187-216b.wav
 	in sync with d-14Nov-10-b (recorded in d-14Nov10-a)
 x   dnb-14Nov02-a.au	~198-~218
 	in sync with d-14Nov10-a,d-14Nov-10-b (recorded in d-14Nov10-a)
-.   d-14Nov10-b		200-220 PRIMARY
+x   d-14Nov10-b		200-220 PRIMARY
 	overlaps (200-220)
-	  d217-242.wav
+	. d217-242.wav
 	. dnb-14Nov02-b.au	~218-~228
-.   d217-242.wav
+x   d217-242.wav
 	(recorded in d-14Nov10-c)
-.   dnb-14Nov02-b.au	~218-~228
+x   dnb-14Nov02-b.au	~218-~228
 	(recorded in d-14Nov10-b)
-.   d-14Nov10-c		220-240 PRIMARY
+x   d-14Nov10-c		220-240 PRIMARY
 	overlaps (220-240)
 	. d217-242.wav
 	. d228-247.wav
 	. dnb-14Nov02-c.au	~228-~248
 	. d-14Nov10-d		240-260
-.   d228-247.wav
+x   d228-247.wav
 	(recorded in d-14Nov10-c)
-.   dnb-14Nov02-c.au	~228-~248
+x   dnb-14Nov02-c.au	~228-~248
 	(recorded in d-14Nov10-c)
 .   d-14Nov10-d		240-260 PRIMARY
 	overlaps (240-260)
 	. d242-268.wav
 	  d248-258.wav
 	. d-14Nov10-e
-.   d242-268.wav
+x   d242-268.wav
 	(recorded in d-14Nov10-d)
-.   d248-258.wav
+x   d248-258.wav
 	(recorded in d-14Nov10-d)
 .   d-14Nov10-e		260-280 PRIMARY
 	overlaps (260-280)
@@ -823,14 +823,14 @@ min	-----------
 	(direct transition from d396-415)
 	(continuation of Is It Love?)
 411:14.552	00:00.000 -- START
-	~01:01	  :: The Spectrum / Wax Doctor
-	~04:35	  :: Universal Horn (J. Majik Remix) / JMJ & Richie 
-	~09:19	  :: Alien Resident / Kid Loops
+412:15	~01:01	  :: The Spectrum / Wax Doctor
+415:49	~04:35	  :: Universal Horn (J. Majik Remix) / JMJ & Richie 
+420:33	~09:19	  :: Alien Resident / Kid Loops
 	    https://www.beatport.com/track/alien-resident-original-mix/6154091
 			https://soundcloud.com/kidloopsofficial/alien-resident
-	~12:40	  :: Pass Agent / Luger
+423:54	~12:40	  :: Pass Agent / Luger
 		     transition at 12:40-12:46 matches 3:10 in track
-	~15:19	  :: Mystery Track 7 (15:21.776 in new aup)
+426:33	~15:19	  :: Mystery Track 7 (15:21.776 in new aup)
 431:14.552	20:00.000 -- END
 
 	d435-455
@@ -840,14 +840,14 @@ min	-----------
 431:14.552	00:00.000 -- START
 431:38	00:23.540 -- promo8
 432:02	00:48.107 :: Mystery Track 8
-	~06:28	  :: Mystery Track 9
-	~10:13	  :: Rite of Spring (Doc Scott Remix) / System 7
+437:42	~06:28	  :: Mystery Track 9
+441:27	~10:13	  :: Rite of Spring (Doc Scott Remix) / System 7
 		     https://soundcloud.com/kf81-1/the-ikon-drum-n-bass-show-live-on-dnbradiocom-12
 		      from 1:07:10~ until 1:11:10
 		      https://www.mixcloud.com/ThePhurious/all-cruze-part-2/
 		      from 17:36
       https://soundcloud.com/sonicrampage/surgical-sounds-the-doc-scott-tribute
-	~16:38	  :: Omen (Director's Cut) / Makai (vs. Nico)
+447:52	~16:38	  :: Omen (Director's Cut) / Makai (vs. Nico)
 		     https://www.youtube.com/watch?v=7DTg6hwrbOg
 		     6:53 on youtube ... to 23:31?
 			6:18 wrap-up ... hard drums only
@@ -865,12 +865,12 @@ min	-----------
 	(direct transition from d435-455)
 	(continuation of Omen)
 451:14.552	00:00.000 -- START
-	~01:09	  :: Mystery Track 10
-	~04:42	  :: Home (Jedi Knights Remix (Drowning In Time)) /
+452:23	~01:09	  :: Mystery Track 10
+455:56	~04:42	  :: Home (Jedi Knights Remix (Drowning In Time)) /
 		     Depeche Mode
 	    https://www.youtube.com/watch?v=qTdPqqNa3gY
 	    https://www.youtube.com/watch?v=Yqzylc0cREI
-	~07:27	  :: Mystery Track 11
+458:41	~07:27	  :: Mystery Track 11
 	    NOT: The Trip / Logistics
 	    NOT: P.F.O.S.H (Original Mix) / reckei
 465:50.455	14:35.903 -- END
