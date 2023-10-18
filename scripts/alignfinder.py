@@ -1,8 +1,6 @@
 import numpy as np
 from pydub import AudioSegment
 import pydub
-#import soundfile as sf
-import resampy
 import argparse
 import datetime
 import sys
@@ -65,6 +63,37 @@ def sample2ts(sample):
     msec = samplerate%1000
     return f"{min:2d}:{sec:02d}.{msec:03d}"
 
+# plot results
+def makeplot(label,a_signal,a_signal_index,b_signal,b_signal_index,half_test_window):
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    fig.suptitle(f'{label} Waves A and B')
+    plt.ylabel("Freq")
+    ax1.set_ylim(-8000,8000)
+    ax2.set_ylim(-8000,8000)
+    ax1.axhline(0) #y-axis line
+    ax1.axvline(a_signal_index) #x-axis line
+    ax2.axhline(0) #y-axis line
+    ax2.axvline(b_signal_index) #x-axis line
+
+    print(f"A range: {a_signal_index-half_test_window}-{a_signal_index+half_test_window}")
+    ax1.plot(range(a_signal_index-half_test_window,a_signal_index+half_test_window),
+             a_signal[a_signal_index-half_test_window:a_signal_index+half_test_window])
+    ax2.plot(range(b_signal_index-half_test_window,b_signal_index+half_test_window),
+             b_signal[b_signal_index-half_test_window:b_signal_index+half_test_window])
+    plt.show()
+
+def oldplot(a_signal,absmin_ts_a,half_test_window):
+    plt.figure(1)
+    time = np.linspace(
+        absmin_ts_a-half_test_window, # start
+        test_window / samplerate,
+        num = test_window
+    )
+    plt.plot(time, 
+        a_signal[absmin_ts_a-half_test_window:absmin_ts_a+half_test_window])
+
+    plt.show()
+
 def main(args):
     global samplerate
 
@@ -102,6 +131,8 @@ def main(args):
     elif (a_audio.frame_rate > b_audio.frame_rate):
         print(f"Resampling B from {b_audio.frame_rate/1000}kHz to {a_audio.frame_rate/1000}kHz")
         a_audio = a_audio.set_frame_rate(b_audio.frame_rate)
+
+    print(f"Use max possible amplitude instead of 8k?  {a_audio.max_possible_amplitude }")
 
     # Normalize volumes
     print(f"Max volume A: {a_audio.max} B: {b_audio.max} -- equalizing")
@@ -212,31 +243,7 @@ def main(args):
         print_wavesum("AbsMin", absmin_wave_sum, start_sampleA + absmin_ts_a,
                              start_sampleB + absmin_ts_b)
 
-        if True:
-            fig, (ax1, ax2) = plt.subplots(1, 2)
-            fig.suptitle('AbsMin Waves A and B')
-            plt.ylabel("Freq")
-            ax1.set_ylim(-8000,8000)
-            ax2.set_ylim(-8000,8000)
-            ax1.axhline(0) #y-axis line
-            ax2.axhline(0) #y-axis line
-
-            print(f"A range: {absmin_ts_a-half_test_window}-{absmin_ts_a+half_test_window}")
-            ax1.plot(range(absmin_ts_a-half_test_window,absmin_ts_a+half_test_window),
-                     a_signal[absmin_ts_a-half_test_window:absmin_ts_a+half_test_window])
-            ax2.plot(range(absmin_ts_b-half_test_window,absmin_ts_b+half_test_window),
-                     b_signal[absmin_ts_b-half_test_window:absmin_ts_b+half_test_window])
-        if False:
-            plt.figure(1)
-            time = np.linspace(
-                absmin_ts_a-half_test_window, # start
-                test_window / samplerate,
-                num = test_window
-            )
-            plt.plot(time, 
-                a_signal[absmin_ts_a-half_test_window:absmin_ts_a+half_test_window])
-
-        plt.show()
+        makeplot("AbsMin",a_signal,absmin_ts_a,b_signal,absmin_ts_b,half_test_window)
 
 
 if __name__ == "__main__":
