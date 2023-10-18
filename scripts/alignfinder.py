@@ -58,28 +58,35 @@ def normalize_volume(audio, max):
 # convert a sample # into a timestamp
 def sample2ts(sample):
     global samplerate
-    min = int(sample/(samplerate*60))
-    sec = int(sample/samplerate)%60
-    msec = samplerate%1000
+    seconds = sample/samplerate
+    min = int(seconds/60)
+    sec = int(seconds)%60
+    msec = int((seconds - sec)*1000)
     return f"{min:2d}:{sec:02d}.{msec:03d}"
 
 # plot results
 def makeplot(label,a_signal,a_signal_index,b_signal,b_signal_index,half_test_window):
-    fig, (ax1, ax2) = plt.subplots(1, 2)
-    fig.suptitle(f'{label} Waves A and B')
-    plt.ylabel("Freq")
-    ax1.set_ylim(-8000,8000)
-    ax2.set_ylim(-8000,8000)
-    ax1.axhline(0) #y-axis line
-    ax1.axvline(a_signal_index) #x-axis line
-    ax2.axhline(0) #y-axis line
-    ax2.axvline(b_signal_index) #x-axis line
+    fig, axs= plt.subplots(1, 4)
+    fig.suptitle(f'{label} Waves A, B, Added, Added(abs)')
+    fig.set_figwidth(15)
+    for ax in axs:
+        ax.set(ylim=(-16000,16000))
+        ax.axhline(0)
+    axs[0].axvline(a_signal_index) #x-axis line
+    axs[1].axvline(b_signal_index) #x-axis line
+    axs[2].axvline(half_test_window)
+    axs[3].axvline(half_test_window)
 
-    print(f"A range: {a_signal_index-half_test_window}-{a_signal_index+half_test_window}")
-    ax1.plot(range(a_signal_index-half_test_window,a_signal_index+half_test_window),
-             a_signal[a_signal_index-half_test_window:a_signal_index+half_test_window])
-    ax2.plot(range(b_signal_index-half_test_window,b_signal_index+half_test_window),
-             b_signal[b_signal_index-half_test_window:b_signal_index+half_test_window])
+    axs[0].plot(range(a_signal_index-half_test_window,a_signal_index+half_test_window),
+            a_signal[a_signal_index-half_test_window:a_signal_index+half_test_window])
+    axs[1].plot(range(b_signal_index-half_test_window,b_signal_index+half_test_window),
+            b_signal[b_signal_index-half_test_window:b_signal_index+half_test_window])
+
+    sum_array = a_signal[a_signal_index-half_test_window:a_signal_index+half_test_window] + b_signal[b_signal_index-half_test_window:b_signal_index+half_test_window]
+    axs[2].plot(range(0,2*half_test_window),
+            sum_array)
+    axs[3].plot(range(0,2*half_test_window),
+            np.abs(sum_array))
     plt.show()
 
 def oldplot(a_signal,absmin_ts_a,half_test_window):
@@ -117,7 +124,7 @@ def main(args):
         b_audio = AudioSegment.from_file(fileB)
     except Exception as e:
         sys.exit(f"Cannot read {fileA}: {e}")
-    
+
     print(f".    Input: a length {len(a_audio)/1000}s, "
           + f"rate {a_audio.frame_rate/1000}kHz")
     print(f".    Input: b length {len(b_audio)/1000}s, "
@@ -135,19 +142,23 @@ def main(args):
     print(f"Use max possible amplitude instead of 8k?  {a_audio.max_possible_amplitude }")
 
     # Normalize volumes
-    print(f"Max volume A: {a_audio.max} B: {b_audio.max} -- equalizing")
-    if (a_audio.max > b_audio.max):
-        print("Adjusting A to B volume")
-        normalize_volume(b_audio, a_audio.max)
-    elif (a_audio.max < b_audio.max):
-        print("Adjusting B to A volume")
-        normalize_volume(a_audio, b_audio.max)
+    print(f"Max volume A: {a_audio.max} B: {b_audio.max} -- normalizing both")
+    a_audio = pydub.effects.normalize(a_audio)
+    b_audio = pydub.effects.normalize(b_audio)
+
+    if False:
+        if (a_audio.max > b_audio.max):
+            print(f"Adjusting A (a_audio.max) to B volume (b_audio.max)")
+            normalize_volume(b_audio, a_audio.max)
+        elif (a_audio.max < b_audio.max):
+            print(f"Adjusting B (b_audio.max) to A volume (a_audio.max) ")
+            normalize_volume(a_audio, b_audio.max)
 
     # Collect left side of audio as numpy array
     samplerate = a_audio.frame_rate             # same on both now
     a_signal = audiosegment_to_numpy(a_audio)
     b_signal = audiosegment_to_numpy(b_audio)
-    
+
     # Truncate based on end time if necessary
     if stop_timeA != -1:
         a_signal = a_signal[:int(stop_timeA * samplerate)]
@@ -208,18 +219,25 @@ def main(args):
               +f"({end_b - start_b} samples) : "
               +now.strftime("%H:%M:%S"))
 
+        alignvalues=[]
+
         for j in range(start_b, end_b):
-            # print(f"wave_sum = np.sum(a_signal[{align_point_a-half_test_window}:{align_point_a+half_test_window}] + b_signal[{j-half_test_window}:{j+half_test_window}])")
-            # wave_sum = np.sum(a_signal[align_point_a-half_test_window:align_point_a+half_test_window] + b_signal[j-half_test_window:j+half_test_window])
-            sum_array = np.sum(a_signal[align_point_a-half_test_window:align_point_a+half_test_window] + b_signal[j-half_test_window:j+half_test_window])
-            #wave_sum = np.mean(sum_array)
-            # mean doesn't do it -- maybe mean, plus std deviation, or just
-            # std deviation?
-            #wave_sum = np.std(sum_array)
-            # no
-            l1_norm = np.sum(np.abs(sum_array))
-            std_dev = np.std(sum_array)
-            wave_sum = l1_norm + std_dev
+            sum_array = a_signal[align_point_a-half_test_window:align_point_a+half_test_window] + b_signal[j-half_test_window:j+half_test_window]
+
+            # now that that is really an array, try mean of abs
+            # wave_sum = np.mean(np.abs(sum_array))
+
+            abssum_array = np.abs(sum_array)
+
+            # store multiple results
+            alignvalues.append([
+                j,
+                np.sum(abssum_array),
+                np.mean(abssum_array),
+                np.std(abssum_array)])
+
+            # ok but not great -- mean + stddev?
+            wave_sum = np.mean(abssum_array) + np.std(abssum_array)
 
             if wave_sum > max_wave_sum:
                 max_wave_sum = wave_sum
@@ -243,8 +261,38 @@ def main(args):
         print_wavesum("AbsMin", absmin_wave_sum, start_sampleA + absmin_ts_a,
                              start_sampleB + absmin_ts_b)
 
+        print("{:9s}    {:>8s}\t{:>8s}\t{:>8s}\t{:>8s}\t{:>8s}".format(
+            "Timestamp", "Sum", "Mean", "Std", "Mean+Std", "TS(raw)"))
+        for pair in [("Mean+Std",lambda x:x[2]+x[3]),
+                     ("Sum",lambda x:x[1]),
+                     ("Mean",lambda x:x[2]),
+                     ("Std",lambda x:x[3])]:
+            print(f"--- by {pair[0]}")
+            # sort list
+            alignvalues.sort(key=pair[1])
+
+            # print lowest five values
+            for i in range(0,5):
+                j=alignvalues[i]
+                print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}".format(
+                    sample2ts(start_sampleB + j[0]),j[1],j[2],j[3],
+                    j[2]+j[3], j[0]))
+
         makeplot("AbsMin",a_signal,absmin_ts_a,b_signal,absmin_ts_b,half_test_window)
 
+        if False:
+            # keeping this for further manual/automatic comparison
+            targettime=27.274
+            targetsample=int(targettime*samplerate)
+            print(f"--- AND AT OUR TARGET {targettime}s ({targetsample})")
+            for j in alignvalues:
+                if j[0] != targetsample:
+                    continue
+                print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}".format(
+                    sample2ts(start_sampleB + j[0]),j[1],j[2],j[3],
+                    j[2]+j[3], j[0]))
+                makeplot("AbsMin",a_signal,absmin_ts_a,b_signal,targetsample,half_test_window)
+            print("---")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Audio file alignment')
