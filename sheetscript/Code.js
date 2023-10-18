@@ -96,7 +96,7 @@ function ParseTSV(fileContent) {
       var trackName = (titleParts.length > 1) ? titleParts[1] : trackTitle;
       var trackArtist = (titleParts.length > 1) ? titleParts[0] : '';
     }
-    else if (match = /^file (start)? sync: (.+):? ([0-9.]+)\s*(.*)/.exec(label)) {
+    else if (match = /^file (start)? sync: ([^ :]+?):? ([0-9.]+)\s*(.*)/.exec(label)) {
       console.log('DEBUG: found file (start) sync')
       if (match[1] == "start") {
         entryType = 'File Start Sync'
