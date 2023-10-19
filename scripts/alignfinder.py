@@ -5,8 +5,30 @@ import argparse
 import datetime
 import sys
 import matplotlib.pyplot as plt
+# import pipeclient from scripts for Audacity
+sys.path.append('/Users/timh/Downloads/Netradio/netradio_DNB_localdisk/scripts')
+import pipeclient
+import json
+import time
+import re
 
 samplerate = 0      # sample rate for comparisons
+debug = False       # debug level
+max_samplerate = 0  # maximum sample rate between A and B
+# audacity connection
+audacity = pipeclient.PipeClient()
+# audacity shared data
+aud_tracks = None
+aud_clips = None
+ALabelTrack = BLabelTrack = BAudioTrack = None
+BNumber = None  # as in 051: 051-E-Sassin - Nightrider.wv
+# filenames so we can use them in Audacity
+fileA = fileB = None
+
+def dprint(string):
+    global debug
+    if debug:
+        print(string)
 
 def parse_file_and_startstop(arg):
     parts = arg.split(":")
@@ -16,6 +38,10 @@ def parse_file_and_startstop(arg):
         return parts[0], int(parts[1]), -1
     else:
         return parts[0], int(parts[1]), int(parts[2])
+
+# convert samplerate to max for use in file
+def samplerate2max(sr):
+    return int(sr*max_samplerate/samplerate)
 
 def audiosegment_to_numpy(audio):
     # chatgpt suggested way -- get samples in the format
@@ -38,12 +64,12 @@ def sample_profile(samples, sr):
         sample2ts(samples),
         sr/1000)
 
-def print_wavesum(label, value, ts_a, ts_b):
+# print results -- ignore A mark as we already know it
+def print_wavesum(label, value, ts_b):
     global samplerate
 
-    print("{:6s} WaveSum: {:9f}, Timestamps A: {:8.3f} ({}) B: {:8.3f}".format(
-        label, value, ts_a/samplerate, sample2ts(ts_a),
-        ts_b/samplerate))
+    print("{:6s} WaveSum: {:12f}, Timestamp B: {} ({:9d} maxsamples)".format(
+        label, value, sample2ts(ts_b), samplerate2max(ts_b)))
 
 # like pydub.effects.normalize, but only adjust volume to 'max'
 def normalize_volume(audio, max):
@@ -101,8 +127,123 @@ def oldplot(a_signal,absmin_ts_a,half_test_window):
 
     plt.show()
 
+def audcommand(string):
+    reply = ''
+    audacity.write(string + '\n')
+    # Allow a little time for Audacity to return the data:
+    for i in range(0,5):
+        time.sleep(0.1)
+        reply = (audacity.read())
+        if reply != '':
+            break
+    if reply == '':
+        sys.exit(f'Audacity: No data returned for {string} ({reply}).')
+    if not re.search(r"BatchCommand finished: OK", reply):
+        sys.stderr.write(f"Unexpected Audacity response: <<{reply}>>\n\n")
+    return reply
+
+# given appropriate details, set a label on a given track
+def setlabel(LabelTrack,ts,label):
+    dprint(f"setlabel({LabelTrack},{ts},{label})")
+    audcommand(f'Select: Track={LabelTrack} Start={ts} End={ts}')
+    audcommand("SetTrackStatus: Focused=1")
+    audcommand("AddLabel:")
+        # now, stupidly, we need to find the # of the label we just added
+    jdata = audcommand('GetInfo: Type=Labels')
+    jdata = (jdata [:jdata.rfind(']')+1])
+    aud_labels = json.loads(jdata)
+        # [labeltrack, ...]
+        # where each label track is [tracknumber, [[ts1, ts2, label], ...]
+    labelnum = 0
+    newlabelnum = None
+    for lt in aud_labels:
+        dprint(f"label track {lt[0]}")
+        for l in lt[1]:
+            dprint(f"label{labelnum}: {l}")
+            if l[2] == '' and l[0] == ts and l[1] == ts:
+                # this is our label number
+                newlabelnum = labelnum
+                break
+            labelnum += 1
+    if not newlabelnum:
+        sys.exit(f"Could not find the empty label we just created at {ts} in track {ALabelTrack}")
+    # finally, set the label description
+    audcommand(f'SetLabel: Label={newlabelnum} Text="{label}"')
+
+# Given an alignment label, A track timestamp, and B track timestamp,
+# Set labels on the A track for start of B and alignment, and set label on B for alignment
+def setlabels(label, A_ts, B_ts):
+    global aud_tracks, aud_clips, fileA, fileB, ALabelTrack, BLabelTrack, BAudioTrack, BNumber
+    aud_labels = None
+
+    # Pull Track info if we don't have them already
+    if not aud_tracks:
+        jdata = audcommand('GetInfo: Type=Tracks')
+        jdata = (jdata [:jdata.rfind(']')+1])
+        aud_tracks = json.loads(jdata)
+        # format of response
+        # [{dict about track}, ...]
+
+        # [labeltrack, ...]
+        # where each label track is [tracknumber, [[ts1, ts2, label], ...]
+        
+    # Set ALabelTrack and BLabelTrack if not already set
+    if not ALabelTrack:
+        if match := re.match(r"(.*/)?([^/]+)\..{2,4}$", fileA, re.IGNORECASE):
+            baseA = match.group(2)
+            count = 0
+            for l in aud_tracks:
+                if baseA in l['name'] and 'labels' in l['name'] and (l['kind'] == 'label'):
+                    ALabelTrack = count
+                    dprint(f"A Label Track {ALabelTrack} - {l['name']}")
+                    break
+                count += 1
+            if not ALabelTrack:
+                sys.exit(f'Could not find baseA: {baseA} in label track')
+        else:
+            sys.exit(f'Could not find base filename in fileA: {fileA}')
+    if not BLabelTrack:
+        if match := re.match(r"(.*/)?(\d{3})([^/]+)\..{2,4}", fileB, re.IGNORECASE):
+            BNumber = match.group(2)
+            count = 0
+            for l in aud_tracks:
+                if BNumber in l['name']:
+                    if 'labels' in l['name'] and (l['kind'] == 'label'):
+                        BLabelTrack = count
+                        dprint(f"B Label Track {BLabelTrack} - {l['name']}")
+                    elif l['kind'] == "wave":
+                        BAudioTrack = count
+                        dprint(f"B Audio Track {BAudioTrack} - {l['name']}")
+                count += 1
+            if not BLabelTrack:
+                sys.exit(f'Could not find label track {baseB}.labels')
+        else:
+            sys.exit(f'Could not find tracknum/base filename in fileB: {fileB}')
+        
+    # Get/Update Clip Info
+    jdata = audcommand('GetInfo: Type=Clips')
+    jdata = (jdata [:jdata.rfind(']')+1])
+    aud_clips = json.loads(jdata)
+    # format of response
+    # [{dict about clips}, ...]
+    BClipStart = None
+    for c in aud_clips:
+        if c['track'] == BAudioTrack:
+            BClipStart = c['start']
+            dprint(f"B Audio Track start: {BClipStart}")
+            break
+
+    # Set A alignment label
+    setlabel(ALabelTrack,A_ts,"note: "+label)
+
+    # Set A start-of-B label
+    setlabel(ALabelTrack,round(A_ts-B_ts,3),f"orig{BNumber} start: "+label)
+
+    # Set B alignment label
+    setlabel(BLabelTrack,round(BClipStart+B_ts,3),f"orig{BNumber} note: "+label)
+
 def main(args):
-    global samplerate
+    global max_samplerate, samplerate, fileA, fileB, debug
 
     # Read arguments
     fileA, start_timeA, stop_timeA = parse_file_and_startstop(args.fileA)
@@ -110,7 +251,15 @@ def main(args):
     align_points = args.alignpoints
     search_window = args.searchwindow
     test_window = args.testwindow
+    debug = args.debug
     half_test_window = test_window // 2
+
+    dprint("DEBUG mode on")
+
+    # TESTING
+    print(f"fileA {fileA}")
+    setlabels("script align point 1", 187+56.200, 48.396)
+    sys.exit("testing")
 
     # Load tracks
     print(f"Loading {fileA}")
@@ -129,17 +278,19 @@ def main(args):
           + f"rate {a_audio.frame_rate/1000}kHz")
     print(f".    Input: b length {len(b_audio)/1000}s, "
           + f"rate {b_audio.frame_rate/1000}kHz")
-    print(f"a_audio first 10 samples: {a_audio[:10]}")
 
     # Equalize sample rate
     if (a_audio.frame_rate < b_audio.frame_rate):
         print(f"Resampling A from {a_audio.frame_rate/1000}kHz to {b_audio.frame_rate/1000}kHz")
+        max_samplerate = b_audio.frame_rate
         b_audio = b_audio.set_frame_rate(a_audio.frame_rate)
     elif (a_audio.frame_rate > b_audio.frame_rate):
         print(f"Resampling B from {b_audio.frame_rate/1000}kHz to {a_audio.frame_rate/1000}kHz")
+        max_samplerate = a_audio.frame_rate
         a_audio = a_audio.set_frame_rate(b_audio.frame_rate)
 
-    print(f"Use max possible amplitude instead of 8k?  {a_audio.max_possible_amplitude }")
+    dprint("Use max possible amplitude in plots, instead of 8k? "+
+           f"{a_audio.max_possible_amplitude }")
 
     # Normalize volumes
     print(f"Max volume A: {a_audio.max} B: {b_audio.max} -- normalizing both")
@@ -206,17 +357,18 @@ def main(args):
         elif (align_point_a + half_test_window > len(a_signal)):
             align_point_a = len(a_signal) - half_test_window
 
-        print(f"align point a: {align_point_a}")
+        dprint(f"align point a: {align_point_a}")
         start_b = max(half_test_window, align_point_a - search_window_samples)
-        print(f"start_b {start_b} = max({half_test_window}, {align_point_a} - {search_window_samples})")
+        dprint(f"start_b {start_b} = max({half_test_window}, {align_point_a} - {search_window_samples})")
         end_b = min(len(b_signal)-half_test_window,
                     align_point_a + search_window_samples)
 
         now = datetime.datetime.now()
-        print(f"\nChecking align point {i} : "
-              +sample2ts(align_point_a)
-              +" -- B "+sample2ts(start_b)+" - "+sample2ts(end_b)
-              +f"({end_b - start_b} samples) : "
+        print(f"start sampleA {start_sampleA} + align_point_a {align_point_a}")
+        print(f"\nChecking align point {i}: A: "+sample2ts(align_point_a)
+              +f" / {samplerate2max(start_sampleA + align_point_a)} (max)samples\n"
+              +"\t\t        B:  range "+sample2ts(start_b)+" - "+sample2ts(end_b)
+              +f" ({end_b - start_b} samples) : time "
               +now.strftime("%H:%M:%S"))
 
         alignvalues=[]
@@ -254,30 +406,32 @@ def main(args):
                 absmin_ts_a = align_point_a
                 absmin_ts_b = j
 
-        print_wavesum("Max", max_wave_sum, start_sampleA + max_ts_a,
-                             start_sampleB + max_ts_b)
-        print_wavesum("Min", min_wave_sum, start_sampleA + min_ts_a,
-                             start_sampleB + min_ts_b)
-        print_wavesum("AbsMin", absmin_wave_sum, start_sampleA + absmin_ts_a,
-                             start_sampleB + absmin_ts_b)
+        # summary of possible alignments
+        print("")
+        print_wavesum("Max", max_wave_sum, start_sampleB + max_ts_b)
+        print_wavesum("Min", min_wave_sum, start_sampleB + min_ts_b)
+        print_wavesum("AbsMin", absmin_wave_sum, start_sampleB + absmin_ts_b)
 
-        print("{:9s}    {:>8s}\t{:>8s}\t{:>8s}\t{:>8s}\t{:>8s}".format(
-            "Timestamp", "Sum", "Mean", "Std", "Mean+Std", "TS(raw)"))
-        for pair in [("Mean+Std",lambda x:x[2]+x[3]),
-                     ("Sum",lambda x:x[1]),
-                     ("Mean",lambda x:x[2]),
-                     ("Std",lambda x:x[3])]:
-            print(f"--- by {pair[0]}")
-            # sort list
-            alignvalues.sort(key=pair[1])
+        # debug print of align point finding details
+        if debug:
+            print("{:9s}    {:>8s}\t{:>8s}\t{:>8s}\t{:>8s}\t{:>8s}".format(
+                "Timestamp", "Sum", "Mean", "Std", "Mean+Std", "TS(raw)"))
+            for pair in [("Mean+Std",lambda x:x[2]+x[3]),
+                         ("Sum",lambda x:x[1]),
+                         ("Mean",lambda x:x[2]),
+                         ("Std",lambda x:x[3])]:
+                print(f"--- by {pair[0]}")
+                # sort list
+                alignvalues.sort(key=pair[1])
 
-            # print lowest five values
-            for i in range(0,5):
-                j=alignvalues[i]
-                print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}".format(
-                    sample2ts(start_sampleB + j[0]),j[1],j[2],j[3],
-                    j[2]+j[3], j[0]))
+                # print lowest five values
+                for i in range(0,5):
+                    j=alignvalues[i]
+                    print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}".format(
+                        sample2ts(start_sampleB + j[0]),j[1],j[2],j[3],
+                        j[2]+j[3], j[0]))
 
+        # show plots of results
         makeplot("AbsMin",a_signal,absmin_ts_a,b_signal,absmin_ts_b,half_test_window)
 
         if False:
@@ -301,6 +455,7 @@ if __name__ == "__main__":
     parser.add_argument('--alignpoints', type=int, default=5, help='Number of alignment points (default: 5)')
     parser.add_argument('--searchwindow', type=int, default=60, help='Search window in seconds (default: 60)')
     parser.add_argument('--testwindow', type=int, default=100, help='Test window in samples (default: 100)')
+    parser.add_argument('--debug', action='store_true', help='Enable debug text')
 
     args = parser.parse_args()
     main(args)
