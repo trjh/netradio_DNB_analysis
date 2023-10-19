@@ -24,6 +24,8 @@ ALabelTrack = BLabelTrack = BAudioTrack = None
 BNumber = None  # as in 051: 051-E-Sassin - Nightrider.wv
 # filenames so we can use them in Audacity
 fileA = fileB = None
+# how far to search(in sec) either side of align point in A for best match
+A_Align_Search = 2.5
 
 def dprint(string):
     global debug
@@ -131,8 +133,8 @@ def audcommand(string):
     reply = ''
     audacity.write(string + '\n')
     # Allow a little time for Audacity to return the data:
-    for i in range(0,5):
-        time.sleep(0.1)
+    for wait in [0.1, 0.2, 0.4, 0.8, 1.0]:
+        time.sleep(wait)
         reply = (audacity.read())
         if reply != '':
             break
@@ -140,41 +142,13 @@ def audcommand(string):
         sys.exit(f'Audacity: No data returned for {string} ({reply}).')
     if not re.search(r"BatchCommand finished: OK", reply):
         sys.stderr.write(f"Unexpected Audacity response: <<{reply}>>\n\n")
+        if re.search(r"BatchCommand finished: Failed!", reply):
+            sys.exit("Failed command, exiting.")
     return reply
 
-# given appropriate details, set a label on a given track
-def setlabel(LabelTrack,ts,label):
-    dprint(f"setlabel({LabelTrack},{ts},{label})")
-    audcommand(f'Select: Track={LabelTrack} Start={ts} End={ts}')
-    audcommand("SetTrackStatus: Focused=1")
-    audcommand("AddLabel:")
-        # now, stupidly, we need to find the # of the label we just added
-    jdata = audcommand('GetInfo: Type=Labels')
-    jdata = (jdata [:jdata.rfind(']')+1])
-    aud_labels = json.loads(jdata)
-        # [labeltrack, ...]
-        # where each label track is [tracknumber, [[ts1, ts2, label], ...]
-    labelnum = 0
-    newlabelnum = None
-    for lt in aud_labels:
-        dprint(f"label track {lt[0]}")
-        for l in lt[1]:
-            dprint(f"label{labelnum}: {l}")
-            if l[2] == '' and l[0] == ts and l[1] == ts:
-                # this is our label number
-                newlabelnum = labelnum
-                break
-            labelnum += 1
-    if not newlabelnum:
-        sys.exit(f"Could not find the empty label we just created at {ts} in track {ALabelTrack}")
-    # finally, set the label description
-    audcommand(f'SetLabel: Label={newlabelnum} Text="{label}"')
-
-# Given an alignment label, A track timestamp, and B track timestamp,
-# Set labels on the A track for start of B and alignment, and set label on B for alignment
-def setlabels(label, A_ts, B_ts):
+# initialize audacity data
+def audinit():
     global aud_tracks, aud_clips, fileA, fileB, ALabelTrack, BLabelTrack, BAudioTrack, BNumber
-    aud_labels = None
 
     # Pull Track info if we don't have them already
     if not aud_tracks:
@@ -183,9 +157,6 @@ def setlabels(label, A_ts, B_ts):
         aud_tracks = json.loads(jdata)
         # format of response
         # [{dict about track}, ...]
-
-        # [labeltrack, ...]
-        # where each label track is [tracknumber, [[ts1, ts2, label], ...]
         
     # Set ALabelTrack and BLabelTrack if not already set
     if not ALabelTrack:
@@ -216,9 +187,67 @@ def setlabels(label, A_ts, B_ts):
                         dprint(f"B Audio Track {BAudioTrack} - {l['name']}")
                 count += 1
             if not BLabelTrack:
-                sys.exit(f'Could not find label track {baseB}.labels')
+                sys.exit(f'Could not find label track {BNumber}.labels')
         else:
             sys.exit(f'Could not find tracknum/base filename in fileB: {fileB}')
+        
+
+# given appropriate details, set a label on a given track
+def setlabel(LabelTrack,ts,label):
+    setts = False   # by default, don't set the timestamp when setting label text, but do if we found it at ts=0
+
+    dprint(f"setlabel({LabelTrack}, {ts}, {label})")
+    ts=round(ts,3)
+    dprint(f"setlabel: timestamp rounded down - {ts}")
+
+    audcommand(f'Select: Track={LabelTrack} Start={ts} End={ts}')
+    audcommand("SetTrackStatus: Focused=1")
+    audcommand("AddLabel:")
+        # now, stupidly, we need to find the # of the label we just added
+    jdata = audcommand('GetInfo: Type=Labels')
+    jdata = (jdata [:jdata.rfind(']')+1])
+    aud_labels = json.loads(jdata)
+        # [labeltrack, ...]
+        # where each label track is [tracknumber, [[ts1, ts2, label], ...]
+    labelnum = 0
+    newlabelnum = None
+    for lt in aud_labels:
+        dprint(f"label track {lt[0]}")
+        for l in lt[1]:
+            dprint(f"label{labelnum}: {l}")
+            if l[2] == '' and l[0] == ts and l[1] == ts:
+                # this is our label number
+                newlabelnum = labelnum
+                break
+            labelnum += 1
+    if not newlabelnum:
+        sys.stderr.write(f"Could not find the empty label we just created at {ts} in track {ALabelTrack}, "
+                         + "trying at ts=0\n")
+        setts = True
+        for lt in aud_labels:
+            for l in lt[1]:
+                if l[2] == '' and l[0] == 0 and l[1] == 0:
+                    # this is our label number
+                    newlabelnum = labelnum
+                    break
+                labelnum += 1
+        if not newlabelnum:
+            sys.exit(f"Could not find the empty label we just created in track {ALabelTrack} at ts=0 or ts={ts}")
+    # finally, set the label description
+    command = f'SetLabel: Label={newlabelnum} Text="{label}"'
+    if setts:
+        command += f' Start={ts} End={ts}'
+    audcommand(command)
+
+# Given an alignment label, A track timestamp, and B track timestamp,
+# Set labels on the A track for start of B and alignment, and set label on B for alignment
+def setlabels(label, A_ts, B_ts):
+    global aud_tracks, aud_clips, fileA, fileB, ALabelTrack, BLabelTrack, BAudioTrack, BNumber
+    aud_labels = None
+
+    # Pull Track info if we don't have them already
+    if not aud_tracks or not ALabelTrack or not BLabelTrack:
+        audinit()
         
     # Get/Update Clip Info
     jdata = audcommand('GetInfo: Type=Clips')
@@ -237,13 +266,13 @@ def setlabels(label, A_ts, B_ts):
     setlabel(ALabelTrack,A_ts,"note: "+label)
 
     # Set A start-of-B label
-    setlabel(ALabelTrack,round(A_ts-B_ts,3),f"orig{BNumber} start: "+label)
+    setlabel(ALabelTrack,A_ts-B_ts,f"orig{BNumber} start: "+label)
 
     # Set B alignment label
-    setlabel(BLabelTrack,round(BClipStart+B_ts,3),f"orig{BNumber} note: "+label)
+    setlabel(BLabelTrack,BClipStart+B_ts,f"orig{BNumber} note: "+label)
 
 def main(args):
-    global max_samplerate, samplerate, fileA, fileB, debug
+    global max_samplerate, samplerate, fileA, fileB, debug, A_Align_Search
 
     # Read arguments
     fileA, start_timeA, stop_timeA = parse_file_and_startstop(args.fileA)
@@ -253,13 +282,13 @@ def main(args):
     test_window = args.testwindow
     debug = args.debug
     half_test_window = test_window // 2
+    invert = -1 if args.invert else 1
 
     dprint("DEBUG mode on")
 
-    # TESTING
-    print(f"fileA {fileA}")
-    setlabels("script align point 1", 187+56.200, 48.396)
-    sys.exit("testing")
+    # Initialize Audacity
+    print("Initializing Audacity")
+    audinit()
 
     # Load tracks
     print(f"Loading {fileA}")
@@ -341,8 +370,21 @@ def main(args):
     # Step for alignment points
     step_a = len(a_signal) // align_points
     
-    for i in range(align_points):
-        align_point_a = i * step_a
+    for apidx in range(align_points):
+        align_point_a = apidx * step_a
+        # find the best align point within 5 seconds of automatically-allocated point
+        # ensure it is >1 sec from end and <1 sec from beginning (this also
+        # ensures we don't wrap around as 1 sec = samplerate > half_test_window
+        # highest data point available is good too
+        align_point_a_min = max(1*samplerate, align_point_a - A_Align_Search*samplerate)
+        align_point_a_max = min(align_point_a + A_Align_Search*samplerate, len(a_signal) - samplerate)
+        align_point_a_maxfound = 0
+        dprint(f"Align  point a: initial ({align_point_a}) min ({align_point_a_min}) max ({align_point_a_max})")
+        for ap_i in range(int(align_point_a_min),int(align_point_a_max)):
+            if align_point_a_maxfound < abs(a_signal[ap_i]):
+                align_point_a_maxfound = abs(a_signal[ap_i])
+                align_point_a = ap_i
+        dprint(f"Align  point a: final   ({align_point_a}) -- max signal value {align_point_a_maxfound}")
 
         max_wave_sum = float("-inf")
         min_wave_sum = float("inf")
@@ -351,21 +393,13 @@ def main(args):
         min_ts_a = min_ts_b = 0
         absmin_ts_a = absmin_ts_b = 0
 
-        # we don't want test windows to wrap around the array
-        if (align_point_a < half_test_window):
-            align_point_a = half_test_window
-        elif (align_point_a + half_test_window > len(a_signal)):
-            align_point_a = len(a_signal) - half_test_window
-
-        dprint(f"align point a: {align_point_a}")
         start_b = max(half_test_window, align_point_a - search_window_samples)
-        dprint(f"start_b {start_b} = max({half_test_window}, {align_point_a} - {search_window_samples})")
-        end_b = min(len(b_signal)-half_test_window,
-                    align_point_a + search_window_samples)
+        end_b = min(len(b_signal)-half_test_window, align_point_a + search_window_samples)
+        dprint(f"Search point B: {start_b} - {end_b}")
 
         now = datetime.datetime.now()
         print(f"start sampleA {start_sampleA} + align_point_a {align_point_a}")
-        print(f"\nChecking align point {i}: A: "+sample2ts(align_point_a)
+        print(f"\nChecking align point {apidx}: A: "+sample2ts(align_point_a)
               +f" / {samplerate2max(start_sampleA + align_point_a)} (max)samples\n"
               +"\t\t        B:  range "+sample2ts(start_b)+" - "+sample2ts(end_b)
               +f" ({end_b - start_b} samples) : time "
@@ -374,19 +408,26 @@ def main(args):
         alignvalues=[]
 
         for j in range(start_b, end_b):
-            sum_array = a_signal[align_point_a-half_test_window:align_point_a+half_test_window] + b_signal[j-half_test_window:j+half_test_window]
+            sum_array = (a_signal[align_point_a-half_test_window:align_point_a+half_test_window] +
+                         invert * b_signal[j-half_test_window:j+half_test_window])
 
             # now that that is really an array, try mean of abs
             # wave_sum = np.mean(np.abs(sum_array))
 
             abssum_array = np.abs(sum_array)
+            # we *should* be able to use np.square but... it isn't doing what it is supposed to do
+            # square_array = [pow(x,2) for x in sum_array]
+            # too slow -- were we wrapping around?
+            square_array = np.square(sum_array, dtype=np.int64)
 
             # store multiple results
             alignvalues.append([
                 j,
                 np.sum(abssum_array),
                 np.mean(abssum_array),
-                np.std(abssum_array)])
+                np.std(abssum_array),
+                np.sum(square_array)
+                ])
 
             # ok but not great -- mean + stddev?
             wave_sum = np.mean(abssum_array) + np.std(abssum_array)
@@ -414,25 +455,37 @@ def main(args):
 
         # debug print of align point finding details
         if debug:
-            print("{:9s}    {:>8s}\t{:>8s}\t{:>8s}\t{:>8s}\t{:>8s}".format(
-                "Timestamp", "Sum", "Mean", "Std", "Mean+Std", "TS(raw)"))
+            print("{:9s}    {:>8s}\t{:>8s}\t{:>8s}\t{:>8s}\t{:>8s}\t{:>8s}".format(
+                "Timestamp", "Sum", "Mean", "Std", "Mean+Std", "Sum(^2)", "TS(raw)"))
             for pair in [("Mean+Std",lambda x:x[2]+x[3]),
                          ("Sum",lambda x:x[1]),
                          ("Mean",lambda x:x[2]),
-                         ("Std",lambda x:x[3])]:
+                         ("Std",lambda x:x[3]),
+                         ("Sum(Squared)",lambda x:x[4])]:
                 print(f"--- by {pair[0]}")
                 # sort list
                 alignvalues.sort(key=pair[1])
 
                 # print lowest five values
-                for i in range(0,5):
-                    j=alignvalues[i]
-                    print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}".format(
-                        sample2ts(start_sampleB + j[0]),j[1],j[2],j[3],
-                        j[2]+j[3], j[0]))
+                for k in range(0,5):
+                    av=alignvalues[k]
+                    print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}\t{:8d}".format(
+                        sample2ts(start_sampleB + av[0]),av[1],av[2],av[3],
+                        av[2]+av[3], av[4], av[0]))
 
         # show plots of results
         makeplot("AbsMin",a_signal,absmin_ts_a,b_signal,absmin_ts_b,half_test_window)
+
+        # ask if we should add it to Audacity
+        print(f"Add align point {apidx} to Audacity? [yN] ", end='')
+        choice = input().lower()
+        if 'y' in choice:
+            Apoint = (start_sampleA + align_point_a)/samplerate
+            Bpoint = absmin_ts_b/samplerate
+            print("Adding points to Audacity A: {Apoint} B: {Bpoint}")
+            setlabels(f"script align point {apidx}", Apoint, Bpoint)
+        else:
+            print("No labels added to Audacity.")
 
         if False:
             # keeping this for further manual/automatic comparison
@@ -456,6 +509,7 @@ if __name__ == "__main__":
     parser.add_argument('--searchwindow', type=int, default=60, help='Search window in seconds (default: 60)')
     parser.add_argument('--testwindow', type=int, default=100, help='Test window in samples (default: 100)')
     parser.add_argument('--debug', action='store_true', help='Enable debug text')
+    parser.add_argument('--invert', action='store_true', help='Invert signal B before adding signals to compare them')
 
     args = parser.parse_args()
     main(args)
