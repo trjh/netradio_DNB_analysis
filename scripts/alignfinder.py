@@ -24,9 +24,11 @@ BNumber = None  # as in 051: 051-E-Sassin - Nightrider.wv
 # filenames so we can use them in Audacity
 fileA = fileB = None
 # how far to search(in sec) either side of align point in A for best match
-A_Align_Search = 2.5
+A_Align_Search = 0.5
 # align all indexes by this # of samples to align with Audacity's minimum input unit of measure 0.001s
 step_by = 1
+# figure to leave in background until next graph started
+fig = None
 
 def dprint(string):
     global debug
@@ -67,13 +69,6 @@ def sample_profile(samples, sr):
         sample2ts(samples),
         sr/1000)
 
-# print results -- ignore A mark as we already know it
-def print_wavesum(label, value, ts_b):
-    global samplerate
-
-    print("{:6s} WaveSum: {:12f}, Timestamp B: {} ({})".format(
-        label, value, sample2ts(ts_b), samplerate2max(ts_b)))
-
 # like pydub.effects.normalize, but only adjust volume to 'max'
 def normalize_volume(audio, max):
     peak_sample_val = audio.max
@@ -90,11 +85,13 @@ def sample2ts(sample):
     seconds = sample/samplerate
     min = int(seconds/60)
     sec = int(seconds)%60
-    msec = int((seconds - sec)*1000)
+    msec = int(1000*(seconds - int(seconds)))
     return f"{min:2d}:{sec:02d}.{msec:03d}"
 
 # plot results
 def makeplot(label,a_signal,a_signal_index,b_signal,b_signal_index,half_test_window):
+    global fig
+
     fig, axs= plt.subplots(1, 4)
     fig.suptitle(f'{label} Waves A, B, Added, Added(abs)')
     fig.set_figwidth(15)
@@ -126,7 +123,8 @@ def makeplot(label,a_signal,a_signal_index,b_signal,b_signal_index,half_test_win
             sum_array)
     axs[3].plot(range(0,2*half_test_window),
             np.abs(sum_array))
-    plt.show()
+    plt.draw()
+    plt.pause(1)
 
 def oldplot(a_signal,absmin_ts_a,half_test_window):
     plt.figure(1)
@@ -208,8 +206,19 @@ def setlabel(LabelTrack,ts,label):
     setts = False   # by default, don't set the timestamp when setting label text, but do if we found it at ts=0
 
     dprint(f"setlabel({LabelTrack}, {ts}, {label})")
-    ts=round(ts,3)
-    dprint(f"setlabel: timestamp rounded down - {ts}")
+    # round down ts to 6 digits to avoid python math wierdness
+    ts=round(ts,6)
+    # note if we had more significant digits than expected -- when we're
+    # aligning with 0.001 sec we shouldn't need to
+    passts=round(ts,3)
+    if (ts != passts):
+        if (skip_by > 1):
+            sys.stderr.write(
+                f"WARNING: setlabel given timestamp {ts} with greater granularity " +
+                f"than expected {skip_by * samplerate}s")
+        else:
+            dprint(f"setlabel: timestamp rounded down from {ts} to {passts}")
+    ts = passts
 
     audcommand(f'Select: Track={LabelTrack} Start={ts} End={ts}')
     audcommand("SetTrackStatus: Focused=1")
@@ -387,7 +396,7 @@ def main(args):
     print(".           b has " + sample_profile(len(b_signal), samplerate))
 
     # Convert search window value from seconds to samples
-    search_window_samples = search_window * samplerate
+    search_window_samples = int(search_window * samplerate)
 
     # Set stepby value -- Audacity keeps track of individual samples, but only
     # allows us to set labels by time down to the nearest 0.001 second.  So
@@ -397,14 +406,19 @@ def main(args):
     test_window = int(test_window/step_by) * step_by
     half_test_window = int(half_test_window/step_by) * step_by
 
-    # Step for alignment points
-    step_a = len(a_signal) // align_points
-    step_a = int(step_a/step_by) * step_by
+    # Choose alignment points -- one at start, one at end, distribute the rest
+    align_indices = [0, len(a_signal)-int(0.5*samplerate)]
+    if align_points > 2:
+        step_a = len(a_signal) // (align_points - 1)
+        step_a = int(step_a/step_by) * step_by
+        for step_a_i in range(1,align_points - 1):
+            align_indices.append(step_a_i * step_a)
+    align_indices.sort()
     
-    for apidx in range(align_points):
-        # Select align point in A
-        align_point_a = apidx * step_a
-        align_search_direction = -1 if (apidx == align_points-1) else 1 # move backwards on last point
+    for apidx in range(len(align_indices)):
+        align_point_a = align_indices[apidx]
+        # Select best point near initiall chosen align point
+        align_search_direction = -1 if (align_point_a == align_indices[-1]) else 1 # move backwards on last point
 
         # look over 6 windows until we find a minimal good amplitude
         for mult in range(5):
@@ -420,9 +434,9 @@ def main(args):
         dprint(f"Search point B: {start_b} - {end_b}")
 
         print(f"\nChecking align point {apidx}: point A: "+sample2ts(align_point_a)
-              +f"{' ':21s} / ({samplerate2max(start_sampleA + align_point_a)})\n"
+              +f" (from checking start) : ({align_point_a} samples, {samplerate2max(align_point_a)})\n"
               +f"{' ':23s} range B: "+sample2ts(start_b)+" - "+sample2ts(end_b)
-              +f" : elapsed {time.time() - exec_start:.1f}s")
+              +f" : clocktime elapsed {time.time() - exec_start:.1f}s")
 
         alignvalues=[]
 
@@ -458,18 +472,30 @@ def main(args):
         min_meanstddev = alignvalues[min_indices[5],5]
 
         # summary of result
-        print("")
-        print_wavesum("Alignment by minimum (mean + stddev) of absolute value",
-                      min_meanstddev, start_sampleB + align_point_b)
+        print(f"\n                 RESULT point B: "+sample2ts(align_point_b)+
+              f" ({align_point_b} samples, {samplerate2max(align_point_b)})"+
+              f"\n{' ':18s} Alignment by minimum (mean + stddev) of absolute value, score {min_meanstddev}")
 
         # what were the other possibilities? -- show sample/timestamps with same minimum mean+stddev
         alignvalue_min_indices = np.where(alignvalues[:,5] == min_meanstddev)[0]
-        print(f"All samples with this score: {alignvalues[alignvalue_min_indices,0]}")
+        alignvalue_min_count = len(alignvalue_min_indices)
+        if alignvalue_min_count == 1:
+            print ("Good Sample -- this is the only index with this score")
+        elif alignvalue_min_count > 1:
+            print(f"WARNING: {alignvalue_min_count} samples had the same score -- printing first 5 timestamps")
+            amatch_ts = []
+            for amatch_i in range(5):
+                amatch_ts.append(sample2ts(alignvalues[alignvalue_min_indices[amatch_i],0]
+                                 + start_sampleB))
+            print(f"         {', '.join(amatch_ts)}")
 
         # what were the timestamps according to other scores?
         print("Timestamp  Scoring Method")
         for im in [("Sum",1), ("Mean",2), ("StdDev",3), ("SumSquared",4)]:
-            print("{:9s}  {}".format(sample2ts(start_sampleB + alignvalues[min_indices[im[1]],0]), im[0]))
+            im_ts = alignvalues[min_indices[im[1]],0]
+            print("{:9s}  {:10s} {}".format(sample2ts(im_ts), im[0],
+                "MATCH" if (im_ts == align_point_b) else "(differs)"
+                ))
 
         # debug print of align point finding details
         if debug:
@@ -523,6 +549,10 @@ def main(args):
                 makeplot("AbsMin",a_signal,align_point_a,b_signal,targetsample,half_test_window)
             print("---")
 
+        # END: for j in range(start_b, end_b, step_by):
+
+    # END: for apidx in range(len(align_indices)):
+
     print("Analysis complete.")
 
 if __name__ == "__main__":
@@ -530,7 +560,7 @@ if __name__ == "__main__":
     parser.add_argument('fileA', help='File A path and optional start/stop time in seconds (e.g. fileA, fileA:10, or fileA:10:500)')
     parser.add_argument('fileB', help='File B path and optional start/stop time in seconds (e.g. fileA, fileB:20, or fileB:20:600)')
     parser.add_argument('--alignpoints', type=int, default=5, help='Number of alignment points (default: 5)')
-    parser.add_argument('--searchwindow', type=int, default=60, help='Search window in seconds (default: 60)')
+    parser.add_argument('--searchwindow', type=float, default=5.0, help='Search window in seconds (default: 5.0)')
     parser.add_argument('--testwindow', type=int, default=100, help='Test window in samples (default: 100)')
     parser.add_argument('--debug', action='store_true', help='Enable debug text')
     parser.add_argument('--invert', action='store_true', help='Invert signal B before adding signals to compare them')
