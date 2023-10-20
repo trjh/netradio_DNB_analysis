@@ -2,7 +2,6 @@ import numpy as np
 from pydub import AudioSegment
 import pydub
 import argparse
-import datetime
 import sys
 import matplotlib.pyplot as plt
 # import pipeclient from scripts for Audacity
@@ -26,6 +25,8 @@ BNumber = None  # as in 051: 051-E-Sassin - Nightrider.wv
 fileA = fileB = None
 # how far to search(in sec) either side of align point in A for best match
 A_Align_Search = 2.5
+# align all indexes by this # of samples to align with Audacity's minimum input unit of measure 0.001s
+step_by = 1
 
 def dprint(string):
     global debug
@@ -43,7 +44,7 @@ def parse_file_and_startstop(arg):
 
 # convert samplerate to max for use in file
 def samplerate2max(sr):
-    return int(sr*max_samplerate/samplerate)
+    return f"{int(sr*max_samplerate/samplerate):8d} in {max_samplerate/1000}kHz samples"
 
 def audiosegment_to_numpy(audio):
     # chatgpt suggested way -- get samples in the format
@@ -70,7 +71,7 @@ def sample_profile(samples, sr):
 def print_wavesum(label, value, ts_b):
     global samplerate
 
-    print("{:6s} WaveSum: {:12f}, Timestamp B: {} ({:9d} maxsamples)".format(
+    print("{:6s} WaveSum: {:12f}, Timestamp B: {} ({})".format(
         label, value, sample2ts(ts_b), samplerate2max(ts_b)))
 
 # like pydub.effects.normalize, but only adjust volume to 'max'
@@ -97,8 +98,18 @@ def makeplot(label,a_signal,a_signal_index,b_signal,b_signal_index,half_test_win
     fig, axs= plt.subplots(1, 4)
     fig.suptitle(f'{label} Waves A, B, Added, Added(abs)')
     fig.set_figwidth(15)
+
+    # calculate scale
+    scale = 16000
+    for val in [
+            np.max(np.abs(a_signal[a_signal_index-half_test_window:a_signal_index+half_test_window])),
+            np.max(np.abs(b_signal[b_signal_index-half_test_window:b_signal_index+half_test_window]))
+            ]:
+        if val > scale:
+            scale = val
+
     for ax in axs:
-        ax.set(ylim=(-16000,16000))
+        ax.set(ylim=(-1*scale,scale))
         ax.axhline(0)
     axs[0].axvline(a_signal_index) #x-axis line
     axs[1].axvline(b_signal_index) #x-axis line
@@ -271,8 +282,32 @@ def setlabels(label, A_ts, B_ts):
     # Set B alignment label
     setlabel(BLabelTrack,BClipStart+B_ts,f"orig{BNumber} note: "+label)
 
+
+# given initial proposed alignment point in signalarray, find point that meets
+# these rules, searching in a `A_Align_Search` window around initial point
+# - >1 sec from beginning
+# - >1 sec from end
+# - both of the above should ensure no search wrap-around (half_test_window < 1 sec)
+# - highest data point available
+def find_best_alignpoint(initialpoint, signalarray):
+    global samplerate, A_Align_Search, step_by
+
+    returnpoint = -1
+    align_min = max(1*samplerate, initialpoint - A_Align_Search*samplerate)
+    align_max = min(initialpoint + A_Align_Search*samplerate, len(signalarray) - samplerate)
+    max_amplitude = 0
+    dprint(f"find_best_alignpoint: initial ({initialpoint}) min ({align_min}) max ({align_max})")
+    for ap_i in range(int(align_min),int(align_max),step_by):
+        if max_amplitude < abs(signalarray[ap_i]):
+            max_amplitude = abs(signalarray[ap_i])
+            returnpoint = ap_i
+    dprint(f"find_best_alignpoint: final   ({returnpoint}) -- max signal value {max_amplitude}")
+
+    return(returnpoint, max_amplitude)
+
+
 def main(args):
-    global max_samplerate, samplerate, fileA, fileB, debug, A_Align_Search
+    global max_samplerate, samplerate, fileA, fileB, debug, A_Align_Search,step_by
 
     # Read arguments
     fileA, start_timeA, stop_timeA = parse_file_and_startstop(args.fileA)
@@ -283,6 +318,7 @@ def main(args):
     debug = args.debug
     half_test_window = test_window // 2
     invert = -1 if args.invert else 1
+    exec_start = time.time()
 
     dprint("DEBUG mode on")
 
@@ -326,14 +362,6 @@ def main(args):
     a_audio = pydub.effects.normalize(a_audio)
     b_audio = pydub.effects.normalize(b_audio)
 
-    if False:
-        if (a_audio.max > b_audio.max):
-            print(f"Adjusting A (a_audio.max) to B volume (b_audio.max)")
-            normalize_volume(b_audio, a_audio.max)
-        elif (a_audio.max < b_audio.max):
-            print(f"Adjusting B (b_audio.max) to A volume (a_audio.max) ")
-            normalize_volume(a_audio, b_audio.max)
-
     # Collect left side of audio as numpy array
     samplerate = a_audio.frame_rate             # same on both now
     a_signal = audiosegment_to_numpy(a_audio)
@@ -361,53 +389,44 @@ def main(args):
     # Convert search window value from seconds to samples
     search_window_samples = search_window * samplerate
 
+    # Set stepby value -- Audacity keeps track of individual samples, but only
+    # allows us to set labels by time down to the nearest 0.001 second.  So
+    # let's be sure that A and B timestamps are aligned properly to these
+    # times.
+    step_by = int(0.001 * samplerate)
+    test_window = int(test_window/step_by) * step_by
+    half_test_window = int(half_test_window/step_by) * step_by
+
     # Step for alignment points
     step_a = len(a_signal) // align_points
-
-    # Convert search window value from seconds to samples
-    search_window_samples = search_window * samplerate
-
-    # Step for alignment points
-    step_a = len(a_signal) // align_points
+    step_a = int(step_a/step_by) * step_by
     
     for apidx in range(align_points):
+        # Select align point in A
         align_point_a = apidx * step_a
-        # find the best align point within 5 seconds of automatically-allocated point
-        # ensure it is >1 sec from end and <1 sec from beginning (this also
-        # ensures we don't wrap around as 1 sec = samplerate > half_test_window
-        # highest data point available is good too
-        align_point_a_min = max(1*samplerate, align_point_a - A_Align_Search*samplerate)
-        align_point_a_max = min(align_point_a + A_Align_Search*samplerate, len(a_signal) - samplerate)
-        align_point_a_maxfound = 0
-        dprint(f"Align  point a: initial ({align_point_a}) min ({align_point_a_min}) max ({align_point_a_max})")
-        for ap_i in range(int(align_point_a_min),int(align_point_a_max)):
-            if align_point_a_maxfound < abs(a_signal[ap_i]):
-                align_point_a_maxfound = abs(a_signal[ap_i])
-                align_point_a = ap_i
-        dprint(f"Align  point a: final   ({align_point_a}) -- max signal value {align_point_a_maxfound}")
+        align_search_direction = -1 if (apidx == align_points-1) else 1 # move backwards on last point
 
-        max_wave_sum = float("-inf")
-        min_wave_sum = float("inf")
-        absmin_wave_sum = float("inf")
-        max_ts_a = max_ts_b = 0
-        min_ts_a = min_ts_b = 0
-        absmin_ts_a = absmin_ts_b = 0
+        # look over 6 windows until we find a minimal good amplitude
+        for mult in range(5):
+            startpoint = align_point_a + (mult * A_Align_Search*samplerate * align_search_direction)
+            newpoint, max_amplitude = find_best_alignpoint(startpoint, a_signal)
+            if max_amplitude > 6000:
+                align_point_a = newpoint
+                break
 
+        # Establish range to search in B
         start_b = max(half_test_window, align_point_a - search_window_samples)
         end_b = min(len(b_signal)-half_test_window, align_point_a + search_window_samples)
         dprint(f"Search point B: {start_b} - {end_b}")
 
-        now = datetime.datetime.now()
-        print(f"start sampleA {start_sampleA} + align_point_a {align_point_a}")
-        print(f"\nChecking align point {apidx}: A: "+sample2ts(align_point_a)
-              +f" / {samplerate2max(start_sampleA + align_point_a)} (max)samples\n"
-              +"\t\t        B:  range "+sample2ts(start_b)+" - "+sample2ts(end_b)
-              +f" ({end_b - start_b} samples) : time "
-              +now.strftime("%H:%M:%S"))
+        print(f"\nChecking align point {apidx}: point A: "+sample2ts(align_point_a)
+              +f"{' ':21s} / ({samplerate2max(start_sampleA + align_point_a)})\n"
+              +f"{' ':23s} range B: "+sample2ts(start_b)+" - "+sample2ts(end_b)
+              +f" : elapsed {time.time() - exec_start:.1f}s")
 
         alignvalues=[]
 
-        for j in range(start_b, end_b):
+        for j in range(start_b, end_b, step_by):
             sum_array = (a_signal[align_point_a-half_test_window:align_point_a+half_test_window] +
                          invert * b_signal[j-half_test_window:j+half_test_window])
 
@@ -426,62 +445,65 @@ def main(args):
                 np.sum(abssum_array),
                 np.mean(abssum_array),
                 np.std(abssum_array),
-                np.sum(square_array)
+                np.sum(square_array),
+                np.mean(abssum_array) + np.std(abssum_array)
                 ])
 
-            # ok but not great -- mean + stddev?
-            wave_sum = np.mean(abssum_array) + np.std(abssum_array)
+        # find minimum scores in each column
+        alignvalues=np.array(alignvalues)
+        min_indices = np.argmin(alignvalues, axis=0)
 
-            if wave_sum > max_wave_sum:
-                max_wave_sum = wave_sum
-                max_ts_a = align_point_a
-                max_ts_b = j
+        # select alignment point by mean + stddev
+        align_point_b  = int(alignvalues[min_indices[5],0])
+        min_meanstddev = alignvalues[min_indices[5],5]
 
-            if wave_sum < min_wave_sum:
-                min_wave_sum = wave_sum
-                min_ts_a = align_point_a
-                min_ts_b = j
-
-            if abs(wave_sum) < absmin_wave_sum:
-                absmin_wave_sum = abs(wave_sum)
-                absmin_ts_a = align_point_a
-                absmin_ts_b = j
-
-        # summary of possible alignments
+        # summary of result
         print("")
-        print_wavesum("Max", max_wave_sum, start_sampleB + max_ts_b)
-        print_wavesum("Min", min_wave_sum, start_sampleB + min_ts_b)
-        print_wavesum("AbsMin", absmin_wave_sum, start_sampleB + absmin_ts_b)
+        print_wavesum("Alignment by minimum (mean + stddev) of absolute value",
+                      min_meanstddev, start_sampleB + align_point_b)
+
+        # what were the other possibilities? -- show sample/timestamps with same minimum mean+stddev
+        alignvalue_min_indices = np.where(alignvalues[:,5] == min_meanstddev)[0]
+        print(f"All samples with this score: {alignvalues[alignvalue_min_indices,0]}")
+
+        # what were the timestamps according to other scores?
+        print("Timestamp  Scoring Method")
+        for im in [("Sum",1), ("Mean",2), ("StdDev",3), ("SumSquared",4)]:
+            print("{:9s}  {}".format(sample2ts(start_sampleB + alignvalues[min_indices[im[1]],0]), im[0]))
 
         # debug print of align point finding details
         if debug:
             print("{:9s}    {:>8s}\t{:>8s}\t{:>8s}\t{:>8s}\t{:>8s}\t{:>8s}".format(
                 "Timestamp", "Sum", "Mean", "Std", "Mean+Std", "Sum(^2)", "TS(raw)"))
-            for pair in [("Mean+Std",lambda x:x[2]+x[3]),
-                         ("Sum",lambda x:x[1]),
-                         ("Mean",lambda x:x[2]),
-                         ("Std",lambda x:x[3]),
-                         ("Sum(Squared)",lambda x:x[4])]:
+            for pair in [("Mean+Std",5),
+                         ("Sum",1),
+                         ("Mean",2),
+                         ("Std",3),
+                         ("Sum(Squared)",4)]:
                 print(f"--- by {pair[0]}")
-                # sort list
-                alignvalues.sort(key=pair[1])
+                # get indices that would sort by each method
+                sorted_indices = np.argsort(alignvalues[:, pair[1]])
 
                 # print lowest five values
-                for k in range(0,5):
-                    av=alignvalues[k]
+                for k in range(5):
+                    av=alignvalues[sorted_indices[k]]
                     print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}\t{:8d}".format(
-                        sample2ts(start_sampleB + av[0]),av[1],av[2],av[3],
-                        av[2]+av[3], av[4], av[0]))
+                        sample2ts(start_sampleB + av[0]),int(av[1]),av[2],av[3],
+                        av[5], int(av[4]), int(av[0])))
 
-        # show plots of results
-        makeplot("AbsMin",a_signal,absmin_ts_a,b_signal,absmin_ts_b,half_test_window)
+        # ask if we should show the plots
+        print("View graphs? [yN]", end='')
+        choice = input().lower()
+        if 'y' in choice:
+            # show plots of results
+            makeplot("AbsMin",a_signal,align_point_a,b_signal,align_point_b,half_test_window)
 
         # ask if we should add it to Audacity
         print(f"Add align point {apidx} to Audacity? [yN] ", end='')
         choice = input().lower()
         if 'y' in choice:
             Apoint = (start_sampleA + align_point_a)/samplerate
-            Bpoint = absmin_ts_b/samplerate
+            Bpoint = align_point_b/samplerate
             print("Adding points to Audacity A: {Apoint} B: {Bpoint}")
             setlabels(f"script align point {apidx}", Apoint, Bpoint)
         else:
@@ -498,8 +520,10 @@ def main(args):
                 print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}".format(
                     sample2ts(start_sampleB + j[0]),j[1],j[2],j[3],
                     j[2]+j[3], j[0]))
-                makeplot("AbsMin",a_signal,absmin_ts_a,b_signal,targetsample,half_test_window)
+                makeplot("AbsMin",a_signal,align_point_a,b_signal,targetsample,half_test_window)
             print("---")
+
+    print("Analysis complete.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Audio file alignment')
