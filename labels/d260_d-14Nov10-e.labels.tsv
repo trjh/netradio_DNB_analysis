@@ -1,15 +1,38 @@
 0.000000	0.000000	file start sync: d-14Nov10-e.au 15653.051068 verified d242-268
-0.000000	193.767000	ID051: E-Sassin - Nightrider
+0.000000	186.904821	ID051: E-Sassin - Nightrider
 7.823257	52.147047	note: ~"I am the Night Rider" xN
 128.505155	136.855670	note: ~start of transition, background "Murder"
-185.103093	192.680412	note: drop-off -- but doesn't seem like transition
-193.767000	453.767000	start052: ID: B-Boy 3000 - Diet for Murder
+185.208000	186.012000	track sync: B end
+186.207980	186.207980	orig052 start: .
+186.369000	186.369000	orig052 start: B script align point 3
+186.538000	186.538000	orig052 start: 2 script align point 2
+186.715000	186.715000	orig052 start: A script align point 1
+186.887565	186.887565	orig052 start: 0
+186.904821	186.904821	orig051 end: .
+186.904821	186.904821	orig051 end: B
+186.904821	186.904821	orig051 note: file start 052
+186.904821	186.904821	orig052 start: 051-sync-B
+186.904821	453.767000	start052: ID: B-Boy 3000 - Diet for Murder
+187.503120	187.503120	orig051 end: 2
+187.670179	187.670179	orig051 end: 1
+190.018415	190.621415	orig052 sync: 0 start
+190.698000	191.301000	track sync: 0 start
+244.528159	244.528159	orig052 sync: A script align point 1
+245.035000	245.035000	track sync: A script align point 1
 255.477186	265.260365	note: ~clearest quote
+300.570159	300.570159	orig052 sync: 2 script align point 2
+300.900000	300.900000	track sync: 2 script align point 2
+353.947159	353.947159	orig052 sync: B script align point 3
+354.109000	354.109000	track sync: B script align point 3
 399.252762	410.274317	note: ~last quote
-407.121624	443.452798	note: ~battle sounds
+404.592000	405.200000	orig052 sync: 4 ending
+404.592000	405.200000	track sync: 4 ending
+407.121624	443.416599	note: ~battle sounds
 430.212188	443.586660	note: helicopter, and a chorus?
-443.451355	443.451355	start053: ID: Net Radio - Promo6 Peace
-468.272100	468.272100	start054: ID: Codename John - Dreams of Heaven
+443.451355	468.272000	start053: ID: Net Radio - Promo6 Peace
+446.807980	446.807980	orig052 end: 4
+447.504821	447.504821	orig052 end: .
+468.272100	834.598000	start054: ID: Codename John - Dreams of Heaven
 810.786625	810.786625	note: file start d276-293b
 834.598138	834.598138	start055: ID: John B - Secrets
 879.283824	881.268943	file note: skip?
