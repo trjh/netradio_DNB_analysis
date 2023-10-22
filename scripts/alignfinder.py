@@ -13,6 +13,7 @@ import re
 
 samplerate = 0      # sample rate for comparisons
 debug = False       # debug level
+audacitytest = False # audacity debug?
 max_samplerate = 0  # maximum sample rate between A and B
 # audacity connection
 audacity = pipeclient.PipeClient()
@@ -26,9 +27,15 @@ fileA = fileB = None
 # how far to search(in sec) either side of align point in A for best match
 A_Align_Search = 0.5
 # align all indexes by this # of samples to align with Audacity's minimum input unit of measure 0.001s
+# unless precise flag is set
 step_by = 1
+precise = False
 # figure to leave in background until next graph started
 fig = None
+# advice
+advice = """
+    - Ensure that your starting points match up closely to the start of each song
+"""
 
 def dprint(string):
     global debug
@@ -40,9 +47,9 @@ def parse_file_and_startstop(arg):
     if len(parts) == 1:
         return parts[0], 0, -1
     elif len(parts) == 2:
-        return parts[0], int(parts[1]), -1
+        return parts[0], float(parts[1]), -1
     else:
-        return parts[0], int(parts[1]), int(parts[2])
+        return parts[0], float(parts[1]), float(parts[2])
 
 # convert samplerate to max for use in file
 def samplerate2max(sr):
@@ -69,15 +76,44 @@ def sample_profile(samples, sr):
         sample2ts(samples),
         sr/1000)
 
-# like pydub.effects.normalize, but only adjust volume to 'max'
-def normalize_volume(audio, max):
-    peak_sample_val = audio.max
-        
-    if peak_sample_val == 0:
-        return seg
-                            
-    needed_boost = pydub.utils.ratio_to_db(max / peak_sample_val)
-    return audio.apply_gain(needed_boost)
+
+def adjust_volume(a, b):
+    print(f"Max volume A: {a.max:5d} B: {b.max:5d}\n"+
+          f"RMS        A: {a.rms:5d} B: {b.rms:5d}")
+    
+    adjustedA = adjustedB = ""
+    if a.rms < b.rms:
+        needed_boost = pydub.utils.ratio_to_db(b.rms / a.rms)
+        a = a.apply_gain(needed_boost)
+        adjustedA = "adjusted"
+    elif a.rms > b.rms:
+        needed_boost = pydub.utils.ratio_to_db(a.rms / b.rms)
+        b = b.apply_gain(needed_boost)
+        adjustedB = "adjusted"
+    else:
+        print("No difference in RMS, no volume adjustment.")
+
+    print(f"Max volume {adjustedA}A: {a.max:5d} {adjustedB}B: {b.max:5d}\n"+
+          f"RMS        {adjustedA}A: {a.rms:5d} {adjustedB}B: {b.rms:5d}")
+    return
+
+    if False:
+        # second way -- normalize both, but this just adjust to max volume,
+        # which doesn't always adjust the low-bandwith signal appropriately
+        print(f"Max volume A: {a_audio.max} B: {b_audio.max} -- normalizing both")
+        a_audio = pydub.effects.normalize(a_audio)
+        b_audio = pydub.effects.normalize(b_audio)
+        print(f"Max volume A: {a_audio.max} B: {b_audio.max} -- after normalization")
+    if False:
+        # def normalize_volume(audio, max):
+        # first way -- adjust one sample to the volume of the other
+        peak_sample_val = audio.max
+            
+        if peak_sample_val == 0:
+            return seg
+                                
+        needed_boost = pydub.utils.ratio_to_db(max / peak_sample_val)
+        return audio.apply_gain(needed_boost)
     
 # convert a sample # into a timestamp
 def sample2ts(sample):
@@ -96,11 +132,25 @@ def makeplot(label,a_signal,a_signal_index,b_signal,b_signal_index,half_test_win
     fig.suptitle(f'{label} Waves A, B, Added, Added(abs)')
     fig.set_figwidth(15)
 
+    # calculate range
+    a_min=max(0,a_signal_index-half_test_window)
+    a_max=min(len(a_signal),a_signal_index+half_test_window)
+    b_min=max(0,b_signal_index-half_test_window)
+    b_max=min(len(b_signal),b_signal_index+half_test_window)
+
+    # check size, for when we've really expanded the scale
+    if ((a_max - a_min) < (b_max-b_min)):
+        correctvalue = ((b_max-b_min) - (a_max - a_min))
+        sys.exit(f"B scale is {correctvalue} larger than A, exiting")
+    elif ((a_max - a_min) > (b_max-b_min)):
+        correctvalue = ((a_max-a_min) - (b_max - b_min))
+        sys.exit(f"A scale is {correctvalue} larger than B, exiting")
+
     # calculate scale
     scale = 16000
     for val in [
-            np.max(np.abs(a_signal[a_signal_index-half_test_window:a_signal_index+half_test_window])),
-            np.max(np.abs(b_signal[b_signal_index-half_test_window:b_signal_index+half_test_window]))
+            np.max(np.abs(a_signal[a_min:a_max])),
+            np.max(np.abs(b_signal[b_min:b_max]))
             ]:
         if val > scale:
             scale = val
@@ -113,16 +163,12 @@ def makeplot(label,a_signal,a_signal_index,b_signal,b_signal_index,half_test_win
     axs[2].axvline(half_test_window)
     axs[3].axvline(half_test_window)
 
-    axs[0].plot(range(a_signal_index-half_test_window,a_signal_index+half_test_window),
-            a_signal[a_signal_index-half_test_window:a_signal_index+half_test_window])
-    axs[1].plot(range(b_signal_index-half_test_window,b_signal_index+half_test_window),
-            b_signal[b_signal_index-half_test_window:b_signal_index+half_test_window])
+    axs[0].plot(range(a_min,a_max), a_signal[a_min:a_max])
+    axs[1].plot(range(b_min,b_max), b_signal[b_min:b_max])
 
-    sum_array = a_signal[a_signal_index-half_test_window:a_signal_index+half_test_window] + b_signal[b_signal_index-half_test_window:b_signal_index+half_test_window]
-    axs[2].plot(range(0,2*half_test_window),
-            sum_array)
-    axs[3].plot(range(0,2*half_test_window),
-            np.abs(sum_array))
+    sum_array = a_signal[a_min:a_max] + b_signal[b_min:b_max]
+    axs[2].plot(range(0,2*half_test_window), sum_array)
+    axs[3].plot(range(0,2*half_test_window), np.abs(sum_array))
     plt.draw()
     plt.pause(1)
 
@@ -139,7 +185,12 @@ def oldplot(a_signal,absmin_ts_a,half_test_window):
     plt.show()
 
 def audcommand(string):
+    global audacitytest
+
     reply = ''
+    if audacitytest and (('AddLabel' in string) or ('SetLabel' in string)):
+        print(f"TESTMODE - would send <<{string}>> to Audacity")
+        return
     audacity.write(string + '\n')
     # Allow a little time for Audacity to return the data:
     for wait in [0.1, 0.2, 0.4, 0.8, 1.0]:
@@ -203,22 +254,37 @@ def audinit():
 
 # given appropriate details, set a label on a given track
 def setlabel(LabelTrack,ts,label):
+    global step_by, precise
+
     setts = False   # by default, don't set the timestamp when setting label text, but do if we found it at ts=0
 
     dprint(f"setlabel({LabelTrack}, {ts}, {label})")
-    # round down ts to 6 digits to avoid python math wierdness
-    ts=round(ts,6)
-    # note if we had more significant digits than expected -- when we're
-    # aligning with 0.001 sec we shouldn't need to
-    passts=round(ts,3)
-    if (ts != passts):
-        if (skip_by > 1):
+    # round down ts to 8 digits to avoid python math wierdness
+    dprint(f"ts1 fractions of a second in samples: {(ts - int(ts))*max_samplerate}")
+    ts=round(ts,8)
+    dprint(f"ts2 fractions of a second in samples: {(ts - int(ts))*max_samplerate}")
+
+    # check precision of the ts
+    # - if it's more precise than step_by, note this
+    # - if precise flag is set, and it's more precise than 0.001s,
+    #   add sample offset to label
+    pass_ts=round(ts,3)
+    if (ts != pass_ts):
+        if (step_by > 1):
             sys.stderr.write(
                 f"WARNING: setlabel given timestamp {ts} with greater granularity " +
-                f"than expected {skip_by * samplerate}s")
+                f"than expected {step_by * samplerate}s")
+        elif precise:
+            # add sample offset to label -- format is HH:MM:SS + samples
+            min = int(ts/60)
+            sec = int(ts)%60
+            samples = int((ts - int(ts)) * max_samplerate)
+            note = f"({min:02d}:{sec:02d} + {samples} samples)"
+            label += " " + note
+            sys.stderr.write(f"NOTE: adding {note} to label to note correct label placement\n")
         else:
-            dprint(f"setlabel: timestamp rounded down from {ts} to {passts}")
-    ts = passts
+            dprint(f"setlabel: timestamp rounded down from {ts} to {pass_ts}")
+    ts = pass_ts
 
     audcommand(f'Select: Track={LabelTrack} Start={ts} End={ts}')
     audcommand("SetTrackStatus: Focused=1")
@@ -302,7 +368,7 @@ def find_best_alignpoint(initialpoint, signalarray):
     global samplerate, A_Align_Search, step_by
 
     returnpoint = -1
-    align_min = max(1*samplerate, initialpoint - A_Align_Search*samplerate)
+    align_min = max(int(0.5*samplerate), initialpoint - A_Align_Search*samplerate)
     align_max = min(initialpoint + A_Align_Search*samplerate, len(signalarray) - samplerate)
     max_amplitude = 0
     dprint(f"find_best_alignpoint: initial ({initialpoint}) min ({align_min}) max ({align_max})")
@@ -316,7 +382,8 @@ def find_best_alignpoint(initialpoint, signalarray):
 
 
 def main(args):
-    global max_samplerate, samplerate, fileA, fileB, debug, A_Align_Search,step_by
+    global max_samplerate, samplerate, fileA, fileB, debug, A_Align_Search, step_by, precise
+    global audacitytest
 
     # Read arguments
     fileA, start_timeA, stop_timeA = parse_file_and_startstop(args.fileA)
@@ -324,7 +391,10 @@ def main(args):
     align_points = args.alignpoints
     search_window = args.searchwindow
     test_window = args.testwindow
+    precise = args.precise
     debug = args.debug
+    debug_dump = args.dump
+    audacitytest = args.audacitytest
     half_test_window = test_window // 2
     invert = -1 if args.invert else 1
     exec_start = time.time()
@@ -366,10 +436,8 @@ def main(args):
     dprint("Use max possible amplitude in plots, instead of 8k? "+
            f"{a_audio.max_possible_amplitude }")
 
-    # Normalize volumes
-    print(f"Max volume A: {a_audio.max} B: {b_audio.max} -- normalizing both")
-    a_audio = pydub.effects.normalize(a_audio)
-    b_audio = pydub.effects.normalize(b_audio)
+    # Adjust volume
+    adjust_volume(a_audio,b_audio)
 
     # Collect left side of audio as numpy array
     samplerate = a_audio.frame_rate             # same on both now
@@ -401,8 +469,9 @@ def main(args):
     # Set stepby value -- Audacity keeps track of individual samples, but only
     # allows us to set labels by time down to the nearest 0.001 second.  So
     # let's be sure that A and B timestamps are aligned properly to these
-    # times.
-    step_by = int(0.001 * samplerate)
+    # times.  (Unless precise flag is set)
+    if not precise:
+        step_by = int(0.001 * samplerate)
     test_window = int(test_window/step_by) * step_by
     half_test_window = int(half_test_window/step_by) * step_by
 
@@ -414,6 +483,9 @@ def main(args):
         for step_a_i in range(1,align_points - 1):
             align_indices.append(step_a_i * step_a)
     align_indices.sort()
+
+    # save results for examation at the end
+    align_results = []
     
     for apidx in range(len(align_indices)):
         align_point_a = align_indices[apidx]
@@ -454,14 +526,17 @@ def main(args):
             square_array = np.square(sum_array, dtype=np.int64)
 
             # store multiple results
-            alignvalues.append([
+            j_entry = [
                 j,
                 np.sum(abssum_array),
                 np.mean(abssum_array),
                 np.std(abssum_array),
                 np.sum(square_array),
                 np.mean(abssum_array) + np.std(abssum_array)
-                ])
+                ]
+            alignvalues.append(j_entry)
+            if debug_dump:
+                print(f"{sample2ts(j)} {j_entry}")
 
         # find minimum scores in each column
         alignvalues=np.array(alignvalues)
@@ -475,6 +550,9 @@ def main(args):
         print(f"\n                 RESULT point B: "+sample2ts(align_point_b)+
               f" ({align_point_b} samples, {samplerate2max(align_point_b)})"+
               f"\n{' ':18s} Alignment by minimum (mean + stddev) of absolute value, score {min_meanstddev}")
+
+        # save results
+        align_results.append((apidx, align_point_a, align_point_b))
 
         # what were the other possibilities? -- show sample/timestamps with same minimum mean+stddev
         alignvalue_min_indices = np.where(alignvalues[:,5] == min_meanstddev)[0]
@@ -517,12 +595,30 @@ def main(args):
                         sample2ts(start_sampleB + av[0]),int(av[1]),av[2],av[3],
                         av[5], int(av[4]), int(av[0])))
 
+        # for comparing program results to manually found right results, plug
+        # your point # in here and change False to True
+        if True and apidx==0:
+            # keeping this for further manual/automatic comparison
+            targettime=0.513
+            #targetsample=int(targettime*samplerate)
+            targetsample=8207
+            # find the sample
+            alignvalue_target = np.where(alignvalues[:,0] == targetsample)[0][0]
+            av = alignvalues[alignvalue_target]
+            print(f"--- AND AT OUR TARGET {targettime}s ({targetsample})")
+            print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}\t{:8d}".format(
+                sample2ts(start_sampleB + av[0]),int(av[1]),av[2],av[3],
+                av[5], int(av[4]), int(av[0])))
+            makeplot(f"Mean+StDev (manual)",a_signal,align_point_a,b_signal,targetsample,90*half_test_window)
+            print("---")
+        ## END MANUAL DEBUG SECTION
+
         # ask if we should show the plots
         print("View graphs? [yN]", end='')
         choice = input().lower()
         if 'y' in choice:
             # show plots of results
-            makeplot("AbsMin",a_signal,align_point_a,b_signal,align_point_b,half_test_window)
+            makeplot(f"Mean+StDev #{apidx}",a_signal,align_point_a,b_signal,align_point_b,half_test_window)
 
         # ask if we should add it to Audacity
         print(f"Add align point {apidx} to Audacity? [yN] ", end='')
@@ -535,35 +631,51 @@ def main(args):
         else:
             print("No labels added to Audacity.")
 
-        if False:
-            # keeping this for further manual/automatic comparison
-            targettime=27.274
-            targetsample=int(targettime*samplerate)
-            print(f"--- AND AT OUR TARGET {targettime}s ({targetsample})")
-            for j in alignvalues:
-                if j[0] != targetsample:
-                    continue
-                print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}".format(
-                    sample2ts(start_sampleB + j[0]),j[1],j[2],j[3],
-                    j[2]+j[3], j[0]))
-                makeplot("AbsMin",a_signal,align_point_a,b_signal,targetsample,half_test_window)
-            print("---")
+        # Keep a log of scores and audacity
+        try:
+            scorelog = open("alignscore.log", "a")
+            scorelog.write(f"{fileA=} {fileB=} {apidx=} score={min_meanstddev} addtoaudacity={choice} "+
+                           f"{start_timeA=} {align_point_a=} ({samplerate2max(align_point_a)}) "+
+                           f"{start_timeB=} checked {start_b=} - {end_b=} "+
+                           f"result {align_point_b=} ({samplerate2max(align_point_b)})\n")
+            scorelog.close()
+        except Exception as e:
+            sys.exit(f"Cannot open/append alignscore.log: {e}")
+
 
         # END: for j in range(start_b, end_b, step_by):
 
     # END: for apidx in range(len(align_indices)):
 
     print("Analysis complete.")
+    print("Calculating speed difference between A and B")
+    print("Point  "+"  ".join([f'SpeedVSPt{n}' for n in range(len(align_results)-1)]))
+    for ar_i in range(1,len(align_results)):
+        print(f"{ar_i:5d}  ",end='')
+        for comparepoint in range(ar_i):
+            # mix/original A/B
+            delta = 100 * ((align_results[ar_i][1] - align_results[comparepoint][1]) /
+                           (align_results[ar_i][2] - align_results[comparepoint][2]))
+            print(f"{delta:10.2f}  ",end='')
+        print('')
+    print(advice)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Audio file alignment')
-    parser.add_argument('fileA', help='File A path and optional start/stop time in seconds (e.g. fileA, fileA:10, or fileA:10:500)')
-    parser.add_argument('fileB', help='File B path and optional start/stop time in seconds (e.g. fileA, fileB:20, or fileB:20:600)')
+    parser.add_argument('fileA', help='File A path and optional start/stop time in seconds (e.g. fileA, fileA:10.1, or fileA:10.1:500.2)')
+    parser.add_argument('fileB', help='File B path and optional start/stop time in seconds (e.g. fileB, fileB:20, or fileB:20.5:600.0)')
     parser.add_argument('--alignpoints', type=int, default=5, help='Number of alignment points (default: 5)')
     parser.add_argument('--searchwindow', type=float, default=5.0, help='Search window in seconds (default: 5.0)')
     parser.add_argument('--testwindow', type=int, default=100, help='Test window in samples (default: 100)')
     parser.add_argument('--debug', action='store_true', help='Enable debug text')
+    parser.add_argument('--dump', action='store_true', help='Show whole score table for align attempt')
     parser.add_argument('--invert', action='store_true', help='Invert signal B before adding signals to compare them')
+    parser.add_argument('--precise', action='store_true',
+                        help='By default we search for timestamps to the nearest 0.001s, as we cannot pass '+
+                             'anything more precise to Audacity.  With this flag, search for timestamps to '+
+                             'the precision of the lowest rate between A and B, and reflect this in the notes '+
+                             'to Audacity')
+    parser.add_argument('--audacitytest', action='store_true', help='Print Audacity commands, but do not send them')
 
     args = parser.parse_args()
     main(args)
