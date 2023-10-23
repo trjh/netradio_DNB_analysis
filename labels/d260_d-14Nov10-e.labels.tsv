@@ -29,11 +29,20 @@
 404.592000	405.200000	track sync: 4 ending
 407.121624	443.416599	note: ~battle sounds
 430.212188	443.586660	note: helicopter, and a chorus?
-443.451355	468.272000	start053: ID: Net Radio - Promo6 Peace
+443.451355	467.872029	start053: ID: Net Radio - Promo6 Peace
 446.807980	446.807980	orig052 end: 4
 447.504821	447.504821	orig052 end: .
-468.272100	834.598000	start054: ID: Codename John - Dreams of Heaven
+467.872029	467.872029	orig054 start: rough 1
+467.872029	834.598000	start054: ID: Codename John - Dreams of Heaven
+467.873315	467.873345	orig054 start: .
+467.873345	467.873345	LISTENCHECK orig054 start: A
+468.368410	468.368410	note: 3 to 4-5 peaks
+468.384129	468.386313	LISTENCHECK orig054 sync: A
+468.384129	468.386313	track sync: A
+470.469059	470.469059	orig054 start: rough align 2
+543.387429	543.422790	note: rough align 2
 810.786625	810.786625	note: file start d276-293b
+834.371304	834.371304	orig054 end: .
 834.598138	834.598138	start055: ID: John B - Secrets
 879.283824	881.268943	file note: skip?
 919.854701	924.693430	note: ~there is a secret soul
