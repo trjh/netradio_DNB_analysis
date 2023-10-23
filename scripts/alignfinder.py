@@ -76,26 +76,59 @@ def sample_profile(samples, sr):
         sample2ts(samples),
         sr/1000)
 
+def np_rms(np_array):
+    return np.sqrt(np.mean(np.square(np_array, dtype=np.int64)))
 
+# works for both AudioSegments and numpy arrays
 def adjust_volume(a, b):
-    print(f"Max volume A: {a.max:5d} B: {b.max:5d}\n"+
-          f"RMS        A: {a.rms:5d} B: {b.rms:5d}")
-    
-    adjustedA = adjustedB = ""
-    if a.rms < b.rms:
-        needed_boost = pydub.utils.ratio_to_db(b.rms / a.rms)
-        a = a.apply_gain(needed_boost)
-        adjustedA = "adjusted"
-    elif a.rms > b.rms:
-        needed_boost = pydub.utils.ratio_to_db(a.rms / b.rms)
-        b = b.apply_gain(needed_boost)
-        adjustedB = "adjusted"
-    else:
-        print("No difference in RMS, no volume adjustment.")
+    # AudioSegment
+    if isinstance(a, pydub.audio_segment.AudioSegment):
+        print(f"Max volume A: {a.max:5d} B: {b.max:5d}\n"+
+              f"RMS        A: {a.rms:5d} B: {b.rms:5d}")
 
-    print(f"Max volume {adjustedA}A: {a.max:5d} {adjustedB}B: {b.max:5d}\n"+
-          f"RMS        {adjustedA}A: {a.rms:5d} {adjustedB}B: {b.rms:5d}")
-    return
+        adjustedA = adjustedB = ""
+        if a.rms < b.rms:
+            needed_boost = pydub.utils.ratio_to_db(b.rms / a.rms)
+            a = a.apply_gain(needed_boost)
+            adjustedA = "adjusted"
+        elif a.rms > b.rms:
+            needed_boost = pydub.utils.ratio_to_db(a.rms / b.rms)
+            b = b.apply_gain(needed_boost)
+            adjustedB = "adjusted"
+        else:
+            print("No difference in RMS, no volume adjustment.")
+
+        print(f"Max volume {adjustedA}A: {a.max:5d} {adjustedB}B: {b.max:5d}\n"+
+              f"RMS        {adjustedA}A: {a.rms:5d} {adjustedB}B: {b.rms:5d}")
+        return
+
+    # signal array
+    elif isinstance(a, np.ndarray):
+        # https://superkogito.github.io/blog/2020/04/30/rms_normalization.html
+        a_rms = np_rms(a)
+        b_rms = np_rms(b)
+        print(f"Max volume A: {a.max():5d} B: {b.max():5d}\n"+
+              f"RMS        A: {a_rms:5.2f} B: {b_rms:5.2f}")
+
+        adjustedA = adjustedB = ""
+
+        def adjust(signal, ratio):
+            return np.rint(signal*ratio).astype(int)
+
+        if a_rms < b_rms:
+            a = adjust(a, b_rms/a_rms)
+            a_rms = np_rms(a)
+            adjustedA = "adjusted"
+        elif a_rms > b_rms:
+            b = adjust(b, a_rms/b_rms)
+            b_rms = np_rms(b)
+            adjustedB = "adjusted"
+        else:
+            print("No difference in RMS, no volume adjustment.")
+
+        print(f"Max volume {adjustedA}A: {a.max():5d} {adjustedB}B: {b.max():5d}\n"+
+              f"RMS        {adjustedA}A: {a_rms:5.2f} {adjustedB}B: {b_rms:5.2f}")
+        return
 
     if False:
         # second way -- normalize both, but this just adjust to max volume,
@@ -131,20 +164,33 @@ def makeplot(label,a_signal,a_signal_index,b_signal,b_signal_index,half_test_win
     fig, axs= plt.subplots(1, 4)
     fig.suptitle(f'{label} Waves A, B, Added, Added(abs)')
     fig.set_figwidth(15)
+    orig_a_min = orig_a_max = orig_b_min = orig_b_max = 0
 
-    # calculate range
-    a_min=max(0,a_signal_index-half_test_window)
-    a_max=min(len(a_signal),a_signal_index+half_test_window)
-    b_min=max(0,b_signal_index-half_test_window)
-    b_max=min(len(b_signal),b_signal_index+half_test_window)
+    # calculate range -- we could alternatively use max amplitude a_audio.max_possible_amplitude
+    orig_a_min = a_min=max(0,a_signal_index-half_test_window)
+    orig_a_max = a_max=min(len(a_signal),a_signal_index+half_test_window)
+    orig_b_min = b_min=max(0,b_signal_index-half_test_window)
+    orig_b_max = b_max=min(len(b_signal),b_signal_index+half_test_window)
+
+    dprint(f"makeplot: A range {a_min} - {a_max}\n          B range {b_min} - {b_max}")
 
     # check size, for when we've really expanded the scale
     if ((a_max - a_min) < (b_max-b_min)):
         correctvalue = ((b_max-b_min) - (a_max - a_min))
-        sys.exit(f"B scale is {correctvalue} larger than A, exiting")
+        dprint(f"Adjusting B scale as it is {correctvalue} larger than A")
+        a_left = a_signal_index-a_min
+        a_right = a_max-a_signal_index
+        b_min = b_signal_index-a_left
+        b_max = b_signal_index+a_right
+        dprint(f"     now: A range {a_min} - {a_max}\n          B range {b_min} - {b_max}")
     elif ((a_max - a_min) > (b_max-b_min)):
         correctvalue = ((a_max-a_min) - (b_max - b_min))
-        sys.exit(f"A scale is {correctvalue} larger than B, exiting")
+        dprint(f"Adjusting A scale as it is {correctvalue} larger than B")
+        b_left = b_signal_index-b_min
+        b_right = b_max-b_signal_index
+        a_min = a_signal_index-b_left
+        a_max = a_signal_index+b_right
+        dprint(f"     now: A range {a_min} - {a_max}\n          B range {b_min} - {b_max}")
 
     # calculate scale
     scale = 16000
@@ -163,12 +209,13 @@ def makeplot(label,a_signal,a_signal_index,b_signal,b_signal_index,half_test_win
     axs[2].axvline(half_test_window)
     axs[3].axvline(half_test_window)
 
-    axs[0].plot(range(a_min,a_max), a_signal[a_min:a_max])
-    axs[1].plot(range(b_min,b_max), b_signal[b_min:b_max])
+    axs[0].plot(range(orig_a_min,orig_a_max), a_signal[orig_a_min:orig_a_max])
+    axs[1].plot(range(orig_b_min,orig_b_max), b_signal[orig_b_min:orig_b_max])
 
     sum_array = a_signal[a_min:a_max] + b_signal[b_min:b_max]
-    axs[2].plot(range(0,2*half_test_window), sum_array)
-    axs[3].plot(range(0,2*half_test_window), np.abs(sum_array))
+    print(f"sum_array = a_signal[{a_min=}:{a_max=}] + b_signal[{b_min=}:{b_max=}] -- oh and 2*{half_test_window=}")
+    axs[2].plot(range(0,a_max-a_min), sum_array)
+    axs[3].plot(range(0,a_max-a_min), np.abs(sum_array))
     plt.draw()
     plt.pause(1)
 
@@ -395,6 +442,7 @@ def main(args):
     debug = args.debug
     debug_dump = args.dump
     audacitytest = args.audacitytest
+    localnorm = args.localnorm
     half_test_window = test_window // 2
     invert = -1 if args.invert else 1
     exec_start = time.time()
@@ -418,10 +466,8 @@ def main(args):
     except Exception as e:
         sys.exit(f"Cannot read {fileA}: {e}")
 
-    print(f".    Input: a length {len(a_audio)/1000}s, "
-          + f"rate {a_audio.frame_rate/1000}kHz")
-    print(f".    Input: b length {len(b_audio)/1000}s, "
-          + f"rate {b_audio.frame_rate/1000}kHz")
+    print(f".    Input: a length {len(a_audio)/1000}s, rate {a_audio.frame_rate/1000}kHz")
+    print(f".    Input: b length {len(b_audio)/1000}s, rate {b_audio.frame_rate/1000}kHz")
 
     # Equalize sample rate
     if (a_audio.frame_rate < b_audio.frame_rate):
@@ -432,9 +478,6 @@ def main(args):
         print(f"Resampling B from {b_audio.frame_rate/1000}kHz to {a_audio.frame_rate/1000}kHz")
         max_samplerate = a_audio.frame_rate
         a_audio = a_audio.set_frame_rate(b_audio.frame_rate)
-
-    dprint("Use max possible amplitude in plots, instead of 8k? "+
-           f"{a_audio.max_possible_amplitude }")
 
     # Adjust volume
     adjust_volume(a_audio,b_audio)
@@ -500,10 +543,18 @@ def main(args):
                 align_point_a = newpoint
                 break
 
+        # build seperate array of A signals we are searching
+        a_signal_offset = align_point_a - half_test_window
+        a_signal_slice = np.array(a_signal[a_signal_offset:align_point_a+half_test_window])
+
         # Establish range to search in B
         start_b = max(half_test_window, align_point_a - search_window_samples)
         end_b = min(len(b_signal)-half_test_window, align_point_a + search_window_samples)
         dprint(f"Search point B: {start_b} - {end_b}")
+
+        # make B search range a seperate slice
+        b_signal_offset = start_b - half_test_window
+        b_signal_slice = np.array(b_signal[b_signal_offset:end_b+half_test_window])
 
         print(f"\nChecking align point {apidx}: point A: "+sample2ts(align_point_a)
               +f" (from checking start) : ({align_point_a} samples, {samplerate2max(align_point_a)})\n"
@@ -512,9 +563,14 @@ def main(args):
 
         alignvalues=[]
 
+        # at this point we could normalize the volumes of a_signal_slice and b_signal_slice
+        if localnorm:
+            adjust_volume(a_signal_slice,b_signal_slice)
+
         for j in range(start_b, end_b, step_by):
-            sum_array = (a_signal[align_point_a-half_test_window:align_point_a+half_test_window] +
-                         invert * b_signal[j-half_test_window:j+half_test_window])
+            b_j_start = j-b_signal_offset-half_test_window
+            b_j_end   = j-b_signal_offset+half_test_window
+            sum_array = a_signal_slice + b_signal_slice[b_j_start:b_j_end]
 
             # now that that is really an array, try mean of abs
             # wave_sum = np.mean(np.abs(sum_array))
@@ -532,7 +588,8 @@ def main(args):
                 np.mean(abssum_array),
                 np.std(abssum_array),
                 np.sum(square_array),
-                np.mean(abssum_array) + np.std(abssum_array)
+                np.mean(abssum_array) + np.std(abssum_array),
+                np_rms(sum_array)
                 ]
             alignvalues.append(j_entry)
             if debug_dump:
@@ -569,7 +626,7 @@ def main(args):
 
         # what were the timestamps according to other scores?
         print("Timestamp  Scoring Method")
-        for im in [("Sum",1), ("Mean",2), ("StdDev",3), ("SumSquared",4)]:
+        for im in [("Sum",1), ("Mean",2), ("StdDev",3), ("SumSquared",4), ("RMS", 6)]:
             im_ts = alignvalues[min_indices[im[1]],0]
             print("{:9s}  {:10s} {}".format(sample2ts(im_ts), im[0],
                 "MATCH" if (im_ts == align_point_b) else "(differs)"
@@ -577,13 +634,14 @@ def main(args):
 
         # debug print of align point finding details
         if debug:
-            print("{:9s}    {:>8s}\t{:>8s}\t{:>8s}\t{:>8s}\t{:>8s}\t{:>8s}".format(
-                "Timestamp", "Sum", "Mean", "Std", "Mean+Std", "Sum(^2)", "TS(raw)"))
+            print("{:9s}    {:>8s}\t{:>8s}\t{:>8s}\t{:>8s}\t{:>8s}\t{:>8s}\t{:>8s}".format(
+                "Timestamp", "Sum", "Mean", "Std", "Mean+Std", "Sum(^2)", "RMS", "TS(raw)"))
             for pair in [("Mean+Std",5),
                          ("Sum",1),
                          ("Mean",2),
                          ("Std",3),
-                         ("Sum(Squared)",4)]:
+                         ("Sum(Squared)",4),
+                         ("RMS",6)]:
                 print(f"--- by {pair[0]}")
                 # get indices that would sort by each method
                 sorted_indices = np.argsort(alignvalues[:, pair[1]])
@@ -591,9 +649,9 @@ def main(args):
                 # print lowest five values
                 for k in range(5):
                     av=alignvalues[sorted_indices[k]]
-                    print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}\t{:8d}".format(
+                    print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}\t{:8.2f}\t{:8d}".format(
                         sample2ts(start_sampleB + av[0]),int(av[1]),av[2],av[3],
-                        av[5], int(av[4]), int(av[0])))
+                        av[5], int(av[4]), av[6], int(av[0])))
 
         # for comparing program results to manually found right results, plug
         # your point # in here and change False to True
@@ -609,7 +667,15 @@ def main(args):
             print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}\t{:8d}".format(
                 sample2ts(start_sampleB + av[0]),int(av[1]),av[2],av[3],
                 av[5], int(av[4]), int(av[0])))
+            sys.stderr.write("NOTE -- half_test_window adjusted to 90x here!  NOTE NOTE\n")
             makeplot(f"Mean+StDev (manual)",a_signal,align_point_a,b_signal,targetsample,90*half_test_window)
+            print("OURGRAPH - original signal array -- hit return", end='')
+            choice = input().lower()
+            print("")
+            makeplot(f"Mean+StDev (manual)",a_signal_slice,align_point_a-a_signal_offset,
+                                            b_signal_slice,targetsample-b_signal_offset,2*half_test_window)
+            print("OURGRAPH - signal slice array -- hit return", end='')
+            choice = input().lower()
             print("---")
         ## END MANUAL DEBUG SECTION
 
@@ -670,6 +736,11 @@ if __name__ == "__main__":
     parser.add_argument('--debug', action='store_true', help='Enable debug text')
     parser.add_argument('--dump', action='store_true', help='Show whole score table for align attempt')
     parser.add_argument('--invert', action='store_true', help='Invert signal B before adding signals to compare them')
+    parser.add_argument('--localnorm', action='store_true',
+                        help='By default, this program normalizes both samples so that theoretically the volume '+
+                             'levels should be the same.  Sometimes this doesn\'t seem to work.  In this '+
+                             'case, using this flag will normalize each A and B search window -- however, '+
+                             'this may lead to false positives')
     parser.add_argument('--precise', action='store_true',
                         help='By default we search for timestamps to the nearest 0.001s, as we cannot pass '+
                              'anything more precise to Audacity.  With this flag, search for timestamps to '+
