@@ -122,7 +122,7 @@ def adjust_line(entry):
     global adjust_value
     for i in range(2):
         entry[i] -= adjust_value
-    if match := re.match(r"file (start )?sync: (.+):? ([0-9.]+)(.*)", entry[2]):
+    if match := re.match(r"file (start )?sync: (.+):? ([0-9.]+) (.*)", entry[2]):
         # adjust sync time too
         try:
             syncfloat = float(match.group(3))
@@ -133,7 +133,7 @@ def adjust_line(entry):
 
         newlabel = f"file {match.group(1)}sync: {match.group(2)} {syncfloat}"
         if (len(match.groups()) > 3):
-            newlabel += match.group(4)
+            newlabel += " " + match.group(4)
         sys.stderr.write(f"ADJUSTED START OLD: {entry[2]}\n")
         sys.stderr.write(f"ADJUSTED START NEW: {newlabel}\n")
         entry[2] = newlabel
