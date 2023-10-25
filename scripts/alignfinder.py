@@ -35,6 +35,8 @@ fig = None
 # advice
 advice = """
     - Ensure that your starting points match up closely to the start of each song
+    - Try expanding your test window to more than the default number of samples
+    - Check that your search window is not too narrow
 """
 
 def dprint(string):
@@ -83,8 +85,8 @@ def np_rms(np_array):
 def adjust_volume(a, b):
     # AudioSegment
     if isinstance(a, pydub.audio_segment.AudioSegment):
-        print(f"Max volume A: {a.max:5d} B: {b.max:5d}\n"+
-              f"RMS        A: {a.rms:5d} B: {b.rms:5d}")
+        dprint(f"Max volume A: {a.max:5d} B: {b.max:5d}\n"+
+               f"RMS        A: {a.rms:5d} B: {b.rms:5d}")
 
         adjustedA = adjustedB = ""
         if a.rms < b.rms:
@@ -98,37 +100,57 @@ def adjust_volume(a, b):
         else:
             print("No difference in RMS, no volume adjustment.")
 
-        print(f"Max volume {adjustedA}A: {a.max:5d} {adjustedB}B: {b.max:5d}\n"+
-              f"RMS        {adjustedA}A: {a.rms:5d} {adjustedB}B: {b.rms:5d}")
+        dprint(f"Max volume {adjustedA}A: {a.max:5d} {adjustedB}B: {b.max:5d}\n"+
+               f"RMS        {adjustedA}A: {a.rms:5d} {adjustedB}B: {b.rms:5d}")
         return
 
     # signal array
     elif isinstance(a, np.ndarray):
         # https://superkogito.github.io/blog/2020/04/30/rms_normalization.html
-        a_rms = np_rms(a)
-        b_rms = np_rms(b)
-        print(f"Max volume A: {a.max():5d} B: {b.max():5d}\n"+
-              f"RMS        A: {a_rms:5.2f} B: {b_rms:5.2f}")
+        signals = {'a': a, 'b': b}
+        adjust = source = ""
+        sig_rms = {}
+        maxvol = {}
 
-        adjustedA = adjustedB = ""
+        dprint("   Max Volume      RMS")
+        for k in signals.keys():
+            sig_rms[k] = np_rms(signals[k])
+            maxvol[k] = np.abs(signals[k]).max()
+            dprint(f"{k}: {maxvol[k]:10d} {sig_rms[k]:8.2f}")
 
-        def adjust(signal, ratio):
-            return np.rint(signal*ratio).astype(int)
+        # set this to sig_rms to use RMS instead of amplitude
+        adjust_value = maxvol
+        adjust_string = "Amplitude"
 
-        if a_rms < b_rms:
-            a = adjust(a, b_rms/a_rms)
-            a_rms = np_rms(a)
-            adjustedA = "adjusted"
-        elif a_rms > b_rms:
-            b = adjust(b, a_rms/b_rms)
-            b_rms = np_rms(b)
-            adjustedB = "adjusted"
+        if adjust_value['a'] < adjust_value['b']:
+            adjust = 'a'
+            source = 'b'
+        elif adjust_value['a'] > adjust_value['b']:
+            adjust = 'b'
+            source = 'a'
         else:
-            print("No difference in RMS, no volume adjustment.")
+            dprint(f"No difference in {adjust_string}, no volume adjustment.")
 
-        print(f"Max volume {adjustedA}A: {a.max():5d} {adjustedB}B: {b.max():5d}\n"+
-              f"RMS        {adjustedA}A: {a_rms:5.2f} {adjustedB}B: {b_rms:5.2f}")
-        return
+        if adjust:
+            orig = signals[adjust]
+            # uncomment to adjust by RMS
+            # factor  sig_rms[source]/sig_rms[adjust]
+            factor = adjust_value[source]/adjust_value[adjust]
+            dprint(f"Adjusting {adjust} by {factor}")
+            signals[adjust] = np.rint(signals[adjust]*factor).astype(int)
+            sig_rms[adjust] = np_rms(signals[adjust])
+            maxvol[adjust] = np.abs(signals[adjust]).max()
+            if debug:
+                print("Showing volume adjustment plot, hit return to continue.")
+                volumeplot(f"Original {adjust}, Original {source}, Adjusted {adjust} - byamplitude",
+                           orig,signals[source],signals[adjust])
+                input()
+
+        dprint("   Max Volume      RMS")
+        for k in signals.keys():
+            dprint(f"{k}: {maxvol[k]:10d} {sig_rms[k]:8.2f}")
+
+        return (signals['a'],signals['b'])
 
     if False:
         # second way -- normalize both, but this just adjust to max volume,
@@ -209,8 +231,12 @@ def makeplot(label,a_signal,a_signal_index,b_signal,b_signal_index,half_test_win
     axs[2].axvline(half_test_window)
     axs[3].axvline(half_test_window)
 
-    axs[0].plot(range(orig_a_min,orig_a_max), a_signal[orig_a_min:orig_a_max])
-    axs[1].plot(range(orig_b_min,orig_b_max), b_signal[orig_b_min:orig_b_max])
+    if half_test_window < 25:
+        axs[0].stem(range(orig_a_min,orig_a_max), a_signal[orig_a_min:orig_a_max])
+        axs[1].stem(range(orig_b_min,orig_b_max), b_signal[orig_b_min:orig_b_max])
+    else:
+        axs[0].plot(range(orig_a_min,orig_a_max), a_signal[orig_a_min:orig_a_max])
+        axs[1].plot(range(orig_b_min,orig_b_max), b_signal[orig_b_min:orig_b_max])
 
     sum_array = a_signal[a_min:a_max] + b_signal[b_min:b_max]
     print(f"sum_array = a_signal[{a_min=}:{a_max=}] + b_signal[{b_min=}:{b_max=}] -- oh and 2*{half_test_window=}")
@@ -219,17 +245,35 @@ def makeplot(label,a_signal,a_signal_index,b_signal,b_signal_index,half_test_win
     plt.draw()
     plt.pause(1)
 
-def oldplot(a_signal,absmin_ts_a,half_test_window):
-    plt.figure(1)
-    time = np.linspace(
-        absmin_ts_a-half_test_window, # start
-        test_window / samplerate,
-        num = test_window
-    )
-    plt.plot(time, 
-        a_signal[absmin_ts_a-half_test_window:absmin_ts_a+half_test_window])
 
-    plt.show()
+# plot before/after for adjust_volume
+def volumeplot(label,a_signal,b_signal,c_signal):
+    global fig
+
+    signals = [a_signal, b_signal, c_signal]
+
+    fig, axs= plt.subplots(1, 3)
+    fig.suptitle(label)
+    fig.set_figwidth(15)
+
+    # calculate scale
+    scale = 16000
+    for s in signals:
+        val = np.max(np.abs(s))
+        if val > scale:
+            scale = val
+
+    for ax in axs:
+        ax.set(ylim=(-1*scale,scale))
+        ax.axhline(0)
+
+    for s in range(len(signals)):
+        l = len(signals[s])
+        axs[s].axvline(l/2)   # x-axis line
+        axs[s].plot(range(l), signals[s])
+
+    plt.draw()
+    plt.pause(1)
 
 def audcommand(string):
     global audacitytest
@@ -300,40 +344,52 @@ def audinit():
         
 
 # given appropriate details, set a label on a given track
-def setlabel(LabelTrack,ts,label):
+def setlabel(LabelTrack,ts,label,endts=None):
     global step_by, precise
 
     setts = False   # by default, don't set the timestamp when setting label text, but do if we found it at ts=0
 
-    dprint(f"setlabel({LabelTrack}, {ts}, {label})")
-    # round down ts to 8 digits to avoid python math wierdness
-    dprint(f"ts1 fractions of a second in samples: {(ts - int(ts))*max_samplerate}")
-    ts=round(ts,8)
-    dprint(f"ts2 fractions of a second in samples: {(ts - int(ts))*max_samplerate}")
+    dprint(f"setlabel({LabelTrack}, {ts}, {label}, endts={endts})")
+    if (not LabelTrack) or (not ts) or (not label):
+        sys.exit(f"invalid arguments to setlabel({LabelTrack}, {ts}, {label}, endts={endts})")
 
-    # check precision of the ts
-    # - if it's more precise than step_by, note this
-    # - if precise flag is set, and it's more precise than 0.001s,
-    #   add sample offset to label
-    pass_ts=round(ts,3)
-    if (ts != pass_ts):
-        if (step_by > 1):
-            sys.stderr.write(
-                f"WARNING: setlabel given timestamp {ts} with greater granularity " +
-                f"than expected {step_by * samplerate}s")
-        elif precise:
-            # add sample offset to label -- format is HH:MM:SS + samples
-            min = int(ts/60)
-            sec = int(ts)%60
-            samples = int((ts - int(ts)) * max_samplerate)
-            note = f"({min:02d}:{sec:02d} + {samples} samples)"
-            label += " " + note
-            sys.stderr.write(f"NOTE: adding {note} to label to note correct label placement\n")
-        else:
-            dprint(f"setlabel: timestamp rounded down from {ts} to {pass_ts}")
-    ts = pass_ts
+    ts = [ts, endts if endts else ts]
+    note = ""
 
-    audcommand(f'Select: Track={LabelTrack} Start={ts} End={ts}')
+    # Adjust the timestamps
+    for i in [0,1]:
+        # round down ts to 8 digits to avoid python math wierdness
+        dprint(f"ts[{i}] fractions of a second in samples: {(ts[i] - int(ts[i]))*max_samplerate}")
+        ts[i]=round(ts[i],8)
+
+        # check precision of the ts
+        # - if it's more precise than step_by, note this
+        # - if precise flag is set, and it's more precise than 0.001s,
+        #   add sample offset to label
+        pass_ts=round(ts[i],3)
+        if (ts[i] != pass_ts):
+            if (step_by > 1):
+                sys.stderr.write(
+                    f"WARNING: setlabel given timestamp {ts[i]} with greater granularity " +
+                    f"than expected {step_by * samplerate}s")
+            elif precise:
+                # add sample offset to label -- format is HH:MM:SS + samples
+                min = int(ts[i]/60)
+                sec = int(ts[i])%60
+                samples = int((ts[i] - int(ts[i])) * max_samplerate)
+                if note and (ts[0] != pass_ts):
+                    dprint(f"ADDING TO NOTE AS ts0 ({ts[0]}) != ts1/pass_ts ({pass_ts})")
+                    note += "-"
+                if not note or (ts[0] != pass_ts):
+                    note += f"({min:02d}:{sec:02d} + {samples} samples)"
+                sys.stderr.write(f"NOTE: adding {note} to label to note correct label placement\n")
+            else:
+                dprint(f"setlabel: timestamp rounded down from {ts[i]} to {pass_ts[i]}")
+        ts[i] = pass_ts
+
+    label += " " + note
+
+    audcommand(f'Select: Track={LabelTrack} Start={ts[0]} End={ts[1]}')
     audcommand("SetTrackStatus: Focused=1")
     audcommand("AddLabel:")
         # now, stupidly, we need to find the # of the label we just added
@@ -344,19 +400,24 @@ def setlabel(LabelTrack,ts,label):
         # where each label track is [tracknumber, [[ts1, ts2, label], ...]
     labelnum = 0
     newlabelnum = None
+    justblank = []
     for lt in aud_labels:
         dprint(f"label track {lt[0]}")
         for l in lt[1]:
             dprint(f"label{labelnum}: {l}")
-            if l[2] == '' and l[0] == ts and l[1] == ts:
+            if l[2] == '' and l[0] == ts[0] and l[1] == ts[1]:
                 # this is our label number
                 newlabelnum = labelnum
                 break
+            elif l[2] == '':
+                print(f"Blank label# {labelnum} start={l[0]} end={l[1]}")
+                justblank.append(labelnum)
             labelnum += 1
-    if not newlabelnum:
-        sys.stderr.write(f"Could not find the empty label we just created at {ts} in track {ALabelTrack}, "
+    if not newlabelnum and not audacitytest:
+        sys.stderr.write(f"Could not find the empty label we just created at {ts[0]}-{ts[1]} in track {ALabelTrack}, "
                          + "trying at ts=0\n")
         setts = True
+        labelnum = 0
         for lt in aud_labels:
             for l in lt[1]:
                 if l[2] == '' and l[0] == 0 and l[1] == 0:
@@ -365,16 +426,31 @@ def setlabel(LabelTrack,ts,label):
                     break
                 labelnum += 1
         if not newlabelnum:
-            sys.exit(f"Could not find the empty label we just created in track {ALabelTrack} at ts=0 or ts={ts}")
+            sys.stderr.write(f"Could not find the empty label we just created in track {ALabelTrack} "
+                             + f"at ts=0 or ts={ts[0]} but we found these blank labels {justblank}\n")
+            if len(justblank) == 1:
+                print(f"Using only blank, label# {justblank[0]}")
+                newlabelnum = justblank[0]
+            elif len(justblank) == 0:
+                sys.exit(f"Could not find any blank labels.")
+            else:
+                print("Please chose a label number from above list: ",end='')
+                choice = int(input().lower())
+                if choice in justblank:
+                    print("Using label# {choice}")
+                    newlabelnum = choice
+                else:
+                    sys.exit(f"Choice {choice} not a valid label number, exiting.")
+
     # finally, set the label description
     command = f'SetLabel: Label={newlabelnum} Text="{label}"'
     if setts:
-        command += f' Start={ts} End={ts}'
+        command += f' Start={ts[0]} End={ts[1]}'
     audcommand(command)
 
 # Given an alignment label, A track timestamp, and B track timestamp,
 # Set labels on the A track for start of B and alignment, and set label on B for alignment
-def setlabels(label, A_ts, B_ts):
+def setlabels(label, A_ts, B_ts, B_start=None, B_end=None, justA=False):
     global aud_tracks, aud_clips, fileA, fileB, ALabelTrack, BLabelTrack, BAudioTrack, BNumber
     aud_labels = None
 
@@ -396,13 +472,19 @@ def setlabels(label, A_ts, B_ts):
             break
 
     # Set A alignment label
-    setlabel(ALabelTrack,A_ts,"note: "+label)
+    setlabel(ALabelTrack,A_ts,"NOTE: "+label)
+    if justA:
+        return
 
     # Set A start-of-B label
-    setlabel(ALabelTrack,A_ts-B_ts,f"orig{BNumber} start: "+label)
+    setlabel(ALabelTrack,A_ts-B_ts,f"ORIG{BNumber} start: "+label)
 
     # Set B alignment label
-    setlabel(BLabelTrack,BClipStart+B_ts,f"orig{BNumber} note: "+label)
+    setlabel(BLabelTrack,BClipStart+B_ts,f"ORIG{BNumber} NOTE: "+label)
+
+    # Set B range label
+    if B_start:
+        setlabel(BLabelTrack,BClipStart+B_start,f"ORIG{BNumber} NOTE: search range "+label,endts=BClipStart+B_end)
 
 
 # given initial proposed alignment point in signalarray, find point that meets
@@ -508,6 +590,7 @@ def main(args):
 
     # Convert search window value from seconds to samples
     search_window_samples = int(search_window * samplerate)
+    dprint(f"Search window in seconds: {search_window}, in samples: {search_window_samples}")
 
     # Set stepby value -- Audacity keeps track of individual samples, but only
     # allows us to set labels by time down to the nearest 0.001 second.  So
@@ -546,11 +629,18 @@ def main(args):
         # build seperate array of A signals we are searching
         a_signal_offset = align_point_a - half_test_window
         a_signal_slice = np.array(a_signal[a_signal_offset:align_point_a+half_test_window])
+        a_signal_rms = np_rms(a_signal_slice)
 
         # Establish range to search in B
-        start_b = max(half_test_window, align_point_a - search_window_samples)
-        end_b = min(len(b_signal)-half_test_window, align_point_a + search_window_samples)
-        dprint(f"Search point B: {start_b} - {end_b}")
+        dprint(f"Search point B theory: {align_point_a - search_window_samples} - "+
+               f"{align_point_a + search_window_samples}, width {2*search_window_samples}")
+        last_point_adjust = 0
+        if align_results:
+            last_point_adjust = align_results[-1][2] - align_results[-1][1]
+            dprint(f"Shifting B window by {last_point_adjust} to account for diff between last point A&B")
+        start_b = max(half_test_window, (align_point_a - search_window_samples)+last_point_adjust)
+        end_b   = min(len(b_signal)-half_test_window, align_point_a + search_window_samples + last_point_adjust)
+        dprint(f"Search point B actual: {start_b} - {end_b}, width {end_b - start_b}")
 
         # make B search range a seperate slice
         b_signal_offset = start_b - half_test_window
@@ -565,43 +655,56 @@ def main(args):
 
         # at this point we could normalize the volumes of a_signal_slice and b_signal_slice
         if localnorm:
-            adjust_volume(a_signal_slice,b_signal_slice)
+            (a_signal_slice, b_signal_slice) = adjust_volume(a_signal_slice,b_signal_slice)
 
         for j in range(start_b, end_b, step_by):
             b_j_start = j-b_signal_offset-half_test_window
             b_j_end   = j-b_signal_offset+half_test_window
             sum_array = a_signal_slice + b_signal_slice[b_j_start:b_j_end]
 
-            # now that that is really an array, try mean of abs
-            # wave_sum = np.mean(np.abs(sum_array))
+            # reject the point of RMS of sum is greater than RMS of A or of B
+            # -- adding the signals should in *some* way lessen the signal
+            b_signal_rms = np_rms(b_signal_slice[b_j_start:b_j_end])
+            sum_rms = np_rms(sum_array)
+            reject = False
+            if (sum_rms > a_signal_rms) or (sum_rms > b_signal_rms):
+                reject = True
 
+            # Add element to score -- difference between RMS
+            diff_rms = abs(a_signal_rms - b_signal_rms)
+
+            # Calculate various scoring values, we'll select one later
             abssum_array = np.abs(sum_array)
-            # we *should* be able to use np.square but... it isn't doing what it is supposed to do
-            # square_array = [pow(x,2) for x in sum_array]
-            # too slow -- were we wrapping around?
-            square_array = np.square(sum_array, dtype=np.int64)
+            mean = np.mean(abssum_array)
+            std  = np.std(abssum_array)
 
             # store multiple results
             j_entry = [
                 j,
                 np.sum(abssum_array),
-                np.mean(abssum_array),
-                np.std(abssum_array),
-                np.sum(square_array),
-                np.mean(abssum_array) + np.std(abssum_array),
-                np_rms(sum_array)
+                mean,
+                std,
+                np.sum(np.square(sum_array, dtype=np.int64)),
+                mean + std + diff_rms,
+                sum_rms,
+                reject
                 ]
             alignvalues.append(j_entry)
             if debug_dump:
                 print(f"{sample2ts(j)} {j_entry}")
 
-        # find minimum scores in each column
+        # find minimum scores in each column -- where sum RMS is less than A RMS and B RMS
         alignvalues=np.array(alignvalues)
-        min_indices = np.argmin(alignvalues, axis=0)
+        filtered_rows = alignvalues[alignvalues[:, -1] == False]
+        print(f"Data points examined: {alignvalues.shape[0]}, results where sum lowered RMS: {filtered_rows.shape[0]}")
+        if filtered_rows.shape[0] == 0:
+            print(f"\nWARNING: No good signal matches according to RMS tests, ignoring the test :WARNING")
+            filtered_rows = alignvalues
+        min_indices = np.argmin(filtered_rows, axis=0)
 
         # select alignment point by mean + stddev
-        align_point_b  = int(alignvalues[min_indices[5],0])
-        min_meanstddev = alignvalues[min_indices[5],5]
+        align_point_b  = int(filtered_rows[min_indices[5],0])
+        min_meanstddev = filtered_rows[min_indices[5],5]
 
         # summary of result
         print(f"\n                 RESULT point B: "+sample2ts(align_point_b)+
@@ -612,7 +715,7 @@ def main(args):
         align_results.append((apidx, align_point_a, align_point_b))
 
         # what were the other possibilities? -- show sample/timestamps with same minimum mean+stddev
-        alignvalue_min_indices = np.where(alignvalues[:,5] == min_meanstddev)[0]
+        alignvalue_min_indices = np.where(filtered_rows[:,5] == min_meanstddev)[0]
         alignvalue_min_count = len(alignvalue_min_indices)
         if alignvalue_min_count == 1:
             print ("Good Sample -- this is the only index with this score")
@@ -620,14 +723,14 @@ def main(args):
             print(f"WARNING: {alignvalue_min_count} samples had the same score -- printing first 5 timestamps")
             amatch_ts = []
             for amatch_i in range(5):
-                amatch_ts.append(sample2ts(alignvalues[alignvalue_min_indices[amatch_i],0]
+                amatch_ts.append(sample2ts(filtered_rows[alignvalue_min_indices[amatch_i],0]
                                  + start_sampleB))
             print(f"         {', '.join(amatch_ts)}")
 
         # what were the timestamps according to other scores?
         print("Timestamp  Scoring Method")
         for im in [("Sum",1), ("Mean",2), ("StdDev",3), ("SumSquared",4), ("RMS", 6)]:
-            im_ts = alignvalues[min_indices[im[1]],0]
+            im_ts = filtered_rows[min_indices[im[1]],0]
             print("{:9s}  {:10s} {}".format(sample2ts(im_ts), im[0],
                 "MATCH" if (im_ts == align_point_b) else "(differs)"
                 ))
@@ -644,25 +747,29 @@ def main(args):
                          ("RMS",6)]:
                 print(f"--- by {pair[0]}")
                 # get indices that would sort by each method
-                sorted_indices = np.argsort(alignvalues[:, pair[1]])
+                sorted_indices = np.argsort(filtered_rows[:, pair[1]])
 
                 # print lowest five values
                 for k in range(5):
-                    av=alignvalues[sorted_indices[k]]
+                    if k >= len(sorted_indices): continue
+                    av=filtered_rows[sorted_indices[k]]
                     print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}\t{:8.2f}\t{:8d}".format(
                         sample2ts(start_sampleB + av[0]),int(av[1]),av[2],av[3],
                         av[5], int(av[4]), av[6], int(av[0])))
 
+            # summarize data that will have scrolled away
+            print(f"alignvalues#: {alignvalues.shape[0]} filtered#: {filtered_rows.shape[0]} matches to our point: {alignvalue_min_count}")
+
         # for comparing program results to manually found right results, plug
         # your point # in here and change False to True
-        if True and apidx==0:
+        if False and apidx==0:
             # keeping this for further manual/automatic comparison
             targettime=0.513
             #targetsample=int(targettime*samplerate)
             targetsample=8207
             # find the sample
-            alignvalue_target = np.where(alignvalues[:,0] == targetsample)[0][0]
-            av = alignvalues[alignvalue_target]
+            alignvalue_target = np.where(filtered_rows[:,0] == targetsample)[0][0]
+            av = filtered_rows[alignvalue_target]
             print(f"--- AND AT OUR TARGET {targettime}s ({targetsample})")
             print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}\t{:8d}".format(
                 sample2ts(start_sampleB + av[0]),int(av[1]),av[2],av[3],
@@ -684,16 +791,40 @@ def main(args):
         choice = input().lower()
         if 'y' in choice:
             # show plots of results
-            makeplot(f"Mean+StDev #{apidx}",a_signal,align_point_a,b_signal,align_point_b,half_test_window)
+            makeplot(f"FULL RANGE Mean+StDev #{apidx}{' w/localnorm' if localnorm else ''}",
+                     a_signal_slice, align_point_a - a_signal_offset,
+                     b_signal_slice, align_point_b - b_signal_offset, half_test_window)
+            if (half_test_window > 1000):
+                print("Hit return for closeup graph", end='')
+                choice = input().lower()
+                makeplot(f"Range:200 Mean+StDev #{apidx}{' w/localnorm' if localnorm else ''}",
+                         a_signal_slice, align_point_a - a_signal_offset,
+                         b_signal_slice, align_point_b - b_signal_offset, 100)
+            print("Super closeup graph? [yN]", end='')
+            choice = input().lower()
+            if 'y' in choice:
+                makeplot(f"Range:20/Original sig Mean+StDev #{apidx}{' w/localnorm' if localnorm else ''}",
+                         a_signal, align_point_a,
+                         b_signal, align_point_b, 10)
+            # old way -- using original signal
+            #makeplot(f"Mean+StDev #{apidx}{' w/localnorm' if localnorm else ''}",
+            #         a_signal,align_point_a,b_signal,align_point_b,half_test_window)
 
         # ask if we should add it to Audacity
-        print(f"Add align point {apidx} to Audacity? [yN] ", end='')
+        print(f"Add align point {apidx} to Audacity? [y - all, j - just align point, N - none] ", end='')
         choice = input().lower()
         if 'y' in choice:
-            Apoint = (start_sampleA + align_point_a)/samplerate
-            Bpoint = align_point_b/samplerate
-            print("Adding points to Audacity A: {Apoint} B: {Bpoint}")
-            setlabels(f"script align point {apidx}", Apoint, Bpoint)
+            Apoint  = (start_sampleA + align_point_a)/samplerate
+            Bpoint  = align_point_b/samplerate
+            B_start = start_b/samplerate
+            B_end   = end_b/samplerate
+            print(f"Adding points to Audacity A: {Apoint} B: {Bpoint}")
+            dprint(f"setlabels(f'script align pt {apidx}', {Apoint=}, {Bpoint=}, B_start={B_start=}, B_end={B_end=})")
+            setlabels(f"script align point {apidx}", Apoint, Bpoint, B_start=B_start, B_end=B_end)
+        elif 'j' in choice:
+            Apoint  = (start_sampleA + align_point_a)/samplerate
+            Bpoint  = align_point_b/samplerate
+            setlabels(f"script align point {apidx}", Apoint, Bpoint, justA=True)
         else:
             print("No labels added to Audacity.")
 
@@ -732,7 +863,7 @@ if __name__ == "__main__":
     parser.add_argument('fileB', help='File B path and optional start/stop time in seconds (e.g. fileB, fileB:20, or fileB:20.5:600.0)')
     parser.add_argument('--alignpoints', type=int, default=5, help='Number of alignment points (default: 5)')
     parser.add_argument('--searchwindow', type=float, default=5.0, help='Search window in seconds (default: 5.0)')
-    parser.add_argument('--testwindow', type=int, default=100, help='Test window in samples (default: 100)')
+    parser.add_argument('--testwindow', type=int, default=800, help='Test window in samples (default: 800)')
     parser.add_argument('--debug', action='store_true', help='Enable debug text')
     parser.add_argument('--dump', action='store_true', help='Show whole score table for align attempt')
     parser.add_argument('--invert', action='store_true', help='Invert signal B before adding signals to compare them')
