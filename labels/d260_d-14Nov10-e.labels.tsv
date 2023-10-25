@@ -1,4 +1,4 @@
-0.000000	0.000000	file start sync: d-14Nov10-e.au 15653.051068 verified d242-268
+0.000000	0.000000	file start sync: d-14Nov10-e.au 15654.051068 verified d242-268
 0.000000	186.904821	ID051: E-Sassin - Nightrider
 7.823257	52.147047	note: ~"I am the Night Rider" xN
 128.505155	136.855670	note: ~start of transition, background "Murder"
@@ -12,7 +12,7 @@
 186.904821	186.904821	orig051 end: B
 186.904821	186.904821	orig051 note: file start 052
 186.904821	186.904821	orig052 start: 051-sync-B
-186.904821	453.767000	start052: ID: B-Boy 3000 - Diet for Murder
+186.904821	443.433301	start052: ID: B-Boy 3000 - Diet for Murder
 187.503120	187.503120	orig051 end: 2
 187.670179	187.670179	orig051 end: 1
 190.018415	190.621415	orig052 sync: 0 start
@@ -27,34 +27,103 @@
 399.252762	410.274317	note: ~last quote
 404.592000	405.200000	orig052 sync: 4 ending
 404.592000	405.200000	track sync: 4 ending
-407.121624	443.416599	note: ~battle sounds
-430.212188	443.586660	note: helicopter, and a chorus?
-443.451355	467.872029	start053: ID: Net Radio - Promo6 Peace
+407.121624	442.690219	note: ~battle sounds
+430.212188	442.690219	note: helicopter, and a chorus?
+443.433301	467.872029	start053: ID: Net Radio - Promo6 Peace
 446.807980	446.807980	orig052 end: 4
 447.504821	447.504821	orig052 end: .
-467.872029	467.872029	orig054 start: rough 1
-467.872029	834.598000	start054: ID: Codename John - Dreams of Heaven
-467.873315	467.873345	orig054 start: .
-467.873345	467.873345	LISTENCHECK orig054 start: A
-468.368410	468.368410	note: 3 to 4-5 peaks
-468.384129	468.386313	LISTENCHECK orig054 sync: A
-468.384129	468.386313	track sync: A
-470.469059	470.469059	orig054 start: rough align 2
-543.387429	543.422790	note: rough align 2
+467.721281	467.721281	orig054 start: rough sync pre-skip
+467.724864	467.724864	orig054 start: 2 pre-skip
+467.872029	834.598616	start054: ID: Codename John - Dreams of Heaven
+467.873345	467.873345	orig054 start: 1
+468.384129	468.386313	track sync: 1
+506.084000	506.488000	track sync: 2 pre-skip
+506.894184	506.914139	note: rough sync pre-skip
+506.922438	509.807415	note: SKIP back 2.885s (also in overlapping files)
+508.696404	509.498404	orig054 sync: A post-skip
+509.955000	510.757000	track sync: A post-skip
+540.349354	541.149354	orig054 sync: 3 post-skip
+541.476000	542.276000	track sync: 3 post-skip
+572.453815	572.529420	orig054 sync: 4 post-skip
+573.458261	573.533867	track sync: 4 post-skip
+617.731862	620.839360	orig054 note: rough sync 5
+618.545152	621.652651	note: rough sync 5
+661.806179	662.723683	orig054 note: rough sync 6
+662.481579	663.399083	note: rough sync 6
+723.046524	723.846524	orig054 sync: 7 post-skip
+723.468000	724.268000	track sync: 7 post-skip
+778.016926	778.817926	orig054 sync: 8 post-skip
+778.226000	779.027000	track sync: 8 post-skip
 810.786625	810.786625	note: file start d276-293b
-834.371304	834.371304	orig054 end: .
-834.598138	834.598138	start055: ID: John B - Secrets
-879.283824	881.268943	file note: skip?
-919.854701	924.693430	note: ~there is a secret soul
-1188.823040	1188.823040	NOTE: SKIP SOMEWHERE BEFORE HERE
-1200.000000	1200.000000	file end: d-14Nov10-e.au
+832.485876	832.488567	track sync: B post-skip end
+834.205526	834.205526	orig055 start: .
+834.205526	834.205526	orig055 start: 1 pre-skip (055s1)
+834.377390	834.377390	055s0
+834.381426	834.381426	orig055 start: sync-054-B
+834.598616	1367.960000	start055: ID: John B - Secrets
+835.352503	835.353893	orig055 sync: 0
+835.353077	835.353077	orig055 note: peak, ideal align point 0 13:55+23150 (or 23146)
+835.524367	835.525757	track sync: 0
+835.524850	835.524850	NOTE: script align point 0 (13:55 + 23146 samples) fixed
+835.845598	835.845598	orig054 end: B post-skip
+835.845598	835.845598	orig054 end: B post-skip
+836.054673	836.054673	054e8
+836.267233	836.267233	054e7
+836.850045	836.850045	054e4
+836.972245	836.972245	054e3
+837.104195	837.104195	orig054 end: A post-skip
+879.503646	879.503646	orig055 note: split to find skip in mix
+879.594028	879.603435	orig055 sync: 1
+879.628563	879.637970	track sync: 1 pre-skip
+879.667854	879.672854	orig055 sync: post-skip
+879.967697	881.385775	note: SKIP back 1s+18437 (1.418s in all overlapping files)
+881.550000	881.555000	track sync: A post-skip
+918.469410	918.470537	orig055 sync: 3 post-skip
+920.059904	921.654613	note: ~there is a secret soul
+920.201375	920.202501	track sync: 3 post-skip
+964.591970	964.599970	orig055 sync: 4 post-skip
+966.145250	966.153250	track sync: 4 post-skip
+1035.381187	1035.384437	track sync: 5 post-skip
+1114.843014	1114.850702	orig055 sync: 6 post-skip
+1115.813187	1115.820875	track sync: 6 post-skip
+1177.227586	1177.230822	orig055 sync: 7 post-skip
+1177.955695	1177.958931	track sync: 7 post-skip
+1198.938446	1198.940970	orig055 sync: 8 post-skip
+1199.582201	1199.584725	track sync: 8 last in d-14Nov10-e
+1200.000000	1200.000000	file end: d-14Nov10-e.au COMPLETE
 1200.000000	1200.000000	note d-14Nov10-f: ID055: John B - Secrets
-1200.000000	1200.000000	note d-14Nov10-f: file start sync: d-14Nov10-f.au MARK verified 276-293b
+1200.000000	1200.000000	note d-14Nov10-f: file start sync: d-14Nov10-f.au 15654.051068 verified 276-293b
+1211.959574	1211.964029	orig055 sync: 9 post-skip
+1212.551561	1212.556016	note d-14Nov10-f: track sync: 9 d-14Nov10-f
+1278.190163	1278.193727	orig055 sync: 10 post-skip
+1278.525936	1278.529501	note d-14Nov10-f: track sync: 10 post-skip
+1323.281926	1323.288864	orig055 sync: 11 post-skip
+1323.442062	1323.449000	note d-14Nov10-f: track sync: 11 post-skip
+1364.548687	1364.550063	note d-14Nov10-f: track sync: B post-skip
+1364.548687	1364.550063	orig055 sync: B post-skip
 1367.964641	1367.964641	note d-14Nov10-f: start056: ID: Optical - Grey Odyssey
+1372.199697	1372.199697	note d-14Nov10-f: 055e10
+1372.455910	1372.455910	note d-14Nov10-f: 055e9
+1372.455910	1372.455910	orig055 end: .
+1372.507679	1372.507679	055e8
+1372.834097	1372.834097	055e6
+1373.417204	1373.417204	055e4
+1373.595888	1373.595888	055e3
+1373.746070	1373.746070	orig055 end: A post-skip
+1767.421678	1767.874467	note d-14Nov10-f: note: SKIP (in sync with other files)
 2400.000000	2400.000000	note d-14Nov10-f: file end: d-14Nov10-f.au
-810.786625	810.786625	file start sync: d276-293b.wav MARK verified by d-14Nov10-e
-1949.856000	1949.856000	file end: d276-293b.wav
-443.424004	443.424004	file start sync: d269-271b.wav MARK verified d-14Nov10-e
-619.258504	619.258504	file end: d269-271b.wav
-382.272000	382.272000	file start sync: d268-287.wav MARK verified d-14Nov10-e
-1582.272000	1582.272000	file end: d268-287.wav
+810.786625	810.786625	file start sync: d276-293b.wav 15654.051068 verified by d-14Nov10-e
+810.786625	1200.000000	file note: in sync with d-14Nov10-e over this range
+1200.000000	1949.856000	file note: in sync with d-14Nov10-f over this range
+1949.856000	1949.856000	file end: d276-293b.wav COMPLETE
+443.424004	443.424004	file start sync: d269-271b.wav 15654.051068 verified d-14Nov10-e
+443.424004	619.258504	file note: in sync with d-14Nov10-e over entire file
+619.258504	619.258504	file end: d269-271b.wav COMPLETE
+382.272000	382.272000	file start sync: d268-287.wav 15654.051068 verified d-14Nov10-e
+382.272000	1050.242750	file note: in sync with d-14Nov10-e over this range
+1050.242745	1050.242745	file note: SKIP
+1050.242750	1051.682750	file note: SKIP ahead 1.440s
+1051.682750	1051.682750	file note: skip resume
+1051.682750	1200.000000	file note: in sync with d-14Nov10-e over this range
+1200.000000	1583.712000	file note: in sync with d-14Nov10-f over this range
+1583.712000	1583.712000	file end: d268-287.wav COMPLETE
