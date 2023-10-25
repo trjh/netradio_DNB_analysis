@@ -55,6 +55,7 @@
 778.016926	778.817926	orig054 sync: 8 post-skip
 778.226000	779.027000	track sync: 8 post-skip
 810.786625	810.786625	note: file start d276-293b
+832.485876	832.488567	orig054 sync: B post-skip end
 832.485876	832.488567	track sync: B post-skip end
 834.205526	834.205526	orig055 start: .
 834.205526	834.205526	orig055 start: 1 pre-skip (055s1)
@@ -75,7 +76,7 @@
 879.503646	879.503646	orig055 note: split to find skip in mix
 879.594028	879.603435	orig055 sync: 1
 879.628563	879.637970	track sync: 1 pre-skip
-879.667854	879.672854	orig055 sync: post-skip
+879.667854	879.672854	orig055 sync: A post-skip
 879.967697	881.385775	note: SKIP back 1s+18437 (1.418s in all overlapping files)
 881.550000	881.555000	track sync: A post-skip
 918.469410	918.470537	orig055 sync: 3 post-skip
