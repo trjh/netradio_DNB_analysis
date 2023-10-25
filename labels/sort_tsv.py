@@ -26,10 +26,11 @@ keyword_patterns = [
     r"orig(\d+)\s+(start|end|note):\s+(.*)",
     r"(file|mix) (start|end|note): (.*)",
     r"note(\s\S+?)?: (.*)",
+    r"(\d{3})[se](.+)",
 ]
 
 # Compile regular expressions
-keyword_regexes = [re.compile(pattern) for pattern in keyword_patterns]
+keyword_regexes = [re.compile(pattern, flags=re.IGNORECASE) for pattern in keyword_patterns]
 
 # Function to sort lines -- put "file start" at the top, always, then sort by
 # timestamp, then sort by label
