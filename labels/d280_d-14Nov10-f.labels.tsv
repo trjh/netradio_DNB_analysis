@@ -1,0 +1,133 @@
+0.000000	0.000000	file start sync: d-14Nov10-f.au 16854.051068 verified 276-293b
+0.000000	0.000000	ID055: John B - Secrets
+11.959574	11.964029	orig055 sync: 9 post-skip
+12.551561	12.556016	track sync: 9 d-14Nov10-f
+78.190163	78.193727	orig055 sync: 10 post-skip
+78.525936	78.529501	track sync: 10 post-skip
+123.281926	123.288864	orig055 sync: 11 post-skip
+123.442062	123.449000	track sync: 11 post-skip
+164.548687	164.550063	orig055 sync: B post-skip
+164.548687	164.550063	track sync: B post-skip
+167.523465	167.523465	orig056 start: .
+167.523488	167.523488	056s4
+167.525438	167.525438	056s3
+167.536436	167.536436	056s2
+167.708499	167.708499	orig056 start: 1
+167.708499	537.097984	start056: ID: Optical - Grey Odyssey
+168.033107	168.034147	orig056 sync: 1
+168.218141	168.219181	track sync: 1
+172.199697	172.199697	055e10
+172.455910	172.455910	055e9
+172.455910	172.455910	orig055 end: .
+172.507679	172.507679	055e8
+172.834097	172.834097	055e6
+173.417204	173.417204	055e4
+173.595888	173.595888	055e3
+173.746070	173.746070	orig055 end: A post-skip
+212.261545	212.262347	orig056 sync: 2 pre-skip
+212.274515	212.275317	track sync: 2 pre-skip
+215.052447	215.057575	orig056 sync: 3
+215.054420	215.059547	track sync: 3 pre-skip
+215.584918	215.585874	orig056 sync: 4 last pre-skip
+215.584940	215.585896	track sync: 4 last pre-skip
+215.589474	215.589474	orig056 note: split to find skip in mix
+215.589497	219.685332	note: SKIP back 4.096s
+218.494996	218.496428	orig056 sync: A post-skip
+218.534751	218.534751	orig056 note: resume from skip split
+219.731881	219.733313	track sync: A post-skip
+282.643946	283.244946	orig056 sync: 6 post-skip
+283.630000	284.231000	track sync: 6 post-skip
+383.712000	383.712000	note d288-307: file start sync: d288-307.wav 16854.051068 verified d-14Nov10-f
+383.712000	1200.000000	note d288-307: file note: in sync with d-14Nov10-f over this range
+400.114429	400.716429	orig056 sync: 7 post-skip
+400.643000	401.245000	track sync: 7 post-skip
+425.269263	425.270519	orig056 note: script align range 1
+425.269759	425.269759	orig056 note: script align point 1 - (4m18s7848 - 3s12817(due to skip))
+425.700941	425.702197	note: script align range 1 (manual)
+425.701437	425.701437	NOTE: script align point 1 (07:05 + 30933 samples)
+536.017747	536.018507	orig056 sync: B end
+536.017747	536.018507	track sync: B end
+536.018125	536.018125	note: peak
+536.764287	536.764287	orig057 start: 3
+536.764288	536.764288	057s3
+536.764560	536.764560	057s2
+536.883673	536.883673	orig057 start: 1
+536.996988	536.997739	orig057 sync: A very start
+537.097984	799.991375	start057: ID: Matrix - Mute
+537.116374	537.117125	track sync: 1 very start
+537.116634	537.116749	note: peak
+537.963418	537.963418	orig057 note: manual script align point 0 (8:56 + 38805 samples)
+538.079062	538.079062	NOTE: script align point 0 (08:58 + 3486 samples)
+538.112614	538.112614	ORIG057 NOTE: script align point 0 (08:58 + 10225 samples)
+542.862438	542.862438	orig056 end: B
+542.862438	542.862438	orig056 end: B
+543.294116	543.294116	orig056 note: end 056 for script align range 1
+543.391010	543.391010	056e7
+544.099323	544.099323	056eA
+567.524959	567.528053	orig057 sync: 2 pre-skip
+567.525232	567.528325	track sync: 2 pre-skip
+567.610185	567.611372	orig057 sync: 3 just pre-skip
+567.610186	567.611372	track sync: 3 just pre-skip
+567.612813	567.612813	orig057 note: split to find skip in mix
+567.612813	573.523689	note: SKIP back 5.911s (in all files)
+572.656116	572.656116	orig057 note: split resume
+572.758493	572.763559	orig057 sync: A post-skip
+573.626067	573.631133	track sync: A post-skip
+653.786442	654.186442	orig057 sync: 5 post-skip
+654.336986	654.736986	track sync: 5 post-skip
+667.406899	667.406899	ORIG057 NOTE: manually set script align point 1
+667.905063	667.905063	NOTE: script align point 1 (11:07 + 39913 samples) fixed
+794.946372	794.946563	orig057 sync: B post-skip
+794.946372	794.946563	track sync: B post-skip
+799.641739	799.641739	orig058 start: 2
+799.641739	799.643936	058s2?
+799.643936	799.643936	058s1
+799.742326	799.742326	orig058 start: 2 (pre-skip)
+799.744525	799.744525	058s1
+799.756045	799.756045	orig058 start: 0
+799.893443	799.893945	orig058 sync: 0 start
+799.991375	803.397794	orig057 note: this end range not in mix or not audible
+799.991375	1271.456929	start058: ID: Codename John - Deep Inside
+800.007749	800.008251	track sync: 0 start
+803.397593	803.397593	orig057 end: B
+803.397794	803.397794	orig057 end: B
+803.895756	803.895756	057eSAP1
+803.948137	803.948137	057e5
+804.265167	804.265167	orig057 end: A post-skip
+826.966427	826.977927	orig058 sync: 1 pre-skip
+826.968624	826.980124	track sync: 1 pre-skip four spikes
+827.443416	827.443912	orig058 sync: 2 just before skip
+827.544003	827.544499	track sync: 2 just before skiip
+827.545690	827.545690	orig058 note: split to find skip in mix (left side)
+827.545690	831.128093	note: SKIP back 3.582s (multiple files)
+829.448986	829.448986	orig058 note: split resume
+829.826178	829.826178	orig058 sync: A post-skip local peak
+831.505313	831.505313	track sync: A post-skip local peak
+874.715475	874.764788	orig058 sync: 4 post-skip
+876.220687	876.270000	track sync: 4 post-skip
+905.352261	905.352261	note: seems to diverge with orig here, but probably just signal loss due to slow stream
+933.371773	933.375745	orig058 sync: 5 post-skip
+934.646009	934.649982	track sync: 5 post-skip
+1098.592554	1098.596052	orig058 sync: 6 post-skip
+1099.220373	1099.223871	track sync: 6 post-skip
+1099.220997	1099.220997	note: peak
+1199.263118	1199.264620	orig058 sync: B end of d-14Nov10-f
+1199.496927	1199.498430	track sync: B end of d-14Nov10-f
+1199.999799	1199.999799	file end: d-14Nov10-f.au COMPLETE
+1258.996009	1258.998776	note d288-307: track058 sync: 8 end
+1258.996009	1258.998776	orig058 sync: 8 end
+1271.456930	1271.456930	note d288-307: orig059 start: A
+1271.456930	1271.456930	note d288-307: start059: ID: Dillinja - Silver Blade
+1271.692318	1271.693059	note d288-307: track sync: A start
+1273.629938	1273.629938	note d288-307: orig058 end: 8
+1273.629938	1273.629938	orig058 end: 8
+1273.863770	1273.863770	orig058 end: B
+1274.257757	1274.257757	058e6
+1274.904175	1274.904175	058e5
+1275.309073	1275.309073	058eA
+1313.074036	1316.199008	note d288-307: NOTE: SKIP
+1583.712000	1583.712000	note d288-307: file end: d288-307.wav
+1583.712000	1583.712000	note d308-327: file start sync: d308-237.wav 16854.051068 not-verifiable but sounds v good
+1684.603872	1685.458356	note d308-327: note: SKIP
+2400.000000	2400.000000	note d308-237: note: file start d-14Nov10-h
+2783.712000	2783.712000	note d308-327: file end: d308-327.wav
