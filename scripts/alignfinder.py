@@ -602,12 +602,12 @@ def main(args):
     half_test_window = int(half_test_window/step_by) * step_by
 
     # Choose alignment points -- one at start, one at end, distribute the rest
-    align_indices = [0, len(a_signal)-int(0.5*samplerate)]
+    align_indices = [0, len(b_signal)-int(0.5*samplerate)]
     if align_points > 2:
-        step_a = len(a_signal) // (align_points - 1)
-        step_a = int(step_a/step_by) * step_by
-        for step_a_i in range(1,align_points - 1):
-            align_indices.append(step_a_i * step_a)
+        step_b = len(b_signal) // (align_points - 1)
+        step_b = int(step_b/step_by) * step_by
+        for step_b_i in range(1,align_points - 1):
+            align_indices.append(step_b_i * step_b)
     align_indices.sort()
 
     # save results for examation at the end
@@ -618,18 +618,30 @@ def main(args):
         # Select best point near initiall chosen align point
         align_search_direction = -1 if (align_point_a == align_indices[-1]) else 1 # move backwards on last point
 
-        # look over 6 windows until we find a minimal good amplitude
+        # look over 6 windows until we find a minimal good amplitude -- or # settle for best of bad amplitudes
+        best_bad_point = best_bad_amplitude = -1
         for mult in range(5):
             startpoint = align_point_a + (mult * A_Align_Search*samplerate * align_search_direction)
             newpoint, max_amplitude = find_best_alignpoint(startpoint, a_signal)
             if max_amplitude > 6000:
                 align_point_a = newpoint
                 break
+            elif max_amplitude > best_bad_amplitude:
+                best_bad_point = newpoint
+                best_bad_amplitude = max_amplitude
+
+        # did we find a good point?
+        if align_point_a == align_indices[apidx]:
+            align_point_a = best_bad_point
 
         # build seperate array of A signals we are searching
-        a_signal_offset = align_point_a - half_test_window
-        a_signal_slice = np.array(a_signal[a_signal_offset:align_point_a+half_test_window])
+        a_signal_offset = max(0, align_point_a - half_test_window)
+        a_signal_sliceend = min(len(a_signal), align_point_a+half_test_window)
+        a_signal_slice = np.array(a_signal[a_signal_offset:a_signal_sliceend])
         a_signal_rms = np_rms(a_signal_slice)
+        a_signal_abs  = np.abs(a_signal_slice)
+        a_signal_mean = np.mean(a_signal_abs)
+        a_signal_std  = np.std(a_signal_abs)
 
         # Establish range to search in B
         dprint(f"Search point B theory: {align_point_a - search_window_samples} - "+
@@ -639,7 +651,9 @@ def main(args):
             last_point_adjust = align_results[-1][2] - align_results[-1][1]
             dprint(f"Shifting B window by {last_point_adjust} to account for diff between last point A&B")
         start_b = max(half_test_window, (align_point_a - search_window_samples)+last_point_adjust)
+        dprint(f"start_b = max({half_test_window=}, ({align_point_a=} - {search_window_samples=})+{last_point_adjust=}")
         end_b   = min(len(b_signal)-half_test_window, align_point_a + search_window_samples + last_point_adjust)
+        dprint(f"end_b   = min(len(b_signal)={len(b_signal)} - {half_test_window=}, {align_point_a=} + {search_window_samples=} + {last_point_adjust=}")
         dprint(f"Search point B actual: {start_b} - {end_b}, width {end_b - start_b}")
 
         # make B search range a seperate slice
@@ -664,7 +678,10 @@ def main(args):
 
             # reject the point of RMS of sum is greater than RMS of A or of B
             # -- adding the signals should in *some* way lessen the signal
-            b_signal_rms = np_rms(b_signal_slice[b_j_start:b_j_end])
+            b_signal_rms  = np_rms(b_signal_slice[b_j_start:b_j_end])
+            b_signal_abs  = np.abs(b_signal_slice[b_j_start:b_j_end])
+            b_signal_mean = np.mean(b_signal_abs)
+            b_signal_std  = np.std(b_signal_abs)
             sum_rms = np_rms(sum_array)
             reject = False
             if (sum_rms > a_signal_rms) or (sum_rms > b_signal_rms):
@@ -678,6 +695,30 @@ def main(args):
             mean = np.mean(abssum_array)
             std  = np.std(abssum_array)
 
+            # wait let's compare them to the *larger* of the two signals, and
+            # see if this addition has lowered both, so instead of the score
+            # being:
+            #   - mean + std
+            # or
+            #   - mean + std + diff_rms
+            # it is
+            #   - (larger_signal_mean - mean) + (larger_signal_std - std)
+            # close, but it doesn't take into account low scores because of
+            # low values at A & B
+            #   - now divide the above by the mean of the higher signal
+            # nah, still get scores with too big a diff between a & b
+            #   - divide the above by the mean of the lower signal
+            # multiply by the difference so higher -- worse -- we want a low
+            # score
+            a_score, b_score = a_signal_mean + a_signal_std, b_signal_mean + b_signal_std
+            if b_score >= a_score:
+                score = abs(b_score - (mean + std)) * (b_score - a_score)
+                # dprint(f"{j=} :: abs({b_score=} - ({mean=} + {std=})) / {b_signal_mean=}")
+                # dprint(f":: {abs(b_score - (mean + std))} / {b_signal_mean=}")
+            else:
+                # b must be less than a
+                score = abs(a_score - (mean + std)) * (a_score - b_score)
+
             # store multiple results
             j_entry = [
                 j,
@@ -685,7 +726,7 @@ def main(args):
                 mean,
                 std,
                 np.sum(np.square(sum_array, dtype=np.int64)),
-                mean + std + diff_rms,
+                score,
                 sum_rms,
                 reject
                 ]
@@ -694,6 +735,8 @@ def main(args):
                 print(f"{sample2ts(j)} {j_entry}")
 
         # find minimum scores in each column -- where sum RMS is less than A RMS and B RMS
+        if len(alignvalues) == 0:
+            sys.exit(f"Somehow no points examined in range B {start_b} - {end_b}, width {end_b - start_b}")
         alignvalues=np.array(alignvalues)
         filtered_rows = alignvalues[alignvalues[:, -1] == False]
         print(f"Data points examined: {alignvalues.shape[0]}, results where sum lowered RMS: {filtered_rows.shape[0]}")
@@ -762,21 +805,41 @@ def main(args):
 
         # for comparing program results to manually found right results, plug
         # your point # in here and change False to True
-        if False and apidx==0:
+        if True and apidx==0:
             # keeping this for further manual/automatic comparison
-            targettime=0.513
             #targetsample=int(targettime*samplerate)
-            targetsample=8207
+            targettime, targetsample = 1.199, 19186
+            # ok -- but that looks wrong?  this should be the first down curve
+            # NOTE -- amplitude 8304 =~ 0.2534 on audacity
+            # array/audacity = 8304/0.2534 ; audacity = 0.2534*array/8304
+            #      -- audacity = array-amplitude * 0.00003052
+            #      --    array = audacity-amplitude * 32822.1344
+            # expecting amp -0.459 == -15065
+            targettime, targetsample = 0.261, round(11532*16000/44100)
+            # found by searching for -15000 or less
+            # -15065 at 46932 in b_signal_slice
+            targetsample = 46932
+            targettime   = round(targetsample/samplerate,3)
             # find the sample
             alignvalue_target = np.where(filtered_rows[:,0] == targetsample)[0][0]
+            # now find that amplitude!!
+            for b_signal_slice_i in range(len(b_signal_slice)):
+                if b_signal_slice[b_signal_slice_i] < -15000:
+                    print(f"--- AMPLITUDE B {b_signal_slice[b_signal_slice_i]} at {b_signal_slice_i} in b_signal_slice")
+                
             av = filtered_rows[alignvalue_target]
             print(f"--- AND AT OUR TARGET {targettime}s ({targetsample})")
+            print(f"--- AMPLITUDE A: {a_signal[align_point_a]} note {a_signal_offset=}")
+            print(f"--- AMPLITUDE B: {b_signal[targetsample]} note {b_signal_offset=}")
             print("{:9s}    {:8d}\t{:8.2f}\t{:8.2f}\t{:8.2f}\t{:8d}\t{:8d}".format(
                 sample2ts(start_sampleB + av[0]),int(av[1]),av[2],av[3],
                 av[5], int(av[4]), int(av[0])))
-            sys.stderr.write("NOTE -- half_test_window adjusted to 90x here!  NOTE NOTE\n")
-            makeplot(f"Mean+StDev (manual)",a_signal,align_point_a,b_signal,targetsample,90*half_test_window)
+            makeplot(f"Mean+StDev (manual)",a_signal,align_point_a,b_signal,targetsample,2*half_test_window)
             print("OURGRAPH - original signal array -- hit return", end='')
+            choice = input().lower()
+            print("")
+            makeplot(f"Mean+StDev (manual)",a_signal,align_point_a,b_signal,targetsample,50)
+            print("OURGRAPH - original signal array (closeup) -- hit return", end='')
             choice = input().lower()
             print("")
             makeplot(f"Mean+StDev (manual)",a_signal_slice,align_point_a-a_signal_offset,
