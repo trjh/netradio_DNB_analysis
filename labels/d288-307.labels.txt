@@ -1,0 +1,19 @@
+1200.000000	1200.000000	note d308-327: file start sync: d308-237.wav 17237.763068 not-verifiable but sounds v good
+1200.000000	1257.979000	end of Silver Blade (as on cd)
+1257.197519	1257.197519	start060: ID: Ed Rush & Fierce - Locust
+1300.891872	1301.746356	note d308-327: note: SKIP
+2016.288000	2016.288000	note d308-237: note: file start d-14Nov10-h
+2400.000000	2400.000000	note d308-327: file end: d308-327.wav
+0.000000	0.000000	file start sync: d288-307.wav 17237.763068 verified d-14Nov10-f
+0.000000	816.288000	file note: in sync with d-14Nov10-f over this range
+416.279375	887.744929	start058: ID: Codename John - Deep Inside
+816.287799	816.287799	note: file end: d-14Nov10-f.au
+875.284009	875.286776	orig058 sync: 8 end
+875.284009	875.286776	track058 sync: 8 end
+887.744930	887.744930	orig059 start: A
+887.744930	887.744930	start059: ID: Dillinja - Silver Blade
+887.980318	887.981059	track sync: A start
+889.917938	889.917938	orig058 end: 8
+929.362036	932.487008	NOTE: SKIP
+930.298927	930.634885	SKIP?
+1200.000000	1200.000000	file end: d288-307.wav
