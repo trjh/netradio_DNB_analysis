@@ -77,27 +77,27 @@
 980.872941	980.873493	track sync: 2 pre-skip
 980.887991	980.887991	orig062 note: split here to find skip in mix
 980.887991	984.843691	note: SKIP back 3.956s (multiple files)
-984.007298	984.007298	orig062 note: resume from split (fixed by 39091 samples)
-984.023722	984.024543	orig062 sync: A post-split
+983.120431	983.120431	orig062 note: resume from split (fixed by 39091 samples)
+983.136854	983.137676	orig062 sync: A post-split
+984.006857	984.006857	orig062 note: resume from split
+984.023272	984.024089	orig062 sync: A post-skip
 984.860619	984.861440	track sync: A post-split (fixed by 39091 samples)
-984.893725	984.893725	orig062 note: resume from split
-984.910140	984.910957	orig062 sync: A post-skip
-1073.452155	1073.454468	orig062 sync: 4 post-skip
+1072.565288	1072.567601	orig062 sync: 4 post-skip
 1073.937624	1073.939937	track sync: 4 post-skip
-1197.106314	1197.112300	orig062 sync: B post-skip end-of-d308
+1196.219446	1196.225433	orig062 sync: B post-skip end-of-d308
 1197.106314	1197.112300	track sync: B post-skip end-of-d308
 1199.113583	1199.113583	file end: d308-327.wav COMPLETE
 1200.000000	1200.000000	note d328-342: file start sync: d328-342.wav 18437.763068 verified d-14Nov10-h d316-335
+1314.110958	1314.113389	orig062 sync: 6
 1314.533884	1314.536315	note d328-342: track sync: 6 new file
-1314.997826	1315.000257	orig062 sync: 6
 1421.657564	1421.659778	note d328-342: track sync: 7 end
-1422.544431	1422.546645	orig062 sync: 7 end
+1421.657564	1421.659778	orig062 sync: 7 end
 1426.945692	1426.945692	note d328-342: orig063 start: A
 1426.945692	1426.945692	note d328-342: start062: Lemon D City Lights
 1426.945692	1426.945692	orig063 start: .
 1427.173134	1427.175398	note d328-342: track sync: A start
+1429.258645	1429.258645	orig062 end: 7
 1429.301837	1429.301837	note d328-342: orig062 end: 7
-1430.145512	1430.145512	orig062 end: 7
 1430.188704	1430.188704	orig062 end: B
 1430.674172	1430.674172	062e4
 1431.025601	1431.025601	062eA
