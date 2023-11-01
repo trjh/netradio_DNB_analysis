@@ -1,0 +1,112 @@
+0.000000	0.000000	file start sync: d308-237.wav 18437.763068 verified by 059-Silver Blade
+-312.255070	56.944562	start059: ID: Dillinja - Silver Blade
+49.162623	49.163064	track059 sync: 7 end
+56.772796	56.772796	060s3
+56.772796	56.772796	orig060 start: 3
+56.773816	56.773816	060s2
+56.944542	56.944542	orig060 start: 1
+56.944542	584.944312	start060: ID: Ed Rush & Fierce - Locust
+57.171877	57.173310	orig060 sync: 1 first wave
+57.343623	57.345056	track sync: 1 first wave
+57.344379	57.344379	note: midway cross
+58.897322	58.897322	orig059 end: 7
+59.093635	59.093635	059eB
+100.659048	100.670019	orig060 sync: 2 pre-skip
+100.660068	100.671039	track sync: 2 pre-skip
+100.665616	100.665685	note: crossing
+100.965552	100.966627	orig060 sync: 3 pre-skip
+100.965552	100.966627	track sync: 3 pre-skip
+101.061623	101.061623	orig060 note: split here to find skip in mix
+101.061623	102.945517	note: SKIP back 1.884s
+101.063159	101.063159	orig060 note: resume from skip
+101.202140	101.207642	orig060 sync: A post-skip
+103.084498	103.090000	track sync: A post-skip
+185.890663	185.892228	orig060 sync: 5 post-skip
+187.441185	187.442749	track sync: 5 post-skip
+237.407939	237.407939	note: file start d316-335.wav
+238.973503	238.974320	orig060 sync: 6 post-skip
+240.315748	240.316565	track sync: 6 post-skip
+354.649252	354.652710	orig060 sync: 7 post-skip
+355.537415	355.540873	track sync: 7
+378.328564	378.330624	note: d316 sync
+484.686806	484.690243	orig060 sync: 8 post-skip
+485.064062	485.067499	track sync: 8 post-skip
+580.804498	580.805564	orig060 sync: B post-skip end
+580.804498	580.805564	track sync: B post-skip end
+584.830003	584.830003	061s3
+584.830003	584.830003	orig061 start: 3
+584.944312	584.944312	orig061 start: 1
+584.944312	953.159819	start061: ID: Codename John feat. Grooverider - Warned
+585.050565	585.052457	orig061 sync: 1 start
+585.164874	585.166766	track sync: 1 start
+587.086152	587.086152	orig060 end: B
+587.086152	587.086152	orig060 end: B
+587.463408	587.463408	060e8
+587.974315	587.974315	060e7
+588.428397	588.428397	060e6
+588.636674	588.636674	060e5
+588.968510	588.968510	060eA
+613.625294	613.628547	orig061 sync: 2 pre-skip
+613.627312	613.630565	track sync: 2 pre-skip
+614.148992	614.153120	orig061 sync: 3 immediate pre-skip
+614.148992	614.153120	track sync: 3 immediate pre-skip
+614.155309	616.226420	note: SKIP back 2.071s (multiple files)
+614.155312	614.155312	orig061 note: split to find skip in mix
+614.912047	614.912047	orig061 note: split resume
+614.933861	614.939734	orig061 sync: A post-skip
+616.248237	616.254110	track sync: A post-skip
+663.192398	669.013337	note: "This is a warning warning warning..."
+707.641247	707.645578	orig061 sync: 5 post-skip
+708.591497	708.595828	track sync: 5 post-skip
+816.288000	816.288000	note: file start d-14Nov10-h
+819.255193	819.260828	orig061 sync: 6 post-skip
+819.767120	819.772755	track sync: 6 post-skip
+949.596281	949.603444	orig061 sync: B post-skip end
+949.596281	949.603444	track sync: B post-skip end
+953.051429	953.051429	orig062 start: A
+953.159819	953.159819	orig062 start: 1
+953.159819	1426.945685	start062: ID: Boymerang - Still
+953.279360	953.280362	orig062 sync: 1 start
+953.387750	953.388752	track sync: 1 start
+957.178575	957.178575	orig061 end: B
+957.178575	957.178575	orig061 end: B
+957.690502	957.690502	061e6
+958.128824	958.128824	061e5
+958.492951	958.492951	061eA
+980.872941	980.873493	orig062 sync: 2 pre-skip
+980.872941	980.873493	track sync: 2 pre-skip
+980.887991	980.887991	orig062 note: split here to find skip in mix
+980.887991	984.843691	note: SKIP back 3.956s (multiple files)
+984.007298	984.007298	orig062 note: resume from split (fixed by 39091 samples)
+984.023722	984.024543	orig062 sync: A post-split
+984.860619	984.861440	track sync: A post-split (fixed by 39091 samples)
+984.893725	984.893725	orig062 note: resume from split
+984.910140	984.910957	orig062 sync: A post-skip
+1073.452155	1073.454468	orig062 sync: 4 post-skip
+1073.937624	1073.939937	track sync: 4 post-skip
+1197.106314	1197.112300	orig062 sync: B post-skip end-of-d308
+1197.106314	1197.112300	track sync: B post-skip end-of-d308
+1199.113583	1199.113583	file end: d308-327.wav COMPLETE
+1200.000000	1200.000000	note d328-342: file start sync: d328-342.wav 18437.763068 verified d-14Nov10-h d316-335
+1314.533884	1314.536315	note d328-342: track sync: 6 new file
+1314.997826	1315.000257	orig062 sync: 6
+1421.657564	1421.659778	note d328-342: track sync: 7 end
+1422.544431	1422.546645	orig062 sync: 7 end
+1426.945692	1426.945692	note d328-342: orig063 start: A
+1426.945692	1426.945692	note d328-342: start062: Lemon D City Lights
+1426.945692	1426.945692	orig063 start: .
+1427.173134	1427.175398	note d328-342: track sync: A start
+1429.301837	1429.301837	note d328-342: orig062 end: 7
+1430.145512	1430.145512	orig062 end: 7
+1430.188704	1430.188704	orig062 end: B
+1430.674172	1430.674172	062e4
+1431.025601	1431.025601	062eA
+2078.112000	2078.112000	note d328-342: file end: d328-342.wav
+237.407939	237.407939	file start sync: d316-335.wav 18437.763068 verified d308-327
+237.407939	1200.000000	file note: in sync with d308-327 over this range
+1200.000000	1437.407939	file note: in sync with d328-342 over this range
+1437.407939	1437.407939	file end: d316-335.wav COMPLETE
+816.288000	816.288000	file start sync: d-14Nov10-h.au 18437.763068 verified d308-327
+816.288000	1200.000000	file note: in sync with d308-327 over this range
+1200.000000	1602.207500	file note: in sync with d328-342 over this range
+1602.207500	1602.207500	file end: d-14Nov10-h.au COMPLETE
