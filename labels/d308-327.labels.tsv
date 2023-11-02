@@ -1,4 +1,4 @@
-0.000000	0.000000	file start sync: d308-237.wav 18437.763068 verified by 059-Silver Blade
+0.000000	0.000000	file start sync: d308-327.wav 18437.763068 verified by 059-Silver Blade
 -312.255070	56.944562	start059: ID: Dillinja - Silver Blade
 49.162623	49.163064	track059 sync: 7 end
 56.772796	56.772796	060s3
@@ -63,17 +63,17 @@
 819.767120	819.772755	track sync: 6 post-skip
 949.596281	949.603444	orig061 sync: B post-skip end
 949.596281	949.603444	track sync: B post-skip end
-953.051429	953.051429	orig062 start: A
+952.956145	952.956145	orig062 start: A
 953.159819	953.159819	orig062 start: 1
 953.159819	1426.945685	start062: ID: Boymerang - Still
-953.279360	953.280362	orig062 sync: 1 start
+953.184076	953.185079	orig062 sync: 1 start
 953.387750	953.388752	track sync: 1 start
 957.178575	957.178575	orig061 end: B
 957.178575	957.178575	orig061 end: B
 957.690502	957.690502	061e6
 958.128824	958.128824	061e5
 958.492951	958.492951	061eA
-980.872941	980.873493	orig062 sync: 2 pre-skip
+980.777658	980.778210	orig062 sync: 2 pre-skip
 980.872941	980.873493	track sync: 2 pre-skip
 980.887991	980.887991	orig062 note: split here to find skip in mix
 980.887991	984.843691	note: SKIP back 3.956s (multiple files)
