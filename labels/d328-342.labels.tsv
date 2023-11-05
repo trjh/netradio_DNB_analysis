@@ -1,0 +1,120 @@
+0.000000	0.000000	file start sync: d328-342.wav 19637.763068 verified d-14Nov10-h d316-335
+-246.840181	226.945692	start062: ID: Boymerang - Still
+114.110958	114.113389	orig062 sync: 6
+114.533884	114.536315	track sync: 6 new file
+221.657564	221.659778	orig062 sync: 7 end
+221.657564	221.659778	track sync: 7 end
+226.849751	226.849751	063s2
+226.849758	226.849758	orig063 start: 2
+226.945692	226.945692	orig063 start: 1
+226.945692	634.825944	start063: ID: Lemon D - City Lights
+227.173134	227.175398	track sync: 1 start
+229.258645	229.258645	orig062 end: 7
+229.301837	229.301837	orig062 end: 7
+237.408000	237.408000	note d336-355: file start sync: d336-355.wav 19637.763068 verified d328-342
+237.408000	237.408000	note: file start d336-355
+237.408000	630.247625	note d336-355: file note: in sync with d328-342 over this range
+251.256500	251.266685	orig063 sync: 2 pre-skip
+251.256500	251.266685	track sync: 2 pre-skip
+251.671064	251.671064	orig063 note: split to find skip in mix
+251.671064	253.949786	note: SKIP back 2.279s (multiple files)
+252.449388	252.449388	orig063 note: resume from split
+252.757731	252.760489	orig063 sync: A post-skip
+254.258127	254.260885	track sync: A post-skip
+318.273425	318.275872	orig063 sync: 4 post-skip
+319.516124	319.518570	track sync: 4 post-skip
+436.288604	436.290997	orig063 sync: 5
+437.066926	437.069319	track sync: 5 post-skip
+465.526560	465.527001	note: sync d336-355
+590.792938	590.794755	orig063 sync: 6 post-skip
+590.963187	590.965004	track sync: 6 post-skip
+630.247625	631.495625	note d336-355: file note: SKIP ahead 1.248s
+631.495625	878.112000	note d336-355: file note: in sync with d328-342 over this range
+634.067058	634.070125	orig063 sync: B post-skip end
+634.067058	634.070125	track sync: B post-skip end
+634.784191	636.496646	orig063 note: end 1.712s range not used in mix
+634.825944	668.945061	start064: ID: Net Radio - Promo7 Club Groove
+636.496646	636.496646	orig063 end: B
+636.496646	636.496646	orig063 end: B
+636.666896	636.666896	063e6
+637.274968	637.274968	063e5
+637.739345	637.739345	063e4
+637.997042	637.997042	063eA
+668.862540	668.862540	065s1
+668.945061	1030.054221	start065: ID: Dr. Know - Make Me Feel
+669.294669	669.294669	065s0
+669.424946	669.424946	track sync: 0 start
+671.512400	671.512400	orig065 start: 5
+671.512400	671.512400	orig065 start: 5
+671.642677	671.642677	orig065 sync: 0 start
+671.767936	671.944797	track sync: 1 first tone change
+674.417796	674.594657	orig065 sync: 1
+675.258725	675.258725	note: tone change 2
+678.621220	678.621220	orig065 note: tone change 2
+693.381377	693.381377	note: not inverted, very slowed, mix zero point shifted down?
+693.381377	693.405436	track sync: 2 - start of verbalization
+694.891549	694.914429	orig065 sync: 2 - only starts sync
+720.023495	720.025253	track sync: 3 pre-skip GOOD SYNC
+720.075272	720.077029	orig065 sync: 3 pre-skip
+720.786499	720.787695	track sync: 4 pre-skip
+720.797483	720.798680	orig065 sync: 4 pre-skip
+720.988436	720.989558	orig065 sync: 5 pre-skip
+720.988436	720.989558	track sync: 5 pre-skip
+721.073636	721.073636	orig065 note: split to find skip in mix
+721.073636	731.137561	note: SKIP back 10.064s (both files)
+731.228625	731.231065	track sync: A (6) post-skip
+746.888432	746.888432	orig065 note: resume from split
+746.979496	746.981935	orig065 sync: A post-skip
+833.026355	833.028436	track sync: 7 post-skip
+843.288747	843.290828	orig065 sync: 7 post-skip
+877.730934	877.739130	track sync: B (8) end of d328-342
+878.112000	878.112000	file end: d328-342.wav COMPLETE
+885.645242	885.653438	orig065 sync: B
+957.401088	957.401088	note d336-355: orig066 start: A
+958.258503	958.258503	note d336-355: 066s1
+958.258503	958.258503	orig066 start: .
+980.139525	982.267045	note d336-355: note: can maybe hear the first tones of 066
+986.943684	986.944813	note d336-355: track sync: 9 - just before mix?
+988.298669	988.300706	note d336-355: track sync: 10 pre-skip2
+988.423062	988.423062	note d336-355: note: SKIP - perhaps intentional - split here
+988.423063	990.310043	note d336-355: note: SKIP range - ahead 1.887s
+989.020392	989.021521	orig065 sync: 9
+990.304252	990.306289	orig065 sync: 10
+990.535232	990.540596	note d336-355: NOTE: after skip signal now inverted?
+990.535232	990.540596	note d336-355: track sync: 11 post-skip in sync with point 10
+992.540816	992.546180	orig065 sync: 11 post-skip2 in sync with point 10
+999.342480	999.344362	note d336-355: track sync: 12 NOW NOT INVERTED maybe? confused.
+1000.884167	1000.886049	orig065 sync: 12
+1002.017915	1003.179957	note d336-355: note: "forever" from next 066? not in 065
+1002.915228	1004.026203	orig066 note: "forever"
+1003.555982	1005.484236	note d336-355: track066 sync: A first four-note
+1003.950979	1004.328510	note d336-355: note: first of four-note
+1004.413397	1006.341651	orig066 sync: A first four-note
+1005.484236	1005.484236	note d336-355: note: rough sync 13 (rs13)
+1006.653298	1010.868491	orig065 note: voice saying something "... give me .."? in both track and mix
+1006.703820	1006.703820	orig065 note: rough sync 13 (rs13)
+1015.476013	1016.208818	note d336-355: note: rs14
+1016.163263	1016.896068	orig065 note: rs14
+1016.994820	1017.767794	note d336-355: note: rs15
+1017.576757	1018.349731	orig065 note: rs15
+1018.905542	1020.473202	note d336-355: note: "yeah, yeah" very low in the mix now
+1019.396286	1020.738134	orig065 note: "yeah, yeah"
+1023.360998	1023.515159	note d336-355: note: rs16
+1023.649790	1023.803950	orig065 note: rs16
+1023.745936	1023.745936	065eA
+1028.753030	1028.841057	note d336-355: note: last rough sync
+1028.753030	1028.841057	orig065 note: last rough sync
+1028.841057	1030.054221	orig065 note: fade out if in at all
+1029.234415	1029.234415	065e7
+1030.054221	1030.054221	note d336-355: start066: ID: JMJ & Richie - Free La Funk (PFM Remix)
+1030.054221	1039.496807	orig065 note: range not used in mix
+1031.582498	1031.582498	orig065 end: B
+1037.420098	1037.420098	065e9
+1037.491223	1037.491223	065e10
+1037.491223	1037.491223	065e11
+1037.491223	1037.491223	note d336-355: 065e10 and 11
+1037.955119	1037.955119	065e12
+1039.496807	1039.496807	note d336-355: orig065 end: last rough sync
+1039.496807	1039.496807	orig065 end: .
+1041.800558	1041.801115	note d336-355: track sync: 1 - note not inverted
+1041.800558	1041.801115	orig066 sync: 1
