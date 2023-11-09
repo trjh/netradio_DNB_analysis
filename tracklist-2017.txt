@@ -141,27 +141,39 @@ x   d276-293b.wav
 x   d-14Nov10-f		280-300 PRIMARY
 	overlaps (280-300)
 	d288-307.wav
-    d288-307.wav	PRIMARY
+x   d288-307.wav	PRIMARY
 	no overlaps (300-307)
-    d308-327.wav	PRIMARY
+x   d308-327.wav	PRIMARY
 	overlaps (308-327)
-	d316-335.wav
-	d-14Nov10-h		320-333
-    d316-335.wav
-    d-14Nov10-h		320-333
-    d328-342.wav
-    d336-355.wav
-    d356-375.wav
-    d376-395.wav
-    d396-415.wav
-    d416-435.wav
+	. d316-335.wav
+	. d-14Nov10-h		320-333
+x   d316-335.wav
+	(recorded in d308-327)
+x   d-14Nov10-h		320-333
+	(recorded in d308-327)
+x   d328-342.wav	PRIMARY
+	overlaps (328-342)
+	. d336-355.wav (but also primary)
+.   d336-355.wav	PRIMARY
+    d356-375.wav	PRIMARY
+    d376-395.wav	PRIMARY
+    d396-415.wav	PRIMARY
+    d416-435.wav	PRIMARY
+	overlaps (416-435)
+	d425-438b.wav
+	d425-444.wav
     d425-438b.wav
     d425-444.wav
-    d436-455.wav
+    d436-455.wav	PRIMARY
+	overlaps (436-455)
+	d445-464.wav
     d445-464.wav
-    d456-470.wav
+    d456-470.wav	PRIMARY
+	overlaps (456-470)
+	d465-484.wav
+	d472-491.wav
     d465-484.wav
-    d472-491.wav
+    d472-491.wav	PRIMARY?
     d485-504.wav
     d492-511.wav
     d505-524.wav
@@ -271,7 +283,11 @@ x   d-14Nov10-f		280-300 PRIMARY
 		     https://www.youtube.com/watch?v=A0H2xYgndls
 		     (original version of tune)
 		     [see Appendix Mystery Track 1]
-		     https://youtu.be/mpkVorEMhYU?si=UD7xFVIAAdFpHhp8 -- Soulpower remix, asked for this remix
+		     -- asking for the audio --
+		     https://youtu.be/mpkVorEMhYU -- tSilke -- Soulpower remix, asked for this remix
+		     https://youtu.be/_rD-br9B8T0 -- eto4toi -- "
+		     https://youtu.be/K0OglGoUrfM -- tmontyb10011 -- (Cevin Fisher/Peter Daou Club Mix), "
+		     --:
 	13:12.523 .. organ kicks in again
 	14:12.808 .. transition (break & C'mon c'mon c'mon c'mon)
 		     just let me ... get you off my mind .. turn me on tur
@@ -719,9 +735,10 @@ min	-----------
 	13:09.512 .. bassline stop/change [end of last song?]
 	13:34.101 .. Free La Funk bassline starts
 
-350:08	18:53.762 :: Mystery Track 3
+350:08	18:53.762 :: Mystery Track 3 (Aquarius - Wave Forms)
 		  :: ?? Coo-ooo-ooh-ooh yeah song
 		     no hits
+		     https://www.reddit.com/r/AtmosphericDnB/comments/16n4u0m/comment/k1cvlzm/?utm_source=share&utm_medium=web2x&context=3
 351:14.552  20:00.000 -- END
 
 	dnb356-375
@@ -795,8 +812,9 @@ min	-----------
 			6:13.504 last beat
 	05:28.189 .. end of Your Sound
 	09:32.453 .. last OTR beat
-380:47	09:32.453 :: Mystery Track 5
+380:47	09:32.453 :: Mystery Track 5 (j majik remix of solar feelings by Jacobs optical stairway)
 			"space inside of me"
+		     https://www.reddit.com/r/AtmosphericDnB/comments/16n4u0m/comment/k1geg8x/?utm_source=share&utm_medium=web2x&context=3
 385:17	14:03.150 :: Sea of Tears / Goldie
 		     https://www.youtube.com/watch?v=BY37izMpcsc
 		     14:51.190 guitar enters	[in sync 0:48.334]
