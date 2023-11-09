@@ -38,3 +38,5 @@ dropbox
 Makefile
 jaz_links
 scripts/__pycache__/
+alignscore.log
+sheetscript/logs
