@@ -35,7 +35,7 @@ sources
 dropbox
 ._*
 .DS_Store
-Makefile
+Makefile.audio
 jaz_links
 scripts/__pycache__/
 alignscore.log

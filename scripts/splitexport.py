@@ -1,12 +1,10 @@
 import argparse
 import sys
-# import pipeclient from scripts for Audacity
-sys.path.append('/Users/timh/Downloads/Netradio/netradio_DNB_localdisk/scripts')
-import pipeclient
 import json
 import re
 import time
 import pprint
+import pyaudacity as pa
 
 outline = """
     - create a label track if necessary
@@ -19,7 +17,6 @@ outline = """
 
 debug = False                           # debug level
 
-audacity = None                         # audacity connection
 aud_tracks = None                       # list of audacity tracks
 aud_clips = None                        # list of audacity audio clips
 audacitytest = False                    # audacity debug
@@ -36,24 +33,10 @@ def dprint(string):
 def audcommand(string):
     global audacitytest
 
-    reply = ''
     if audacitytest and (('AddLabel' in string) or ('SetLabel' in string)):
         print(f"TESTMODE - would send <<{string}>> to Audacity")
         return
-    audacity.write(string + '\n')
-    # Allow a little time for Audacity to return the data:
-    for wait in [0.1, 0.2, 0.4, 0.8, 1.0]:
-        time.sleep(wait)
-        reply = (audacity.read())
-        if reply != '':
-            break
-    if reply == '':
-        sys.exit(f'Audacity: No data returned for {string} ({reply}).')
-    if not re.search(r"BatchCommand finished: OK", reply):
-        sys.stderr.write(f"Unexpected Audacity response: <<{reply}>>\n\n")
-        if re.search(r"BatchCommand finished: Failed!", reply):
-            sys.exit("Failed command, exiting.")
-    return reply
+    return pa.do(string)
 
 # initialize audacity data
 def audinit():
@@ -62,7 +45,7 @@ def audinit():
     # Pull Track info if we don't have them already
     # probably not needed but good as an init test
     if not aud_tracks:
-        jdata = audcommand('GetInfo: Type=Tracks')
+        jdata = pa.get_info(info_type='Tracks')
         jdata = (jdata [:jdata.rfind(']')+1])
         aud_tracks = json.loads(jdata)
         dprint(aud_tracks)
@@ -70,12 +53,12 @@ def audinit():
         # [{dict about track}, ...]
 
     if not aud_clips:
-        jdata = audcommand('GetInfo: Type=Clips')
+        jdata = pa.get_info(info_type='Clips')
         jdata = (jdata [:jdata.rfind(']')+1])
         aud_clips = json.loads(jdata)
 
     if not samplerate:
-        jdata = audcommand('GetInfo: Type=Preferences')
+        jdata = pa.get_info(info_type='Preferences')
         jdata = (jdata [:jdata.rfind(']')+1])
         prefs = json.loads(jdata)
         for p in prefs:
@@ -126,8 +109,9 @@ def setlabel(LabelTrack,ts,label,endts=None):
     audcommand(f'Select: Track={LabelTrack} Start={ts[0]} End={ts[1]}')
     audcommand("SetTrackStatus: Focused=1")
     audcommand("AddLabel:")
-        # now, stupidly, we need to find the # of the label we just added
-    jdata = audcommand('GetInfo: Type=Labels')
+
+    # now, stupidly, we need to find the # of the label we just added
+    jdata = pa.get_info(info_type='Labels')
     jdata = (jdata [:jdata.rfind(']')+1])
     aud_labels = json.loads(jdata)
         # [labeltrack, ...]
@@ -232,7 +216,7 @@ def parse_metadatafile(filename):
 
 
 def main(args):
-    global audacitytest, audacity, debug, aud_clips, aud_tracks
+    global audacitytest, debug, aud_clips, aud_tracks
 
     # Read arguments
     metadatafile = args.metadata
@@ -246,7 +230,6 @@ def main(args):
 
     # Initialize Audacity
     print("Initializing Audacity")
-    audacity = pipeclient.PipeClient()
     audinit()
     dprint(f".tracks: {len(aud_tracks)}")
     if debug_dump:
