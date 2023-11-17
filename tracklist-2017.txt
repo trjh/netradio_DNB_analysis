@@ -283,6 +283,7 @@ x   d328-342.wav	PRIMARY
 		     https://www.youtube.com/watch?v=A0H2xYgndls
 		     (original version of tune)
 		     [see Appendix Mystery Track 1]
+		https://archive.org/details/lp_stay_meshell-ndegeocello/disc1/02.01.+Stay+(The+Midnight+Rockers+Remix).mp3
 		     -- asking for the audio --
 		     https://youtu.be/mpkVorEMhYU -- tSilke -- Soulpower remix, asked for this remix
 		     https://youtu.be/_rD-br9B8T0 -- eto4toi -- "
@@ -754,6 +755,8 @@ min	-----------
 			  Yeah, I got a tune for you."
 	05:38.556 .. end of Mystery Track 4 drumline
 356:53	05:38.556 :: Hypnotising / PFM
+		     https://tunebat.com/Info/Hypnotising-PFM/4mUFhBlBMF8MLlaje7qxjP
+		     https://store.om-records.com/album/radical-beauty
 		     https://vimeo.com/106319553 (length 6:12)
 			 1:04 first 'hypnotising'
 			 1:33 drums				[sync point]
