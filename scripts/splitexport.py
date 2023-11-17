@@ -26,8 +26,10 @@ aud_labels = None                       # list of audacity labels
 audacitytest = False                    # audacity debug
 samplerate = None                       # sample rate of the audio track
 
+args = None                             # share command-line argument globally
+
 metadataformat = r"timestamp=(.+?), trackName=(.+?), artistName=(.+?), albumName=(.+?), trackNumber=(\d+), albumTrackCount=(\d+), genre=(.+?), year=(\d+), trackDuration=([\d.]+), playerPosition=([\d.]+)"
-metadata_re = re.compile(metadataformat)
+metadata_re = re.compile(metadataformat, flags=re.IGNORECASE)
 
 def dprint(string):
     global debug
@@ -166,6 +168,19 @@ def setlabel(LabelTrack,ts,label,endts=None):
         command += f' Start={ts[0]} End={ts[1]}'
     audcommand(command)
 
+
+# Run a subprocess and catch errors
+def runcommand(args):
+    try:
+        response = subprocess.run(args)
+    except FileNotFoundError:
+        sys.exit(f'command <<{args[0]}>> not found\n')
+    except subprocess.CalledProcessError as e:
+        sys.exit(f'Error occurred running {args}: {e}\n')
+    if response.returncode != 0:
+        sys.exit(f'Error occurred running {args}\n')
+
+
 # read metadata from file with given filename, return list of dicts containing
 # unique metadata
 def parse_metadatafile(filename):
@@ -175,7 +190,7 @@ def parse_metadatafile(filename):
     lastentry = None
 
     try:
-        input_file = open(filename, 'r')
+        input_file = open(filename, 'r', encoding="latin-1")
     except Exception as inst:
         print(f"Unable to open {filename}: {inst}")
         sys.exit('Exiting.')
@@ -203,13 +218,15 @@ def parse_metadatafile(filename):
                     # new entry, add it to our data
                     returnlist.append(entry)
                     lastentry = entry
+                    dprint(f"New entry line {linenum}: {line}\n")
             else:
                 # no last entry
                 returnlist.append(entry)
                 lastentry = entry
         else:
             # line did not match regex
-            sys.stederr.write(f"Unexpected input line {linenum}: {line}")
+            sys.stderr.write(f"Unexpected input line {linenum}: {line}\n")
+
     # end for line in input_file
     input_file.close()
     return(returnlist)
@@ -217,7 +234,7 @@ def parse_metadatafile(filename):
 
 # slightly following the example of vinyl2digital, use the labels to select ranges in audio, then use Export2 to export them
 def export_by_label(audio_track, metadata, interactive=False):
-    global aud_labels
+    global aud_labels, args
 
     cwd = os.getcwd()
     print(f"Storing files in {cwd}")
@@ -228,43 +245,66 @@ def export_by_label(audio_track, metadata, interactive=False):
     labelnum = 0
     for lt in aud_labels:
         for l in lt[1]:
-            if metadata[labelnum]['track'] not in l[2]:
-                sys.exit(f"mismatch between label {l} and metadata {metadata[labelnum]}?")
-            filename = f"{labelnum+1:02d} - {metadata[labelnum]['artist']} - {metadata[labelnum]['track']}.wav"
+            l_metadata = metadata[labelnum]
+            if l_metadata['track'] not in l[2]:
+                print(f"mismatch between label {l} and metadata {l_metadata}?")
+                print("Continue? [Yn] ", end='')
+                choice = input().lower()
+                if 'n' in choice:
+                    sys.exit("Exiting as requested")
+
+            filename = f"{labelnum+1:02d} - {l_metadata['artist']} - {l_metadata['track']}"
             # remove samples annotations, bad-for-unix chars, and lead/trail whitespace
             filename = re.sub(r'\(\d+:\d+ \+ \d+ samples\)-?', '', filename)
+            filename = re.sub(r'[<>:"\/\\\|\?\*]', '_', filename)
 
-            print(f"--- Exporting #{labelnum} [{l[2]}] as {filename}")
-            pa.do(f"Select: Track={audio_track} Start={l[0]} End={l[1]}")
-            fqfilename = cwd + "/" + filename
-            pa.export(fqfilename, num_channels=2)
+            # Check for existing wav/wavepack
+            doexport = True
+            if os.path.exists(filename + ".wav"):
+                if args.overwrite:
+                    print(f"--- Overwrite mode, removing {filename}.wav")
+                    try:
+                        os.remove(filename + ".wav")
+                    except Exception as e:
+                        sys.exit("Unable to remove {filename}.wav: {e}")
+                else:
+                    print(f"--- Existing wav file, will not recreate {filename}.wav")
+                    doexport = False
+
+            if os.path.exists(filename + ".wv"):
+                if args.overwrite:
+                    print(f"--- Overwrite mode, removing {filename}.wv")
+                    try:
+                        os.remove(filename + ".wv")
+                    except Exception as e:
+                        sys.exit("Unable to remove {filename}.wv: {e}")
+                else:
+                    print(f"--- Existing wavepack file {filename}.wv, skipping to next track")
+                    labelnum += 1
+                    continue
+
+            # Export the track
+            if doexport:
+                print(f"--- Exporting #{labelnum} [{l[2]}] as {filename}.wav")
+                pa.do(f"Select: Track={audio_track} Start={l[0]} End={l[1]}")
+                fqfilename = cwd + "/" + filename + ".wav"
+                pa.export(fqfilename, num_channels=2)
 
             # we're here, invoke wavpack
-            print(f"--- Compacting {filename} with wavpack")
-            try:
-                subprocess.run(["wavpack", fqfilename])
-            except FileNotFoundError:
-                print('Command not found')
-            except subprocess.CalledProcessError as e:
-                print('Error occurred:', e)
+            print(f"--- Compacting {filename}.wav with wavpack")
+            runcommand(["wavpack", filename + ".wav"])
 
             # ok, that went well, now wvtag
-            wvfilename = re.sub(r'.wav$', '.wv', filename)
-            print(f"--- Adding tags to {wvfilename} with wvtag")
+            print(f"--- Adding tags to {filename}.wv with wvtag")
             wvtagcall = ["wvtag",
-                "-w",       "TITLE="+metadata[labelnum]['track'],
-                "-w",      "ARTIST="+metadata[labelnum]['artist'],
-                "-w",       "ALBUM="+metadata[labelnum]['album'],
-                "-w",        "DATE="+metadata[labelnum]['year'],
-                "-w", "TRACKNUMBER="+metadata[labelnum]['num'],
-                "-w",       "GENRE="+metadata[labelnum]['genre'],
-                wvfilename]
-            try:
-                subprocess.run(wvtagcall)
-            except FileNotFoundError:
-                print('Command not found')
-            except subprocess.CalledProcessError as e:
-                print('Error occurred:', e)
+                "-w",       "TITLE="+l_metadata['track'],
+                "-w",      "ARTIST="+l_metadata['artist'],
+                "-w",       "ALBUM="+l_metadata['album'],
+                "-w",        "DATE="+l_metadata['year'],
+                "-w", "TRACKNUMBER="+l_metadata['num'],
+                "-w",       "GENRE="+l_metadata['genre'],
+                filename + ".wv"]
+            runcommand(wvtagcall)
 
             # interactive check if desired
             if interactive:
@@ -274,18 +314,18 @@ def export_by_label(audio_track, metadata, interactive=False):
                     sys.ext("Exiting")
 
             # remove wav file
-            print(f"--- Removing {filename}")
+            print(f"--- Removing {filename}.wav")
             try:
-                os.remove(filename)
+                os.remove(filename + ".wav")
             except Exception as e:
-                sys.exit("Unable to remove {filename}: {e}")
+                sys.exit("Unable to remove {filename}.wav: {e}")
 
             # increment label number
             labelnum += 1
 
 
-def main(args):
-    global audacitytest, debug, debug_dump, aud_clips, aud_tracks, aud_labels
+def main():
+    global args, audacitytest, debug, debug_dump, aud_clips, aud_tracks, aud_labels
 
     # Read arguments
     metadatafile = args.metadata
@@ -296,6 +336,15 @@ def main(args):
     pp = pprint.PrettyPrinter(indent=4)
 
     dprint("DEBUG mode on")
+
+    # if we are just testing metadata file, do that and exit
+    if args.metatest:
+        debug = True
+        metadata = parse_metadatafile(metadatafile)
+        dprint(f".metadata entries: {len(metadata)}")
+        print("dump> metadata")
+        pp.pprint(metadata)
+        sys.exit('metadata test complete')
 
     # Initialize Audacity
     print("Initializing Audacity")
@@ -406,7 +455,7 @@ if __name__ == "__main__":
         timestamp=2023-November-7 2:8:51, trackName=Apple Tree Farm,
         artistName=AppleJack, albumName=Tree Farm Tapes (2014), trackNumber=8,
         albumTrackCount=9, genre=Spoken, year=2014,
-        trackDuration=355.013000488281, playerPosition=12.192999839783
+        trackDuration=355.013, playerPosition=12.192
     """
     parser = argparse.ArgumentParser(description=description, epilog=epilog)
     parser.add_argument('metadata', help='Metadata file')
@@ -414,6 +463,8 @@ if __name__ == "__main__":
     parser.add_argument('--dump', action='store_true', help='Dump data structures as they are read/created')
     parser.add_argument('--audacitytest', action='store_true', help='Print Audacity commands, but do not send them')
     parser.add_argument('-i', '--interactive', action='store_true', help='Pause after creating each wavpack file')
+    parser.add_argument('--metatest', action='store_true', help='Check input file for parseability, then exit')
+    parser.add_argument('--overwrite', action='store_true', help='Overwrite existing wav/wv files')
 
     args = parser.parse_args()
-    main(args)
+    main()
