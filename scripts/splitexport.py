@@ -7,6 +7,10 @@ import time
 import pprint
 import pyaudacity as pa
 import subprocess
+import tempfile
+from pydub import AudioSegment
+from pydub.silence import detect_silence
+
 
 outline = """
     - create a label track if necessary
@@ -27,6 +31,14 @@ audacitytest = False                    # audacity debug
 samplerate = None                       # sample rate of the audio track
 
 args = None                             # share command-line argument globally
+
+audio_track = None
+label_track = None                      # audio and label track we operate on.
+                                        # globals to make it easer to add labels from subroutines.
+
+# Define your silence parameters
+min_silence_length = 250   # in milliseconds
+
 
 metadataformat = r"timestamp=(.+?), trackName=(.+?), artistName=(.+?), albumName=(.+?), trackNumber=(\d+), albumTrackCount=(\d+), genre=(.+?), year=(\d+), trackDuration=([\d.]+), playerPosition=([\d.]+)"
 metadata_re = re.compile(metadataformat, flags=re.IGNORECASE)
@@ -232,6 +244,57 @@ def parse_metadatafile(filename):
     return(returnlist)
 
 
+# find a silence around timestamp, return start and end of biggest silence in
+# 10 second window around timstamp
+def find_silence(audio_track, timestamp):
+    global min_silence_length, args, label_track, debug
+    silence_start = silence_end = timestamp
+
+    # create a temporary file
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+        temp_filename = tmp_file.name
+
+    # export the 5 sec before & after timestamp to temp file
+    pa.do(f"Select: Track={audio_track} Start={timestamp-5} End={timestamp+5}")
+    pa.export(temp_filename + ".wav", num_channels=2)
+    dprint(f"Exported from {timestamp-5} to {timestamp+5} into {temp_filename}")
+
+    if debug:
+        setlabel(label_track,timestamp-5,"SILENCE SEARCH",endts=timestamp+5)
+
+    # import temp file, then remove it
+    audio = AudioSegment.from_file(temp_filename + ".wav")
+    dprint(f"Imported AudioSegment {temp_filename}")
+    os.unlink(temp_filename)
+    os.unlink(temp_filename + ".wav")
+
+    # use pydub.detect_silence to find silence windows
+    silence_ranges = detect_silence(audio, min_silence_len=min_silence_length, silence_thresh=args.silence_threshold)
+    dprint(f"detect silence(audio, min={min_silence_length}, thresh={args.silence_threshold}\n"
+            + f"...output: {silence_ranges}")
+
+    if silence_ranges:
+        # Find the longest silence
+        longest_silence = max(silence_ranges, key=lambda x: x[1] - x[0])
+
+        # Calculate the duration of the longest silence
+        longest_silence_duration = longest_silence[1] - longest_silence[0]  # Duration in milliseconds
+        dprint(f"Found {len(silence_ranges)} silence ranges, longest is {longest_silence_duration}ms "
+              +f"starting at {longest_silence[0]/1000}")
+
+        # return offsets
+        silence_start = timestamp - 5 + longest_silence[0]/1000
+        silence_end   = timestamp - 5 + longest_silence[1]/1000
+
+        if debug:
+            setlabel(label_track,silence_start,f"SILENCE longest of {len(silence_ranges)}",endts=silence_end)
+
+    else:
+        dprint("No silences found.")
+
+    return (silence_start, silence_end)
+
+
 # slightly following the example of vinyl2digital, use the labels to select ranges in audio, then use Export2 to export them
 def export_by_label(audio_track, metadata, interactive=False):
     global aud_labels, args
@@ -326,6 +389,7 @@ def export_by_label(audio_track, metadata, interactive=False):
 
 def main():
     global args, audacitytest, debug, debug_dump, aud_clips, aud_tracks, aud_labels
+    global audio_track, label_track
 
     # Read arguments
     metadatafile = args.metadata
@@ -364,8 +428,6 @@ def main():
         pp.pprint(metadata)
 
     # Find audio and label track
-    audio_track = None
-    label_track = None
     audio_start = None
     audio_end   = None
     for at_i in range(len(aud_tracks)):
@@ -415,21 +477,29 @@ def main():
 
     if create_labels:
         start = 0
+        count = 0
         for track in metadata:
             if (start > audio_end):
                 print(f"Track '{track['track']}' starts after end of recorded audio, skipping it and all remaining.")
                 break
+            if args.limit:
+                if count > args.limit:
+                    print(f"Exiting after {args.limit} labels as requested.")
+                    break
+
             try:
                 duration = float(track['duration'])
             except:
                 sys.exit(f"Issue with setting duration to float on entry {track}")
 
             end = start + duration
+            (end, next_start) = find_silence(audio_track, end)
             printt = "'" + track['track'] + "'"
             print(f"Label: {printt:40s} len: {duration:7.3f} start: {start:7.3f} end: {end:7.3f}")
             setlabel(label_track,start,track['track'],endts=end)
 
-            start = end
+            start = next_start
+            count += 1
 
     # Verify everything looks ok with user
     print("Please check the labels in Audacity, adjust if necessary,\nand enter y to continue. [yN]", end='')
@@ -465,6 +535,9 @@ if __name__ == "__main__":
     parser.add_argument('-i', '--interactive', action='store_true', help='Pause after creating each wavpack file')
     parser.add_argument('--metatest', action='store_true', help='Check input file for parseability, then exit')
     parser.add_argument('--overwrite', action='store_true', help='Overwrite existing wav/wv files')
+    parser.add_argument('--silence_threshold', type=int, default=-50,
+                        help='Threshold for silence, in decibels (default: -50dB)')
+    parser.add_argument('--limit', type=int, default=None, help='If set, only create this many labels')
 
     args = parser.parse_args()
     main()
