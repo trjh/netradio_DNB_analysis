@@ -1,1 +1,2 @@
 pyaudacity @ git+https://github.com/bwagner/pyaudacity
+pydub
