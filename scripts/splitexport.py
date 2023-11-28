@@ -1,3 +1,5 @@
+#!python3
+
 import os
 import argparse
 import sys
@@ -10,6 +12,7 @@ import subprocess
 import tempfile
 from pydub import AudioSegment
 from pydub.silence import detect_silence
+import numpy as np
 
 
 outline = """
@@ -38,10 +41,16 @@ label_track = None                      # audio and label track we operate on.
 
 # Define your silence parameters
 min_silence_length = 250   # in milliseconds
+silence_find_window = 10   # in seconds -- window is actually 2x this figure.
+                           # look this far before and after timestamp given to find_silence for a silence span
 
 
-metadataformat = r"timestamp=(.+?), trackName=(.+?), artistName=(.+?), albumName=(.+?), trackNumber=(\d+), albumTrackCount=(\d+), genre=(.+?), year=(\d+), trackDuration=([\d.]+), playerPosition=([\d.]+)"
-metadata_re = re.compile(metadataformat, flags=re.IGNORECASE)
+metadataformats = [r"timestamp=(.+?), trackName=(.+?), artistName=(.+?), albumName=(.+?), trackNumber=(\d+), "
+                   + r"albumTrackCount=(\d+), genre=(.+?), year=(\d+), trackDuration=([\d.]+), playerPosition=([\d.]+), "
+                   + r"albumartist=(.+?), composer=(.*?), disccount=(\d+), discnumber=(\d+), compilation=(true|false)",
+                   r"timestamp=(.+?), trackName=(.+?), artistName=(.+?), albumName=(.+?), trackNumber=(\d+), "
+                   + r"albumTrackCount=(\d+), genre=(.+?), year=(\d+), trackDuration=([\d.]+), playerPosition=([\d.]+)"]
+
 
 def dprint(string):
     global debug
@@ -91,6 +100,9 @@ def setlabel(LabelTrack,ts,label,endts=None):
     global samplerate, debug_dump, aud_labels
 
     setts = False   # by default, don't set the timestamp when setting label text, but do if we found it at ts=0
+
+    # remove quotes and other oddities from label
+    label = re.sub(r'["]', '_', label)
 
     dprint(f".setlabel({LabelTrack}, {ts}, {label}, endts={endts})")
     if (LabelTrack is None) or (ts is None) or (label is None):
@@ -196,7 +208,10 @@ def runcommand(args):
 # read metadata from file with given filename, return list of dicts containing
 # unique metadata
 def parse_metadatafile(filename):
-    global metadata_re
+    global metadataformats
+
+    metadataformat = None
+    metadata_re = None
 
     returnlist = []
     lastentry = None
@@ -207,6 +222,26 @@ def parse_metadatafile(filename):
         print(f"Unable to open {filename}: {inst}")
         sys.exit('Exiting.')
 
+    # read until we know which metadata format to use
+    for line in input_file:
+        if "timestamp=" in line:
+            for f in metadataformats:
+                if re.match(f, line, flags=re.IGNORECASE):
+                    metadataformat = f
+                    metadata_re = re.compile(metadataformat, flags=re.IGNORECASE)
+                    input_file.seek(0)  # rewind to beginning
+                    dprint(f"Working metadata format: {f}\nexample: {line}\n")
+                    break
+            # END for f in metadataformats:
+            if metadataformat:
+                break
+            else:
+                print(f"WARNING: {line} did not match a metadata format")
+        # END if "trackName=" in line:
+    # END for line in input_file:
+    if not metadataformat:
+        sys.exit("EXIT: unable to find working metadata format")
+
     linenum = 0
     for line in input_file:
         linenum += 1
@@ -216,21 +251,31 @@ def parse_metadatafile(filename):
         # timestamp=(.+*), trackName=(.+?), artistName=(.+?), albumName=(.+?), trackNumber=(\d+),
         #                  6            7           8                    9                        10
         # albumTrackCount=(\d+), genre=(.+?), year=(\d+), trackDuration=([\d.]+), playerPosition=([\d.]+)"
+        #               11              12               13                14                 15
+        # r"albumartist=(.+?), composer=(.+?), disccount=(\d+), discnumber=(\d+), compilation=(true|false)",
         if match := metadata_re.match(line):
             entry = {"track": match.group(2), "artist": match.group(3), "album": match.group(4),
                      "num": match.group(5)+"/"+match.group(6), "genre": match.group(7), "year": match.group(8),
                      "duration": match.group(9)}
+            if len(match.groups()) > 10:
+                entry.update({"albumartist": match.group(11), "composer": match.group(12), "disc": match.group(14)+"/"+match.group(13),
+                              "compilation": (1 if match.group(15)=="true" else 0)})
             if lastentry:
                 lastentry_match = True
                 for k in lastentry:
+                    # do not use duration, as oddly it can change?!
+                    if k == 'duration': continue
                     if lastentry[k] != entry[k]:
                         lastentry_match = False
                         break
                 if not lastentry_match:
                     # new entry, add it to our data
                     returnlist.append(entry)
-                    lastentry = entry
                     dprint(f"New entry line {linenum}: {line}\n")
+                    if lastentry['track'] == entry['track']:
+                        print("WARNING: second entry with identical track name, "
+                              + "use --metatest to debug if this is not expected.")
+                    lastentry = entry
             else:
                 # no last entry
                 returnlist.append(entry)
@@ -244,9 +289,58 @@ def parse_metadatafile(filename):
     return(returnlist)
 
 
+# like pydub detect_silence, but look for absolute zero signal only
+def detect_fullsilence(audio_segment, min_silence_len=1000):
+    """
+    Returns a list of all silent sections [start, end] in milliseconds of audio.
+
+    audio_segment - the segment to find silence in
+    min_silence_len - the minimum length for any silent section
+    """
+    # Get the samples as a NumPy array
+    samples = np.array(audio_segment.get_array_of_samples())
+
+    # Convert stereo to mono by averaging the channels if necessary
+    if audio_segment.channels == 2:
+        samples = samples.reshape((-1, 2))
+        samples = samples.mean(axis=1)
+
+    # Find indices where the sample value is zero
+    zero_indices = np.where(samples == 0)[0]
+
+    # Compute minimum silence length in samples
+    min_silence_samples = int(min_silence_len * audio_segment.frame_rate / 1000)
+
+    # Find consecutive ranges of zeroes
+    ranges = []
+    start_index = None
+    end_index = None
+    # pad zero_indices with an ending 0 so that the ranges.append will trigger
+    # even at the end
+    np.append(zero_indices, 0)
+    for i in zero_indices:
+        if start_index is None:
+            start_index = end_index = i
+        elif i != end_index+1:
+            if ((start_index != end_index) and
+                (end_index - start_index >= min_silence_samples)):
+                # THEN...
+                ranges.append((start_index, end_index))
+                print(f"update: {ranges=}")
+            start_index = end_index = i
+        else:
+            end_index = i
+
+    # Convert sample indices to time (milliseconds)
+    print(ranges)
+    silence_ranges = [(r[0] * 1000 / audio_segment.frame_rate, r[1] * 1000 / audio_segment.frame_rate) for r in ranges]
+
+    return silence_ranges
+
 # find a silence around timestamp, return start and end of biggest silence in
 # 10 second window around timstamp
-def find_silence(audio_track, timestamp):
+# if 'start' is set, don't let search start before it
+def find_silence(audio_track, timestamp, start=None):
     global min_silence_length, args, label_track, debug
     silence_start = silence_end = timestamp
 
@@ -254,13 +348,17 @@ def find_silence(audio_track, timestamp):
     with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
         temp_filename = tmp_file.name
 
-    # export the 5 sec before & after timestamp to temp file
-    pa.do(f"Select: Track={audio_track} Start={timestamp-5} End={timestamp+5}")
+    # export the (silence_find_window) sec before & after timestamp to temp file
+    audio_start = timestamp - silence_find_window
+    if start and (audio_start < start):
+        audio_start = start
+    audio_end   = timestamp + silence_find_window
+    pa.do(f"Select: Track={audio_track} Start={audio_start} End={audio_end}")
     pa.export(temp_filename + ".wav", num_channels=2)
-    dprint(f"Exported from {timestamp-5} to {timestamp+5} into {temp_filename}")
+    dprint(f"Exported from {audio_start} to {audio_end} into {temp_filename}")
 
     if debug:
-        setlabel(label_track,timestamp-5,"SILENCE SEARCH",endts=timestamp+5)
+        setlabel(label_track,audio_start,"SILENCE SEARCH",endts=audio_end)
 
     # import temp file, then remove it
     audio = AudioSegment.from_file(temp_filename + ".wav")
@@ -269,7 +367,11 @@ def find_silence(audio_track, timestamp):
     os.unlink(temp_filename + ".wav")
 
     # use pydub.detect_silence to find silence windows
-    silence_ranges = detect_silence(audio, min_silence_len=min_silence_length, silence_thresh=args.silence_threshold)
+    if args.fullsilence:
+        silence_ranges = detect_fullsilence(audio, min_silence_len=min_silence_length)
+    else:
+        silence_ranges = detect_silence(audio, min_silence_len=min_silence_length,
+                                        silence_thresh=args.silence_threshold)
     dprint(f"detect silence(audio, min={min_silence_length}, thresh={args.silence_threshold}\n"
             + f"...output: {silence_ranges}")
 
@@ -283,8 +385,8 @@ def find_silence(audio_track, timestamp):
               +f"starting at {longest_silence[0]/1000}")
 
         # return offsets
-        silence_start = timestamp - 5 + longest_silence[0]/1000
-        silence_end   = timestamp - 5 + longest_silence[1]/1000
+        silence_start = timestamp - silence_find_window + longest_silence[0]/1000
+        silence_end   = timestamp - silence_find_window + longest_silence[1]/1000
 
         if debug:
             setlabel(label_track,silence_start,f"SILENCE longest of {len(silence_ranges)}",endts=silence_end)
@@ -308,9 +410,15 @@ def export_by_label(audio_track, metadata, interactive=False):
     labelnum = 0
     for lt in aud_labels:
         for l in lt[1]:
+            if args.limit:
+                if labelnum > args.limit:
+                    print(f"Exiting after {args.limit} labels/exports as requested.")
+                    break
+
             l_metadata = metadata[labelnum]
             if l_metadata['track'] not in l[2]:
-                print(f"mismatch between label {l} and metadata {l_metadata}?")
+                print(f"mismatch between label and metadata:\n"+
+                      f"label: {l[2]:20s} {l}\nmetadata: {l_metadata['track']:20s} {l_metadata}")
                 print("Continue? [Yn] ", end='')
                 choice = input().lower()
                 if 'n' in choice:
@@ -358,15 +466,17 @@ def export_by_label(audio_track, metadata, interactive=False):
             runcommand(["wavpack", filename + ".wav"])
 
             # ok, that went well, now wvtag
+            # https://wiki.hydrogenaud.io/index.php?title=APE_key
+            # should have had mixed case but we'll continue as we started
             print(f"--- Adding tags to {filename}.wv with wvtag")
-            wvtagcall = ["wvtag",
-                "-w",       "TITLE="+l_metadata['track'],
-                "-w",      "ARTIST="+l_metadata['artist'],
-                "-w",       "ALBUM="+l_metadata['album'],
-                "-w",        "DATE="+l_metadata['year'],
-                "-w", "TRACKNUMBER="+l_metadata['num'],
-                "-w",       "GENRE="+l_metadata['genre'],
-                filename + ".wv"]
+            wvtagcall = ["wvtag"]
+            for tpair in (['TITLE', 'track'], ['ARTIST', 'artist'], ['ALBUM', 'album'], ['DATE', 'year'], ['TRACKNUMBER', 'num'],
+                          ['GENRE', 'genre'], ['ALBUM ARTIST', 'albumartist'], ['COMPOSER', 'composer'], ['DISC', 'disc'],
+                          ['COMPILATION', 'compilation']):
+                if tpair[1] in l_metadata:
+                    wvtagcall.extend(["-w", tpair[0]+"="+str(l_metadata[tpair[1]])])
+            wvtagcall.append(filename + ".wv")
+            print(wvtagcall)
             runcommand(wvtagcall)
 
             # interactive check if desired
@@ -437,6 +547,8 @@ def main():
             audio_end   = aud_tracks[at_i]['end']
         elif (label_track == None) and (aud_tracks[at_i]['kind'] == 'label'):
             label_track = at_i
+        elif (aud_tracks[at_i]['kind'] == 'label'):
+            print("WARNING: more than one label track\n")
         else:
             dprint(f".t[{at_i}][kind]: {aud_tracks[at_i]['kind']}")
     if audio_track == None:
@@ -476,7 +588,7 @@ def main():
             create_labels = False
 
     if create_labels:
-        start = 0
+        start = args.start
         count = 0
         for track in metadata:
             if (start > audio_end):
@@ -493,12 +605,18 @@ def main():
                 sys.exit(f"Issue with setting duration to float on entry {track}")
 
             end = start + duration
-            (end, next_start) = find_silence(audio_track, end)
+            (new_end, next_start) = find_silence(audio_track, end, start=start)
+            print(f"...silence {new_end} - {end} - {next_start}")
+            if new_end > start:
+                end = new_end
             printt = "'" + track['track'] + "'"
             print(f"Label: {printt:40s} len: {duration:7.3f} start: {start:7.3f} end: {end:7.3f}")
             setlabel(label_track,start,track['track'],endts=end)
 
-            start = next_start
+            if next_start >= end:
+                start = next_start
+            else:
+                start = end
             count += 1
 
     # Verify everything looks ok with user
@@ -538,6 +656,8 @@ if __name__ == "__main__":
     parser.add_argument('--silence_threshold', type=int, default=-50,
                         help='Threshold for silence, in decibels (default: -50dB)')
     parser.add_argument('--limit', type=int, default=None, help='If set, only create this many labels')
+    parser.add_argument('--start', type=float, default=0, help='If set, start labels at this timestamp')
+    parser.add_argument('--fullsilence', action='store_true', help='Compute silence as zero signal only')
 
     args = parser.parse_args()
     main()
