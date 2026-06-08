@@ -141,9 +141,28 @@ def parse_label_track_id_text(text):
     return number, artist.strip(), title.strip()
 
 
+def label_stem(path):
+    return re.sub(r"\.labels\.tsv$", "", os.path.basename(path), flags=re.I)
+
+
 def owning_file_for_label_path(path):
-    stem = re.sub(r"\.labels\.tsv$", "", os.path.basename(path), flags=re.I)
-    return normalize_audio_filename(stem)
+    # Canonical key for timeline matching only (the label sync rows / timeline use
+    # this normalized form internally). NOT written to the metadata.
+    return normalize_audio_filename(label_stem(path))
+
+
+def original_audio_name(stem):
+    """The ORIGINAL capture filename for a label stem (.wav, or .au for 14Nov).
+
+    Track metadata in this repo is about the original files + tracks; the player
+    keeps its own original->transcoded(.mp3) mapping separately.
+    """
+    if "14Nov" in stem:
+        if "." in stem:
+            tail = stem.split(".", 1)[1]
+            stem = ("d-" + tail) if tail.startswith("14Nov") else tail
+        return stem + ".au"
+    return stem + ".wav"
 
 
 def parse_label_track_ids():
@@ -156,10 +175,11 @@ def parse_label_track_ids():
             continue
         number, artist, title = parsed
         owning = owning_file_for_label_path(row["path"])
+        source_file = original_audio_name(label_stem(row["path"]))
         start = (timeline.get(owning) or {}).get("master_start_seconds")
         master = start + row["seconds"] if start is not None else None
         record = {"track_number": number, "track_artist": artist, "track_name": title,
-                  "owning_file": owning, "master_seconds": master}
+                  "source_file": source_file, "master_seconds": master}
         existing = result.get(number)
         if existing is None:
             result[number] = record
@@ -221,6 +241,7 @@ def main():
                 filled += 1
             elif entry[field] != label[label_key]:
                 kept.append((number, field, entry[field], label[label_key]))
+        entry["source_file"] = label["source_file"]  # original capture file (.wav/.au)
         if label["master_seconds"] is not None:
             entry["master_seconds"] = round(label["master_seconds"], 3)
         else:
