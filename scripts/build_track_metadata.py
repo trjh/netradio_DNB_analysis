@@ -168,6 +168,34 @@ def original_audio_name(stem):
 def parse_label_track_ids():
     label_rows = read_label_rows()
     timeline = parse_file_timeline(label_rows)
+    # File master windows keyed by ORIGINAL capture filename (the .mp3 form is an
+    # internal artifact). Used to find every capture a track appears in.
+    windows = []
+    for mp3_key, info in timeline.items():
+        stem = mp3_key[:-4] if mp3_key.lower().endswith(".mp3") else mp3_key
+        windows.append((original_audio_name(stem),
+                        info.get("master_start_seconds"), info.get("master_end_seconds")))
+
+    def files_for(master, owning_original):
+        """All capture files whose master window covers this track, owning first/included."""
+        hits = []
+        if master is not None:
+            for name, start, end in windows:
+                if start is None or end is None:
+                    continue
+                if start - 0.05 <= master <= end + 0.05:
+                    hits.append((start, name))
+        if owning_original not in [n for _, n in hits]:
+            own_start = next((s for n, s, e in windows if n == owning_original and s is not None),
+                             master if master is not None else 0.0)
+            hits.append((own_start, owning_original))
+        seen, ordered = set(), []
+        for _start, name in sorted(hits):
+            if name not in seen:
+                seen.add(name)
+                ordered.append(name)
+        return ordered
+
     result, conflicts = {}, []
     for row in label_rows:
         parsed = parse_label_track_id_text(row["text"])
@@ -175,11 +203,11 @@ def parse_label_track_ids():
             continue
         number, artist, title = parsed
         owning = owning_file_for_label_path(row["path"])
-        source_file = original_audio_name(label_stem(row["path"]))
+        owning_original = original_audio_name(label_stem(row["path"]))
         start = (timeline.get(owning) or {}).get("master_start_seconds")
         master = start + row["seconds"] if start is not None else None
         record = {"track_number": number, "track_artist": artist, "track_name": title,
-                  "source_file": source_file, "master_seconds": master}
+                  "source_files": files_for(master, owning_original), "master_seconds": master}
         existing = result.get(number)
         if existing is None:
             result[number] = record
@@ -241,7 +269,8 @@ def main():
                 filled += 1
             elif entry[field] != label[label_key]:
                 kept.append((number, field, entry[field], label[label_key]))
-        entry["source_file"] = label["source_file"]  # original capture file (.wav/.au)
+        entry["source_files"] = label["source_files"]  # original capture files (.wav/.au)
+        entry.pop("source_file", None)  # supersede the earlier singular field
         if label["master_seconds"] is not None:
             entry["master_seconds"] = round(label["master_seconds"], 3)
         else:

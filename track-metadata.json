@@ -8,7 +8,11 @@
         "note": "Net Radio station promo — no commercial release"
       },
       "master_seconds": 0.0,
-      "source_file": "d000-018.wav",
+      "source_files": [
+        "d-25-000b.wav",
+        "d-25-005b.wav",
+        "d000-018.wav"
+      ],
       "title": "Promo1 Club Groove",
       "use_logo": true
     },
@@ -19,7 +23,10 @@
         "note": "Net Radio station promo — no commercial release"
       },
       "master_seconds": 35.299,
-      "source_file": "d000-018.wav",
+      "source_files": [
+        "d-25-005b.wav",
+        "d000-018.wav"
+      ],
       "title": "Promo2 Peace",
       "use_logo": true
     },
@@ -32,7 +39,11 @@
         "year": "1998"
       },
       "master_seconds": 59.91,
-      "source_file": "d000-018.wav",
+      "source_files": [
+        "d-25-005b.wav",
+        "d000-018.wav",
+        "d001-026b.wav"
+      ],
       "title": "Sky Blue",
       "use_logo": false
     },
@@ -45,7 +56,11 @@
         "year": "1998"
       },
       "master_seconds": 303.949,
-      "source_file": "d000-018.wav",
+      "source_files": [
+        "d-25-005b.wav",
+        "d000-018.wav",
+        "d001-026b.wav"
+      ],
       "title": "Everything is Gonna Be Alright",
       "use_logo": false
     },
@@ -58,7 +73,11 @@
         "year": "1998"
       },
       "master_seconds": 573.867,
-      "source_file": "d000-018.wav",
+      "source_files": [
+        "d000-018.wav",
+        "d001-026b.wav",
+        "d006-025.wav"
+      ],
       "title": "You're My Life (incomplete)",
       "use_logo": false
     },
@@ -71,7 +90,11 @@
         "year": "1998"
       },
       "master_seconds": 588.696,
-      "source_file": "d000-018.wav",
+      "source_files": [
+        "d000-018.wav",
+        "d001-026b.wav",
+        "d006-025.wav"
+      ],
       "title": "Unity Gain (incomplete)",
       "use_logo": false
     },
@@ -84,7 +107,11 @@
         "year": "1998"
       },
       "master_seconds": 647.372,
-      "source_file": "d000-018.wav",
+      "source_files": [
+        "d000-018.wav",
+        "d001-026b.wav",
+        "d006-025.wav"
+      ],
       "title": "You're My Life",
       "use_logo": false
     },
@@ -97,7 +124,12 @@
         "year": "1998"
       },
       "master_seconds": 1102.848,
-      "source_file": "d019-040.wav",
+      "source_files": [
+        "d000-018.wav",
+        "d001-026b.wav",
+        "d006-025.wav",
+        "d019-040.wav"
+      ],
       "title": "Crucial",
       "use_logo": false
     },
@@ -108,7 +140,11 @@
         "note": "Net Radio station promo — no commercial release"
       },
       "master_seconds": 1579.66,
-      "source_file": "d019-040.wav",
+      "source_files": [
+        "d001-026b.wav",
+        "d019-040.wav",
+        "d026-045.wav"
+      ],
       "title": "Promo3 Club Groove",
       "use_logo": true
     },
@@ -121,7 +157,12 @@
         "year": "1997"
       },
       "master_seconds": 1613.771,
-      "source_file": "d019-040.wav",
+      "source_files": [
+        "d001-026b.wav",
+        "d019-040.wav",
+        "d026-045.wav",
+        "d026-073b.wav"
+      ],
       "title": "Artificial Life",
       "use_logo": false
     },
@@ -133,7 +174,11 @@
         "year": "1997"
       },
       "master_seconds": 2134.772,
-      "source_file": "d019-040.wav",
+      "source_files": [
+        "d019-040.wav",
+        "d026-045.wav",
+        "d026-073b.wav"
+      ],
       "title": "Piano (The Green Stinky Mix)",
       "use_logo": false
     },
@@ -145,7 +190,12 @@
         "year": "1997"
       },
       "master_seconds": 2420.48,
-      "source_file": "d026-073b.wav",
+      "source_files": [
+        "d019-040.wav",
+        "d026-045.wav",
+        "d026-073b.wav",
+        "d041-064.wav"
+      ],
       "title": "Arboleda de Manzanitas (Drum & Bass Mix)",
       "use_logo": false
     },
@@ -158,7 +208,11 @@
         "year": "1997"
       },
       "master_seconds": 2762.348,
-      "source_file": "d026-073b.wav",
+      "source_files": [
+        "d026-073b.wav",
+        "d041-064.wav",
+        "d046-065.wav"
+      ],
       "title": "Senses",
       "use_logo": false
     },
@@ -170,7 +224,11 @@
         "year": "1996"
       },
       "master_seconds": 3153.363,
-      "source_file": "d026-073b.wav",
+      "source_files": [
+        "d026-073b.wav",
+        "d041-064.wav",
+        "d046-065.wav"
+      ],
       "title": "Stay (The Midnight Rockers Remix)",
       "use_logo": false
     },
@@ -183,7 +241,11 @@
         "year": "1997"
       },
       "master_seconds": 3334.848,
-      "source_file": "d026-073b.wav",
+      "source_files": [
+        "d026-073b.wav",
+        "d041-064.wav",
+        "d046-065.wav"
+      ],
       "title": "Mind Games",
       "use_logo": false
     },
@@ -192,7 +254,11 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 3960.022,
-      "source_file": "d065-087.wav",
+      "source_files": [
+        "d026-073b.wav",
+        "d065-087.wav",
+        "d066-085.wav"
+      ],
       "title": "The Rope-A-Dope",
       "use_logo": false
     },
@@ -204,7 +270,12 @@
         "year": "1997"
       },
       "master_seconds": 4255.272,
-      "source_file": "d065-087.wav",
+      "source_files": [
+        "d026-073b.wav",
+        "d065-087.wav",
+        "d066-085.wav",
+        "d069-086.wav"
+      ],
       "title": "On & On (Blu Mar Ten Remix)",
       "use_logo": false
     },
@@ -213,7 +284,11 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 4731.62,
-      "source_file": "d065-087.wav",
+      "source_files": [
+        "d065-087.wav",
+        "d066-085.wav",
+        "d069-086.wav"
+      ],
       "title": "The Oracle (Extended Instrumental Remix)",
       "use_logo": false
     },
@@ -222,7 +297,12 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 5058.848,
-      "source_file": "d065-087.wav",
+      "source_files": [
+        "d065-087.wav",
+        "d066-085.wav",
+        "d069-086.wav",
+        "d084-103b.wav"
+      ],
       "title": "James Bond Theme (Stephane Malca Remix)",
       "use_logo": false
     },
@@ -231,7 +311,12 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 5267.52,
-      "source_file": "d065-087.wav",
+      "source_files": [
+        "d065-087.wav",
+        "d084-103b.wav",
+        "d086-105.wav",
+        "d088-107.wav"
+      ],
       "title": "Twin Peaks (Alëem Remix)",
       "use_logo": false
     },
@@ -244,7 +329,11 @@
         "year": "1997"
       },
       "master_seconds": 5269.45,
-      "source_file": "d088-107.wav",
+      "source_files": [
+        "d084-103b.wav",
+        "d086-105.wav",
+        "d088-107.wav"
+      ],
       "title": "J-Walkin'",
       "use_logo": false
     },
@@ -253,7 +342,11 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 5693.32,
-      "source_file": "d088-107.wav",
+      "source_files": [
+        "d084-103b.wav",
+        "d086-105.wav",
+        "d088-107.wav"
+      ],
       "title": "Junkle I",
       "use_logo": false
     },
@@ -265,7 +358,11 @@
         "year": "1997"
       },
       "master_seconds": 6070.578,
-      "source_file": "d088-107.wav",
+      "source_files": [
+        "d084-103b.wav",
+        "d086-105.wav",
+        "d088-107.wav"
+      ],
       "title": "63rd Suite",
       "use_logo": false
     },
@@ -274,7 +371,11 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 6456.899,
-      "source_file": "d088-107.wav",
+      "source_files": [
+        "d088-107.wav",
+        "d107-121b.wav",
+        "d106-125.wav"
+      ],
       "title": "Shoeshiner",
       "use_logo": false
     },
@@ -286,7 +387,11 @@
         "year": "1997"
       },
       "master_seconds": 6669.768,
-      "source_file": "d107-121b.wav",
+      "source_files": [
+        "d107-121b.wav",
+        "d106-125.wav",
+        "d104-108b.wav"
+      ],
       "title": "Happy Baby",
       "use_logo": false
     },
@@ -298,7 +403,10 @@
         "year": "1996"
       },
       "master_seconds": 7014.188,
-      "source_file": "d107-121b.wav",
+      "source_files": [
+        "d107-121b.wav",
+        "d106-125.wav"
+      ],
       "title": "Serious Intent",
       "use_logo": false
     },
@@ -307,7 +415,12 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 7338.146,
-      "source_file": "d107-121b.wav",
+      "source_files": [
+        "d107-121b.wav",
+        "d106-125.wav",
+        "d122-144.wav",
+        "d122-144b.wav"
+      ],
       "title": "Cruzer",
       "use_logo": false
     },
@@ -316,7 +429,11 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 7675.757,
-      "source_file": "d122-144.wav",
+      "source_files": [
+        "d122-144.wav",
+        "d122-144b.wav",
+        "d126-145.wav"
+      ],
       "title": "At Home With The Snake",
       "use_logo": false
     },
@@ -325,7 +442,11 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 7973.335,
-      "source_file": "d122-144.wav",
+      "source_files": [
+        "d122-144.wav",
+        "d122-144b.wav",
+        "d126-145.wav"
+      ],
       "title": "Queen of the Ghetto (Ghetto Defendant)",
       "use_logo": false
     },
@@ -334,7 +455,11 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 8259.453,
-      "source_file": "d122-144.wav",
+      "source_files": [
+        "d122-144.wav",
+        "d122-144b.wav",
+        "d126-145.wav"
+      ],
       "title": "Crusoe Takes A Trip",
       "use_logo": false
     },
@@ -343,7 +468,12 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 8657.243,
-      "source_file": "d145-164.wav",
+      "source_files": [
+        "d122-144.wav",
+        "d126-145.wav",
+        "d145-164b.wav",
+        "d145-164.wav"
+      ],
       "title": "Promo4 Peace",
       "use_logo": false
     },
@@ -352,7 +482,11 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 8681.834,
-      "source_file": "d145-164.wav",
+      "source_files": [
+        "d126-145.wav",
+        "d145-164b.wav",
+        "d145-164.wav"
+      ],
       "title": "Crystal Blue",
       "use_logo": false
     },
@@ -361,7 +495,10 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 9083.374,
-      "source_file": "d145-164.wav",
+      "source_files": [
+        "d145-164b.wav",
+        "d145-164.wav"
+      ],
       "title": "Problem Child",
       "use_logo": false
     },
@@ -370,7 +507,10 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 9424.643,
-      "source_file": "d145-164.wav",
+      "source_files": [
+        "d145-164b.wav",
+        "d145-164.wav"
+      ],
       "title": "You Talking To Me?",
       "use_logo": false
     },
@@ -379,7 +519,12 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 9877.211,
-      "source_file": "d165-186.wav",
+      "source_files": [
+        "d145-164b.wav",
+        "d145-164.wav",
+        "d165-186b.wav",
+        "d165-186.wav"
+      ],
       "title": "Circuit Breaker",
       "use_logo": false
     },
@@ -388,7 +533,10 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 10340.178,
-      "source_file": "d165-186.wav",
+      "source_files": [
+        "d165-186b.wav",
+        "d165-186.wav"
+      ],
       "title": "The Reckoning",
       "use_logo": false
     },
@@ -397,7 +545,10 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 10690.792,
-      "source_file": "d165-186.wav",
+      "source_files": [
+        "d165-186b.wav",
+        "d165-186.wav"
+      ],
       "title": "Input",
       "use_logo": false
     },
@@ -405,7 +556,9 @@
       "artist": "Friends, Lovers & Family",
       "artwork": null,
       "fields": {},
-      "source_file": "d180_d-14Nov10-a.au",
+      "source_files": [
+        "d180_d-14Nov10-a.au"
+      ],
       "title": "Dark Fader",
       "use_logo": false
     },
@@ -413,7 +566,9 @@
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
-      "source_file": "d180_d-14Nov10-a.au",
+      "source_files": [
+        "d180_d-14Nov10-a.au"
+      ],
       "title": "Promo5 Club Groove",
       "use_logo": false
     },
@@ -421,7 +576,9 @@
       "artist": "David Kristian",
       "artwork": null,
       "fields": {},
-      "source_file": "d180_d-14Nov10-a.au",
+      "source_files": [
+        "d180_d-14Nov10-a.au"
+      ],
       "title": "Hopeless",
       "use_logo": false
     },
@@ -429,7 +586,9 @@
       "artist": "The Sonar Circle",
       "artwork": null,
       "fields": {},
-      "source_file": "d180_d-14Nov10-a.au",
+      "source_files": [
+        "d180_d-14Nov10-a.au"
+      ],
       "title": "Strength",
       "use_logo": false
     },
@@ -437,7 +596,9 @@
       "artist": "Justin Tewn & Hunter A.D.",
       "artwork": null,
       "fields": {},
-      "source_file": "d200_d-14Nov10-b.au",
+      "source_files": [
+        "d200_d-14Nov10-b.au"
+      ],
       "title": "Science of Industry",
       "use_logo": false
     },
@@ -445,7 +606,9 @@
       "artist": "Dave Wallace",
       "artwork": null,
       "fields": {},
-      "source_file": "d200_d-14Nov10-b.au",
+      "source_files": [
+        "d200_d-14Nov10-b.au"
+      ],
       "title": "Waves (Kid Loops remix)",
       "use_logo": false
     },
@@ -453,7 +616,9 @@
       "artist": "E-Z Rollers",
       "artwork": null,
       "fields": {},
-      "source_file": "d200_d-14Nov10-b.au",
+      "source_files": [
+        "d200_d-14Nov10-b.au"
+      ],
       "title": "Retro",
       "use_logo": false
     },
@@ -461,7 +626,9 @@
       "artist": "Dr S Gachet",
       "artwork": null,
       "fields": {},
-      "source_file": "d220_d-14Nov10-c.au",
+      "source_files": [
+        "d220_d-14Nov10-c.au"
+      ],
       "title": "It's All Gone Sideways",
       "use_logo": false
     },
@@ -469,7 +636,9 @@
       "artist": "Arcon 2",
       "artwork": null,
       "fields": {},
-      "source_file": "d220_d-14Nov10-c.au",
+      "source_files": [
+        "d220_d-14Nov10-c.au"
+      ],
       "title": "The Beckoning",
       "use_logo": false
     },
@@ -477,7 +646,9 @@
       "artist": "Alpha Omega",
       "artwork": null,
       "fields": {},
-      "source_file": "d220_d-14Nov10-c.au",
+      "source_files": [
+        "d220_d-14Nov10-c.au"
+      ],
       "title": "Realism",
       "use_logo": false
     },
@@ -485,7 +656,9 @@
       "artist": "Downpour",
       "artwork": null,
       "fields": {},
-      "source_file": "d240_d-14Nov10-d.au",
+      "source_files": [
+        "d240_d-14Nov10-d.au"
+      ],
       "title": "Her Spectre Above Me Look",
       "use_logo": false
     },
@@ -493,7 +666,9 @@
       "artist": "G-Money",
       "artwork": null,
       "fields": {},
-      "source_file": "d240_d-14Nov10-d.au",
+      "source_files": [
+        "d240_d-14Nov10-d.au"
+      ],
       "title": "Falling",
       "use_logo": false
     },
@@ -501,7 +676,9 @@
       "artist": "DJ 3D",
       "artwork": null,
       "fields": {},
-      "source_file": "d240_d-14Nov10-d.au",
+      "source_files": [
+        "d240_d-14Nov10-d.au"
+      ],
       "title": "Cairo",
       "use_logo": false
     },
@@ -509,7 +686,9 @@
       "artist": "E-Sassin",
       "artwork": null,
       "fields": {},
-      "source_file": "d240_d-14Nov10-d.au",
+      "source_files": [
+        "d240_d-14Nov10-d.au"
+      ],
       "title": "Nightrider",
       "use_logo": false
     },
@@ -517,7 +696,9 @@
       "artist": "B-Boy 3000",
       "artwork": null,
       "fields": {},
-      "source_file": "d260_d-14Nov10-e.au",
+      "source_files": [
+        "d260_d-14Nov10-e.au"
+      ],
       "title": "Diet for Murder",
       "use_logo": false
     },
@@ -525,7 +706,9 @@
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
-      "source_file": "d260_d-14Nov10-e.au",
+      "source_files": [
+        "d260_d-14Nov10-e.au"
+      ],
       "title": "Promo6 Peace",
       "use_logo": false
     },
@@ -533,7 +716,9 @@
       "artist": "Codename John",
       "artwork": null,
       "fields": {},
-      "source_file": "d260_d-14Nov10-e.au",
+      "source_files": [
+        "d260_d-14Nov10-e.au"
+      ],
       "title": "Dreams of Heaven",
       "use_logo": false
     },
@@ -541,7 +726,9 @@
       "artist": "John B",
       "artwork": null,
       "fields": {},
-      "source_file": "d260_d-14Nov10-e.au",
+      "source_files": [
+        "d260_d-14Nov10-e.au"
+      ],
       "title": "Secrets",
       "use_logo": false
     },
@@ -549,7 +736,9 @@
       "artist": "Optical",
       "artwork": null,
       "fields": {},
-      "source_file": "d260_d-14Nov10-e.au",
+      "source_files": [
+        "d260_d-14Nov10-e.au"
+      ],
       "title": "Grey Odyssey",
       "use_logo": false
     },
@@ -557,7 +746,9 @@
       "artist": "Matrix",
       "artwork": null,
       "fields": {},
-      "source_file": "d280_d-14Nov10-f.au",
+      "source_files": [
+        "d280_d-14Nov10-f.au"
+      ],
       "title": "Mute",
       "use_logo": false
     },
@@ -566,7 +757,10 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 17653.042,
-      "source_file": "d288-307.wav",
+      "source_files": [
+        "d-14Nov10-f.au",
+        "d288-307.wav"
+      ],
       "title": "Deep Inside",
       "use_logo": false
     },
@@ -575,7 +769,9 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 18124.508,
-      "source_file": "d288-307.wav",
+      "source_files": [
+        "d288-307.wav"
+      ],
       "title": "Silver Blade",
       "use_logo": false
     },
@@ -584,7 +780,10 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 18493.708,
-      "source_file": "d288-307.wav",
+      "source_files": [
+        "d288-307.wav",
+        "d308-327.wav"
+      ],
       "title": "Locust",
       "use_logo": false
     },
@@ -593,7 +792,10 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 19022.707,
-      "source_file": "d308-327.wav",
+      "source_files": [
+        "d308-327.wav",
+        "d316-335.wav"
+      ],
       "title": "Warned",
       "use_logo": false
     },
@@ -602,7 +804,11 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 19390.923,
-      "source_file": "d308-327.wav",
+      "source_files": [
+        "d308-327.wav",
+        "d316-335.wav",
+        "d-14Nov10-h.au"
+      ],
       "title": "Still",
       "use_logo": false
     },
@@ -611,7 +817,11 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 19864.709,
-      "source_file": "d328-342.wav",
+      "source_files": [
+        "d316-335.wav",
+        "d-14Nov10-h.au",
+        "d328-342.wav"
+      ],
       "title": "City Lights",
       "use_logo": false
     },
@@ -620,7 +830,9 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 20272.589,
-      "source_file": "d328-342.wav",
+      "source_files": [
+        "d328-342.wav"
+      ],
       "title": "Promo7 Club Groove",
       "use_logo": false
     },
@@ -629,7 +841,9 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 20306.708,
-      "source_file": "d328-342.wav",
+      "source_files": [
+        "d328-342.wav"
+      ],
       "title": "Make Me Feel",
       "use_logo": false
     },
@@ -638,7 +852,9 @@
       "artwork": null,
       "fields": {},
       "master_seconds": 20667.817,
-      "source_file": "d328-342.wav",
+      "source_files": [
+        "d328-342.wav"
+      ],
       "title": "Free La Funk (PFM Remix)",
       "use_logo": false
     }
