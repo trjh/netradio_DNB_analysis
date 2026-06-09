@@ -25,7 +25,8 @@
       "master_seconds": 35.299,
       "source_files": [
         "d-25-005b.wav",
-        "d000-018.wav"
+        "d000-018.wav",
+        "d001-026b.wav"
       ],
       "title": "Promo2 Peace",
       "use_logo": true
@@ -59,7 +60,8 @@
       "source_files": [
         "d-25-005b.wav",
         "d000-018.wav",
-        "d001-026b.wav"
+        "d001-026b.wav",
+        "d006-025.wav"
       ],
       "title": "Everything is Gonna Be Alright",
       "use_logo": false
@@ -110,7 +112,8 @@
       "source_files": [
         "d000-018.wav",
         "d001-026b.wav",
-        "d006-025.wav"
+        "d006-025.wav",
+        "d019-040.wav"
       ],
       "title": "You're My Life",
       "use_logo": false
@@ -128,7 +131,8 @@
         "d000-018.wav",
         "d001-026b.wav",
         "d006-025.wav",
-        "d019-040.wav"
+        "d019-040.wav",
+        "d026-045.wav"
       ],
       "title": "Crucial",
       "use_logo": false
@@ -143,7 +147,8 @@
       "source_files": [
         "d001-026b.wav",
         "d019-040.wav",
-        "d026-045.wav"
+        "d026-045.wav",
+        "d026-073b.wav"
       ],
       "title": "Promo3 Club Groove",
       "use_logo": true
@@ -177,7 +182,8 @@
       "source_files": [
         "d019-040.wav",
         "d026-045.wav",
-        "d026-073b.wav"
+        "d026-073b.wav",
+        "d041-064.wav"
       ],
       "title": "Piano (The Green Stinky Mix)",
       "use_logo": false
@@ -194,7 +200,8 @@
         "d019-040.wav",
         "d026-045.wav",
         "d026-073b.wav",
-        "d041-064.wav"
+        "d041-064.wav",
+        "d046-065.wav"
       ],
       "title": "Arboleda de Manzanitas (Drum & Bass Mix)",
       "use_logo": false
@@ -244,7 +251,9 @@
       "source_files": [
         "d026-073b.wav",
         "d041-064.wav",
-        "d046-065.wav"
+        "d046-065.wav",
+        "d065-087.wav",
+        "d066-085.wav"
       ],
       "title": "Mind Games",
       "use_logo": false
@@ -257,7 +266,8 @@
       "source_files": [
         "d026-073b.wav",
         "d065-087.wav",
-        "d066-085.wav"
+        "d066-085.wav",
+        "d069-086.wav"
       ],
       "title": "The Rope-A-Dope",
       "use_logo": false
@@ -287,7 +297,8 @@
       "source_files": [
         "d065-087.wav",
         "d066-085.wav",
-        "d069-086.wav"
+        "d069-086.wav",
+        "d084-103b.wav"
       ],
       "title": "The Oracle (Extended Instrumental Remix)",
       "use_logo": false
@@ -301,7 +312,9 @@
         "d065-087.wav",
         "d066-085.wav",
         "d069-086.wav",
-        "d084-103b.wav"
+        "d084-103b.wav",
+        "d086-105.wav",
+        "d088-107.wav"
       ],
       "title": "James Bond Theme (Stephane Malca Remix)",
       "use_logo": false
@@ -361,7 +374,9 @@
       "source_files": [
         "d084-103b.wav",
         "d086-105.wav",
-        "d088-107.wav"
+        "d088-107.wav",
+        "d107-121b.wav",
+        "d106-125.wav"
       ],
       "title": "63rd Suite",
       "use_logo": false
@@ -374,7 +389,8 @@
       "source_files": [
         "d088-107.wav",
         "d107-121b.wav",
-        "d106-125.wav"
+        "d106-125.wav",
+        "d104-108b.wav"
       ],
       "title": "Shoeshiner",
       "use_logo": false
@@ -405,7 +421,9 @@
       "master_seconds": 7014.188,
       "source_files": [
         "d107-121b.wav",
-        "d106-125.wav"
+        "d106-125.wav",
+        "d122-144.wav",
+        "d122-144b.wav"
       ],
       "title": "Serious Intent",
       "use_logo": false
@@ -419,7 +437,8 @@
         "d107-121b.wav",
         "d106-125.wav",
         "d122-144.wav",
-        "d122-144b.wav"
+        "d122-144b.wav",
+        "d126-145.wav"
       ],
       "title": "Cruzer",
       "use_logo": false
@@ -458,7 +477,9 @@
       "source_files": [
         "d122-144.wav",
         "d122-144b.wav",
-        "d126-145.wav"
+        "d126-145.wav",
+        "d145-164b.wav",
+        "d145-164.wav"
       ],
       "title": "Crusoe Takes A Trip",
       "use_logo": false
@@ -485,7 +506,8 @@
       "source_files": [
         "d126-145.wav",
         "d145-164b.wav",
-        "d145-164.wav"
+        "d145-164.wav",
+        "d146.wav"
       ],
       "title": "Crystal Blue",
       "use_logo": false
@@ -509,7 +531,9 @@
       "master_seconds": 9424.643,
       "source_files": [
         "d145-164b.wav",
-        "d145-164.wav"
+        "d145-164.wav",
+        "d165-186b.wav",
+        "d165-186.wav"
       ],
       "title": "You Talking To Me?",
       "use_logo": false
@@ -547,7 +571,10 @@
       "master_seconds": 10690.792,
       "source_files": [
         "d165-186b.wav",
-        "d165-186.wav"
+        "d165-186.wav",
+        "d-14Nov10-a.au",
+        "d187-200.wav",
+        "d187-216b.wav"
       ],
       "title": "Input",
       "use_logo": false
@@ -598,7 +625,8 @@
       "master_seconds": 11964.971,
       "source_files": [
         "d-14Nov10-a.au",
-        "d187-216b.wav"
+        "d187-216b.wav",
+        "d-14Nov10-b.au"
       ],
       "title": "Strength",
       "use_logo": false
@@ -622,7 +650,9 @@
       "master_seconds": 12713.248,
       "source_files": [
         "d187-216b.wav",
-        "d-14Nov10-b.au"
+        "d-14Nov10-b.au",
+        "dnb-14Nov02-b.au",
+        "d217-242.wav"
       ],
       "title": "Waves (Kid Loops remix)",
       "use_logo": false
@@ -636,7 +666,8 @@
         "d187-216b.wav",
         "d-14Nov10-b.au",
         "dnb-14Nov02-b.au",
-        "d217-242.wav"
+        "d217-242.wav",
+        "d-14Nov10-c.au"
       ],
       "title": "Retro",
       "use_logo": false
@@ -649,7 +680,8 @@
       "source_files": [
         "dnb-14Nov02-b.au",
         "d217-242.wav",
-        "d-14Nov10-c.au"
+        "d-14Nov10-c.au",
+        "d228-247.wav"
       ],
       "title": "It's All Gone Sideways",
       "use_logo": false
@@ -677,7 +709,9 @@
         "dnb-14Nov02-b.au",
         "d217-242.wav",
         "d-14Nov10-c.au",
-        "d228-247.wav"
+        "d228-247.wav",
+        "dnb-14Nov02-c.au",
+        "d-14Nov10-d.au"
       ],
       "title": "Realism",
       "use_logo": false
@@ -690,7 +724,8 @@
       "source_files": [
         "d217-242.wav",
         "d228-247.wav",
-        "d-14Nov10-d.au"
+        "d-14Nov10-d.au",
+        "d242-268.wav"
       ],
       "title": "Her Spectre Above Me Look",
       "use_logo": false
@@ -703,7 +738,8 @@
       "source_files": [
         "d228-247.wav",
         "d-14Nov10-d.au",
-        "d242-268.wav"
+        "d242-268.wav",
+        "d248-258.wav"
       ],
       "title": "Falling",
       "use_logo": false
@@ -729,7 +765,8 @@
       "source_files": [
         "d-14Nov10-d.au",
         "d242-268.wav",
-        "d248-258.wav"
+        "d248-258.wav",
+        "d-14Nov10-e.au"
       ],
       "title": "Nightrider",
       "use_logo": false
@@ -741,7 +778,9 @@
       "master_seconds": 15839.956,
       "source_files": [
         "d242-268.wav",
-        "d-14Nov10-e.au"
+        "d-14Nov10-e.au",
+        "d268-287.wav",
+        "d269-271b.wav"
       ],
       "title": "Diet for Murder",
       "use_logo": false
@@ -768,7 +807,8 @@
       "source_files": [
         "d-14Nov10-e.au",
         "d268-287.wav",
-        "d269-271b.wav"
+        "d269-271b.wav",
+        "d276-293b.wav"
       ],
       "title": "Dreams of Heaven",
       "use_logo": false
@@ -781,7 +821,8 @@
       "source_files": [
         "d-14Nov10-e.au",
         "d268-287.wav",
-        "d276-293b.wav"
+        "d276-293b.wav",
+        "d-14Nov10-f.au"
       ],
       "title": "Secrets",
       "use_logo": false
@@ -795,7 +836,8 @@
         "d-14Nov10-e.au",
         "d268-287.wav",
         "d276-293b.wav",
-        "d-14Nov10-f.au"
+        "d-14Nov10-f.au",
+        "d288-307.wav"
       ],
       "title": "Grey Odyssey",
       "use_logo": false
@@ -832,7 +874,8 @@
       "master_seconds": 18124.508,
       "source_files": [
         "d-14Nov10-f.au",
-        "d288-307.wav"
+        "d288-307.wav",
+        "d308-327.wav"
       ],
       "title": "Silver Blade",
       "use_logo": false
@@ -844,7 +887,8 @@
       "master_seconds": 18493.708,
       "source_files": [
         "d288-307.wav",
-        "d308-327.wav"
+        "d308-327.wav",
+        "d316-335.wav"
       ],
       "title": "Locust",
       "use_logo": false
@@ -856,7 +900,8 @@
       "master_seconds": 19022.707,
       "source_files": [
         "d308-327.wav",
-        "d316-335.wav"
+        "d316-335.wav",
+        "d-14Nov10-h.au"
       ],
       "title": "Warned",
       "use_logo": false
@@ -869,7 +914,8 @@
       "source_files": [
         "d308-327.wav",
         "d316-335.wav",
-        "d-14Nov10-h.au"
+        "d-14Nov10-h.au",
+        "d328-342.wav"
       ],
       "title": "Still",
       "use_logo": false

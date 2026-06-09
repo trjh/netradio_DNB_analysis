@@ -63,6 +63,13 @@ class LiveTests(unittest.TestCase):
         for name in ids[38]["source_files"]:
             self.assertFalse(name.startswith("d180_"), name)
 
+    def test_source_files_include_continuation_captures(self):
+        # Regression: a track continues into later captures (marked by bare `IDNNN:`
+        # rows), not just the capture containing its start.
+        ids, _conflicts = b.parse_label_track_ids()
+        self.assertIn("d-14Nov10-b.au", ids[41]["source_files"])  # The Sonar Circle - Strength
+        self.assertIn("d-14Nov10-c.au", ids[44]["source_files"])  # E-Z Rollers - Retro
+
 
 if __name__ == "__main__":
     unittest.main()

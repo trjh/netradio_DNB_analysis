@@ -172,61 +172,83 @@ def original_from_mp3(mp3_name):
     return original_audio_name(stem)
 
 
+ID_ROW_RE = re.compile(r"^ID0*(\d+):", re.I)  # bare `IDNNN:` continuation marker
+
+
 def parse_label_track_ids():
     label_rows = read_label_rows()
     timeline, current_by_path = parse_file_timeline(label_rows)
+
+    def owning_original_for(path):
+        owning = current_by_path.get(path) or owning_file_for_label_path(path)
+        return original_from_mp3(owning), owning
+
     # File master windows keyed by ORIGINAL capture filename (the .mp3 form is an
-    # internal artifact). Used to find every capture a track appears in.
-    windows = []
+    # internal artifact).  start_of maps original name -> master_start.
+    windows, start_of = [], {}
     for mp3_key, info in timeline.items():
-        stem = mp3_key[:-4] if mp3_key.lower().endswith(".mp3") else mp3_key
-        windows.append((original_audio_name(stem),
-                        info.get("master_start_seconds"), info.get("master_end_seconds")))
+        name = original_from_mp3(mp3_key)
+        s, e = info.get("master_start_seconds"), info.get("master_end_seconds")
+        windows.append((name, s, e))
+        start_of[name] = s
 
-    def files_for(master, owning_original):
-        """All capture files whose master window covers this track, owning first/included."""
-        hits = []
-        if master is not None:
-            for name, start, end in windows:
-                if start is None or end is None:
-                    continue
-                if start - 0.05 <= master <= end + 0.05:
-                    hits.append((start, name))
-        if owning_original not in [n for _, n in hits]:
-            own_start = next((s for n, s, e in windows if n == owning_original and s is not None),
-                             master if master is not None else 0.0)
-            hits.append((own_start, owning_original))
-        seen, ordered = set(), []
-        for _start, name in sorted(hits):
-            if name not in seen:
-                seen.add(name)
-                ordered.append(name)
-        return ordered
+    # Every label file that explicitly names a track — both `startNNN: ID:` and the
+    # bare `IDNNN:` continuation rows — is a capture the track appears in. (The
+    # `note X: IDNNN:` forward-references are about file X, not this one, and are
+    # excluded because ID_ROW_RE anchors at the start of the text.)
+    appearances = {}
+    for row in label_rows:
+        id_match = ID_ROW_RE.match(row["text"])
+        start_match = parse_label_track_id_text(row["text"])
+        if id_match:
+            number = int(id_match.group(1))
+        elif start_match:
+            number = start_match[0]
+        else:
+            continue
+        appearances.setdefault(number, set()).add(owning_original_for(row["path"])[0])
 
+    # Pass 1: the canonical start row per track (number/title/artist/master).
     result, conflicts = {}, []
     for row in label_rows:
         parsed = parse_label_track_id_text(row["text"])
         if not parsed:
             continue
         number, artist, title = parsed
-        # The owning capture file comes from the file's own `file start sync` row
-        # (tracked by the timeline), NOT the label filename — label files can be
-        # prefixed (e.g. d180_d-14Nov10-a.labels.tsv whose file is d-14Nov10-a.au).
-        owning = current_by_path.get(row["path"]) or owning_file_for_label_path(row["path"])
-        owning_original = original_from_mp3(owning)
+        owning_original, owning = owning_original_for(row["path"])
         start = (timeline.get(owning) or {}).get("master_start_seconds")
         master = start + row["seconds"] if start is not None else None
         record = {"track_number": number, "track_artist": artist, "track_name": title,
-                  "source_files": files_for(master, owning_original), "master_seconds": master}
+                  "owning_original": owning_original, "master_seconds": master}
         existing = result.get(number)
         if existing is None:
             result[number] = record
-        else:
-            if (existing["track_artist"], existing["track_name"]) != (artist, title):
-                conflicts.append({"track_number": number, "kept": [existing["track_artist"], existing["track_name"]],
-                                  "also": [artist, title], "file": owning})
+        elif (existing["track_artist"], existing["track_name"]) != (artist, title):
+            conflicts.append({"track_number": number, "kept": [existing["track_artist"], existing["track_name"]],
+                              "also": [artist, title], "file": owning})
             if existing["master_seconds"] is None and master is not None:
                 result[number] = record
+        elif existing["master_seconds"] is None and master is not None:
+            result[number] = record
+
+    # Pass 2: source_files = explicit appearances (start + ID rows) UNION every
+    # capture whose window overlaps the track's [master, next-track master] span.
+    ordered = sorted(result.values(),
+                     key=lambda r: (r["master_seconds"] is None, r["master_seconds"] or 0.0, r["track_number"]))
+    for index, record in enumerate(ordered):
+        master = record["master_seconds"]
+        nxt = ordered[index + 1]["master_seconds"] if index + 1 < len(ordered) else None
+        end = nxt if (nxt is not None and master is not None and nxt > master) else master
+        files = set(appearances.get(record["track_number"], set()))
+        files.add(record.pop("owning_original"))
+        if master is not None and end is not None:
+            for name, s, e in windows:
+                if s is None or e is None:
+                    continue
+                if s - 0.05 <= end and e + 0.05 >= master:  # window overlaps [master, end]
+                    files.add(name)
+        record["source_files"] = sorted(files, key=lambda n: (start_of.get(n) is None, start_of.get(n) or 0.0, n))
+
     return result, conflicts
 
 
