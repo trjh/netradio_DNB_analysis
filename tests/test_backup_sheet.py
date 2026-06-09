@@ -31,6 +31,24 @@ class HelperTests(unittest.TestCase):
         self.assertIn("secrets", b.SKIP_TABS)
         self.assertIn("baseurl", b.SKIP_TABS)
 
+    def test_skip_tabs_credential_exclusion_is_mandatory(self):
+        # Empty / unset env must NOT re-enable the SECRETS export.
+        for env in ("", None, "   ", ",,"):
+            with self.subTest(env=env):
+                s = b.skip_tabs(env)
+                self.assertIn("secrets", s)
+                self.assertIn("baseurl", s)
+        # Env only ADDS tabs; it can never remove the mandatory ones.
+        s = b.skip_tabs("Drafts, Scratch")
+        self.assertEqual(s, {"secrets", "baseurl", "drafts", "scratch"})
+        # Even an env that tries to "replace" with something else keeps secrets.
+        s = b.skip_tabs("Tracklist")
+        self.assertIn("secrets", s)
+        self.assertIn("baseurl", s)
+        self.assertIn("tracklist", s)
+        # Case/whitespace normalisation.
+        self.assertIn("secrets", b.skip_tabs("  SECRETS  "))
+
 
 class SharedStringsAndRowsTests(unittest.TestCase):
     def _zip(self, parts):

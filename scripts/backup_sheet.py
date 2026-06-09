@@ -25,9 +25,22 @@ DEFAULT_SHEET = os.environ.get("NETRADIO_SHEET_ID", "1bQ8S1v-IgOMpJAHftaSZdtLXCz
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 RNS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
-# Never export tabs that hold credentials. Override via env (comma-separated).
-SKIP_TABS = {t.strip().lower() for t in
-             os.environ.get("NETRADIO_SHEET_SKIP_TABS", "SECRETS,baseurl").split(",") if t.strip()}
+# Tabs that hold credentials and must NEVER be exported. This set is mandatory
+# and cannot be removed — NETRADIO_SHEET_SKIP_TABS only ADDS further tabs to skip
+# (so e.g. NETRADIO_SHEET_SKIP_TABS="" can never re-enable the SECRETS export).
+MANDATORY_SKIP_TABS = frozenset({"secrets", "baseurl"})
+
+
+def skip_tabs(env_value=None):
+    """Lower-cased set of tab names to skip: the mandatory credential tabs plus
+    any extra tabs named in NETRADIO_SHEET_SKIP_TABS (comma-separated)."""
+    if env_value is None:
+        env_value = os.environ.get("NETRADIO_SHEET_SKIP_TABS", "")
+    extra = {t.strip().lower() for t in env_value.split(",") if t.strip()}
+    return set(MANDATORY_SKIP_TABS) | extra
+
+
+SKIP_TABS = skip_tabs()
 
 
 def download_xlsx(sheet_id):
