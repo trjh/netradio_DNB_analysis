@@ -1,0 +1,970 @@
+{
+  "schema": "netradio.track-metadata.v1",
+  "tracks": {
+    "1": {
+      "artist": "Net Radio",
+      "artwork": null,
+      "fields": {
+        "note": "Net Radio station promo — no commercial release"
+      },
+      "master_seconds": 0.0,
+      "source_files": [
+        "d-25-000b.wav",
+        "d-25-005b.wav",
+        "d000-018.wav"
+      ],
+      "title": "Promo1 Club Groove",
+      "use_logo": true
+    },
+    "2": {
+      "artist": "Net Radio",
+      "artwork": null,
+      "fields": {
+        "note": "Net Radio station promo — no commercial release"
+      },
+      "master_seconds": 35.299,
+      "source_files": [
+        "d-25-005b.wav",
+        "d000-018.wav",
+        "d001-026b.wav"
+      ],
+      "title": "Promo2 Peace",
+      "use_logo": true
+    },
+    "3": {
+      "artist": "Jamie Myerson",
+      "artwork": "track-3.jpg",
+      "fields": {
+        "allmusic": "https://www.allmusic.com/album/the-listen-project-mw0000031187",
+        "discogs": "https://www.discogs.com/release/376822",
+        "year": "1998"
+      },
+      "master_seconds": 59.91,
+      "source_files": [
+        "d-25-005b.wav",
+        "d000-018.wav",
+        "d001-026b.wav"
+      ],
+      "title": "Sky Blue",
+      "use_logo": false
+    },
+    "4": {
+      "artist": "Jamie Myerson",
+      "artwork": "track-4.jpg",
+      "fields": {
+        "allmusic": "https://www.allmusic.com/album/the-listen-project-mw0000031187",
+        "discogs": "https://www.discogs.com/release/376822",
+        "year": "1998"
+      },
+      "master_seconds": 303.949,
+      "source_files": [
+        "d-25-005b.wav",
+        "d000-018.wav",
+        "d001-026b.wav",
+        "d006-025.wav"
+      ],
+      "title": "Everything is Gonna Be Alright",
+      "use_logo": false
+    },
+    "5": {
+      "artist": "Jamie Myerson",
+      "artwork": "track-5.jpg",
+      "fields": {
+        "allmusic": "https://www.allmusic.com/album/the-listen-project-mw0000031187",
+        "discogs": "https://www.discogs.com/release/376822",
+        "year": "1998"
+      },
+      "master_seconds": 573.867,
+      "source_files": [
+        "d000-018.wav",
+        "d001-026b.wav",
+        "d006-025.wav"
+      ],
+      "title": "You're My Life (incomplete)",
+      "use_logo": false
+    },
+    "6": {
+      "artist": "Jamie Myerson",
+      "artwork": "track-6.jpg",
+      "fields": {
+        "allmusic": "https://www.allmusic.com/album/the-listen-project-mw0000031187",
+        "discogs": "https://www.discogs.com/release/376822",
+        "year": "1998"
+      },
+      "master_seconds": 588.696,
+      "source_files": [
+        "d000-018.wav",
+        "d001-026b.wav",
+        "d006-025.wav"
+      ],
+      "title": "Unity Gain (incomplete)",
+      "use_logo": false
+    },
+    "7": {
+      "artist": "Jamie Myerson",
+      "artwork": "track-7.jpg",
+      "fields": {
+        "allmusic": "https://www.allmusic.com/album/the-listen-project-mw0000031187",
+        "discogs": "https://www.discogs.com/release/376822",
+        "year": "1998"
+      },
+      "master_seconds": 647.372,
+      "source_files": [
+        "d000-018.wav",
+        "d001-026b.wav",
+        "d006-025.wav",
+        "d019-040.wav"
+      ],
+      "title": "You're My Life",
+      "use_logo": false
+    },
+    "8": {
+      "artist": "Jamie Myerson",
+      "artwork": "track-8.jpg",
+      "fields": {
+        "allmusic": "https://www.allmusic.com/album/the-listen-project-mw0000031187",
+        "discogs": "https://www.discogs.com/release/376822",
+        "year": "1998"
+      },
+      "master_seconds": 1102.848,
+      "source_files": [
+        "d000-018.wav",
+        "d001-026b.wav",
+        "d006-025.wav",
+        "d019-040.wav",
+        "d026-045.wav"
+      ],
+      "title": "Crucial",
+      "use_logo": false
+    },
+    "9": {
+      "artist": "Net Radio",
+      "artwork": null,
+      "fields": {
+        "note": "Net Radio station promo — no commercial release"
+      },
+      "master_seconds": 1579.66,
+      "source_files": [
+        "d001-026b.wav",
+        "d019-040.wav",
+        "d026-045.wav",
+        "d026-073b.wav"
+      ],
+      "title": "Promo3 Club Groove",
+      "use_logo": true
+    },
+    "10": {
+      "artist": "Odyssey",
+      "artwork": "track-10.jpg",
+      "fields": {
+        "allmusic": "https://www.allmusic.com/album/earth-vol-2-mw0000014088",
+        "discogs": "https://www.discogs.com/release/9715-LTJ-Bukem-Earth-Volume-Two",
+        "year": "1997"
+      },
+      "master_seconds": 1613.771,
+      "source_files": [
+        "d001-026b.wav",
+        "d019-040.wav",
+        "d026-045.wav",
+        "d026-073b.wav"
+      ],
+      "title": "Artificial Life",
+      "use_logo": false
+    },
+    "11": {
+      "artist": "Tricky",
+      "artwork": "track-11.jpg",
+      "fields": {
+        "discogs": "https://www.discogs.com/release/38468",
+        "year": "1997"
+      },
+      "master_seconds": 2134.772,
+      "source_files": [
+        "d019-040.wav",
+        "d026-045.wav",
+        "d026-073b.wav",
+        "d041-064.wav"
+      ],
+      "title": "Piano (The Green Stinky Mix)",
+      "use_logo": false
+    },
+    "12": {
+      "artist": "Eighty Mile Beach",
+      "artwork": "track-12.jpg",
+      "fields": {
+        "discogs": "https://www.discogs.com/release/118242",
+        "year": "1997"
+      },
+      "master_seconds": 2420.48,
+      "source_files": [
+        "d019-040.wav",
+        "d026-045.wav",
+        "d026-073b.wav",
+        "d041-064.wav",
+        "d046-065.wav"
+      ],
+      "title": "Arboleda de Manzanitas (Drum & Bass Mix)",
+      "use_logo": false
+    },
+    "13": {
+      "artist": "DJ Addiction",
+      "artwork": "track-13.jpg",
+      "fields": {
+        "allmusic": "https://www.allmusic.com/album/earth-vol-2-mw0000014088",
+        "discogs": "https://www.discogs.com/release/9715-LTJ-Bukem-Earth-Volume-Two",
+        "year": "1997"
+      },
+      "master_seconds": 2762.348,
+      "source_files": [
+        "d026-073b.wav",
+        "d041-064.wav",
+        "d046-065.wav"
+      ],
+      "title": "Senses",
+      "use_logo": false
+    },
+    "14": {
+      "artist": "Me'Shell NdegéOcello",
+      "artwork": "track-14.jpg",
+      "fields": {
+        "discogs": "https://www.discogs.com/release/1640975",
+        "year": "1996"
+      },
+      "master_seconds": 3153.363,
+      "source_files": [
+        "d026-073b.wav",
+        "d041-064.wav",
+        "d046-065.wav"
+      ],
+      "title": "Stay (The Midnight Rockers Remix)",
+      "use_logo": false
+    },
+    "15": {
+      "artist": "DJ Crystl",
+      "artwork": "track-15.jpg",
+      "fields": {
+        "allmusic": "https://www.allmusic.com/album/earth-vol-2-mw0000014088",
+        "discogs": "https://www.discogs.com/release/9715-LTJ-Bukem-Earth-Volume-Two",
+        "year": "1997"
+      },
+      "master_seconds": 3334.848,
+      "source_files": [
+        "d026-073b.wav",
+        "d041-064.wav",
+        "d046-065.wav",
+        "d065-087.wav",
+        "d066-085.wav"
+      ],
+      "title": "Mind Games",
+      "use_logo": false
+    },
+    "16": {
+      "artist": "Skyjuice",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 3960.022,
+      "source_files": [
+        "d026-073b.wav",
+        "d065-087.wav",
+        "d066-085.wav",
+        "d069-086.wav"
+      ],
+      "title": "The Rope-A-Dope",
+      "use_logo": false
+    },
+    "17": {
+      "artist": "Erykah Badu",
+      "artwork": "track-17.jpg",
+      "fields": {
+        "discogs": "https://www.discogs.com/release/226192",
+        "year": "1997"
+      },
+      "master_seconds": 4255.272,
+      "source_files": [
+        "d026-073b.wav",
+        "d065-087.wav",
+        "d066-085.wav",
+        "d069-086.wav"
+      ],
+      "title": "On & On (Blu Mar Ten Remix)",
+      "use_logo": false
+    },
+    "18": {
+      "artist": "Bugs",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 4731.62,
+      "source_files": [
+        "d065-087.wav",
+        "d066-085.wav",
+        "d069-086.wav",
+        "d084-103b.wav"
+      ],
+      "title": "The Oracle (Extended Instrumental Remix)",
+      "use_logo": false
+    },
+    "19": {
+      "artist": "Monty Norman",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 5058.848,
+      "source_files": [
+        "d065-087.wav",
+        "d066-085.wav",
+        "d069-086.wav",
+        "d084-103b.wav",
+        "d086-105.wav",
+        "d088-107.wav"
+      ],
+      "title": "James Bond Theme (Stephane Malca Remix)",
+      "use_logo": false
+    },
+    "20": {
+      "artist": "Angelo Badalamenti & David Lynch",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 5267.52,
+      "source_files": [
+        "d065-087.wav",
+        "d084-103b.wav",
+        "d086-105.wav",
+        "d088-107.wav"
+      ],
+      "title": "Twin Peaks (Alëem Remix)",
+      "use_logo": false
+    },
+    "21": {
+      "artist": "Blame",
+      "artwork": "track-21.jpg",
+      "fields": {
+        "allmusic": "https://www.allmusic.com/album/earth-vol-2-mw0000014088",
+        "discogs": "https://www.discogs.com/release/9715-LTJ-Bukem-Earth-Volume-Two",
+        "year": "1997"
+      },
+      "master_seconds": 5269.45,
+      "source_files": [
+        "d084-103b.wav",
+        "d086-105.wav",
+        "d088-107.wav"
+      ],
+      "title": "J-Walkin'",
+      "use_logo": false
+    },
+    "22": {
+      "artist": "Castillo",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 5693.32,
+      "source_files": [
+        "d084-103b.wav",
+        "d086-105.wav",
+        "d088-107.wav"
+      ],
+      "title": "Junkle I",
+      "use_logo": false
+    },
+    "23": {
+      "artist": "The Amalgamation of Soundz",
+      "artwork": "track-23.jpg",
+      "fields": {
+        "discogs": "https://www.discogs.com/release/40027",
+        "year": "1997"
+      },
+      "master_seconds": 6070.578,
+      "source_files": [
+        "d084-103b.wav",
+        "d086-105.wav",
+        "d088-107.wav",
+        "d107-121b.wav",
+        "d106-125.wav"
+      ],
+      "title": "63rd Suite",
+      "use_logo": false
+    },
+    "24": {
+      "artist": "Crash",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 6456.899,
+      "source_files": [
+        "d088-107.wav",
+        "d107-121b.wav",
+        "d106-125.wav",
+        "d104-108b.wav"
+      ],
+      "title": "Shoeshiner",
+      "use_logo": false
+    },
+    "25": {
+      "artist": "Spring Heel Jack",
+      "artwork": "track-25.jpg",
+      "fields": {
+        "discogs": "https://www.discogs.com/master/44701",
+        "year": "1997"
+      },
+      "master_seconds": 6669.768,
+      "source_files": [
+        "d107-121b.wav",
+        "d106-125.wav",
+        "d104-108b.wav"
+      ],
+      "title": "Happy Baby",
+      "use_logo": false
+    },
+    "26": {
+      "artist": "Endemic Void",
+      "artwork": "track-26.jpg",
+      "fields": {
+        "discogs": "https://www.discogs.com/master/156406",
+        "year": "1996"
+      },
+      "master_seconds": 7014.188,
+      "source_files": [
+        "d107-121b.wav",
+        "d106-125.wav",
+        "d122-144.wav",
+        "d122-144b.wav"
+      ],
+      "title": "Serious Intent",
+      "use_logo": false
+    },
+    "27": {
+      "artist": "Cujo",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 7338.146,
+      "source_files": [
+        "d107-121b.wav",
+        "d106-125.wav",
+        "d122-144.wav",
+        "d122-144b.wav",
+        "d126-145.wav"
+      ],
+      "title": "Cruzer",
+      "use_logo": false
+    },
+    "28": {
+      "artist": "Spaceways",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 7675.757,
+      "source_files": [
+        "d122-144.wav",
+        "d122-144b.wav",
+        "d126-145.wav"
+      ],
+      "title": "At Home With The Snake",
+      "use_logo": false
+    },
+    "29": {
+      "artist": "Rockers Hi-Fi",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 7973.335,
+      "source_files": [
+        "d122-144.wav",
+        "d122-144b.wav",
+        "d126-145.wav"
+      ],
+      "title": "Queen of the Ghetto (Ghetto Defendant)",
+      "use_logo": false
+    },
+    "30": {
+      "artist": "Red Snapper",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 8259.453,
+      "source_files": [
+        "d122-144.wav",
+        "d122-144b.wav",
+        "d126-145.wav",
+        "d145-164b.wav",
+        "d145-164.wav"
+      ],
+      "title": "Crusoe Takes A Trip",
+      "use_logo": false
+    },
+    "31": {
+      "artist": "Net Radio",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 8657.243,
+      "source_files": [
+        "d122-144.wav",
+        "d126-145.wav",
+        "d145-164b.wav",
+        "d145-164.wav"
+      ],
+      "title": "Promo4 Peace",
+      "use_logo": false
+    },
+    "32": {
+      "artist": "Skycutter & Kiki Mojo",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 8681.834,
+      "source_files": [
+        "d126-145.wav",
+        "d145-164b.wav",
+        "d145-164.wav",
+        "d146.wav"
+      ],
+      "title": "Crystal Blue",
+      "use_logo": false
+    },
+    "33": {
+      "artist": "Squarepusher",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 9083.374,
+      "source_files": [
+        "d145-164b.wav",
+        "d145-164.wav"
+      ],
+      "title": "Problem Child",
+      "use_logo": false
+    },
+    "34": {
+      "artist": "The Advocate",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 9424.643,
+      "source_files": [
+        "d145-164b.wav",
+        "d145-164.wav",
+        "d165-186b.wav",
+        "d165-186.wav"
+      ],
+      "title": "You Talking To Me?",
+      "use_logo": false
+    },
+    "35": {
+      "artist": "Decoder",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 9877.211,
+      "source_files": [
+        "d145-164b.wav",
+        "d145-164.wav",
+        "d165-186b.wav",
+        "d165-186.wav"
+      ],
+      "title": "Circuit Breaker",
+      "use_logo": false
+    },
+    "36": {
+      "artist": "Slak & Snuggles",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 10340.178,
+      "source_files": [
+        "d165-186b.wav",
+        "d165-186.wav"
+      ],
+      "title": "The Reckoning",
+      "use_logo": false
+    },
+    "37": {
+      "artist": "Fierce & Nico",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 10690.792,
+      "source_files": [
+        "d165-186b.wav",
+        "d165-186.wav",
+        "d-14Nov10-a.au",
+        "d187-200.wav",
+        "d187-216b.wav"
+      ],
+      "title": "Input",
+      "use_logo": false
+    },
+    "38": {
+      "artist": "Friends, Lovers & Family",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 11177.637,
+      "source_files": [
+        "d165-186b.wav",
+        "d165-186.wav",
+        "d-14Nov10-a.au",
+        "d187-200.wav",
+        "d187-216b.wav"
+      ],
+      "title": "Dark Fader",
+      "use_logo": false
+    },
+    "39": {
+      "artist": "Net Radio",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 11714.748,
+      "source_files": [
+        "d-14Nov10-a.au",
+        "d187-216b.wav"
+      ],
+      "title": "Promo5 Club Groove",
+      "use_logo": false
+    },
+    "40": {
+      "artist": "David Kristian",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 11748.836,
+      "source_files": [
+        "d-14Nov10-a.au",
+        "d187-216b.wav"
+      ],
+      "title": "Hopeless",
+      "use_logo": false
+    },
+    "41": {
+      "artist": "The Sonar Circle",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 11964.971,
+      "source_files": [
+        "d-14Nov10-a.au",
+        "d187-216b.wav",
+        "d-14Nov10-b.au"
+      ],
+      "title": "Strength",
+      "use_logo": false
+    },
+    "42": {
+      "artist": "Justin Tewn & Hunter A.D.",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 12293.941,
+      "source_files": [
+        "d187-216b.wav",
+        "d-14Nov10-b.au"
+      ],
+      "title": "Science of Industry",
+      "use_logo": false
+    },
+    "43": {
+      "artist": "Dave Wallace",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 12713.248,
+      "source_files": [
+        "d187-216b.wav",
+        "d-14Nov10-b.au",
+        "dnb-14Nov02-b.au",
+        "d217-242.wav"
+      ],
+      "title": "Waves (Kid Loops remix)",
+      "use_logo": false
+    },
+    "44": {
+      "artist": "E-Z Rollers",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 13017.461,
+      "source_files": [
+        "d187-216b.wav",
+        "d-14Nov10-b.au",
+        "dnb-14Nov02-b.au",
+        "d217-242.wav",
+        "d-14Nov10-c.au"
+      ],
+      "title": "Retro",
+      "use_logo": false
+    },
+    "45": {
+      "artist": "Dr S Gachet",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 13485.922,
+      "source_files": [
+        "dnb-14Nov02-b.au",
+        "d217-242.wav",
+        "d-14Nov10-c.au",
+        "d228-247.wav"
+      ],
+      "title": "It's All Gone Sideways",
+      "use_logo": false
+    },
+    "46": {
+      "artist": "Arcon 2",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 13784.821,
+      "source_files": [
+        "dnb-14Nov02-b.au",
+        "d217-242.wav",
+        "d-14Nov10-c.au",
+        "d228-247.wav"
+      ],
+      "title": "The Beckoning",
+      "use_logo": false
+    },
+    "47": {
+      "artist": "Alpha Omega",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 14115.278,
+      "source_files": [
+        "dnb-14Nov02-b.au",
+        "d217-242.wav",
+        "d-14Nov10-c.au",
+        "d228-247.wav",
+        "dnb-14Nov02-c.au",
+        "d-14Nov10-d.au"
+      ],
+      "title": "Realism",
+      "use_logo": false
+    },
+    "48": {
+      "artist": "Downpour",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 14521.31,
+      "source_files": [
+        "d217-242.wav",
+        "d228-247.wav",
+        "d-14Nov10-d.au",
+        "d242-268.wav"
+      ],
+      "title": "Her Spectre Above Me Look",
+      "use_logo": false
+    },
+    "49": {
+      "artist": "G-Money",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 14699.005,
+      "source_files": [
+        "d228-247.wav",
+        "d-14Nov10-d.au",
+        "d242-268.wav",
+        "d248-258.wav"
+      ],
+      "title": "Falling",
+      "use_logo": false
+    },
+    "50": {
+      "artist": "DJ 3D",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 15152.075,
+      "source_files": [
+        "d-14Nov10-d.au",
+        "d242-268.wav",
+        "d248-258.wav"
+      ],
+      "title": "Cairo",
+      "use_logo": false
+    },
+    "51": {
+      "artist": "E-Sassin",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 15510.677,
+      "source_files": [
+        "d-14Nov10-d.au",
+        "d242-268.wav",
+        "d248-258.wav",
+        "d-14Nov10-e.au"
+      ],
+      "title": "Nightrider",
+      "use_logo": false
+    },
+    "52": {
+      "artist": "B-Boy 3000",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 15839.956,
+      "source_files": [
+        "d242-268.wav",
+        "d-14Nov10-e.au",
+        "d268-287.wav",
+        "d269-271b.wav"
+      ],
+      "title": "Diet for Murder",
+      "use_logo": false
+    },
+    "53": {
+      "artist": "Net Radio",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 16096.484,
+      "source_files": [
+        "d242-268.wav",
+        "d-14Nov10-e.au",
+        "d268-287.wav",
+        "d269-271b.wav"
+      ],
+      "title": "Promo6 Peace",
+      "use_logo": false
+    },
+    "54": {
+      "artist": "Codename John",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 16120.923,
+      "source_files": [
+        "d-14Nov10-e.au",
+        "d268-287.wav",
+        "d269-271b.wav",
+        "d276-293b.wav"
+      ],
+      "title": "Dreams of Heaven",
+      "use_logo": false
+    },
+    "55": {
+      "artist": "John B",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 16487.65,
+      "source_files": [
+        "d-14Nov10-e.au",
+        "d268-287.wav",
+        "d276-293b.wav",
+        "d-14Nov10-f.au"
+      ],
+      "title": "Secrets",
+      "use_logo": false
+    },
+    "56": {
+      "artist": "Optical",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 17021.016,
+      "source_files": [
+        "d-14Nov10-e.au",
+        "d268-287.wav",
+        "d276-293b.wav",
+        "d-14Nov10-f.au",
+        "d288-307.wav"
+      ],
+      "title": "Grey Odyssey",
+      "use_logo": false
+    },
+    "57": {
+      "artist": "Matrix",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 17390.149,
+      "source_files": [
+        "d276-293b.wav",
+        "d-14Nov10-f.au",
+        "d288-307.wav"
+      ],
+      "title": "Mute",
+      "use_logo": false
+    },
+    "58": {
+      "artist": "Codename John",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 17653.042,
+      "source_files": [
+        "d-14Nov10-f.au",
+        "d288-307.wav"
+      ],
+      "title": "Deep Inside",
+      "use_logo": false
+    },
+    "59": {
+      "artist": "Dillinja",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 18124.508,
+      "source_files": [
+        "d-14Nov10-f.au",
+        "d288-307.wav",
+        "d308-327.wav"
+      ],
+      "title": "Silver Blade",
+      "use_logo": false
+    },
+    "60": {
+      "artist": "Ed Rush & Fierce",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 18493.708,
+      "source_files": [
+        "d288-307.wav",
+        "d308-327.wav",
+        "d316-335.wav"
+      ],
+      "title": "Locust",
+      "use_logo": false
+    },
+    "61": {
+      "artist": "Codename John feat. Grooverider",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 19022.707,
+      "source_files": [
+        "d308-327.wav",
+        "d316-335.wav",
+        "d-14Nov10-h.au"
+      ],
+      "title": "Warned",
+      "use_logo": false
+    },
+    "62": {
+      "artist": "Boymerang",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 19390.923,
+      "source_files": [
+        "d308-327.wav",
+        "d316-335.wav",
+        "d-14Nov10-h.au",
+        "d328-342.wav"
+      ],
+      "title": "Still",
+      "use_logo": false
+    },
+    "63": {
+      "artist": "Lemon D",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 19864.709,
+      "source_files": [
+        "d316-335.wav",
+        "d-14Nov10-h.au",
+        "d328-342.wav"
+      ],
+      "title": "City Lights",
+      "use_logo": false
+    },
+    "64": {
+      "artist": "Net Radio",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 20272.589,
+      "source_files": [
+        "d328-342.wav"
+      ],
+      "title": "Promo7 Club Groove",
+      "use_logo": false
+    },
+    "65": {
+      "artist": "Dr. Know",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 20306.708,
+      "source_files": [
+        "d328-342.wav"
+      ],
+      "title": "Make Me Feel",
+      "use_logo": false
+    },
+    "66": {
+      "artist": "JMJ & Richie",
+      "artwork": null,
+      "fields": {},
+      "master_seconds": 20667.817,
+      "source_files": [
+        "d328-342.wav"
+      ],
+      "title": "Free La Funk (PFM Remix)",
+      "use_logo": false
+    }
+  }
+}
