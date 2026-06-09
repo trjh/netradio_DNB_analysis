@@ -41,3 +41,6 @@ scripts/__pycache__/
 alignscore.log
 sheetscript/logs
 .env
+
+# Private/local agent guide (machine paths, remotes, secret locations)
+AGENT.md
