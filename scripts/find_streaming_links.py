@@ -46,10 +46,23 @@ def base(s):
     return canon(re.sub(r"\s*[\(\[].*?[\)\]]", "", s or ""))
 
 
+FEAT_RE = re.compile(r"\b(feat|featuring|ft)\b", re.I)
+
+
 def qualifier_words(title):
-    inside = " ".join(re.findall(r"[\(\[](.*?)[\)\]]", title or ""))
-    words = set(canon(inside).split()) - {"mix", "remix", "version", "edit", "the"}
-    return words
+    """Version-distinguishing words inside ()/[] groups.
+
+    A featuring credit — "(feat. X)" / "(ft. X)" — is benign: it names a guest on
+    the *same* recording, so it's ignored. Everything else inside parentheses is a
+    meaningful version qualifier (remix / edit / mix / dub / instrumental / a named
+    remixer / "DJ Mix" …) that distinguishes one recording from another and is kept.
+    """
+    words = set()
+    for group in re.findall(r"[\(\[](.*?)[\)\]]", title or ""):
+        if FEAT_RE.search(group):
+            continue                      # featuring credit — same recording
+        words |= set(canon(group).split())
+    return words - {"the"}
 
 
 def artist_ok(want, got):
@@ -64,9 +77,11 @@ def title_ok(want, got):
     bw, bg = base(want), base(got)
     if not (bw and bw == bg):   # exact base-title equality (no loose substring match)
         return False
-    # If the track is a remix/version, require the qualifier to be present too,
-    # so we don't link the original recording for a remix track.
-    return qualifier_words(want) <= set(cg.split())
+    # Version qualifiers must match SYMMETRICALLY. A bare authoritative title must
+    # NOT absorb a candidate carrying an extra remix/edit/DJ-mix qualifier (that
+    # would link a different recording), and vice-versa. Featuring credits are
+    # ignored by qualifier_words, so "(feat. X)" still matches the plain title.
+    return qualifier_words(want) == qualifier_words(got)
 
 
 def itunes_search(term, country, limit=6):

@@ -613,9 +613,7 @@
       "artist": "Decoder",
       "artwork": null,
       "fields": {
-        "apple": "https://music.apple.com/ie/album/circuit-breaker-peshay-remix/625106201?i=625106207&uo=4",
-        "release": "Various - Infinite Beat Vol. 1",
-        "spotify": "https://open.spotify.com/track/7ey2xlVe9yUEup5KR3l0fD"
+        "release": "Various - Infinite Beat Vol. 1"
       },
       "master_seconds": 9877.211,
       "source_files": [
@@ -803,10 +801,7 @@
     "47": {
       "artist": "Alpha Omega",
       "artwork": null,
-      "fields": {
-        "apple": "https://music.apple.com/ie/album/realism-millenium-edit/292446931?i=292446955&uo=4",
-        "spotify": "https://open.spotify.com/track/5cHfNMcdJsq8r1O8cT2BYQ"
-      },
+      "fields": {},
       "master_seconds": 14115.278,
       "source_files": [
         "dnb-14Nov02-b.au",
@@ -906,7 +901,7 @@
       "artist": "Codename John",
       "artwork": null,
       "fields": {
-        "apple": "https://music.apple.com/ie/album/dreams-of-heaven-dj-mix/1884390532?i=1884391122&uo=4",
+        "apple": "https://music.apple.com/ie/album/dreams-of-heaven/1884390532?i=1884390533&uo=4",
         "spotify": "https://open.spotify.com/track/4GK0WHo63fjFd1RDNKM7W1"
       },
       "master_seconds": 16120.923,

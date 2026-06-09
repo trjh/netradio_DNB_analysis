@@ -34,6 +34,17 @@ class TitleMatchTests(unittest.TestCase):
         # a remix track should not match a differently-qualified result
         self.assertFalse(f.title_ok("Waves (Kid Loops Remix)", "Waves (Original Mix)"))
 
+    def test_unqualified_title_rejects_extra_version_qualifier(self):
+        # Regression: a bare authoritative title must NOT absorb a candidate that
+        # carries an extra remix/edit/DJ-mix qualifier — that's a different recording.
+        self.assertFalse(f.title_ok("Circuit Breaker", "Circuit Breaker (Peshay Remix)"))
+        self.assertFalse(f.title_ok("Realism", "Realism (Millenium Edit)"))
+        self.assertFalse(f.title_ok("Dreams of Heaven", "Dreams of Heaven (DJ Mix)"))
+        self.assertFalse(f.title_ok("Strength", "Strength (Remix)"))
+        # ...but a featuring credit on the candidate is benign (same recording).
+        self.assertTrue(f.title_ok("Everything is Gonna Be Alright",
+                                   "Everything Is Gonna Be Alright (feat. Carol Tripp)"))
+
 
 class SpotifyImportTests(unittest.TestCase):
     def _tracks(self):
