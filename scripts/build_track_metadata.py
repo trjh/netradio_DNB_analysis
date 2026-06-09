@@ -116,8 +116,9 @@ def parse_file_timeline(label_rows):
                     changed = True
         if not changed:
             break
-    return {name: {"master_start_seconds": starts[name], "master_end_seconds": ends.get(name)}
-            for name in starts}
+    timeline = {name: {"master_start_seconds": starts[name], "master_end_seconds": ends.get(name)}
+                for name in starts}
+    return timeline, current_by_path
 
 
 LABEL_ID_RE = re.compile(r"\bstart0*(\d+)\s*:\s*ID:\s*(.+)$", re.I)
@@ -165,9 +166,15 @@ def original_audio_name(stem):
     return stem + ".wav"
 
 
+def original_from_mp3(mp3_name):
+    """Original capture filename for a normalized .mp3 timeline key."""
+    stem = mp3_name[:-4] if mp3_name.lower().endswith(".mp3") else mp3_name
+    return original_audio_name(stem)
+
+
 def parse_label_track_ids():
     label_rows = read_label_rows()
-    timeline = parse_file_timeline(label_rows)
+    timeline, current_by_path = parse_file_timeline(label_rows)
     # File master windows keyed by ORIGINAL capture filename (the .mp3 form is an
     # internal artifact). Used to find every capture a track appears in.
     windows = []
@@ -202,8 +209,11 @@ def parse_label_track_ids():
         if not parsed:
             continue
         number, artist, title = parsed
-        owning = owning_file_for_label_path(row["path"])
-        owning_original = original_audio_name(label_stem(row["path"]))
+        # The owning capture file comes from the file's own `file start sync` row
+        # (tracked by the timeline), NOT the label filename — label files can be
+        # prefixed (e.g. d180_d-14Nov10-a.labels.tsv whose file is d-14Nov10-a.au).
+        owning = current_by_path.get(row["path"]) or owning_file_for_label_path(row["path"])
+        owning_original = original_from_mp3(owning)
         start = (timeline.get(owning) or {}).get("master_start_seconds")
         master = start + row["seconds"] if start is not None else None
         record = {"track_number": number, "track_artist": artist, "track_name": title,

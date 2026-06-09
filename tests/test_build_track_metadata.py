@@ -48,6 +48,21 @@ class LiveTests(unittest.TestCase):
         self.assertEqual(ids[3]["track_name"], "Sky Blue")
         self.assertAlmostEqual(ids[3]["master_seconds"], 59.910324, places=2)
 
+    def test_all_tracks_resolve_a_master_position(self):
+        # Regression: prefixed 14Nov label files (d180_d-14Nov10-a.labels.tsv whose
+        # file is d-14Nov10-a.au) must resolve via the sync row, not the filename.
+        ids, _conflicts = b.parse_label_track_ids()
+        missing = [n for n, r in ids.items() if r["master_seconds"] is None]
+        self.assertEqual(missing, [], "tracks with no master_seconds: %s" % missing)
+        # track 38 starts 324.585867 into d-14Nov10-a.au (master_start 10853.051068).
+        self.assertAlmostEqual(ids[38]["master_seconds"], 10853.051068 + 324.585867, places=3)
+
+    def test_source_files_use_original_names_not_prefixed_label_stems(self):
+        ids, _conflicts = b.parse_label_track_ids()
+        self.assertIn("d-14Nov10-a.au", ids[38]["source_files"])
+        for name in ids[38]["source_files"]:
+            self.assertFalse(name.startswith("d180_"), name)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -556,8 +556,13 @@
       "artist": "Friends, Lovers & Family",
       "artwork": null,
       "fields": {},
+      "master_seconds": 11177.637,
       "source_files": [
-        "d180_d-14Nov10-a.au"
+        "d165-186b.wav",
+        "d165-186.wav",
+        "d-14Nov10-a.au",
+        "d187-200.wav",
+        "d187-216b.wav"
       ],
       "title": "Dark Fader",
       "use_logo": false
@@ -566,8 +571,10 @@
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
+      "master_seconds": 11714.748,
       "source_files": [
-        "d180_d-14Nov10-a.au"
+        "d-14Nov10-a.au",
+        "d187-216b.wav"
       ],
       "title": "Promo5 Club Groove",
       "use_logo": false
@@ -576,8 +583,10 @@
       "artist": "David Kristian",
       "artwork": null,
       "fields": {},
+      "master_seconds": 11748.836,
       "source_files": [
-        "d180_d-14Nov10-a.au"
+        "d-14Nov10-a.au",
+        "d187-216b.wav"
       ],
       "title": "Hopeless",
       "use_logo": false
@@ -586,8 +595,10 @@
       "artist": "The Sonar Circle",
       "artwork": null,
       "fields": {},
+      "master_seconds": 11964.971,
       "source_files": [
-        "d180_d-14Nov10-a.au"
+        "d-14Nov10-a.au",
+        "d187-216b.wav"
       ],
       "title": "Strength",
       "use_logo": false
@@ -596,8 +607,10 @@
       "artist": "Justin Tewn & Hunter A.D.",
       "artwork": null,
       "fields": {},
+      "master_seconds": 12293.941,
       "source_files": [
-        "d200_d-14Nov10-b.au"
+        "d187-216b.wav",
+        "d-14Nov10-b.au"
       ],
       "title": "Science of Industry",
       "use_logo": false
@@ -606,8 +619,10 @@
       "artist": "Dave Wallace",
       "artwork": null,
       "fields": {},
+      "master_seconds": 12713.248,
       "source_files": [
-        "d200_d-14Nov10-b.au"
+        "d187-216b.wav",
+        "d-14Nov10-b.au"
       ],
       "title": "Waves (Kid Loops remix)",
       "use_logo": false
@@ -616,8 +631,12 @@
       "artist": "E-Z Rollers",
       "artwork": null,
       "fields": {},
+      "master_seconds": 13017.461,
       "source_files": [
-        "d200_d-14Nov10-b.au"
+        "d187-216b.wav",
+        "d-14Nov10-b.au",
+        "dnb-14Nov02-b.au",
+        "d217-242.wav"
       ],
       "title": "Retro",
       "use_logo": false
@@ -626,8 +645,11 @@
       "artist": "Dr S Gachet",
       "artwork": null,
       "fields": {},
+      "master_seconds": 13485.922,
       "source_files": [
-        "d220_d-14Nov10-c.au"
+        "dnb-14Nov02-b.au",
+        "d217-242.wav",
+        "d-14Nov10-c.au"
       ],
       "title": "It's All Gone Sideways",
       "use_logo": false
@@ -636,8 +658,12 @@
       "artist": "Arcon 2",
       "artwork": null,
       "fields": {},
+      "master_seconds": 13784.821,
       "source_files": [
-        "d220_d-14Nov10-c.au"
+        "dnb-14Nov02-b.au",
+        "d217-242.wav",
+        "d-14Nov10-c.au",
+        "d228-247.wav"
       ],
       "title": "The Beckoning",
       "use_logo": false
@@ -646,8 +672,12 @@
       "artist": "Alpha Omega",
       "artwork": null,
       "fields": {},
+      "master_seconds": 14115.278,
       "source_files": [
-        "d220_d-14Nov10-c.au"
+        "dnb-14Nov02-b.au",
+        "d217-242.wav",
+        "d-14Nov10-c.au",
+        "d228-247.wav"
       ],
       "title": "Realism",
       "use_logo": false
@@ -656,8 +686,11 @@
       "artist": "Downpour",
       "artwork": null,
       "fields": {},
+      "master_seconds": 14521.31,
       "source_files": [
-        "d240_d-14Nov10-d.au"
+        "d217-242.wav",
+        "d228-247.wav",
+        "d-14Nov10-d.au"
       ],
       "title": "Her Spectre Above Me Look",
       "use_logo": false
@@ -666,8 +699,11 @@
       "artist": "G-Money",
       "artwork": null,
       "fields": {},
+      "master_seconds": 14699.005,
       "source_files": [
-        "d240_d-14Nov10-d.au"
+        "d228-247.wav",
+        "d-14Nov10-d.au",
+        "d242-268.wav"
       ],
       "title": "Falling",
       "use_logo": false
@@ -676,8 +712,11 @@
       "artist": "DJ 3D",
       "artwork": null,
       "fields": {},
+      "master_seconds": 15152.075,
       "source_files": [
-        "d240_d-14Nov10-d.au"
+        "d-14Nov10-d.au",
+        "d242-268.wav",
+        "d248-258.wav"
       ],
       "title": "Cairo",
       "use_logo": false
@@ -686,8 +725,11 @@
       "artist": "E-Sassin",
       "artwork": null,
       "fields": {},
+      "master_seconds": 15510.677,
       "source_files": [
-        "d240_d-14Nov10-d.au"
+        "d-14Nov10-d.au",
+        "d242-268.wav",
+        "d248-258.wav"
       ],
       "title": "Nightrider",
       "use_logo": false
@@ -696,8 +738,10 @@
       "artist": "B-Boy 3000",
       "artwork": null,
       "fields": {},
+      "master_seconds": 15839.956,
       "source_files": [
-        "d260_d-14Nov10-e.au"
+        "d242-268.wav",
+        "d-14Nov10-e.au"
       ],
       "title": "Diet for Murder",
       "use_logo": false
@@ -706,8 +750,12 @@
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
+      "master_seconds": 16096.484,
       "source_files": [
-        "d260_d-14Nov10-e.au"
+        "d242-268.wav",
+        "d-14Nov10-e.au",
+        "d268-287.wav",
+        "d269-271b.wav"
       ],
       "title": "Promo6 Peace",
       "use_logo": false
@@ -716,8 +764,11 @@
       "artist": "Codename John",
       "artwork": null,
       "fields": {},
+      "master_seconds": 16120.923,
       "source_files": [
-        "d260_d-14Nov10-e.au"
+        "d-14Nov10-e.au",
+        "d268-287.wav",
+        "d269-271b.wav"
       ],
       "title": "Dreams of Heaven",
       "use_logo": false
@@ -726,8 +777,11 @@
       "artist": "John B",
       "artwork": null,
       "fields": {},
+      "master_seconds": 16487.65,
       "source_files": [
-        "d260_d-14Nov10-e.au"
+        "d-14Nov10-e.au",
+        "d268-287.wav",
+        "d276-293b.wav"
       ],
       "title": "Secrets",
       "use_logo": false
@@ -736,8 +790,12 @@
       "artist": "Optical",
       "artwork": null,
       "fields": {},
+      "master_seconds": 17021.016,
       "source_files": [
-        "d260_d-14Nov10-e.au"
+        "d-14Nov10-e.au",
+        "d268-287.wav",
+        "d276-293b.wav",
+        "d-14Nov10-f.au"
       ],
       "title": "Grey Odyssey",
       "use_logo": false
@@ -746,8 +804,11 @@
       "artist": "Matrix",
       "artwork": null,
       "fields": {},
+      "master_seconds": 17390.149,
       "source_files": [
-        "d280_d-14Nov10-f.au"
+        "d276-293b.wav",
+        "d-14Nov10-f.au",
+        "d288-307.wav"
       ],
       "title": "Mute",
       "use_logo": false
@@ -770,6 +831,7 @@
       "fields": {},
       "master_seconds": 18124.508,
       "source_files": [
+        "d-14Nov10-f.au",
         "d288-307.wav"
       ],
       "title": "Silver Blade",
