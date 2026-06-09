@@ -1,0 +1,26 @@
+"The tracks in d000-018.mp3 presumably don't need to beat-aligned, as they are not mixed together.  However, it seems that the tracks are all a bit faster than the originals.  Did I get something wrong in translating the WAVs?  Is the adjustment universal across the three songs in this file?"
+Adjust file for 003 - Everything is Going to be Alright
+Alightment Point,in file,orig mp3 starts here to be in alignment
+A,338.412,314.261
+C,552.774,313.428
+When orig mp3 is aligned with A,
+A to C file length,214.362
+A to C orig length,215.195,multiplier,1.00388595
+Entire file length,1102.848
+Entire file length after adjustment,1107.133612
+To adjust:
+* Select mix track
+* Effect -> Patch and Tempo -> Change Speed
+"* Adjust ""New Length"" at bottom of dialog according to above"
+Results for track 003
+"after adjustment, mp3 start for alignment:",,,315.601
+track 003 seems entirely in alignment
+Adjust file for 002 - Sky Blue
+Alightment Point,in file,orig mp3 starts here to be in alignment
+A start,59.91,59.525
+B after last synth,279.152,61.685
+When orig mp3 is aligned with A,
+A to B file length,219.242
+A to B orig length,217.083
+Entire file length,1102.848
+Entire file length after adjustment,0
