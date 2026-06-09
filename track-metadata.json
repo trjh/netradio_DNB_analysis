@@ -37,6 +37,8 @@
       "fields": {
         "allmusic": "https://www.allmusic.com/album/the-listen-project-mw0000031187",
         "discogs": "https://www.discogs.com/release/376822",
+        "release": "Jamie Myerson – The Listen Project (1998, CD)",
+        "spotify": "https://open.spotify.com/track/0fZTgg3myT66xokM5Z7Okt?si=fc78d3eba99a498a",
         "year": "1998"
       },
       "master_seconds": 59.91,
@@ -54,6 +56,7 @@
       "fields": {
         "allmusic": "https://www.allmusic.com/album/the-listen-project-mw0000031187",
         "discogs": "https://www.discogs.com/release/376822",
+        "release": "Jamie Myerson – The Listen Project (1998, CD)",
         "year": "1998"
       },
       "master_seconds": 303.949,
@@ -72,6 +75,7 @@
       "fields": {
         "allmusic": "https://www.allmusic.com/album/the-listen-project-mw0000031187",
         "discogs": "https://www.discogs.com/release/376822",
+        "release": "Jamie Myerson – The Listen Project (1998, CD)",
         "year": "1998"
       },
       "master_seconds": 573.867,
@@ -89,6 +93,7 @@
       "fields": {
         "allmusic": "https://www.allmusic.com/album/the-listen-project-mw0000031187",
         "discogs": "https://www.discogs.com/release/376822",
+        "release": "Jamie Myerson – The Listen Project (1998, CD)",
         "year": "1998"
       },
       "master_seconds": 588.696,
@@ -106,6 +111,7 @@
       "fields": {
         "allmusic": "https://www.allmusic.com/album/the-listen-project-mw0000031187",
         "discogs": "https://www.discogs.com/release/376822",
+        "release": "Jamie Myerson – The Listen Project (1998, CD)",
         "year": "1998"
       },
       "master_seconds": 647.372,
@@ -124,6 +130,7 @@
       "fields": {
         "allmusic": "https://www.allmusic.com/album/the-listen-project-mw0000031187",
         "discogs": "https://www.discogs.com/release/376822",
+        "release": "Jamie Myerson – The Listen Project (1998, CD)",
         "year": "1998"
       },
       "master_seconds": 1102.848,
@@ -158,7 +165,9 @@
       "artwork": "track-10.jpg",
       "fields": {
         "allmusic": "https://www.allmusic.com/album/earth-vol-2-mw0000014088",
+        "apple": "https://music.apple.com/ie/album/artificial-life/595866402?i=595866483",
         "discogs": "https://www.discogs.com/release/9715-LTJ-Bukem-Earth-Volume-Two",
+        "release": "LTJ Bukem - Earth Volume Two",
         "year": "1997"
       },
       "master_seconds": 1613.771,
@@ -176,6 +185,7 @@
       "artwork": "track-11.jpg",
       "fields": {
         "discogs": "https://www.discogs.com/release/38468",
+        "release": "Tricky – Makes Me Wanna Die (1997, CD2, CD)",
         "year": "1997"
       },
       "master_seconds": 2134.772,
@@ -192,7 +202,9 @@
       "artist": "Eighty Mile Beach",
       "artwork": "track-12.jpg",
       "fields": {
+        "apple": "https://music.apple.com/ie/album/arboleda-de-manzanitas-drum-bass-mix/439852478?i=439852488",
         "discogs": "https://www.discogs.com/release/118242",
+        "release": "Eighty Mile Beach – Arboleda De Manzanitas (1997, Vinyl)",
         "year": "1997"
       },
       "master_seconds": 2420.48,
@@ -211,7 +223,9 @@
       "artwork": "track-13.jpg",
       "fields": {
         "allmusic": "https://www.allmusic.com/album/earth-vol-2-mw0000014088",
+        "apple": "https://music.apple.com/ie/album/senses/595866402?i=595866531",
         "discogs": "https://www.discogs.com/release/9715-LTJ-Bukem-Earth-Volume-Two",
+        "release": "LTJ Bukem - Earth Volume Two",
         "year": "1997"
       },
       "master_seconds": 2762.348,
@@ -228,6 +242,7 @@
       "artwork": "track-14.jpg",
       "fields": {
         "discogs": "https://www.discogs.com/release/1640975",
+        "release": "Me'Shell NdegéOcello – Stay (1996, CD)",
         "year": "1996"
       },
       "master_seconds": 3153.363,
@@ -244,7 +259,9 @@
       "artwork": "track-15.jpg",
       "fields": {
         "allmusic": "https://www.allmusic.com/album/earth-vol-2-mw0000014088",
+        "apple": "https://music.apple.com/ie/album/mindgames/595866402?i=595866533",
         "discogs": "https://www.discogs.com/release/9715-LTJ-Bukem-Earth-Volume-Two",
+        "release": "LTJ Bukem - Earth Volume Two",
         "year": "1997"
       },
       "master_seconds": 3334.848,
@@ -261,7 +278,10 @@
     "16": {
       "artist": "Skyjuice",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/the-rope-a-dope/1523400564?i=1523400878",
+        "release": "Various - No Categories: A Ubiquity Compilation"
+      },
       "master_seconds": 3960.022,
       "source_files": [
         "d026-073b.wav",
@@ -277,6 +297,7 @@
       "artwork": "track-17.jpg",
       "fields": {
         "discogs": "https://www.discogs.com/release/226192",
+        "release": "Erykah Badu – On & On (1997, Vinyl)",
         "year": "1997"
       },
       "master_seconds": 4255.272,
@@ -292,7 +313,10 @@
     "18": {
       "artist": "Bugs",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/the-oracle-extended-instrumental-remix/1523400564?i=1523400571",
+        "release": "Various - No Categories: A Ubiquity Compilation"
+      },
       "master_seconds": 4731.62,
       "source_files": [
         "d065-087.wav",
@@ -306,7 +330,9 @@
     "19": {
       "artist": "Monty Norman",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Various - Serialement Vôtre"
+      },
       "master_seconds": 5058.848,
       "source_files": [
         "d065-087.wav",
@@ -322,7 +348,9 @@
     "20": {
       "artist": "Angelo Badalamenti & David Lynch",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Various - Serialement Vôtre"
+      },
       "master_seconds": 5267.52,
       "source_files": [
         "d065-087.wav",
@@ -338,7 +366,9 @@
       "artwork": "track-21.jpg",
       "fields": {
         "allmusic": "https://www.allmusic.com/album/earth-vol-2-mw0000014088",
+        "apple": "https://music.apple.com/ie/album/j-walkin/595866402?i=595866484",
         "discogs": "https://www.discogs.com/release/9715-LTJ-Bukem-Earth-Volume-Two",
+        "release": "LTJ Bukem - Earth Volume Two",
         "year": "1997"
       },
       "master_seconds": 5269.45,
@@ -353,7 +383,10 @@
     "22": {
       "artist": "Castillo",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/junkle-i/995101816?i=995101825",
+        "release": "Callisto – The Paradigm EP (1997, Vinyl)"
+      },
       "master_seconds": 5693.32,
       "source_files": [
         "d084-103b.wav",
@@ -367,7 +400,9 @@
       "artist": "The Amalgamation of Soundz",
       "artwork": "track-23.jpg",
       "fields": {
+        "apple": "https://music.apple.com/ie/album/63rd-suite/5575733?i=5575727",
         "discogs": "https://www.discogs.com/release/40027",
+        "release": "The Amalgamation Of Soundzundz-Amalgamation-Of-Soundz",
         "year": "1997"
       },
       "master_seconds": 6070.578,
@@ -384,7 +419,10 @@
     "24": {
       "artist": "Crash",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Various - Shake The Bones",
+        "youtube": "https://www.youtube.com/watch?v=1Qjvdx4TUr8"
+      },
       "master_seconds": 6456.899,
       "source_files": [
         "d088-107.wav",
@@ -400,6 +438,7 @@
       "artwork": "track-25.jpg",
       "fields": {
         "discogs": "https://www.discogs.com/master/44701",
+        "release": "Spring Heel Jack - Busy Curious Thirsty",
         "year": "1997"
       },
       "master_seconds": 6669.768,
@@ -415,7 +454,9 @@
       "artist": "Endemic Void",
       "artwork": "track-26.jpg",
       "fields": {
+        "apple": "https://music.apple.com/ie/album/serious-intent/209772259?i=209772566",
         "discogs": "https://www.discogs.com/master/156406",
+        "release": "Endemic Void - Equations",
         "year": "1996"
       },
       "master_seconds": 7014.188,
@@ -431,7 +472,9 @@
     "27": {
       "artist": "Cujo",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Cujo – Adventures In Foam (1997, CD)"
+      },
       "master_seconds": 7338.146,
       "source_files": [
         "d107-121b.wav",
@@ -446,7 +489,9 @@
     "28": {
       "artist": "Spaceways",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Spaceways - Trad"
+      },
       "master_seconds": 7675.757,
       "source_files": [
         "d122-144.wav",
@@ -459,7 +504,9 @@
     "29": {
       "artist": "Rockers Hi-Fi",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Rockers Hi-Fi – Mish Mash (1997, CD)"
+      },
       "master_seconds": 7973.335,
       "source_files": [
         "d122-144.wav",
@@ -472,7 +519,9 @@
     "30": {
       "artist": "Red Snapper",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Red Snapper - Prince Blimey"
+      },
       "master_seconds": 8259.453,
       "source_files": [
         "d122-144.wav",
@@ -501,7 +550,9 @@
     "32": {
       "artist": "Skycutter & Kiki Mojo",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Various - Infinite Beat Vol. 1"
+      },
       "master_seconds": 8681.834,
       "source_files": [
         "d126-145.wav",
@@ -515,7 +566,9 @@
     "33": {
       "artist": "Squarepusher",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Various - Infinite Beat Vol. 1"
+      },
       "master_seconds": 9083.374,
       "source_files": [
         "d145-164b.wav",
@@ -527,7 +580,9 @@
     "34": {
       "artist": "The Advocate",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Various - Infinite Beat Vol. 1"
+      },
       "master_seconds": 9424.643,
       "source_files": [
         "d145-164b.wav",
@@ -541,7 +596,9 @@
     "35": {
       "artist": "Decoder",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Various - Infinite Beat Vol. 1"
+      },
       "master_seconds": 9877.211,
       "source_files": [
         "d145-164b.wav",
@@ -555,7 +612,9 @@
     "36": {
       "artist": "Slak & Snuggles",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Various - Infinite Beat Vol. 1"
+      },
       "master_seconds": 10340.178,
       "source_files": [
         "d165-186b.wav",
@@ -567,7 +626,9 @@
     "37": {
       "artist": "Fierce & Nico",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Various - Infinite Beat Vol. 1"
+      },
       "master_seconds": 10690.792,
       "source_files": [
         "d165-186b.wav",
@@ -582,7 +643,9 @@
     "38": {
       "artist": "Friends, Lovers & Family",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Various - Infinite Beat Vol. 1"
+      },
       "master_seconds": 11177.637,
       "source_files": [
         "d165-186b.wav",
@@ -609,7 +672,9 @@
     "40": {
       "artist": "David Kristian",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Various - Ultra Mix Drum & Bass"
+      },
       "master_seconds": 11748.836,
       "source_files": [
         "d-14Nov10-a.au",
@@ -621,7 +686,9 @@
     "41": {
       "artist": "The Sonar Circle",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "release": "Various - Ultra Mix Drum & Bass"
+      },
       "master_seconds": 11964.971,
       "source_files": [
         "d-14Nov10-a.au",
