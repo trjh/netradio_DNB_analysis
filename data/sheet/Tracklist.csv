@@ -1,0 +1,96 @@
+Master TS,Track Number,Track Name,Track Artist,File Label,Track Length,Speed,File Note?,SpeedBak,SpeedCompare,File Note for Track in Col B,File Note File,File Note Track,File Note TS,File Note (non-sync)
+0,1,Promo1 Club Groove,Net Radio,start001: ID: Net Radio - Promo1 Club Groove,0.0004085514815,n/a,no,n/a,True,#N/A,d041-064.wav,,2750.558878,file note: skip ahead 0.960063s
+0.0004085514815,2,Promo2 Peace,Net Radio,start002: ID: Net Radio - Promo2 Peace,0.0002848550463,n/a,no,n/a,True,#N/A,d041-064.wav,,2751.518941,file note: skip destination (post-split-and-sync)
+0.0006934065278,3,Sky Blue,Jamie Myserson,start003: ID: Jamie Myserson - Sky Blue,0.002824524097,1.010033467,no,1.0100334665745174,True,#N/A,d064-083b.wav,,4064.605768,file note: skip1 0.192s
+0.003517930625,4,Everything is Gonna Be Alright,Jamie Myerson,start004: ID: Jamie Myerson - Everything is Gonna Be Alright,0.003124045498,0.9960349857,no,0.9960349856730824,True,#N/A,d064-083b.wav,,4064.797768,file note: resume from skip1
+0.006641976123,5,You're My Life (incomplete),Jamie Myerson,start005: ID: Jamie Myerson - You're My Life (incomplete),0.0001716325694,n/a,no,n/a,True,#N/A,d064-083b.wav,,4154.841509,file note: skip2 ahead 4.896s
+0.006813608692,6,Unity Gain (incomplete),Jamie Myerson,start006: ID: Jamie Myerson - Unity Gain (incomplete),0.0006791254398,0.9965513307,no,0.9965513307448004,True,#N/A,d064-083b.wav,,4159.737508,file note: resume from skip2
+0.007492734132,7,You're My Life,Jamie Myerson,start007: ID: Jamie Myerson - You're My Life,0.005271711042,0.9960922348,no,0.9960922347976731,True,#N/A,d064-083b.wav,,4395.993758,file note: skip3 ahead 0.384s
+0.01276444517,8,Crucial,Jamie Myerson,start008: ID: Jamie Myerson - Crucial,0.005518658565,1.016341827,no,1.016341827311556,True,#N/A,d064-083b.wav,,4396.37782,file note: resume from skip3
+0.01828310374,9,Promo3 Club Groove,Net Radio,start009: ID: Net Radio - Promo3 Club Groove,0.0003947965162,n/a,no,n/a,True,#N/A,d064-083b.wav,,4506.783445,file note: skip4 span 5.184s
+0.01867790025,10,Artificial Life,Odyssey,start010: ID: Odyssey - Artificial Life,0.006030106806,1.018994047,no,1.0189940473436603,True,#N/A,d064-083b.wav,,4511.967445,file note: resume from skip4
+0.02470800706,11,Piano (The Green Stinky Mix),Tricky,start011: ID: Tricky - Piano (The Green Stinky Mix),0.003306807755,1.001657511,no,1.0016575109551855,True,#N/A,d064-083b.wav,,4539.710445,file note: skip5 ahead 1.056s
+0.02801481481,12,Arboleda de Manzanitas (Drum & Bass Mix),Eighty Mile Beach,start012: ID: Eighty Mile Beach - Arboleda de Manzanitas (Drum & Bass Mix),0.00395680875,1.001212179,no,1.0012121794739919,True,#N/A,d064-083b.wav,,4540.766445,"file note: resume from skip5, 1.05s not in sync"
+0.03197162356,13,Senses,DJ Addiction,start013: ID: DJ Addiction - Senses,0.004525634144,1.000305268,no,1.0003052677316273,True,#N/A,d064-083b.wav,,4733.723757,file note: skip6 ahead 0.768s
+0.03649725771,14,Stay (The Midnight Rockers Remix),Me'Shell NdegéOcello,start014: ID: Me'Shell NdegéOcello - Stay (The Midnight Rockers Remix),0.002100045637,n/a,no,n/a,True,#N/A,d064-083b.wav,,4734.491758,file note: resume from skip6
+0.03859730334,15,Mind Games,DJ Crystl,start015: ID: DJ Crystl - Mind Games,0.00683522206,1.010651372,no,1.010651371618537,True,#N/A,d064-083b.wav,,4831.73787,file note: skip7 ahead 2.112s
+0.04543252541,16,The Rope-A-Dope,Skyjuice,start016: ID: Skyjuice - The Rope-A-Dope,0.003818312002,1.011358869,no,1.011358869460911,True,#N/A,d064-083b.wav,,4833.849945,file note: resume from skip7
+0.04925083741,17,On & On (Blu Mar Ten Remix),Erykah Badu,start017: ID: Erykah Badu - On & On (Blu Mar Ten Remix),0.005432123981,1.036169707,no,1.036169707,True,#N/A,d064-083b.wav,,5008.577802,file note: skip8 ahead 6.048s
+0.05468296139,18,The Oracle (Extended Instrumental Remix),Bugs,start018: ID: Bugs - The Oracle (Extended Instrumental Remix),0.003615972604,0.9819394595,no,0.9819394595,True,#N/A,d064-083b.wav,,5024.027729,file note: skip9 ahead 0.384s
+0.05829893399,19,James Bond Theme (Stephane Malca Remix),Monty Norman,start019: ID: Monty Norman - James Bond Theme (Stephane Malca Remix),0.002631035116,1.029554643,no,1.029554643,True,#N/A,d064-083b.wav,,5028.352354,file note: skip10 ahead 4.992s
+0.06092996911,20,Twin Peaks (Alëem Remix),Angelo Badalamenti & David Lynch,start020: ID: Angelo Badalamenti & David Lynch - Twin Peaks (Alëem Remix),0.00005903628472,n/a,no,n/a,True,#N/A,d064-083b.wav,,5033.344295,file note: skip10 resumes brief out of sync
+0.06098900539,21,J-Walkin',Blame,start021: ID: Blame - J-Walkin',0.004905899919,1.003701376,no,1.003701376,True,#N/A,d084-103b.wav,,5076.157399,file note: skip1 1.632s
+0.06589490531,22,Junkle I,Castillo,start022: ID: Castillo - Junkle I,0.004366413137,1.000794797,no,1.0007947966827173,True,#N/A,d084-103b.wav,,5077.789399,file note: resume from skip1
+0.07026131845,23,63rd Suite,The Amalgamation of Soundz,start023: ID: The Amalgamation of Soundz - 63rd Suite,0.004471309641,1.002271258,no,1.0022712583107851,True,#N/A,d084-103b.wav,,5126.846853,file note: skip2 0.672s
+0.07473262809,24,Shoeshiner,Crash,start024: ID: Crash - Shoeshiner,0.002463762141,0.9992906953,no,0.9992906953387423,True,#N/A,d084-103b.wav,,5127.518899,file note: resume from skip2
+0.07719639023,25,Happy Baby,Spring Heel Jack,start025: ID: Spring Heel Jack - Happy Baby,0.00391999647,1.000950938,no,1.0009509376679113,True,#N/A,d084-103b.wav,,5165.72576,file note: skip3 1.248s
+0.0811163867,26,Serious Intent,Endemic Void,start026: ID: Endemic Void - Serious Intent,0.003815857697,0.9981697918,no,0.9981697917902772,True,#N/A,d084-103b.wav,,5166.973711,file note: resume from skip3
+0.0849322444,27,Cruzer,Cujo,start027: ID: Cujo - Cruzer,0.003907531435,0.9996433915,no,0.9996433914900885,True,#N/A,d084-103b.wav,,5191.544862,file note: skip4 1.248s
+0.08883977583,28,At Home With The Snake,Spaceways,start028: ID: Spaceways - At Home With The Snake,0.003444190104,0.9993214049,no,0.9993214048509921,True,#N/A,d084-103b.wav,,5192.792899,file note: resume from skip4
+0.09228396594,29,Queen of the Ghetto (Ghetto Defendant),Rockers Hi-Fi,start029: ID: Rockers Hi-Fi - Queen of the Ghetto (Ghetto Defendant),0.003311555498,0.9990793032,no,0.9990793032435816,True,#N/A,d084-103b.wav,,5267.520066,file note: presume contains further skips beyond skip5 -- not bothering to check
+0.09559552144,30,Crusoe Takes A Trip,Red Snapper,start030: ID: Red Snapper - Crusoe Takes A Trip,0.004604051111,0.9988178979,no,0.998817897856529,True,#N/A,d084-103b.wav,,5273.777967,file note: skip5 in this range
+0.1001995725,31,Promo4 Peace,Net Radio,start031: ID: Net Radio - Promo4 Peace,0.0002836018634,n/a,no,n/a,True,#N/A,d087-121.wav,,5653.788439,file note: skip from here to multiple skip range
+0.1004831744,32,Crystal Blue,Skycutter & Kiki Mojo,start032: ID: Skycutter & Kiki Mojo - Crystal Blue,0.004648470949,0.9989443531,no,0.9989443530649222,True,#N/A,d087-121.wav,,5669.345066,file note: multiple skips -- start stop unknown
+0.1051316454,33,Problem Child,Squarepusher,start033: ID: Squarepusher - Problem Child,0.003949872049,1.005353462,no,1.005353461988725,True,#N/A,d087-121.wav,,5720.421879,file note: resume from multiple skips
+0.1090815174,34,You Talking To Me?,The Advocate,start034: ID: The Advocate - You Talking To Me?,0.005238055139,1.004417585,no,1.0044175853316126,True,#N/A,d086-105.wav,,6288.122444,file note: skip1 7.425s
+0.1143195725,35,Circuit Breaker,Decoder,start035: ID: Decoder - Circuit Breaker,0.005357608322,0.9989833056,no,0.9989833055663018,True,#N/A,d086-105.wav,,6295.547819,file note: resume from skip1
+0.1196771809,36,The Reckoning,Slak & Snuggles,start036: ID: Slak & Snuggles - The Reckoning,0.004058841123,0.9988610396,no,0.9988610396048195,True,#N/A,d104-108b.wav,,6575.678316,file note: skip1
+0.123736022,37,Input,Fierce & Nico,start037: ID: Fierce & Nico - Input,0.005634443831,0.9988877233,no,0.9988877232746375,True,#N/A,d104-108b.wav,,6577.118315,file note: skip1 resume
+0.1293704658,38,Dark Fader,"Friends, Lovers & Family","start038: ID: Friends, Lovers & Family - Dark Fader",0.006216894028,0.9989038254,no,0.9989038253887998,True,#N/A,d104-108b.wav,,6581.245815,file note: skip2
+0.1355873598,39,Promo5 Club Groove,Net Radio,start039: ID: Net Radio - Promo5 Club Groove,0.0003945390856,n/a,no,n/a,True,#N/A,d104-108b.wav,,6581.437816,file note: skip2 resume
+0.1359818989,40,Hopeless,David Kristian,start040: ID: David Kristian - Hopeless,0.002499668843,0.9970687627,no,0.9970687626728698,True,#N/A,d104-108b.wav,,6596.362506,file note: skip3
+0.1384815678,41,Strength,The Sonar Circle,start041: ID: The Sonar Circle - Strength,0.003809420174,1.000280163,no,1.0002801630096796,True,#N/A,d104-108b.wav,,6596.362566,file note: post-skip3 section i can't place
+0.142290988,42,Science of Industry,Justin Tewn & Hunter A.D.,start042: ID: Justin Tewn & Hunter A.D. - Science of Industry,0.004842181134,0.9969483721,no,0.9969483720873906,True,#N/A,d104-108b.wav,,6596.408941,file note: skip4
+0.1471331691,43,Waves (Kid Loops remix),Dave Wallace,start043: ID: Dave Wallace - Waves (Kid Loops remix),0.003531888727,0.9968560349,no,0.9968560348657081,True,#N/A,d104-108b.wav,,6596.792896,file note: post-skip4
+0.1506650578,44,Retro,E-Z Rollers,start044: ID: E-Z Rollers - Retro,0.005417103275,1.001000948,no,1.0010009482138011,True,#N/A,d104-108b.wav,,6604.193128,file note: skip5
+0.1560821611,45,It's All Gone Sideways,Dr S Gachet,start045: ID: Dr S Gachet - It's All Gone Sideways,0.003464383125,0.9968461658,no,0.9968461658242739,True,#N/A,d104-108b.wav,,6605.633196,file note: skip5 resume
+0.1595465442,46,The Beckoning,Arcon 2,start046: ID: Arcon 2 - The Beckoning,0.003824731076,0.9958045881,no,0.9958045881408828,True,#N/A,d104-108b.wav,,6610.717374,file note: more skips from here to rest of file - do not use file
+0.1633712753,47,Realism,Alpha Omega,start047: ID: Alpha Omega - Realism,0.004774767164,0.9968678699,no,0.9968678698639964,True,#N/A,d187-216b.wav,,12406.13901,file note: SKIP
+0.1681460425,48,Her Spectre Above Me Look,Downpour,start048: ID: Downpour - Her Spectre Above Me Look,0.002060185185,0.9968354496,no,0.9968354495732623,True,#N/A,d187-216b.wav,,12406.13901,file note: skip length 9:31.296
+0.1702062276,49,Falling.mp3,G-Money,start049: ID: G-Money - Falling.mp3,0.005219907407,0.9968092018,no,0.9968092018191268,True,#N/A,d187-216b.wav,,12977.43507,file note: skip resume here
+0.175426135,50,Cairo.mp3,DJ 3D,start050: ID: DJ 3D - Cairo.mp3,0.004166666667,0.9968348991,no,0.9968348990706255,True,,d228-247.wav,,13596.90259,file note: skip (not present in d-14Nov10-c or d217-242)
+0.1795928017,51,Nightrider.mp3,E-Sassin,start051: ID: E-Sassin - Nightrider.mp3,0.003819444444,0.9968383503,no,0.9968383503445583,True,,d228-247.wav,,13659.62007,file note: post-skip in sync with d-14Nov10-c from here
+0.1834122462,52,Diet for Murder,B-Boy 3000,start052: ID: B-Boy 3000 - Diet for Murder,0.002901230336,0.9968469827,no,0.9968469826995309,True,,d228-247.wav,,13659.62007,file note: sync d228-247.wav 13253.051068 verified d-14Nov10-c -- ALIGNED HERE
+0.1863134765,53,Promo6 Peace,Net Radio,start053: ID: Net Radio - Promo6 Peace,0.0002828556481,n/a,no,n/a,True,,d228-247.wav,,14625.37551,file note: skip ahead 2.503s (and skipping over orphan .007s)
+0.1865963321,54,Dreams of Heaven,Codename John,start054: ID: Codename John - Dreams of Heaven,0.004244520683,0.9961129187,no,0.9961129187053988,True,,d228-247.wav,,14627.8652,"file note: orphan .007s between skips, cannot place, just mute (amplify -50)"
+0.1908408528,55,Secrets,John B,start055: ID: John B - Secrets,0.006173217882,0.9961183329,no,0.9961183328523115,True,,d228-247.wav,,14627.87832,file note: resume from skip
+0.1970140707,56,Grey Odyssey,Optical,start056: ID: Optical - Grey Odyssey,0.00427120772,0.9961045783,no,0.9961045783456318,True,,d228-247.wav,,14644.76813,file note: skip
+0.2012852784,57,Mute,Matrix,start057: ID: Matrix - Mute,0.003042783044,0.9960953136,no,0.9960953135521853,True,,d228-247.wav,,14645.15213,file note: resume from skip
+0.2043280615,58,Deep Inside,Codename John,start058: ID: Codename John - Deep Inside,0.005457910729,0.9960877599,no,0.9960877599300164,True,,d228-247.wav,,14645.15213,file note: in approximate sync with d-14Nov10-d over this range
+0.2097859722,59,Silver Blade,Dillinja,start059: ID: Dillinja - Silver Blade,0.004273143657,0.9960827633,no,0.9960827633212985,True,,d268-287.wav,,16704.29381,file note: SKIP
+0.2140591159,60,Locust,Ed Rush & Fierce,start060: ID: Ed Rush & Fierce - Locust,0.006111108449,0.9960751694,no,0.9960751694219151,True,,d268-287.wav,,16704.29382,file note: SKIP ahead 1.440s
+0.2201702243,61,Warned,Codename John feat. Grooverider,start061: ID: Codename John feat. Grooverider - Warned,0.004261753553,0.9960725318,no,0.9960725318367086,True,,d268-287.wav,,16705.73382,file note: skip resume
+0.2244319779,62,Still,Boymerang,start062: ID: Boymerang - Still,0.005483632789,1.000233374,no,1.0002333736705358,True,,
+0.2299156106,63,City Lights,Lemon D,start063: ID: Lemon D - City Lights,0.00472083625,0.9960651474,no,0.9960651473914773,True,,
+0.2346364469,64,Promo7 Club Groove,Net Radio,start064: ID: Net Radio - Promo7 Club Groove,0.0003948971875,n/a,no,n/a,True,,
+0.2350313441,65,Make Me Feel,Dr. Know,start065: ID: Dr. Know - Make Me Feel,0.008116804063,1.056514051,no,1.056514050701462,True,,
+0.2431481481,67,Mystery Track 3 ?? Coo-ooo-ooh-ooh yeah song,,start067: ID: Mystery Track 3 ?? Coo-ooo-ooh-ooh yeah song,0.00212962963,n/a,,,,,
+0.2452777778,68,Mystery Track 4 ?? Hey Man You Want A Tune song,,start068: ID: Mystery Track 4 ?? Hey Man You Want A Tune song,0.00255787037,n/a,,,,,
+0.2478356481,69,Hypnotising / PFM,,start069: ID: Hypnotising / PFM,0.003356481481,n/a,,,,,
+0.2511921296,70,Urban Style (Original Mix) / Dead Calm,,start070: ID: Urban Style (Original Mix) / Dead Calm,0.00369212963,n/a,,,,,
+0.2548842593,71,Fokus / On Line (Original Mix),,start071: ID: Fokus / On Line (Original Mix),0.003136574074,n/a,,,,,
+0.2580208333,72,Your Sound / J Majik,,start072: ID: Your Sound / J Majik,0.003136574074,n/a,,,,,
+0.2611574074,73,On The Roof / Hidden Agenda,,start073: ID: On The Roof / Hidden Agenda,0.003275462963,n/a,,,,,
+0.2644328704,74,Mystery Track 5,,start074: ID: Mystery Track 5,0.003125,n/a,,,,,
+0.2675578704,75,Sea of Tears / Goldie,,start075: ID: Sea of Tears / Goldie,0.003368055556,n/a,,,,,
+0.2709259259,76,Mystery Track 6 (drumline change),,start076: ID: Mystery Track 6 (drumline change),0.003587962963,n/a,,,,,
+0.2745138889,77,The Angels Fell / Dillinja,,start077: ID: The Angels Fell / Dillinja,0.002881944444,n/a,,,,,
+0.2773958333,78,Ja Know Ya Big / Dillinja,,start078: ID: Ja Know Ya Big / Dillinja,0.003564814815,n/a,,,,,
+0.2809606481,79,The Flute Tune / Hidden Agenda Is It Love?,,start079: ID: The Flute Tune / Hidden Agenda Is It Love?,0.005324074074,n/a,,,,,
+0.2862847222,80,The Spectrum / Wax Doctor,,start080: ID: The Spectrum / Wax Doctor,0.002476851852,n/a,,,,,
+0.2887615741,81,Universal Horn (J. Majik Remix) / JMJ & Richie ,,start081: ID: Universal Horn (J. Majik Remix) / JMJ & Richie ,0.003287037037,n/a,,,,,
+0.2920486111,82,Alien Resident / Kid Loops,,start082: ID: Alien Resident / Kid Loops,0.002326388889,n/a,,,,,
+0.294375,83,Pass Agent / Luger,,start083: ID: Pass Agent / Luger,0.001840277778,n/a,,,,,
+0.2962152778,84,Mystery Track 7 (15:21.776 in new aup),,start084: ID: Mystery Track 7 (15:21.776 in new aup),0.00380787037,n/a,,,,,
+0.3000231481,85,Mystery Track 8,,start085: ID: Mystery Track 8,0.003935185185,n/a,,,,,
+0.3039583333,86,Mystery Track 9,,start086: ID: Mystery Track 9,0.002604166667,n/a,,,,,
+0.3065625,87,Rite of Spring (Doc Scott Remix) / System 7,,start087: ID: Rite of Spring (Doc Scott Remix) / System 7,0.004456018519,n/a,,,,,
+0.3110185185,88,Omen (Director's Cut) / Makai (vs. Nico),,start088: ID: Omen (Director's Cut) / Makai (vs. Nico),0.003136574074,n/a,,,,,
+0.3141550926,89,Mystery Track 10,,start089: ID: Mystery Track 10,0.002465277778,n/a,,,,,
+0.3166203704,90,Home (Jedi Knights Remix (Drowning In Time)) /,,start090: ID: Home (Jedi Knights Remix (Drowning In Time)) /,0.001909722222,n/a,,,,,
+0.3185300926,91,Mystery Track 11,,start091: ID: Mystery Track 11,#VALUE!,n/a,,,,,
+#VALUE!,,,,,#VALUE!,n/a,,,,,
+#VALUE!,,,,,#VALUE!,n/a,,,,,
+#VALUE!,,,,,#VALUE!,n/a,,,,,
+#VALUE!,,,,,#VALUE!,n/a,,,,,
+#VALUE!,,,,,#VALUE!,n/a,,,,,
