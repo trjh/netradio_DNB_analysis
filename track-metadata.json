@@ -55,6 +55,7 @@
       "artwork": "track-4.jpg",
       "fields": {
         "allmusic": "https://www.allmusic.com/album/the-listen-project-mw0000031187",
+        "apple": "https://music.apple.com/ie/album/everything-is-gonna-be-alright-feat-carol-tripp/273372614?i=273372758&uo=4",
         "discogs": "https://www.discogs.com/release/376822",
         "release": "Jamie Myerson – The Listen Project (1998, CD)",
         "year": "1998"
@@ -472,6 +473,7 @@
       "artist": "Cujo",
       "artwork": null,
       "fields": {
+        "apple": "https://music.apple.com/ie/album/cruzer/416340057?i=416340135&uo=4",
         "release": "Cujo – Adventures In Foam (1997, CD)"
       },
       "master_seconds": 7338.146,
@@ -489,6 +491,7 @@
       "artist": "Spaceways",
       "artwork": null,
       "fields": {
+        "apple": "https://music.apple.com/ie/album/at-home-with-the-snake/208083571?i=208083582&uo=4",
         "release": "Spaceways - Trad"
       },
       "master_seconds": 7675.757,
@@ -519,6 +522,7 @@
       "artist": "Red Snapper",
       "artwork": null,
       "fields": {
+        "apple": "https://music.apple.com/ie/album/crusoe-takes-a-trip/277381532?i=277381609&uo=4",
         "release": "Red Snapper - Prince Blimey"
       },
       "master_seconds": 8259.453,
@@ -566,6 +570,7 @@
       "artist": "Squarepusher",
       "artwork": null,
       "fields": {
+        "apple": "https://music.apple.com/ie/album/problem-child/279134950?i=279134953&uo=4",
         "release": "Various - Infinite Beat Vol. 1"
       },
       "master_seconds": 9083.374,
@@ -596,6 +601,7 @@
       "artist": "Decoder",
       "artwork": null,
       "fields": {
+        "apple": "https://music.apple.com/ie/album/circuit-breaker-peshay-remix/625106201?i=625106207&uo=4",
         "release": "Various - Infinite Beat Vol. 1"
       },
       "master_seconds": 9877.211,
@@ -626,6 +632,7 @@
       "artist": "Fierce & Nico",
       "artwork": null,
       "fields": {
+        "apple": "https://music.apple.com/ie/album/input/1583378328?i=1583378629&uo=4",
         "release": "Various - Infinite Beat Vol. 1"
       },
       "master_seconds": 10690.792,
@@ -686,6 +693,7 @@
       "artist": "The Sonar Circle",
       "artwork": null,
       "fields": {
+        "apple": "https://music.apple.com/ie/album/strength/286565339?i=286565449&uo=4",
         "release": "Various - Ultra Mix Drum & Bass"
       },
       "master_seconds": 11964.971,
@@ -712,7 +720,9 @@
     "43": {
       "artist": "Dave Wallace",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/waves-kid-loops-remix/109684573?i=109684508&uo=4"
+      },
       "master_seconds": 12713.248,
       "source_files": [
         "d187-216b.wav",
@@ -726,7 +736,9 @@
     "44": {
       "artist": "E-Z Rollers",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/retro/119057801?i=119057793&uo=4"
+      },
       "master_seconds": 13017.461,
       "source_files": [
         "d187-216b.wav",
@@ -741,7 +753,9 @@
     "45": {
       "artist": "Dr S Gachet",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/its-all-gone-sideways/1822736342?i=1822736360&uo=4"
+      },
       "master_seconds": 13485.922,
       "source_files": [
         "dnb-14Nov02-b.au",
@@ -755,7 +769,9 @@
     "46": {
       "artist": "Arcon 2",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/the-beckoning/292438381?i=292438383&uo=4"
+      },
       "master_seconds": 13784.821,
       "source_files": [
         "dnb-14Nov02-b.au",
@@ -769,7 +785,9 @@
     "47": {
       "artist": "Alpha Omega",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/realism-millenium-edit/292446931?i=292446955&uo=4"
+      },
       "master_seconds": 14115.278,
       "source_files": [
         "dnb-14Nov02-b.au",
@@ -868,7 +886,9 @@
     "54": {
       "artist": "Codename John",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/dreams-of-heaven-dj-mix/1884390532?i=1884391122&uo=4"
+      },
       "master_seconds": 16120.923,
       "source_files": [
         "d-14Nov10-e.au",
@@ -896,7 +916,9 @@
     "56": {
       "artist": "Optical",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/grey-odyssey/1884390532?i=1884390535&uo=4"
+      },
       "master_seconds": 17021.016,
       "source_files": [
         "d-14Nov10-e.au",
@@ -911,7 +933,9 @@
     "57": {
       "artist": "Matrix",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/mute/1884390532?i=1884390537&uo=4"
+      },
       "master_seconds": 17390.149,
       "source_files": [
         "d276-293b.wav",
@@ -924,7 +948,9 @@
     "58": {
       "artist": "Codename John",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/deep-inside/1884390532?i=1884390538&uo=4"
+      },
       "master_seconds": 17653.042,
       "source_files": [
         "d-14Nov10-f.au",
@@ -936,7 +962,9 @@
     "59": {
       "artist": "Dillinja",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/silver-blade/1884390532?i=1884390539&uo=4"
+      },
       "master_seconds": 18124.508,
       "source_files": [
         "d-14Nov10-f.au",
@@ -949,7 +977,9 @@
     "60": {
       "artist": "Ed Rush & Fierce",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/locust/1884390532?i=1884390540&uo=4"
+      },
       "master_seconds": 18493.708,
       "source_files": [
         "d288-307.wav",
@@ -962,7 +992,9 @@
     "61": {
       "artist": "Codename John feat. Grooverider",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/warned/1884390532?i=1884390541&uo=4"
+      },
       "master_seconds": 19022.707,
       "source_files": [
         "d308-327.wav",
@@ -975,7 +1007,9 @@
     "62": {
       "artist": "Boymerang",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/still/696885634?i=696888469&uo=4"
+      },
       "master_seconds": 19390.923,
       "source_files": [
         "d308-327.wav",
@@ -1024,7 +1058,9 @@
     "66": {
       "artist": "JMJ & Richie",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/free-la-funk-pfm-remix/109005996?i=109005705&uo=4"
+      },
       "master_seconds": 20667.817,
       "source_files": [
         "d328-342.wav"
