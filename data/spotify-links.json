@@ -15,7 +15,9 @@
     "track_number": 15,
     "spotify": "https://open.spotify.com/track/4FawryquKj8Lh3Csj0ne58",
     "matched": "DJ Crystl - Mindgames",
-    "confidence": "high"
+    "confidence": "high",
+    "approved": true,
+    "approved_note": "Tim approved 2026-06-10 (title/artist formatting or artist-typo; #22 artist corrected Castillo->Callisto)"
   },
   {
     "track_number": 16,
@@ -45,7 +47,9 @@
     "track_number": 22,
     "spotify": "https://open.spotify.com/track/03PuhOxcqLscc2769QpKU1",
     "matched": "Callisto - Junkle I (table says Castillo; album hint/Apple indicate Callisto)",
-    "confidence": "high"
+    "confidence": "high",
+    "approved": true,
+    "approved_note": "Tim approved 2026-06-10 (title/artist formatting or artist-typo; #22 artist corrected Castillo->Callisto)"
   },
   {
     "track_number": 23,
@@ -75,7 +79,9 @@
     "track_number": 29,
     "spotify": "https://open.spotify.com/track/0KsRg4FYlRM2beAxlwP5r4",
     "matched": "Rockers Hi-Fi - Queen of the Ghetto",
-    "confidence": "high"
+    "confidence": "high",
+    "approved": true,
+    "approved_note": "Tim approved 2026-06-10 (title/artist formatting or artist-typo; #22 artist corrected Castillo->Callisto)"
   },
   {
     "track_number": 30,
@@ -99,7 +105,9 @@
     "track_number": 37,
     "spotify": "https://open.spotify.com/track/63yH8Ix9hndGVKMkAsIdVf",
     "matched": "Fierce & Nico - Input (DJ Mix version on Coastal Breaks)",
-    "confidence": "medium"
+    "confidence": "medium",
+    "approved": true,
+    "approved_note": "Tim approved 2026-06-10 (title/artist formatting or artist-typo; #22 artist corrected Castillo->Callisto)"
   },
   {
     "track_number": 41,

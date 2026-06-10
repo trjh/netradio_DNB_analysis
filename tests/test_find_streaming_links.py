@@ -85,6 +85,27 @@ class SpotifyImportTests(unittest.TestCase):
         self.assertEqual(len(review), 4)
         self.assertNotIn("spotify", tracks["22"]["fields"])
 
+    def test_approved_override_bypasses_soft_checks_only(self):
+        tracks = self._tracks()
+        items = [
+            # approved entry that FAILS the soft checks (artist mismatch, medium
+            # confidence) is applied anyway — explicit human override.
+            {"track_number": 22, "spotify": "https://open.spotify.com/track/ok",
+             "matched": "Wrong Artist - Different (Some Mix)", "confidence": "medium",
+             "approved": True},
+            # approved cannot clobber an already-set value (hard guard).
+            {"track_number": 99, "spotify": "https://open.spotify.com/track/z",
+             "matched": "Done - Already", "confidence": "high", "approved": True},
+            # approved cannot apply a non-spotify URL (hard guard).
+            {"track_number": 10, "spotify": "http://example.com/x",
+             "matched": "Odyssey - Artificial Life", "confidence": "high", "approved": True},
+        ]
+        applied, review = f.import_spotify_json(tracks, self._write(items))
+        self.assertEqual(applied, 1)
+        self.assertEqual(tracks["22"]["fields"]["spotify"], "https://open.spotify.com/track/ok")
+        self.assertEqual(tracks["99"]["fields"]["spotify"], "x")  # unchanged
+        self.assertEqual(len(review), 2)
+
     def _write(self, items):
         import json
         import tempfile

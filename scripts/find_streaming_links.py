@@ -124,11 +124,17 @@ def import_spotify_json(tracks, path):
     Spotify has no unauthenticated search, so links are curated offline (e.g. by a
     browsing agent) into a JSON list of
         {"track_number", "spotify", "matched": "Artist - Title", "confidence"}.
-    We trust nothing blindly: a link is applied only when it is a real
+    We trust nothing blindly: a link is auto-applied only when it is a real
     open.spotify.com/track URL, the curator marked it `high` confidence, the field
     isn't already set, and the curator's claimed Artist/Title still agrees with our
     label-authoritative artist/title (artist_ok + title_ok). Everything else is
     left blank and reported for human review — better blank than the wrong song.
+
+    An entry may also carry `"approved": true` — an explicit human override
+    recorded after a person checked the link. Approved entries skip the *soft*
+    match checks (confidence + artist/title agreement) but still must clear the
+    *hard* guards: a real spotify URL, an existing track, and no value already set
+    (so an override can never clobber or invent).
     """
     items = json.load(open(path, encoding="utf-8"))
     applied, review = 0, []
@@ -136,30 +142,35 @@ def import_spotify_json(tracks, path):
         number = str(e.get("track_number"))
         url = (e.get("spotify") or "").strip()
         conf = (e.get("confidence") or "").lower()
+        approved = bool(e.get("approved"))
         entry = tracks.get(number)
         ma, mt = split_matched(e.get("matched", ""))
         reasons = []
+        # Hard guards — always enforced, even for approved overrides.
         if entry is None:
             reasons.append("no such track")
         if not url.startswith("https://open.spotify.com/track/"):
             reasons.append("not a spotify track url")
-        if conf != "high":
-            reasons.append("confidence=%s" % (conf or "?"))
         if entry is not None and entry.get("fields", {}).get("spotify"):
             reasons.append("already set")
-        if entry is not None:
-            oa, ot = entry.get("artist") or "", entry.get("title") or ""
-            if not artist_ok(oa, ma):
-                reasons.append("artist mismatch (%s vs %s)" % (oa, ma))
-            if not title_ok(ot, mt):
-                reasons.append("title mismatch (%s vs %s)" % (ot, mt))
+        # Soft auto-match checks — skipped for human-approved overrides.
+        if not approved:
+            if conf != "high":
+                reasons.append("confidence=%s" % (conf or "?"))
+            if entry is not None:
+                oa, ot = entry.get("artist") or "", entry.get("title") or ""
+                if not artist_ok(oa, ma):
+                    reasons.append("artist mismatch (%s vs %s)" % (oa, ma))
+                if not title_ok(ot, mt):
+                    reasons.append("title mismatch (%s vs %s)" % (ot, mt))
         if reasons:
             review.append((number, e.get("matched", ""), "; ".join(reasons)))
             print("  HOLD %3s %s  [%s]" % (number, e.get("matched", ""), "; ".join(reasons)))
             continue
         entry.setdefault("fields", {})["spotify"] = url
         applied += 1
-        print("  OK   %3s %s  ->  %s" % (number, e.get("matched", ""), url))
+        print("  OK   %3s %s  ->  %s%s" % (number, e.get("matched", ""), url,
+                                           " (approved override)" if approved else ""))
     print("\nspotify(curated): applied=%d  held-for-review=%d" % (applied, len(review)))
     return applied, review
 

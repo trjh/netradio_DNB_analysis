@@ -265,6 +265,7 @@
         "apple": "https://music.apple.com/ie/album/mindgames/595866402?i=595866533",
         "discogs": "https://www.discogs.com/release/9715-LTJ-Bukem-Earth-Volume-Two",
         "release": "LTJ Bukem - Earth Volume Two",
+        "spotify": "https://open.spotify.com/track/4FawryquKj8Lh3Csj0ne58",
         "year": "1997"
       },
       "master_seconds": 3334.848,
@@ -388,11 +389,12 @@
       "use_logo": false
     },
     "22": {
-      "artist": "Castillo",
+      "artist": "Callisto",
       "artwork": null,
       "fields": {
         "apple": "https://music.apple.com/ie/album/junkle-i/995101816?i=995101825",
-        "release": "Callisto – The Paradigm EP (1997, Vinyl)"
+        "release": "Callisto – The Paradigm EP (1997, Vinyl)",
+        "spotify": "https://open.spotify.com/track/03PuhOxcqLscc2769QpKU1"
       },
       "master_seconds": 5693.32,
       "source_files": [
@@ -517,7 +519,8 @@
       "artist": "Rockers Hi-Fi",
       "artwork": null,
       "fields": {
-        "release": "Rockers Hi-Fi – Mish Mash (1997, CD)"
+        "release": "Rockers Hi-Fi – Mish Mash (1997, CD)",
+        "spotify": "https://open.spotify.com/track/0KsRg4FYlRM2beAxlwP5r4"
       },
       "master_seconds": 7973.335,
       "source_files": [
@@ -644,7 +647,8 @@
       "artwork": null,
       "fields": {
         "apple": "https://music.apple.com/ie/album/input/1583378328?i=1583378629&uo=4",
-        "release": "Various - Infinite Beat Vol. 1"
+        "release": "Various - Infinite Beat Vol. 1",
+        "spotify": "https://open.spotify.com/track/63yH8Ix9hndGVKMkAsIdVf"
       },
       "master_seconds": 10690.792,
       "source_files": [
