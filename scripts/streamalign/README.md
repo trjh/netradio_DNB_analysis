@@ -5,7 +5,8 @@ capture file on the master clock (precise, skip-resolved), validate against Tim'
 ~55 hand alignments, then emit alignment labels for the captures not yet done by
 hand. See [`../../STREAM_PROVENANCE.md`](../../STREAM_PROVENANCE.md) for what the
 data is and what "master time" means, and the player repo's `TASKLIST.md`
-("Stream Alignment Engine") for the phase plan.
+("Stream Alignment Engine") for the phase plan. For a function-by-function tour of
+how the pieces compose, see [`WALKTHROUGH.md`](./WALKTHROUGH.md).
 
 ## Design
 
