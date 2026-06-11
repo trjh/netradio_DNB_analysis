@@ -8,7 +8,6 @@
         "note": "Net Radio station promo — no commercial release"
       },
       "master_begin_seconds": 0.0,
-      "master_seconds": 0.0,
       "source_files": [
         "d-25-000b.wav",
         "d-25-005b.wav",
@@ -24,7 +23,6 @@
         "note": "Net Radio station promo — no commercial release"
       },
       "master_begin_seconds": 35.299,
-      "master_seconds": 35.299,
       "source_files": [
         "d-25-005b.wav",
         "d000-018.wav",
@@ -45,7 +43,6 @@
       },
       "master_begin_seconds": 59.91,
       "master_end_seconds": 303.949,
-      "master_seconds": 59.91,
       "source_files": [
         "d-25-005b.wav",
         "d000-018.wav",
@@ -66,7 +63,6 @@
       },
       "master_begin_seconds": 303.949,
       "master_end_seconds": 573.867,
-      "master_seconds": 303.949,
       "source_files": [
         "d-25-005b.wav",
         "d000-018.wav",
@@ -86,7 +82,6 @@
         "year": "1998"
       },
       "master_begin_seconds": 573.867,
-      "master_seconds": 573.867,
       "source_files": [
         "d000-018.wav",
         "d001-026b.wav",
@@ -106,7 +101,6 @@
       },
       "master_begin_seconds": 588.696,
       "master_end_seconds": 647.372,
-      "master_seconds": 588.696,
       "source_files": [
         "d000-018.wav",
         "d001-026b.wav",
@@ -126,7 +120,6 @@
       },
       "master_begin_seconds": 647.372,
       "master_end_seconds": 1102.848,
-      "master_seconds": 647.372,
       "source_files": [
         "d000-018.wav",
         "d001-026b.wav",
@@ -147,7 +140,6 @@
       },
       "master_begin_seconds": 1102.848,
       "master_end_seconds": 1577.475,
-      "master_seconds": 1102.848,
       "source_files": [
         "d000-018.wav",
         "d001-026b.wav",
@@ -165,7 +157,6 @@
         "note": "Net Radio station promo — no commercial release"
       },
       "master_begin_seconds": 1579.66,
-      "master_seconds": 1579.66,
       "source_files": [
         "d001-026b.wav",
         "d019-040.wav",
@@ -188,7 +179,6 @@
       },
       "master_begin_seconds": 1613.771,
       "master_end_seconds": 2134.772,
-      "master_seconds": 1613.771,
       "source_files": [
         "d001-026b.wav",
         "d019-040.wav",
@@ -208,7 +198,6 @@
       },
       "master_begin_seconds": 2134.772,
       "master_end_seconds": 2420.48,
-      "master_seconds": 2134.772,
       "source_files": [
         "d019-040.wav",
         "d026-045.wav",
@@ -230,7 +219,6 @@
       },
       "master_begin_seconds": 2420.48,
       "master_end_seconds": 2762.348,
-      "master_seconds": 2420.48,
       "source_files": [
         "d019-040.wav",
         "d026-045.wav",
@@ -253,7 +241,6 @@
       },
       "master_begin_seconds": 2762.348,
       "master_end_seconds": 3153.363,
-      "master_seconds": 2762.348,
       "source_files": [
         "d026-073b.wav",
         "d041-064.wav",
@@ -272,7 +259,6 @@
       },
       "master_begin_seconds": 3153.363,
       "master_end_seconds": 3334.848,
-      "master_seconds": 3153.363,
       "source_files": [
         "d026-073b.wav",
         "d041-064.wav",
@@ -294,7 +280,6 @@
       },
       "master_begin_seconds": 3334.848,
       "master_end_seconds": 3960.022,
-      "master_seconds": 3334.848,
       "source_files": [
         "d026-073b.wav",
         "d041-064.wav",
@@ -315,7 +300,6 @@
       },
       "master_begin_seconds": 3960.022,
       "master_end_seconds": 4255.272,
-      "master_seconds": 3960.022,
       "source_files": [
         "d026-073b.wav",
         "d065-087.wav",
@@ -336,7 +320,6 @@
       },
       "master_begin_seconds": 4255.272,
       "master_end_seconds": 4731.62,
-      "master_seconds": 4255.272,
       "source_files": [
         "d026-073b.wav",
         "d065-087.wav",
@@ -356,7 +339,6 @@
       },
       "master_begin_seconds": 4731.62,
       "master_end_seconds": 5058.848,
-      "master_seconds": 4731.62,
       "source_files": [
         "d065-087.wav",
         "d066-085.wav",
@@ -374,7 +356,6 @@
       },
       "master_begin_seconds": 5058.848,
       "master_end_seconds": 5267.518,
-      "master_seconds": 5058.848,
       "source_files": [
         "d065-087.wav",
         "d066-085.wav",
@@ -394,7 +375,6 @@
       },
       "master_begin_seconds": 5267.52,
       "master_end_seconds": 5269.45,
-      "master_seconds": 5267.52,
       "source_files": [
         "d065-087.wav",
         "d084-103b.wav",
@@ -417,7 +397,6 @@
       },
       "master_begin_seconds": 5269.45,
       "master_end_seconds": 5693.32,
-      "master_seconds": 5269.45,
       "source_files": [
         "d084-103b.wav",
         "d086-105.wav",
@@ -436,7 +415,6 @@
       },
       "master_begin_seconds": 5693.32,
       "master_end_seconds": 6070.578,
-      "master_seconds": 5693.32,
       "source_files": [
         "d084-103b.wav",
         "d086-105.wav",
@@ -456,7 +434,6 @@
       },
       "master_begin_seconds": 6070.578,
       "master_end_seconds": 6456.899,
-      "master_seconds": 6070.578,
       "source_files": [
         "d084-103b.wav",
         "d086-105.wav",
@@ -476,7 +453,6 @@
       },
       "master_begin_seconds": 6456.899,
       "master_end_seconds": 6669.768,
-      "master_seconds": 6456.899,
       "source_files": [
         "d088-107.wav",
         "d107-121b.wav",
@@ -496,7 +472,6 @@
       },
       "master_begin_seconds": 6669.768,
       "master_end_seconds": 7014.188,
-      "master_seconds": 6669.768,
       "source_files": [
         "d107-121b.wav",
         "d106-125.wav",
@@ -517,7 +492,6 @@
       },
       "master_begin_seconds": 7014.188,
       "master_end_seconds": 7338.146,
-      "master_seconds": 7014.188,
       "source_files": [
         "d107-121b.wav",
         "d106-125.wav",
@@ -537,7 +511,6 @@
       },
       "master_begin_seconds": 7338.146,
       "master_end_seconds": 7675.757,
-      "master_seconds": 7338.146,
       "source_files": [
         "d107-121b.wav",
         "d106-125.wav",
@@ -558,7 +531,6 @@
       },
       "master_begin_seconds": 7675.757,
       "master_end_seconds": 7973.335,
-      "master_seconds": 7675.757,
       "source_files": [
         "d122-144.wav",
         "d122-144b.wav",
@@ -576,7 +548,6 @@
       },
       "master_begin_seconds": 7973.335,
       "master_end_seconds": 8259.453,
-      "master_seconds": 7973.335,
       "source_files": [
         "d122-144.wav",
         "d122-144b.wav",
@@ -595,7 +566,6 @@
       },
       "master_begin_seconds": 8259.453,
       "master_end_seconds": 8657.243,
-      "master_seconds": 8259.453,
       "source_files": [
         "d122-144.wav",
         "d122-144b.wav",
@@ -612,7 +582,6 @@
       "fields": {},
       "master_begin_seconds": 8657.243,
       "master_end_seconds": 8681.834,
-      "master_seconds": 8657.243,
       "source_files": [
         "d122-144.wav",
         "d126-145.wav",
@@ -630,7 +599,6 @@
       },
       "master_begin_seconds": 8681.834,
       "master_end_seconds": 9083.374,
-      "master_seconds": 8681.834,
       "source_files": [
         "d126-145.wav",
         "d145-164b.wav",
@@ -650,7 +618,6 @@
       },
       "master_begin_seconds": 9083.374,
       "master_end_seconds": 9424.643,
-      "master_seconds": 9083.374,
       "source_files": [
         "d145-164b.wav",
         "d145-164.wav"
@@ -666,7 +633,6 @@
       },
       "master_begin_seconds": 9424.643,
       "master_end_seconds": 9877.211,
-      "master_seconds": 9424.643,
       "source_files": [
         "d145-164b.wav",
         "d145-164.wav",
@@ -684,7 +650,6 @@
       },
       "master_begin_seconds": 9877.211,
       "master_end_seconds": 10340.178,
-      "master_seconds": 9877.211,
       "source_files": [
         "d145-164b.wav",
         "d145-164.wav",
@@ -702,7 +667,6 @@
       },
       "master_begin_seconds": 10340.178,
       "master_end_seconds": 10690.792,
-      "master_seconds": 10340.178,
       "source_files": [
         "d165-186b.wav",
         "d165-186.wav"
@@ -720,7 +684,6 @@
       },
       "master_begin_seconds": 10690.792,
       "master_end_seconds": 11177.637,
-      "master_seconds": 10690.792,
       "source_files": [
         "d165-186b.wav",
         "d165-186.wav",
@@ -739,7 +702,6 @@
       },
       "master_begin_seconds": 11177.637,
       "master_end_seconds": 11714.748,
-      "master_seconds": 11177.637,
       "source_files": [
         "d165-186b.wav",
         "d165-186.wav",
@@ -756,7 +718,6 @@
       "fields": {},
       "master_begin_seconds": 11714.748,
       "master_end_seconds": 11748.836,
-      "master_seconds": 11714.748,
       "source_files": [
         "d-14Nov10-a.au",
         "d187-216b.wav"
@@ -772,7 +733,6 @@
       },
       "master_begin_seconds": 11748.836,
       "master_end_seconds": 11964.971,
-      "master_seconds": 11748.836,
       "source_files": [
         "d-14Nov10-a.au",
         "d187-216b.wav"
@@ -790,7 +750,6 @@
       },
       "master_begin_seconds": 11964.971,
       "master_end_seconds": 12293.941,
-      "master_seconds": 11964.971,
       "source_files": [
         "d-14Nov10-a.au",
         "d187-216b.wav",
@@ -805,7 +764,6 @@
       "fields": {},
       "master_begin_seconds": 12293.941,
       "master_end_seconds": 12713.248,
-      "master_seconds": 12293.941,
       "source_files": [
         "d187-216b.wav",
         "d-14Nov10-b.au"
@@ -822,7 +780,6 @@
       },
       "master_begin_seconds": 12713.248,
       "master_end_seconds": 13017.461,
-      "master_seconds": 12713.248,
       "source_files": [
         "d187-216b.wav",
         "d-14Nov10-b.au",
@@ -841,7 +798,6 @@
       },
       "master_begin_seconds": 13017.461,
       "master_end_seconds": 13485.922,
-      "master_seconds": 13017.461,
       "source_files": [
         "d187-216b.wav",
         "d-14Nov10-b.au",
@@ -861,7 +817,6 @@
       },
       "master_begin_seconds": 13485.922,
       "master_end_seconds": 13784.821,
-      "master_seconds": 13485.922,
       "source_files": [
         "dnb-14Nov02-b.au",
         "d217-242.wav",
@@ -880,7 +835,6 @@
       },
       "master_begin_seconds": 13784.821,
       "master_end_seconds": 14115.278,
-      "master_seconds": 13784.821,
       "source_files": [
         "dnb-14Nov02-b.au",
         "d217-242.wav",
@@ -896,7 +850,6 @@
       "fields": {},
       "master_begin_seconds": 14115.278,
       "master_end_seconds": 14521.31,
-      "master_seconds": 14115.278,
       "source_files": [
         "dnb-14Nov02-b.au",
         "d217-242.wav",
@@ -914,7 +867,6 @@
       "fields": {},
       "master_begin_seconds": 14521.31,
       "master_end_seconds": 14699.005,
-      "master_seconds": 14521.31,
       "source_files": [
         "d217-242.wav",
         "d228-247.wav",
@@ -930,7 +882,6 @@
       "fields": {},
       "master_begin_seconds": 14699.005,
       "master_end_seconds": 15152.075,
-      "master_seconds": 14699.005,
       "source_files": [
         "d228-247.wav",
         "d-14Nov10-d.au",
@@ -946,7 +897,6 @@
       "fields": {},
       "master_begin_seconds": 15152.075,
       "master_end_seconds": 15510.677,
-      "master_seconds": 15152.075,
       "source_files": [
         "d-14Nov10-d.au",
         "d242-268.wav",
@@ -961,7 +911,6 @@
       "fields": {},
       "master_begin_seconds": 15510.677,
       "master_end_seconds": 15839.956,
-      "master_seconds": 15510.677,
       "source_files": [
         "d-14Nov10-d.au",
         "d242-268.wav",
@@ -977,7 +926,6 @@
       "fields": {},
       "master_begin_seconds": 15839.956,
       "master_end_seconds": 16096.484,
-      "master_seconds": 15839.956,
       "source_files": [
         "d242-268.wav",
         "d-14Nov10-e.au",
@@ -993,7 +941,6 @@
       "fields": {},
       "master_begin_seconds": 16096.484,
       "master_end_seconds": 16120.923,
-      "master_seconds": 16096.484,
       "source_files": [
         "d242-268.wav",
         "d-14Nov10-e.au",
@@ -1012,7 +959,6 @@
       },
       "master_begin_seconds": 16120.923,
       "master_end_seconds": 16487.65,
-      "master_seconds": 16120.923,
       "source_files": [
         "d-14Nov10-e.au",
         "d268-287.wav",
@@ -1028,7 +974,6 @@
       "fields": {},
       "master_begin_seconds": 16487.65,
       "master_end_seconds": 17021.016,
-      "master_seconds": 16487.65,
       "source_files": [
         "d-14Nov10-e.au",
         "d268-287.wav",
@@ -1047,7 +992,6 @@
       },
       "master_begin_seconds": 17021.016,
       "master_end_seconds": 17390.149,
-      "master_seconds": 17021.016,
       "source_files": [
         "d-14Nov10-e.au",
         "d268-287.wav",
@@ -1066,7 +1010,6 @@
       },
       "master_begin_seconds": 17390.149,
       "master_end_seconds": 17653.042,
-      "master_seconds": 17390.149,
       "source_files": [
         "d276-293b.wav",
         "d-14Nov10-f.au",
@@ -1084,7 +1027,6 @@
       },
       "master_begin_seconds": 17653.042,
       "master_end_seconds": 18124.508,
-      "master_seconds": 17653.042,
       "source_files": [
         "d-14Nov10-f.au",
         "d288-307.wav"
@@ -1101,7 +1043,6 @@
       },
       "master_begin_seconds": 18124.508,
       "master_end_seconds": 18493.708,
-      "master_seconds": 18124.508,
       "source_files": [
         "d-14Nov10-f.au",
         "d288-307.wav",
@@ -1119,7 +1060,6 @@
       },
       "master_begin_seconds": 18493.708,
       "master_end_seconds": 19022.707,
-      "master_seconds": 18493.708,
       "source_files": [
         "d288-307.wav",
         "d308-327.wav",
@@ -1137,7 +1077,6 @@
       },
       "master_begin_seconds": 19022.707,
       "master_end_seconds": 19390.923,
-      "master_seconds": 19022.707,
       "source_files": [
         "d308-327.wav",
         "d316-335.wav",
@@ -1155,7 +1094,6 @@
       },
       "master_begin_seconds": 19390.923,
       "master_end_seconds": 19864.709,
-      "master_seconds": 19390.923,
       "source_files": [
         "d308-327.wav",
         "d316-335.wav",
@@ -1173,7 +1111,6 @@
       },
       "master_begin_seconds": 19864.709,
       "master_end_seconds": 20272.589,
-      "master_seconds": 19864.709,
       "source_files": [
         "d316-335.wav",
         "d-14Nov10-h.au",
@@ -1188,7 +1125,6 @@
       "fields": {},
       "master_begin_seconds": 20272.589,
       "master_end_seconds": 20306.708,
-      "master_seconds": 20272.589,
       "source_files": [
         "d328-342.wav"
       ],
@@ -1201,7 +1137,6 @@
       "fields": {},
       "master_begin_seconds": 20306.708,
       "master_end_seconds": 20667.817,
-      "master_seconds": 20306.708,
       "source_files": [
         "d328-342.wav"
       ],
@@ -1216,7 +1151,6 @@
         "spotify": "https://open.spotify.com/track/6g3R4uXxxo6vnGO7g8DKTp"
       },
       "master_begin_seconds": 20667.817,
-      "master_seconds": 20667.817,
       "source_files": [
         "d328-342.wav"
       ],

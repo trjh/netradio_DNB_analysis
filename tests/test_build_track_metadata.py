@@ -46,16 +46,16 @@ class LiveTests(unittest.TestCase):
         ids, _conflicts = b.parse_label_track_ids()
         self.assertGreaterEqual(len(ids), 40)
         self.assertEqual(ids[3]["track_name"], "Sky Blue")
-        self.assertAlmostEqual(ids[3]["master_seconds"], 59.910324, places=2)
+        self.assertAlmostEqual(ids[3]["master_begin_seconds"], 59.910324, places=2)
 
     def test_all_tracks_resolve_a_master_position(self):
         # Regression: prefixed 14Nov label files (d180_d-14Nov10-a.labels.tsv whose
         # file is d-14Nov10-a.au) must resolve via the sync row, not the filename.
         ids, _conflicts = b.parse_label_track_ids()
-        missing = [n for n, r in ids.items() if r["master_seconds"] is None]
+        missing = [n for n, r in ids.items() if r["master_begin_seconds"] is None]
         self.assertEqual(missing, [], "tracks with no master_seconds: %s" % missing)
         # track 38 starts 324.585867 into d-14Nov10-a.au (master_start 10853.051068).
-        self.assertAlmostEqual(ids[38]["master_seconds"], 10853.051068 + 324.585867, places=3)
+        self.assertAlmostEqual(ids[38]["master_begin_seconds"], 10853.051068 + 324.585867, places=3)
 
     def test_source_files_use_original_names_not_prefixed_label_stems(self):
         ids, _conflicts = b.parse_label_track_ids()
@@ -127,24 +127,24 @@ class LiveEndTests(unittest.TestCase):
         # Definitive non-overlapping segments: every end is clamped to the next
         # track's begin, so master_end_seconds[n] <= master_seconds[n+1] always.
         ids, _ = b.parse_label_track_ids()
-        ordered = sorted((r for r in ids.values() if r.get("master_seconds") is not None),
-                         key=lambda r: r["master_seconds"])
+        ordered = sorted((r for r in ids.values() if r.get("master_begin_seconds") is not None),
+                         key=lambda r: r["master_begin_seconds"])
         for i, r in enumerate(ordered[:-1]):
             end = r.get("master_end_seconds")
             if end is None:
                 continue
-            self.assertLessEqual(end, ordered[i + 1]["master_seconds"] + 1e-6,
+            self.assertLessEqual(end, ordered[i + 1]["master_begin_seconds"] + 1e-6,
                                  "track %s end overlaps the next track" % r["track_number"])
 
     def test_overlapping_end_is_clamped_to_next_begin(self):
         # Track 3's raw label end (~311.6) runs past track 4's begin (~303.9); the
         # written end must be clamped to track 4's begin, not the raw musical end.
         ids, _ = b.parse_label_track_ids()
-        self.assertAlmostEqual(ids[3]["master_end_seconds"], ids[4]["master_seconds"], places=2)
+        self.assertAlmostEqual(ids[3]["master_end_seconds"], ids[4]["master_begin_seconds"], places=2)
 
-    def test_output_writes_master_begin_seconds_with_alias(self):
-        # The written JSON carries master_begin_seconds (canonical) plus the
-        # deprecated master_seconds alias with the same value.
+    def test_output_uses_master_begin_seconds_not_the_old_name(self):
+        # The written JSON carries master_begin_seconds; the old ambiguous
+        # master_seconds field is gone entirely (no back-compat alias).
         import json
         import sys
         import tempfile
@@ -160,7 +160,8 @@ class LiveEndTests(unittest.TestCase):
                 os.remove(out)
         t3 = data["tracks"]["3"]
         self.assertIn("master_begin_seconds", t3)
-        self.assertEqual(t3["master_begin_seconds"], t3["master_seconds"])
+        self.assertNotIn("master_seconds", t3)
+        self.assertNotIn("master_seconds", json.dumps(data))
 
 
 class SavePreservesAlbumsTests(unittest.TestCase):
@@ -181,7 +182,7 @@ class SavePreservesAlbumsTests(unittest.TestCase):
             },
             "tracks": {
                 "10": {"title": "Artificial Life", "artist": "Odyssey",
-                       "album": "earth-volume-two", "master_seconds": 1.0,
+                       "album": "earth-volume-two", "master_begin_seconds": 1.0,
                        "source_files": ["d.wav"], "fields": {}},
             },
             "note": "an unrelated top-level key",

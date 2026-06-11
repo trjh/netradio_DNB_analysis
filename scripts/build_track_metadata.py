@@ -270,25 +270,25 @@ def parse_label_track_ids():
         start = (timeline.get(owning) or {}).get("master_start_seconds")
         master = start + row["seconds"] if start is not None else None
         record = {"track_number": number, "track_artist": artist, "track_name": title,
-                  "owning_original": owning_original, "master_seconds": master}
+                  "owning_original": owning_original, "master_begin_seconds": master}
         existing = result.get(number)
         if existing is None:
             result[number] = record
         elif (existing["track_artist"], existing["track_name"]) != (artist, title):
             conflicts.append({"track_number": number, "kept": [existing["track_artist"], existing["track_name"]],
                               "also": [artist, title], "file": owning})
-            if existing["master_seconds"] is None and master is not None:
+            if existing["master_begin_seconds"] is None and master is not None:
                 result[number] = record
-        elif existing["master_seconds"] is None and master is not None:
+        elif existing["master_begin_seconds"] is None and master is not None:
             result[number] = record
 
     # Pass 2: source_files = explicit appearances (start + ID rows) UNION every
     # capture whose window overlaps the track's [master, next-track master] span.
     ordered = sorted(result.values(),
-                     key=lambda r: (r["master_seconds"] is None, r["master_seconds"] or 0.0, r["track_number"]))
+                     key=lambda r: (r["master_begin_seconds"] is None, r["master_begin_seconds"] or 0.0, r["track_number"]))
     for index, record in enumerate(ordered):
-        master = record["master_seconds"]
-        nxt = ordered[index + 1]["master_seconds"] if index + 1 < len(ordered) else None
+        master = record["master_begin_seconds"]
+        nxt = ordered[index + 1]["master_begin_seconds"] if index + 1 < len(ordered) else None
         end = nxt if (nxt is not None and master is not None and nxt > master) else master
         files = set(appearances.get(record["track_number"], set()))
         files.add(record.pop("owning_original"))
@@ -378,12 +378,9 @@ def main():
                 kept.append((number, field, entry[field], label[label_key]))
         entry["source_files"] = label["source_files"]  # original capture files (.wav/.au)
         entry.pop("source_file", None)  # supersede the earlier singular field
-        if label["master_seconds"] is not None:
-            begin = round(label["master_seconds"], 3)
-            entry["master_begin_seconds"] = begin
-            # Deprecated alias of master_begin_seconds, kept so the mirrored player
-            # (which still reads master_seconds) doesn't break before it migrates.
-            entry["master_seconds"] = begin
+        entry.pop("master_seconds", None)  # drop the old ambiguous field name from any seed
+        if label["master_begin_seconds"] is not None:
+            entry["master_begin_seconds"] = round(label["master_begin_seconds"], 3)
         else:
             no_master.append(number)
         # Label-derived per-track end, clamped to the next begin (see Pass 2). None
