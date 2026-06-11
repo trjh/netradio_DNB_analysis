@@ -31,6 +31,7 @@ help in summarizing and cross-referencing the information.
 * [labels](./labels) -- Audacity 3.x label export files -- notes on file start/stop, track start/stop, sync points with original tracks, etc.
 * [logo](./logo) -- netradio.com logo files retrieved from archive.org and other places
 * [scripts](./scripts) -- misc. helper scripts mostly oriented around Audacity 2.1.x metadata files
+* [STREAM_PROVENANCE.md](./STREAM_PROVENANCE.md) -- how the capture files came to exist (RealAudio loop -> `/dev/audio` dump -> hex -> wav/au), why they overlap and contain skips, and what "master time" actually is
 
 
 ## Process
