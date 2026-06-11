@@ -12,7 +12,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
 
-from streamalign import align, audio, groundtruth, score  # noqa: E402
+from streamalign import align, audio, groundtruth, score, skips  # noqa: E402
 
 # Known hand values from TIMELINE_GUIDE / the labels (master_start seconds).
 SMOKE = {
@@ -84,6 +84,22 @@ class AlignTests(unittest.TestCase):
         err_samples = abs(r["offset_seconds"] - expected) * audio.SR
         self.assertLess(err_samples, 16, "error %.1f samples" % err_samples)
         self.assertGreater(r["confidence"], 0.9)
+
+
+class SkipDetectionTests(unittest.TestCase):
+    def test_recovers_documented_skips(self):
+        # d065-087.labels.tsv documents d084-103b in sync with d065-087 over local
+        # [1169.6, 1380.4]s with 4 skips: 1.632, 0.672, 1.248, 1.248 (sum 4.8).
+        if not _have_audio("d065-087", "d084-103b"):
+            self.skipTest("audio/ffmpeg not available")
+        r = skips.characterise_overlap(
+            "d065-087", "d084-103b", 1170.0, 1378.0, 1169.592,
+            win_s=8.0, hop_s=1.0, radius_s=3.0)
+        self.assertEqual(len(r["skips"]), 4, r["skips"])
+        self.assertAlmostEqual(sum(s["delta_s"] for s in r["skips"]), 4.8, places=2)
+        got = sorted(round(s["delta_s"], 3) for s in r["skips"])
+        for got_d, exp_d in zip(got, [0.672, 1.248, 1.248, 1.632]):
+            self.assertAlmostEqual(got_d, exp_d, places=2)
 
 
 if __name__ == "__main__":

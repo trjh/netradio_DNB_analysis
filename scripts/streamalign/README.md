@@ -55,10 +55,27 @@ PYTHONPATH=scripts python3 -m streamalign align d000-018 d001-026b
     **localized matched-filter alignment at a seed point, then walk outward
     detecting skips** — which also directly yields the skip map.
 
+### 2026-06-12 — P2 skip detection working
+
+- `skips.py`: walk the overlap window-by-window tracking the local offset; steps in
+  the offset track are skips. Key tuning learned empirically:
+  - **window ≥ 8 s** — DnB's periodic beat makes short (≤4 s) windows lock onto the
+    wrong beat (conf collapses); 8 s disambiguates (conf 0.99).
+  - **tight search radius (~3 s)** — because the offset is tracked continuously,
+    each skip step is small; a wide radius (≥12 s) invites wrong-beat false locks.
+    (Will widen adaptively for the rare large skip, e.g. the documented 10 s one.)
+- **Validated** against `d084-103b` vs `d065-087` (4 documented skips): recovered
+  all four with **exact magnitudes** (1.632, 0.672, 1.248, 1.248 s; sum 4.800),
+  median conf 0.991. Skip *positions* land ~2 s early (8 s-window edge) — magnitudes
+  are exact; position refinement (narrow second pass within the bracket) is a TODO.
+
 ### Next
 
-- **P2** skip detection (sliding local correlation; offset jumps = skips).
-- **P4** global graph solve anchored at `d000-018=0`, redundant-overlap cross-check.
+- **P2 refinement** — narrow skip positions (binary search within the bracket);
+  adaptive radius for large skips; auto-seed the walk (no hand offset) and derive
+  the overlap region from file lengths so it runs on unlabelled files.
+- **P4** global graph solve anchored at `d000-018=0`, redundant-overlap cross-check;
+  produce skip-aware absolute master starts/ends for every file.
 - **P3** audio verification renderer (summed proof clips + inverted-null Audacity
   label file). **P5** emit labels for the unlabelled tail.
 - **Future (Tim, 2026-06-11):** generalise the pairwise aligner to
