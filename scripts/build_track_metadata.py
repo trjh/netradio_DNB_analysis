@@ -225,6 +225,66 @@ def compute_track_ends(label_rows, timeline, current_by_path):
     return ends
 
 
+# --- First-pass (tracklist-2017) tail -------------------------------------------
+# labels/remainder.tsv is produced by scripts/remainderlist.pl from the ~2017
+# tracklist-2017.txt and covers the part of the broadcast the second-pass Audacity
+# labelling hasn't reached yet (tracks ~67-91, incl. the "Mystery Track N" segments).
+# Two things differ from the real *.labels.tsv rows: the timestamp is an ABSOLUTE
+# master second (NOT a local offset to resolve through the file-sync timeline), and
+# the body is `Title / Artist` (slash, artist LAST) instead of `Artist - Title`.
+REMAINDER_FILE = LABELS_DIR / "remainder.tsv"
+MYSTERY_RE = re.compile(r"^\s*Mystery Track\b", re.I)
+
+
+def parse_remainder_id_text(text):
+    """`start0NN: ID: Title / Artist` (remainder.tsv) -> (number, artist, title).
+
+    Splits on the LAST '/' (artist last); artist may be empty/absent (the Mystery
+    Tracks have no '/'). Returns None if it isn't a start-ID row. Caveat: a title
+    containing a literal '/' would mis-split, but the first-pass tail has none.
+    """
+    match = LABEL_ID_RE.search((text or "").strip())
+    if not match:
+        return None
+    number = int(match.group(1))
+    body = match.group(2).strip()
+    if "/" in body:
+        title, _, artist = body.rpartition("/")
+        title, artist = title.strip(), (artist.strip() or None)
+    else:
+        title, artist = body, None
+    return number, artist, title
+
+
+def parse_remainder():
+    """Rough first-pass records from labels/remainder.tsv (empty list if absent)."""
+    records = []
+    if not REMAINDER_FILE.is_file():
+        return records
+    with open(REMAINDER_FILE, "r", encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            parts = line.rstrip("\n").split("\t", 2)
+            if len(parts) < 3:
+                continue
+            master = parse_float(parts[0], None)
+            parsed = parse_remainder_id_text(parts[2])
+            if master is None or not parsed:
+                continue
+            number, artist, title = parsed
+            records.append({"track_number": number, "track_artist": artist,
+                            "track_name": title, "master_begin_seconds": master,
+                            "is_mystery": bool(MYSTERY_RE.match(title or ""))})
+    return records
+
+
+def drop_labelled(rough_records, frontier):
+    """Drop rough rows the second-pass labels already cover (master at/before the
+    labelling frontier), so the player updates tidily as labelling extends into the
+    tail. Assumes the second pass advances contiguously from the broadcast start —
+    it does, the timeline is reconstructed continuously."""
+    return [r for r in rough_records if r["master_begin_seconds"] > frontier]
+
+
 def parse_label_track_ids():
     label_rows = read_label_rows()
     timeline, current_by_path = parse_file_timeline(label_rows)
@@ -382,6 +442,7 @@ def main():
                 filled += 1
             elif entry[field] != label[label_key]:
                 kept.append((number, field, entry[field], label[label_key]))
+        entry["source"] = "precise"  # second-pass Audacity labels (definitive timing)
         entry["source_files"] = label["source_files"]  # original capture files (.wav/.au)
         entry.pop("source_file", None)  # supersede the earlier singular field
         entry.pop("master_seconds", None)  # drop the old ambiguous field name from any seed
@@ -397,9 +458,47 @@ def main():
         else:
             entry.pop("master_end_seconds", None)
 
+    # First-pass (tracklist-2017) tail: add the rough tracks the second-pass labels
+    # don't cover yet (tracks ~67-91, incl. the Mystery segments). Where labelling
+    # has reached, those rough rows are dropped so precise data wins.
+    frontier = max((max(r.get("master_begin_seconds") or 0.0, r.get("master_end_seconds") or 0.0)
+                    for r in ids.values()), default=0.0)
+    rough = drop_labelled(parse_remainder(), frontier)
+    rough_added, rough_kept = 0, 0
+    for rec in rough:
+        rough_kept += 1
+        key = str(rec["track_number"])
+        entry = tracks.get(key)
+        if entry is None:
+            entry = {"title": None, "artist": None, "artwork": None, "use_logo": False, "fields": {}}
+            tracks[key] = entry
+            rough_added += 1
+        for field, rkey in (("title", "track_name"), ("artist", "track_artist")):
+            if not entry.get(field) and rec[rkey]:
+                entry[field] = rec[rkey]
+        entry["master_begin_seconds"] = round(rec["master_begin_seconds"], 3)
+        entry["source"] = "rough"            # first-pass tracklist-2017 (approximate)
+        entry.setdefault("source_files", [])  # remainder rows carry no capture file
+        entry.pop("master_seconds", None)
+        if rec["is_mystery"]:
+            entry["kind"] = "mystery"
+
+    # Definitive segment ends across the COMBINED 1..N timeline: any track whose end
+    # is still unknown — the last precise track before the tail existed, plus every
+    # rough track — runs to the next track's begin. Only the global last track has
+    # no end. (Genuine labelled gaps, end < next begin, are already set and kept.)
+    ordered_keys = sorted((k for k, e in tracks.items() if e.get("master_begin_seconds") is not None),
+                          key=lambda k: tracks[k]["master_begin_seconds"])
+    for i, k in enumerate(ordered_keys[:-1]):
+        entry = tracks[k]
+        if entry.get("master_end_seconds") is None:
+            entry["master_end_seconds"] = round(tracks[ordered_keys[i + 1]]["master_begin_seconds"], 3)
+
     with_end = sum(1 for n in ids if ids[n].get("master_end_seconds") is not None)
     print("identified tracks: %d  (added %d, filled title/artist %d, segment ends %d)"
           % (len(ids), len(added), filled, with_end))
+    print("first-pass tail: %d rough tracks kept (added %d), frontier=%.0fs"
+          % (rough_kept, rough_added, frontier))
     if no_master:
         print("  WARN no master position: %s" % sorted(no_master))
     for n, f, have, lab in kept:

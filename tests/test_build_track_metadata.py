@@ -175,6 +175,90 @@ class LiveEndTests(unittest.TestCase):
         self.assertNotIn("master_seconds", json.dumps(data))
 
 
+class RemainderParseTests(unittest.TestCase):
+    """First-pass remainder.tsv: `Title / Artist` (artist last, may be empty/absent)."""
+
+    def test_slash_splits_title_and_artist(self):
+        self.assertEqual(b.parse_remainder_id_text("start069: ID: Hypnotising / PFM"),
+                         (69, "PFM", "Hypnotising"))
+
+    def test_no_slash_means_no_artist(self):
+        self.assertEqual(b.parse_remainder_id_text("start091: ID: Mystery Track 11"),
+                         (91, None, "Mystery Track 11"))
+
+    def test_trailing_slash_is_empty_artist(self):
+        self.assertEqual(
+            b.parse_remainder_id_text("start090: ID: Home (Jedi Knights Remix (Drowning In Time)) /"),
+            (90, None, "Home (Jedi Knights Remix (Drowning In Time))"))
+
+    def test_parentheses_on_both_sides(self):
+        self.assertEqual(
+            b.parse_remainder_id_text("start088: ID: Omen (Director's Cut) / Makai (vs. Nico)"),
+            (88, "Makai (vs. Nico)", "Omen (Director's Cut)"))
+
+    def test_non_id_row_is_none(self):
+        self.assertIsNone(b.parse_remainder_id_text("file end: d.wav"))
+
+    def test_mystery_detection(self):
+        self.assertTrue(b.MYSTERY_RE.match("Mystery Track 3 ?? Coo-ooo"))
+        self.assertFalse(b.MYSTERY_RE.match("Sea of Tears"))
+
+    def test_drop_labelled_keeps_only_past_the_frontier(self):
+        recs = [{"master_begin_seconds": 100.0}, {"master_begin_seconds": 200.0},
+                {"master_begin_seconds": 300.0}]
+        kept = [r["master_begin_seconds"] for r in b.drop_labelled(recs, 200.0)]
+        self.assertEqual(kept, [300.0])
+
+
+@unittest.skipUnless((REPO / "labels" / "remainder.tsv").is_file(), "remainder.tsv unavailable")
+class LiveTailTests(unittest.TestCase):
+    """The full build folds the first-pass tail (tracks ~67-91 + Mystery Tracks)
+    onto the second-pass labels, tagged source=rough and kind=mystery."""
+
+    @classmethod
+    def setUpClass(cls):
+        import json
+        import sys
+        import tempfile
+        out = tempfile.mktemp(suffix=".json")
+        argv = sys.argv
+        sys.argv = ["build_track_metadata.py", "--out", out]
+        try:
+            b.main()
+            cls.tr = json.load(open(out, encoding="utf-8"))["tracks"]
+        finally:
+            sys.argv = argv
+            if os.path.exists(out):
+                os.remove(out)
+
+    def test_tail_present_and_tagged(self):
+        self.assertGreaterEqual(len(self.tr), 91)
+        self.assertEqual(self.tr["66"]["source"], "precise")
+        self.assertEqual(self.tr["69"]["source"], "rough")
+        self.assertEqual(self.tr["69"]["title"], "Hypnotising")
+        self.assertEqual(self.tr["69"]["artist"], "PFM")
+        self.assertEqual(self.tr["67"]["kind"], "mystery")
+        self.assertNotIn("kind", self.tr["69"])  # an identified rough track isn't a mystery
+
+    def test_boundary_stitched_and_last_track_open(self):
+        # The last precise track now ends where the first rough track begins, and
+        # only the global-last track lacks an end.
+        self.assertAlmostEqual(self.tr["66"]["master_end_seconds"],
+                               self.tr["67"]["master_begin_seconds"], places=2)
+        self.assertIsNone(self.tr["91"].get("master_end_seconds"))
+
+    def test_no_overlaps_across_the_combined_timeline(self):
+        ts = sorted((t for t in self.tr.values() if t.get("master_begin_seconds") is not None),
+                    key=lambda t: t["master_begin_seconds"])
+        for i, t in enumerate(ts[:-1]):
+            end = t.get("master_end_seconds")
+            if end is not None:
+                self.assertLessEqual(end, ts[i + 1]["master_begin_seconds"] + 1e-6)
+
+    def test_rough_tracks_have_no_master_seconds_alias(self):
+        self.assertNotIn("master_seconds", self.tr["69"])
+
+
 class SavePreservesAlbumsTests(unittest.TestCase):
     """save() must round-trip the schema-v2 `albums` map (and any other top-level
     keys), so a --seed regenerate never drops the player's album curation."""
