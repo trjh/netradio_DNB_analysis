@@ -310,8 +310,14 @@ def parse_label_track_ids():
         end = track_ends.get(record["track_number"])
         if end is not None and master is not None and end > master:
             record["master_end_seconds"] = min(end, nxt) if nxt is not None else end
+        elif nxt is not None:
+            # No label end-marker yet (e.g. the 30 s promos): the segment is
+            # treated as contiguous and runs to the next track's begin, so every
+            # track the player shows has a definitive end. A real end < nxt only
+            # appears once the labels carry one (then a gap/Mystery segment opens).
+            record["master_end_seconds"] = nxt
         else:
-            record["master_end_seconds"] = None
+            record["master_end_seconds"] = None   # only the last track has no next
 
     return result, conflicts
 
@@ -392,7 +398,7 @@ def main():
             entry.pop("master_end_seconds", None)
 
     with_end = sum(1 for n in ids if ids[n].get("master_end_seconds") is not None)
-    print("identified tracks: %d  (added %d, filled title/artist %d, label-derived ends %d)"
+    print("identified tracks: %d  (added %d, filled title/artist %d, segment ends %d)"
           % (len(ids), len(added), filled, with_end))
     if no_master:
         print("  WARN no master position: %s" % sorted(no_master))

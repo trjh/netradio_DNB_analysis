@@ -8,6 +8,7 @@
         "note": "Net Radio station promo — no commercial release"
       },
       "master_begin_seconds": 0.0,
+      "master_end_seconds": 35.299,
       "source_files": [
         "d-25-000b.wav",
         "d-25-005b.wav",
@@ -23,6 +24,7 @@
         "note": "Net Radio station promo — no commercial release"
       },
       "master_begin_seconds": 35.299,
+      "master_end_seconds": 59.91,
       "source_files": [
         "d-25-005b.wav",
         "d000-018.wav",
@@ -82,6 +84,7 @@
         "year": "1998"
       },
       "master_begin_seconds": 573.867,
+      "master_end_seconds": 588.696,
       "source_files": [
         "d000-018.wav",
         "d001-026b.wav",
@@ -157,6 +160,7 @@
         "note": "Net Radio station promo — no commercial release"
       },
       "master_begin_seconds": 1579.66,
+      "master_end_seconds": 1613.771,
       "source_files": [
         "d001-026b.wav",
         "d019-040.wav",

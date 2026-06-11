@@ -111,10 +111,21 @@ class ComputeTrackEndsTests(unittest.TestCase):
 
 @unittest.skipUnless((REPO / "labels").is_dir(), "labels/ unavailable")
 class LiveEndTests(unittest.TestCase):
-    def test_most_tracks_get_a_label_derived_end(self):
+    def test_every_track_except_the_last_has_a_segment_end(self):
+        # Definitive segments for the player: every track (incl. the 30 s promos,
+        # which have no label end-marker) gets a master_end_seconds. Only the very
+        # last track by master order, which has no next track, may lack one.
         ids, _ = b.parse_label_track_ids()
-        with_end = [n for n, r in ids.items() if r.get("master_end_seconds") is not None]
-        self.assertGreaterEqual(len(with_end), 55)
+        ordered = sorted((r for r in ids.values() if r.get("master_begin_seconds") is not None),
+                         key=lambda r: r["master_begin_seconds"])
+        without = [r["track_number"] for r in ordered[:-1] if r.get("master_end_seconds") is None]
+        self.assertEqual(without, [], "non-last tracks missing a segment end: %s" % without)
+
+    def test_promo_without_a_label_end_runs_to_the_next_begin(self):
+        # Track 1 (Promo1) has no orig/mix end-marker; its segment end defaults to
+        # the next track's begin (contiguous), not None.
+        ids, _ = b.parse_label_track_ids()
+        self.assertAlmostEqual(ids[1]["master_end_seconds"], ids[2]["master_begin_seconds"], places=3)
 
     def test_track_ends_after_it_starts(self):
         ids, _ = b.parse_label_track_ids()
