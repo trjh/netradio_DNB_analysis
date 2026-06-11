@@ -130,7 +130,7 @@ class LiveEndTests(unittest.TestCase):
     def test_track_ends_after_it_starts(self):
         ids, _ = b.parse_label_track_ids()
         for n, r in ids.items():
-            end, start = r.get("master_end_seconds"), r.get("master_seconds")
+            end, start = r.get("master_end_seconds"), r.get("master_begin_seconds")
             if end is not None and start is not None:
                 self.assertGreater(end, start, "track %s end before start" % n)
 
