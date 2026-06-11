@@ -44,3 +44,8 @@ sheetscript/logs
 
 # Private/local agent guide (machine paths, remotes, secret locations)
 AGENT.md
+
+# streamalign / agent artifacts
+__pycache__/
+*.pyc
+.context/
