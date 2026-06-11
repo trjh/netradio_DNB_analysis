@@ -71,5 +71,41 @@ class LiveTests(unittest.TestCase):
         self.assertIn("d-14Nov10-c.au", ids[44]["source_files"])  # E-Z Rollers - Retro
 
 
+class SavePreservesAlbumsTests(unittest.TestCase):
+    """save() must round-trip the schema-v2 `albums` map (and any other top-level
+    keys), so a --seed regenerate never drops the player's album curation."""
+
+    def test_albums_and_extra_top_level_keys_survive(self):
+        import json
+        import tempfile
+        data = {
+            "schema": "netradio.track-metadata.v2",
+            "albums": {
+                "earth-volume-two": {
+                    "title": "Earth Volume Two", "artist": "LTJ Bukem",
+                    "fields": {"year": "1997", "discogs": "https://x"},
+                    "verified": {"discogs": "2026-06-10"},
+                },
+            },
+            "tracks": {
+                "10": {"title": "Artificial Life", "artist": "Odyssey",
+                       "album": "earth-volume-two", "master_seconds": 1.0,
+                       "source_files": ["d.wav"], "fields": {}},
+            },
+            "note": "an unrelated top-level key",
+        }
+        path = tempfile.mktemp(suffix=".json")
+        try:
+            b.save(data, path)
+            out = json.load(open(path, encoding="utf-8"))
+        finally:
+            os.remove(path)
+        self.assertEqual(out["schema"], "netradio.track-metadata.v2")
+        self.assertIn("earth-volume-two", out["albums"])
+        self.assertEqual(out["albums"]["earth-volume-two"]["verified"], {"discogs": "2026-06-10"})
+        self.assertEqual(out["tracks"]["10"]["album"], "earth-volume-two")
+        self.assertEqual(out.get("note"), "an unrelated top-level key")
+
+
 if __name__ == "__main__":
     unittest.main()
