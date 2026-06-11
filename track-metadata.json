@@ -2,6 +2,7 @@
   "schema": "netradio.track-metadata.v1",
   "tracks": {
     "1": {
+      "anchor": "Promo1Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {
@@ -19,6 +20,7 @@
       "use_logo": true
     },
     "2": {
+      "anchor": "Promo2Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {
@@ -36,6 +38,7 @@
       "use_logo": true
     },
     "3": {
+      "anchor": "SkyJamie",
       "artist": "Jamie Myerson",
       "artwork": "track-3.jpg",
       "fields": {
@@ -57,6 +60,7 @@
       "use_logo": false
     },
     "4": {
+      "anchor": "EverythingJamie",
       "artist": "Jamie Myerson",
       "artwork": "track-4.jpg",
       "fields": {
@@ -79,6 +83,7 @@
       "use_logo": false
     },
     "5": {
+      "anchor": "YoureJamie",
       "artist": "Jamie Myerson",
       "artwork": "track-5.jpg",
       "fields": {
@@ -99,6 +104,7 @@
       "use_logo": false
     },
     "6": {
+      "anchor": "UnityJamie",
       "artist": "Jamie Myerson",
       "artwork": "track-6.jpg",
       "fields": {
@@ -119,6 +125,7 @@
       "use_logo": false
     },
     "7": {
+      "anchor": "YoureJamieMy",
       "artist": "Jamie Myerson",
       "artwork": "track-7.jpg",
       "fields": {
@@ -140,6 +147,7 @@
       "use_logo": false
     },
     "8": {
+      "anchor": "CrucialJamie",
       "artist": "Jamie Myerson",
       "artwork": "track-8.jpg",
       "fields": {
@@ -162,6 +170,7 @@
       "use_logo": false
     },
     "9": {
+      "anchor": "Promo3Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {
@@ -180,6 +189,7 @@
       "use_logo": true
     },
     "10": {
+      "anchor": "ArtificialOdyssey",
       "artist": "Odyssey",
       "artwork": "track-10.jpg",
       "fields": {
@@ -203,6 +213,7 @@
       "use_logo": false
     },
     "11": {
+      "anchor": "PianoTricky",
       "artist": "Tricky",
       "artwork": "track-11.jpg",
       "fields": {
@@ -223,6 +234,7 @@
       "use_logo": false
     },
     "12": {
+      "anchor": "ArboledaEighty",
       "artist": "Eighty Mile Beach",
       "artwork": "track-12.jpg",
       "fields": {
@@ -246,6 +258,7 @@
       "use_logo": false
     },
     "13": {
+      "anchor": "SensesDJ",
       "artist": "DJ Addiction",
       "artwork": "track-13.jpg",
       "fields": {
@@ -267,6 +280,7 @@
       "use_logo": false
     },
     "14": {
+      "anchor": "StayMeShell",
       "artist": "Me'Shell NdegéOcello",
       "artwork": "track-14.jpg",
       "fields": {
@@ -286,6 +300,7 @@
       "use_logo": false
     },
     "15": {
+      "anchor": "MindDJ",
       "artist": "DJ Crystl",
       "artwork": "track-15.jpg",
       "fields": {
@@ -310,6 +325,7 @@
       "use_logo": false
     },
     "16": {
+      "anchor": "TheSkyjuice",
       "artist": "Skyjuice",
       "artwork": null,
       "fields": {
@@ -330,6 +346,7 @@
       "use_logo": false
     },
     "17": {
+      "anchor": "OnErykah",
       "artist": "Erykah Badu",
       "artwork": "track-17.jpg",
       "fields": {
@@ -351,6 +368,7 @@
       "use_logo": false
     },
     "18": {
+      "anchor": "TheBugs",
       "artist": "Bugs",
       "artwork": null,
       "fields": {
@@ -371,6 +389,7 @@
       "use_logo": false
     },
     "19": {
+      "anchor": "JamesMonty",
       "artist": "Monty Norman",
       "artwork": null,
       "fields": {
@@ -391,6 +410,7 @@
       "use_logo": false
     },
     "20": {
+      "anchor": "TwinAngelo",
       "artist": "Angelo Badalamenti & David Lynch",
       "artwork": null,
       "fields": {
@@ -409,6 +429,7 @@
       "use_logo": false
     },
     "21": {
+      "anchor": "JWalkinBlame",
       "artist": "Blame",
       "artwork": "track-21.jpg",
       "fields": {
@@ -431,6 +452,7 @@
       "use_logo": false
     },
     "22": {
+      "anchor": "JunkleCallisto",
       "artist": "Callisto",
       "artwork": null,
       "fields": {
@@ -450,6 +472,7 @@
       "use_logo": false
     },
     "23": {
+      "anchor": "63rdThe",
       "artist": "The Amalgamation of Soundz",
       "artwork": "track-23.jpg",
       "fields": {
@@ -472,6 +495,7 @@
       "use_logo": false
     },
     "24": {
+      "anchor": "ShoeshinerCrash",
       "artist": "Crash",
       "artwork": null,
       "fields": {
@@ -491,6 +515,7 @@
       "use_logo": false
     },
     "25": {
+      "anchor": "HappySpring",
       "artist": "Spring Heel Jack",
       "artwork": "track-25.jpg",
       "fields": {
@@ -510,6 +535,7 @@
       "use_logo": false
     },
     "26": {
+      "anchor": "SeriousEndemic",
       "artist": "Endemic Void",
       "artwork": "track-26.jpg",
       "fields": {
@@ -532,6 +558,7 @@
       "use_logo": false
     },
     "27": {
+      "anchor": "CruzerCujo",
       "artist": "Cujo",
       "artwork": null,
       "fields": {
@@ -553,6 +580,7 @@
       "use_logo": false
     },
     "28": {
+      "anchor": "AtSpaceways",
       "artist": "Spaceways",
       "artwork": null,
       "fields": {
@@ -572,6 +600,7 @@
       "use_logo": false
     },
     "29": {
+      "anchor": "QueenRockers",
       "artist": "Rockers Hi-Fi",
       "artwork": null,
       "fields": {
@@ -590,6 +619,7 @@
       "use_logo": false
     },
     "30": {
+      "anchor": "CrusoeRed",
       "artist": "Red Snapper",
       "artwork": null,
       "fields": {
@@ -611,6 +641,7 @@
       "use_logo": false
     },
     "31": {
+      "anchor": "Promo4Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
@@ -627,6 +658,7 @@
       "use_logo": false
     },
     "32": {
+      "anchor": "CrystalSkycutter",
       "artist": "Skycutter & Kiki Mojo",
       "artwork": null,
       "fields": {
@@ -645,6 +677,7 @@
       "use_logo": false
     },
     "33": {
+      "anchor": "ProblemSquarepusher",
       "artist": "Squarepusher",
       "artwork": null,
       "fields": {
@@ -663,6 +696,7 @@
       "use_logo": false
     },
     "34": {
+      "anchor": "YouThe",
       "artist": "The Advocate",
       "artwork": null,
       "fields": {
@@ -681,6 +715,7 @@
       "use_logo": false
     },
     "35": {
+      "anchor": "CircuitDecoder",
       "artist": "Decoder",
       "artwork": null,
       "fields": {
@@ -699,6 +734,7 @@
       "use_logo": false
     },
     "36": {
+      "anchor": "TheSlak",
       "artist": "Slak & Snuggles",
       "artwork": null,
       "fields": {
@@ -715,6 +751,7 @@
       "use_logo": false
     },
     "37": {
+      "anchor": "InputFierce",
       "artist": "Fierce & Nico",
       "artwork": null,
       "fields": {
@@ -736,6 +773,7 @@
       "use_logo": false
     },
     "38": {
+      "anchor": "DarkFriends",
       "artist": "Friends, Lovers & Family",
       "artwork": null,
       "fields": {
@@ -755,6 +793,7 @@
       "use_logo": false
     },
     "39": {
+      "anchor": "Promo5Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
@@ -769,6 +808,7 @@
       "use_logo": false
     },
     "40": {
+      "anchor": "HopelessDavid",
       "artist": "David Kristian",
       "artwork": null,
       "fields": {
@@ -785,6 +825,7 @@
       "use_logo": false
     },
     "41": {
+      "anchor": "StrengthThe",
       "artist": "The Sonar Circle",
       "artwork": null,
       "fields": {
@@ -804,6 +845,7 @@
       "use_logo": false
     },
     "42": {
+      "anchor": "ScienceJustin",
       "artist": "Justin Tewn & Hunter A.D.",
       "artwork": null,
       "fields": {},
@@ -818,6 +860,7 @@
       "use_logo": false
     },
     "43": {
+      "anchor": "WavesDave",
       "artist": "Dave Wallace",
       "artwork": null,
       "fields": {
@@ -837,6 +880,7 @@
       "use_logo": false
     },
     "44": {
+      "anchor": "RetroEZ",
       "artist": "E-Z Rollers",
       "artwork": null,
       "fields": {
@@ -857,6 +901,7 @@
       "use_logo": false
     },
     "45": {
+      "anchor": "ItsDr",
       "artist": "Dr S Gachet",
       "artwork": null,
       "fields": {
@@ -876,6 +921,7 @@
       "use_logo": false
     },
     "46": {
+      "anchor": "TheArcon",
       "artist": "Arcon 2",
       "artwork": null,
       "fields": {
@@ -895,6 +941,7 @@
       "use_logo": false
     },
     "47": {
+      "anchor": "RealismAlpha",
       "artist": "Alpha Omega",
       "artwork": null,
       "fields": {},
@@ -913,6 +960,7 @@
       "use_logo": false
     },
     "48": {
+      "anchor": "HerDownpour",
       "artist": "Downpour",
       "artwork": null,
       "fields": {},
@@ -929,6 +977,7 @@
       "use_logo": false
     },
     "49": {
+      "anchor": "FallingGMoney",
       "artist": "G-Money",
       "artwork": null,
       "fields": {},
@@ -945,6 +994,7 @@
       "use_logo": false
     },
     "50": {
+      "anchor": "CairoDJ",
       "artist": "DJ 3D",
       "artwork": null,
       "fields": {},
@@ -960,6 +1010,7 @@
       "use_logo": false
     },
     "51": {
+      "anchor": "NightriderESassin",
       "artist": "E-Sassin",
       "artwork": null,
       "fields": {},
@@ -976,6 +1027,7 @@
       "use_logo": false
     },
     "52": {
+      "anchor": "DietBBoy",
       "artist": "B-Boy 3000",
       "artwork": null,
       "fields": {},
@@ -992,6 +1044,7 @@
       "use_logo": false
     },
     "53": {
+      "anchor": "Promo6Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
@@ -1008,6 +1061,7 @@
       "use_logo": false
     },
     "54": {
+      "anchor": "DreamsCodename",
       "artist": "Codename John",
       "artwork": null,
       "fields": {
@@ -1027,6 +1081,7 @@
       "use_logo": false
     },
     "55": {
+      "anchor": "SecretsJohn",
       "artist": "John B",
       "artwork": null,
       "fields": {},
@@ -1043,6 +1098,7 @@
       "use_logo": false
     },
     "56": {
+      "anchor": "GreyOptical",
       "artist": "Optical",
       "artwork": null,
       "fields": {
@@ -1063,6 +1119,7 @@
       "use_logo": false
     },
     "57": {
+      "anchor": "MuteMatrix",
       "artist": "Matrix",
       "artwork": null,
       "fields": {
@@ -1080,6 +1137,7 @@
       "use_logo": false
     },
     "58": {
+      "anchor": "DeepCodename",
       "artist": "Codename John",
       "artwork": null,
       "fields": {
@@ -1097,6 +1155,7 @@
       "use_logo": false
     },
     "59": {
+      "anchor": "SilverDillinja",
       "artist": "Dillinja",
       "artwork": null,
       "fields": {
@@ -1115,6 +1174,7 @@
       "use_logo": false
     },
     "60": {
+      "anchor": "LocustEd",
       "artist": "Ed Rush & Fierce",
       "artwork": null,
       "fields": {
@@ -1133,6 +1193,7 @@
       "use_logo": false
     },
     "61": {
+      "anchor": "WarnedCodename",
       "artist": "Codename John feat. Grooverider",
       "artwork": null,
       "fields": {
@@ -1151,6 +1212,7 @@
       "use_logo": false
     },
     "62": {
+      "anchor": "StillBoymerang",
       "artist": "Boymerang",
       "artwork": null,
       "fields": {
@@ -1170,6 +1232,7 @@
       "use_logo": false
     },
     "63": {
+      "anchor": "CityLemon",
       "artist": "Lemon D",
       "artwork": null,
       "fields": {
@@ -1187,6 +1250,7 @@
       "use_logo": false
     },
     "64": {
+      "anchor": "Promo7Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
@@ -1200,6 +1264,7 @@
       "use_logo": false
     },
     "65": {
+      "anchor": "MakeDr",
       "artist": "Dr. Know",
       "artwork": null,
       "fields": {},
@@ -1213,6 +1278,7 @@
       "use_logo": false
     },
     "66": {
+      "anchor": "FreeJMJ",
       "artist": "JMJ & Richie",
       "artwork": null,
       "fields": {
@@ -1229,6 +1295,7 @@
       "use_logo": false
     },
     "67": {
+      "anchor": "Mystery",
       "artist": null,
       "artwork": null,
       "fields": {},
@@ -1236,11 +1303,14 @@
       "master_begin_seconds": 21008.0,
       "master_end_seconds": 21192.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d336-355.wav"
+      ],
       "title": "Mystery Track 3 ?? Coo-ooo-ooh-ooh yeah song",
       "use_logo": false
     },
     "68": {
+      "anchor": "MysteryTrack",
       "artist": null,
       "artwork": null,
       "fields": {},
@@ -1248,66 +1318,84 @@
       "master_begin_seconds": 21192.0,
       "master_end_seconds": 21413.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d356-375.wav"
+      ],
       "title": "Mystery Track 4 ?? Hey Man You Want A Tune song",
       "use_logo": false
     },
     "69": {
+      "anchor": "HypnotisingPFM",
       "artist": "PFM",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 21413.0,
       "master_end_seconds": 21703.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d356-375.wav"
+      ],
       "title": "Hypnotising",
       "use_logo": false
     },
     "70": {
+      "anchor": "UrbanDead",
       "artist": "Dead Calm",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 21703.0,
       "master_end_seconds": 22022.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d356-375.wav"
+      ],
       "title": "Urban Style (Original Mix)",
       "use_logo": false
     },
     "71": {
+      "anchor": "FokusOn",
       "artist": "On Line (Original Mix)",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 22022.0,
       "master_end_seconds": 22293.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d356-375.wav"
+      ],
       "title": "Fokus",
       "use_logo": false
     },
     "72": {
+      "anchor": "YourJ",
       "artist": "J Majik",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 22293.0,
       "master_end_seconds": 22564.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d376-395.wav"
+      ],
       "title": "Your Sound",
       "use_logo": false
     },
     "73": {
+      "anchor": "OnHidden",
       "artist": "Hidden Agenda",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 22564.0,
       "master_end_seconds": 22847.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d376-395.wav"
+      ],
       "title": "On The Roof",
       "use_logo": false
     },
     "74": {
+      "anchor": "MysteryTrack5",
       "artist": null,
       "artwork": null,
       "fields": {},
@@ -1315,22 +1403,28 @@
       "master_begin_seconds": 22847.0,
       "master_end_seconds": 23117.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d376-395.wav"
+      ],
       "title": "Mystery Track 5",
       "use_logo": false
     },
     "75": {
+      "anchor": "SeaGoldie",
       "artist": "Goldie",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 23117.0,
       "master_end_seconds": 23408.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d376-395.wav"
+      ],
       "title": "Sea of Tears",
       "use_logo": false
     },
     "76": {
+      "anchor": "MysteryTrack6",
       "artist": null,
       "artwork": null,
       "fields": {},
@@ -1338,88 +1432,112 @@
       "master_begin_seconds": 23408.0,
       "master_end_seconds": 23718.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d376-395.wav"
+      ],
       "title": "Mystery Track 6 (drumline change)",
       "use_logo": false
     },
     "77": {
+      "anchor": "TheDillinja",
       "artist": "Dillinja",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 23718.0,
       "master_end_seconds": 23967.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d396-415.wav"
+      ],
       "title": "The Angels Fell",
       "use_logo": false
     },
     "78": {
+      "anchor": "JaDillinja",
       "artist": "Dillinja",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 23967.0,
       "master_end_seconds": 24275.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d396-415.wav"
+      ],
       "title": "Ja Know Ya Big",
       "use_logo": false
     },
     "79": {
+      "anchor": "TheHidden",
       "artist": "Hidden Agenda Is It Love?",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 24275.0,
       "master_end_seconds": 24735.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d396-415.wav"
+      ],
       "title": "The Flute Tune",
       "use_logo": false
     },
     "80": {
+      "anchor": "TheWax",
       "artist": "Wax Doctor",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 24735.0,
       "master_end_seconds": 24949.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d416-435.wav"
+      ],
       "title": "The Spectrum",
       "use_logo": false
     },
     "81": {
+      "anchor": "UniversalJMJ",
       "artist": "JMJ & Richie",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 24949.0,
       "master_end_seconds": 25233.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d416-435.wav"
+      ],
       "title": "Universal Horn (J. Majik Remix)",
       "use_logo": false
     },
     "82": {
+      "anchor": "AlienKid",
       "artist": "Kid Loops",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 25233.0,
       "master_end_seconds": 25434.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d416-435.wav"
+      ],
       "title": "Alien Resident",
       "use_logo": false
     },
     "83": {
+      "anchor": "PassLuger",
       "artist": "Luger",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 25434.0,
       "master_end_seconds": 25593.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d416-435.wav"
+      ],
       "title": "Pass Agent",
       "use_logo": false
     },
     "84": {
+      "anchor": "MysteryTrack7",
       "artist": null,
       "artwork": null,
       "fields": {},
@@ -1427,11 +1545,14 @@
       "master_begin_seconds": 25593.0,
       "master_end_seconds": 25922.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d416-435.wav"
+      ],
       "title": "Mystery Track 7 (15:21.776 in new aup)",
       "use_logo": false
     },
     "85": {
+      "anchor": "MysteryTrack8",
       "artist": null,
       "artwork": null,
       "fields": {},
@@ -1439,11 +1560,14 @@
       "master_begin_seconds": 25922.0,
       "master_end_seconds": 26262.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d436-455.wav"
+      ],
       "title": "Mystery Track 8",
       "use_logo": false
     },
     "86": {
+      "anchor": "MysteryTrack9",
       "artist": null,
       "artwork": null,
       "fields": {},
@@ -1451,33 +1575,42 @@
       "master_begin_seconds": 26262.0,
       "master_end_seconds": 26487.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d436-455.wav"
+      ],
       "title": "Mystery Track 9",
       "use_logo": false
     },
     "87": {
+      "anchor": "RiteSystem",
       "artist": "System 7",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 26487.0,
       "master_end_seconds": 26872.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d436-455.wav"
+      ],
       "title": "Rite of Spring (Doc Scott Remix)",
       "use_logo": false
     },
     "88": {
+      "anchor": "OmenMakai",
       "artist": "Makai (vs. Nico)",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 26872.0,
       "master_end_seconds": 27143.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d436-455.wav"
+      ],
       "title": "Omen (Director's Cut)",
       "use_logo": false
     },
     "89": {
+      "anchor": "MysteryTrack10",
       "artist": null,
       "artwork": null,
       "fields": {},
@@ -1485,29 +1618,37 @@
       "master_begin_seconds": 27143.0,
       "master_end_seconds": 27356.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d456-470.wav"
+      ],
       "title": "Mystery Track 10",
       "use_logo": false
     },
     "90": {
+      "anchor": "Home",
       "artist": null,
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 27356.0,
       "master_end_seconds": 27521.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d456-470.wav"
+      ],
       "title": "Home (Jedi Knights Remix (Drowning In Time))",
       "use_logo": false
     },
     "91": {
+      "anchor": "MysteryTrack11",
       "artist": null,
       "artwork": null,
       "fields": {},
       "kind": "mystery",
       "master_begin_seconds": 27521.0,
       "source": "rough",
-      "source_files": [],
+      "source_files": [
+        "d456-470.wav"
+      ],
       "title": "Mystery Track 11",
       "use_logo": false
     }

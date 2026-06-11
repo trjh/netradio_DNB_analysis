@@ -285,6 +285,66 @@ def drop_labelled(rough_records, frontier):
     return [r for r in rough_records if r["master_begin_seconds"] > frontier]
 
 
+# "Try this first" capture file per master-time span for the unlabelled tail, taken
+# from the tracklist-2017 "definitive track listing" file START/END markers (each a
+# clean ~20-min primary-file block; the filename minute-range is otherwise only a
+# hint). Rough tracks aren't labelled yet, so they carry no overlap-derived
+# source_files — this is the file the player should reach for to play them.
+# [primary_file, span_end_master_seconds]; the span starts where the previous ends.
+TAIL_PRIMARY = [
+    ("d336-355.wav", 21074.552),   # ...–351:14.552
+    ("d356-375.wav", 22274.552),   # 351:14.552–371:14.552
+    ("d376-395.wav", 23474.552),   # 371:14.552–391:14.552
+    ("d396-415.wav", 24674.552),   # 391:14.552–411:14.552
+    ("d416-435.wav", 25874.552),   # 411:14.552–431:14.552
+    ("d436-455.wav", 27074.552),   # 431:14.552–451:14.552
+    ("d456-470.wav", 27950.455),   # 451:14.552–465:50.455
+]
+
+
+def tail_primary_for(master_seconds):
+    """The primary capture file whose master span contains master_seconds, or None."""
+    if master_seconds is None:
+        return None
+    for name, span_end in TAIL_PRIMARY:
+        if master_seconds < span_end:
+            return name
+    return None
+
+
+def _anchor_word(word):
+    word = re.sub(r"[^0-9A-Za-z]", "", word or "")
+    return word[:1].upper() + word[1:] if word else ""
+
+
+def anchor_id(title, artist, used):
+    """Stable per-track id: first title word + first artist word, each capitalised
+    (e.g. 'Promo1Net', 'YoureJamie'). On collision, append further words (remaining
+    title words, then remaining artist words) until unambiguous; a numeric suffix is
+    the last resort. `used` is the set of ids already taken (mutated). The id is a
+    function of the LABEL/rough title+artist only, so it is stable across regenerates
+    and lets curated metadata follow a track whose number/timestamp later changes."""
+    title_words = [w for w in (_anchor_word(x) for x in (title or "").split()) if w]
+    artist_words = [w for w in (_anchor_word(x) for x in (artist or "").split()) if w]
+    parts = ([title_words[0]] if title_words else []) + ([artist_words[0]] if artist_words else [])
+    extra = title_words[1:] + artist_words[1:]
+    anchor = "".join(parts)
+    i = 0
+    while (not anchor or anchor in used) and i < len(extra):
+        parts.append(extra[i])
+        anchor = "".join(parts)
+        i += 1
+    if not anchor:
+        anchor = "Track"
+    if anchor in used:
+        base, n = anchor, 2
+        while "%s%d" % (base, n) in used:
+            n += 1
+        anchor = "%s%d" % (base, n)
+    used.add(anchor)
+    return anchor
+
+
 def parse_label_track_ids():
     label_rows = read_label_rows()
     timeline, current_by_path = parse_file_timeline(label_rows)
@@ -424,85 +484,116 @@ def main():
     if args.seed and os.path.exists(args.seed):
         with open(args.seed, "r", encoding="utf-8") as handle:
             data = json.load(handle)
-    tracks = data.setdefault("tracks", {})
+    seed_tracks = data.get("tracks") or {}
 
+    # 1. Assemble every generated track record (second-pass precise + first-pass
+    #    rough), tagged with its source, generated title/artist, and raw label end.
     ids, conflicts = parse_label_track_ids()
-    added, filled, kept, no_master = [], 0, [], []
+    records = []
     for number in sorted(ids):
-        label = ids[number]
-        key = str(number)
-        entry = tracks.get(key)
-        if entry is None:
-            entry = {"title": None, "artist": None, "artwork": None, "use_logo": False, "fields": {}}
-            tracks[key] = entry
-            added.append(number)
-        for field, label_key in (("title", "track_name"), ("artist", "track_artist")):
-            if not entry.get(field):
-                entry[field] = label[label_key]
-                filled += 1
-            elif entry[field] != label[label_key]:
-                kept.append((number, field, entry[field], label[label_key]))
-        entry["source"] = "precise"  # second-pass Audacity labels (definitive timing)
-        entry["source_files"] = label["source_files"]  # original capture files (.wav/.au)
-        entry.pop("source_file", None)  # supersede the earlier singular field
-        entry.pop("master_seconds", None)  # drop the old ambiguous field name from any seed
-        if label["master_begin_seconds"] is not None:
-            entry["master_begin_seconds"] = round(label["master_begin_seconds"], 3)
-        else:
-            no_master.append(number)
-        # Label-derived per-track end, clamped to the next begin (see Pass 2). None
-        # when no end marker resolves yet — the player then falls back to the next
-        # track's start (contiguous), so a missing end never invents a gap.
-        if label.get("master_end_seconds") is not None:
-            entry["master_end_seconds"] = round(label["master_end_seconds"], 3)
-        else:
-            entry.pop("master_end_seconds", None)
-
-    # First-pass (tracklist-2017) tail: add the rough tracks the second-pass labels
-    # don't cover yet (tracks ~67-91, incl. the Mystery segments). Where labelling
-    # has reached, those rough rows are dropped so precise data wins.
+        lab = ids[number]
+        records.append({"number": number, "g_title": lab["track_name"], "g_artist": lab["track_artist"],
+                        "master_begin": lab["master_begin_seconds"], "label_end": lab.get("master_end_seconds"),
+                        "source": "precise", "source_files": lab["source_files"], "kind": None})
+    # First-pass tail: rows the second-pass labels don't cover yet (tracks ~67-91 +
+    # Mystery Tracks). Each gets its "try this first" primary capture file.
     frontier = max((max(r.get("master_begin_seconds") or 0.0, r.get("master_end_seconds") or 0.0)
                     for r in ids.values()), default=0.0)
     rough = drop_labelled(parse_remainder(), frontier)
-    rough_added, rough_kept = 0, 0
     for rec in rough:
-        rough_kept += 1
-        key = str(rec["track_number"])
-        entry = tracks.get(key)
-        if entry is None:
-            entry = {"title": None, "artist": None, "artwork": None, "use_logo": False, "fields": {}}
-            tracks[key] = entry
-            rough_added += 1
-        for field, rkey in (("title", "track_name"), ("artist", "track_artist")):
-            if not entry.get(field) and rec[rkey]:
-                entry[field] = rec[rkey]
-        entry["master_begin_seconds"] = round(rec["master_begin_seconds"], 3)
-        entry["source"] = "rough"            # first-pass tracklist-2017 (approximate)
-        entry.setdefault("source_files", [])  # remainder rows carry no capture file
-        entry.pop("master_seconds", None)
-        if rec["is_mystery"]:
-            entry["kind"] = "mystery"
+        primary = tail_primary_for(rec["master_begin_seconds"])
+        records.append({"number": rec["track_number"], "g_title": rec["track_name"],
+                        "g_artist": rec["track_artist"], "master_begin": rec["master_begin_seconds"],
+                        "label_end": None, "source": "rough",
+                        "source_files": [primary] if primary else [],
+                        "kind": "mystery" if rec["is_mystery"] else None})
 
-    # Definitive segment ends across the COMBINED 1..N timeline: any track whose end
-    # is still unknown — the last precise track before the tail existed, plus every
-    # rough track — runs to the next track's begin. Only the global last track has
-    # no end. (Genuine labelled gaps, end < next begin, are already set and kept.)
-    ordered_keys = sorted((k for k, e in tracks.items() if e.get("master_begin_seconds") is not None),
-                          key=lambda k: tracks[k]["master_begin_seconds"])
-    for i, k in enumerate(ordered_keys[:-1]):
-        entry = tracks[k]
-        if entry.get("master_end_seconds") is None:
-            entry["master_end_seconds"] = round(tracks[ordered_keys[i + 1]]["master_begin_seconds"], 3)
+    # 2. Stable anchor id per record (first title word + first artist word; see
+    #    anchor_id). Curated metadata follows the anchor, so a track keeps its
+    #    artwork/links when its number or timestamp later changes (e.g. a rough
+    #    track becoming precise, or a Mystery splitting/renumbering).
+    used = set()
+    for rec in sorted(records, key=lambda r: r["number"]):
+        rec["anchor"] = anchor_id(rec["g_title"], rec["g_artist"], used)
 
-    with_end = sum(1 for n in ids if ids[n].get("master_end_seconds") is not None)
-    print("identified tracks: %d  (added %d, filled title/artist %d, segment ends %d)"
-          % (len(ids), len(added), filled, with_end))
-    print("first-pass tail: %d rough tracks kept (added %d), frontier=%.0fs"
-          % (rough_kept, rough_added, frontier))
+    # 3. Index the seed by anchor (its own stored anchor if it has one, else
+    #    recomputed) so curated fields transfer by identity, not by track number.
+    seed_by_anchor, used_seed = {}, set()
+    for k in sorted(seed_tracks, key=_track_sort_key):
+        seed_entry = seed_tracks[k]
+        anchor = seed_entry.get("anchor") or anchor_id(seed_entry.get("title"), seed_entry.get("artist"), used_seed)
+        used_seed.add(anchor)
+        seed_by_anchor.setdefault(anchor, seed_entry)
+
+    # 4. Build the output: carry every curated field forward from the anchor-matched
+    #    seed entry (number is only a fallback), then overlay the generated fields.
+    out_tracks, added, kept, no_master, consumed = {}, [], [], [], set()
+    for rec in records:
+        curated = seed_by_anchor.get(rec["anchor"]) or seed_tracks.get(str(rec["number"]))
+        if curated is not None:
+            consumed.add(id(curated))
+        else:
+            added.append(rec["number"])
+        entry = dict(curated) if curated else {}
+        entry.setdefault("artwork", None)
+        entry.setdefault("use_logo", False)
+        entry.setdefault("fields", {})
+        for field, gval in (("title", rec["g_title"]), ("artist", rec["g_artist"])):
+            if not entry.get(field):
+                if gval:
+                    entry[field] = gval
+            elif gval and entry[field] != gval:
+                kept.append((rec["number"], field, entry[field], gval))  # curated override wins
+        entry["source"] = rec["source"]
+        entry["source_files"] = rec["source_files"]
+        entry["anchor"] = rec["anchor"]
+        if rec["kind"]:
+            entry["kind"] = rec["kind"]
+        else:
+            entry.pop("kind", None)
+        entry.pop("master_seconds", None)   # the old ambiguous field name
+        entry.pop("source_file", None)      # the earlier singular field
+        if rec["master_begin"] is not None:
+            entry["master_begin_seconds"] = round(rec["master_begin"], 3)
+        else:
+            entry.pop("master_begin_seconds", None)
+            no_master.append(rec["number"])
+        entry["_label_end"] = rec["label_end"]   # resolved into master_end below
+        out_tracks[str(rec["number"])] = entry
+
+    # 5. Definitive, non-overlapping segment ends across the COMBINED 1..N timeline:
+    #    a label end is clamped to the next begin; a track with no label end runs to
+    #    the next begin (contiguous); only the global-last track is open-ended.
+    ordered = sorted((k for k, e in out_tracks.items() if e.get("master_begin_seconds") is not None),
+                     key=lambda k: out_tracks[k]["master_begin_seconds"])
+    for i, k in enumerate(ordered):
+        entry = out_tracks[k]
+        nxt = out_tracks[ordered[i + 1]]["master_begin_seconds"] if i + 1 < len(ordered) else None
+        label_end = entry.pop("_label_end", None)
+        if label_end is not None:
+            entry["master_end_seconds"] = round(min(label_end, nxt) if nxt is not None else label_end, 3)
+        elif nxt is not None:
+            entry["master_end_seconds"] = round(nxt, 3)
+        else:
+            entry.pop("master_end_seconds", None)
+    for entry in out_tracks.values():
+        entry.pop("_label_end", None)
+
+    # 6. Keep any curated-only seed track that no generated record claimed.
+    for k, seed_entry in seed_tracks.items():
+        if id(seed_entry) not in consumed and k not in out_tracks:
+            out_tracks[k] = seed_entry
+    data["tracks"] = tracks = out_tracks
+
+    precise_n = sum(1 for e in out_tracks.values() if e.get("source") == "precise")
+    rough_n = sum(1 for e in out_tracks.values() if e.get("source") == "rough")
+    mystery_n = sum(1 for e in out_tracks.values() if e.get("kind") == "mystery")
+    print("tracks: %d  (precise %d, rough %d, mystery %d; new %d, frontier=%.0fs)"
+          % (len(out_tracks), precise_n, rough_n, mystery_n, len(added), frontier))
     if no_master:
         print("  WARN no master position: %s" % sorted(no_master))
-    for n, f, have, lab in kept:
-        print("  KEPT override track %s %s=%r (label %r)" % (n, f, have, lab))
+    for n, f, have, gen in kept:
+        print("  KEPT override track %s %s=%r (label %r)" % (n, f, have, gen))
     for c in conflicts:
         print("  CONFLICT track %s: %s vs %s (%s)" % (c["track_number"], c["kept"], c["also"], c["file"]))
 

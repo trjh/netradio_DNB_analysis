@@ -210,6 +210,44 @@ class RemainderParseTests(unittest.TestCase):
         self.assertEqual(kept, [300.0])
 
 
+class AnchorIdTests(unittest.TestCase):
+    """Stable id = first title word + first artist word, each capitalised; collisions
+    extend with more words, then a numeric suffix as a last resort."""
+
+    def test_first_words_of_title_and_artist(self):
+        self.assertEqual(b.anchor_id("Promo1 Club Groove", "Net Radio", set()), "Promo1Net")
+        self.assertEqual(b.anchor_id("You're My Life", "Jamie Myerson", set()), "YoureJamie")
+
+    def test_collision_extends_with_more_words(self):
+        # A different second word is available, so it appends rather than numbering.
+        self.assertEqual(b.anchor_id("You're My Life", "Jamie Myerson", {"YoureJamie"}), "YoureJamieMy")
+
+    def test_collision_falls_back_to_numeric_when_words_exhausted(self):
+        used = set()
+        self.assertEqual(b.anchor_id("A", "B", used), "AB")        # single words, no extras
+        self.assertEqual(b.anchor_id("A", "B", used), "AB2")       # identical -> numeric suffix
+
+    def test_missing_artist_uses_title_only(self):
+        self.assertEqual(b.anchor_id("Mystery Track 5", None, set()), "Mystery")
+
+    def test_strips_punctuation_and_capitalises(self):
+        self.assertEqual(b.anchor_id("don't stop", "a.b. crew", set()), "DontAb")
+
+    def test_empty_falls_back_to_track(self):
+        self.assertEqual(b.anchor_id("", None, set()), "Track")
+
+
+class TailPrimaryTests(unittest.TestCase):
+    def test_maps_master_time_to_its_primary_capture_file(self):
+        self.assertEqual(b.tail_primary_for(21008), "d336-355.wav")
+        self.assertEqual(b.tail_primary_for(21074.552), "d356-375.wav")  # span_end -> next file
+        self.assertEqual(b.tail_primary_for(27521), "d456-470.wav")
+
+    def test_out_of_range_is_none(self):
+        self.assertIsNone(b.tail_primary_for(99999))
+        self.assertIsNone(b.tail_primary_for(None))
+
+
 @unittest.skipUnless((REPO / "labels" / "remainder.tsv").is_file(), "remainder.tsv unavailable")
 class LiveTailTests(unittest.TestCase):
     """The full build folds the first-pass tail (tracks ~67-91 + Mystery Tracks)
@@ -257,6 +295,43 @@ class LiveTailTests(unittest.TestCase):
 
     def test_rough_tracks_have_no_master_seconds_alias(self):
         self.assertNotIn("master_seconds", self.tr["69"])
+
+    def test_every_track_has_a_unique_anchor(self):
+        anchors = [t.get("anchor") for t in self.tr.values()]
+        self.assertTrue(all(anchors), "some track has no anchor")
+        self.assertEqual(len(anchors), len(set(anchors)), "anchors are not unique")
+        self.assertEqual(self.tr["1"]["anchor"], "Promo1Net")
+        self.assertEqual(self.tr["69"]["anchor"], "HypnotisingPFM")
+
+    def test_rough_tracks_map_to_their_primary_capture_file(self):
+        self.assertEqual(self.tr["67"]["source_files"], ["d336-355.wav"])
+        self.assertEqual(self.tr["91"]["source_files"], ["d456-470.wav"])
+
+    def test_curated_metadata_transfers_by_anchor_across_renumber(self):
+        # A curated "Hypnotising / PFM" seeded at a DIFFERENT number (with artwork)
+        # must follow its anchor onto generated track 69, and not linger at 500.
+        import json
+        import sys
+        import tempfile
+        seed = {"schema": b.SCHEMA, "tracks": {"500": {
+            "title": "Hypnotising", "artist": "PFM", "artwork": "art/track-500.jpg",
+            "fields": {"year": "1998"}, "master_begin_seconds": 1.0}}}
+        seed_path, out_path = tempfile.mktemp(suffix=".json"), tempfile.mktemp(suffix=".json")
+        with open(seed_path, "w", encoding="utf-8") as handle:
+            json.dump(seed, handle)
+        argv = sys.argv
+        sys.argv = ["build_track_metadata.py", "--seed", seed_path, "--out", out_path]
+        try:
+            b.main()
+            data = json.load(open(out_path, encoding="utf-8"))
+        finally:
+            sys.argv = argv
+            for path in (seed_path, out_path):
+                if os.path.exists(path):
+                    os.remove(path)
+        self.assertEqual(data["tracks"]["69"]["artwork"], "art/track-500.jpg")
+        self.assertEqual(data["tracks"]["69"]["fields"]["year"], "1998")
+        self.assertNotIn("500", data["tracks"])  # the stale number didn't linger
 
 
 class SavePreservesAlbumsTests(unittest.TestCase):
