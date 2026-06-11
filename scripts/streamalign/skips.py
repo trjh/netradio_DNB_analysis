@@ -58,7 +58,7 @@ def local_offset(a, b, a_lo, a_hi, expected_offset, radius, phat=True):
 
 
 def walk_overlap(a, b, a_start_s, a_end_s, seed_offset_s,
-                 win_s=1.5, hop_s=0.5, radius_s=12.0, track_conf=0.6,
+                 win_s=8.0, hop_s=1.0, radius_s=3.0, track_conf=0.6,
                  sr=_audio.SR):
     """Walk A's overlap window-by-window, tracking the local offset to B.
 
@@ -66,6 +66,12 @@ def walk_overlap(a, b, a_start_s, a_end_s, seed_offset_s,
     of (a_time_s, offset_s, confidence). The offset estimate is carried forward
     only through confident windows, so it survives the low-confidence window that
     straddles a skip and re-locks just past it (skips up to ~radius are recovered).
+
+    Defaults are the values validated against the documented d065-087/d084-103b
+    skips and are NOT free knobs: a window < ~8 s locks onto DnB's periodic beat
+    (confidence collapses), and a radius >= ~12 s admits wrong-beat false locks
+    (offset is tracked continuously so each skip step is small). Override only with
+    care. Large skips (the rare ~10 s one) need a wider radius — handle adaptively.
     """
     win, hop, radius = int(win_s * sr), int(hop_s * sr), int(radius_s * sr)
     offset = seed_offset_s * sr

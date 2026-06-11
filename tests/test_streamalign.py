@@ -92,9 +92,10 @@ class SkipDetectionTests(unittest.TestCase):
         # [1169.6, 1380.4]s with 4 skips: 1.632, 0.672, 1.248, 1.248 (sum 4.8).
         if not _have_audio("d065-087", "d084-103b"):
             self.skipTest("audio/ffmpeg not available")
+        # Call with DEFAULT tuning on purpose: the production defaults must be the
+        # validated values, so this fails if they regress to the known-bad ones.
         r = skips.characterise_overlap(
-            "d065-087", "d084-103b", 1170.0, 1378.0, 1169.592,
-            win_s=8.0, hop_s=1.0, radius_s=3.0)
+            "d065-087", "d084-103b", 1170.0, 1378.0, 1169.592)
         self.assertEqual(len(r["skips"]), 4, r["skips"])
         self.assertAlmostEqual(sum(s["delta_s"] for s in r["skips"]), 4.8, places=2)
         got = sorted(round(s["delta_s"], 3) for s in r["skips"])
