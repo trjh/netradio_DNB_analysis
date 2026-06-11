@@ -2,6 +2,7 @@
   "schema": "netradio.track-metadata.v1",
   "tracks": {
     "1": {
+      "anchor": "Promo1Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {
@@ -9,6 +10,7 @@
       },
       "master_begin_seconds": 0.0,
       "master_end_seconds": 35.299,
+      "source": "precise",
       "source_files": [
         "d-25-000b.wav",
         "d-25-005b.wav",
@@ -18,6 +20,7 @@
       "use_logo": true
     },
     "2": {
+      "anchor": "Promo2Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {
@@ -25,6 +28,7 @@
       },
       "master_begin_seconds": 35.299,
       "master_end_seconds": 59.91,
+      "source": "precise",
       "source_files": [
         "d-25-005b.wav",
         "d000-018.wav",
@@ -34,6 +38,7 @@
       "use_logo": true
     },
     "3": {
+      "anchor": "SkyJamie",
       "artist": "Jamie Myerson",
       "artwork": "track-3.jpg",
       "fields": {
@@ -45,6 +50,7 @@
       },
       "master_begin_seconds": 59.91,
       "master_end_seconds": 303.949,
+      "source": "precise",
       "source_files": [
         "d-25-005b.wav",
         "d000-018.wav",
@@ -54,6 +60,7 @@
       "use_logo": false
     },
     "4": {
+      "anchor": "EverythingJamie",
       "artist": "Jamie Myerson",
       "artwork": "track-4.jpg",
       "fields": {
@@ -65,6 +72,7 @@
       },
       "master_begin_seconds": 303.949,
       "master_end_seconds": 573.867,
+      "source": "precise",
       "source_files": [
         "d-25-005b.wav",
         "d000-018.wav",
@@ -75,6 +83,7 @@
       "use_logo": false
     },
     "5": {
+      "anchor": "YoureJamie",
       "artist": "Jamie Myerson",
       "artwork": "track-5.jpg",
       "fields": {
@@ -85,6 +94,7 @@
       },
       "master_begin_seconds": 573.867,
       "master_end_seconds": 588.696,
+      "source": "precise",
       "source_files": [
         "d000-018.wav",
         "d001-026b.wav",
@@ -94,6 +104,7 @@
       "use_logo": false
     },
     "6": {
+      "anchor": "UnityJamie",
       "artist": "Jamie Myerson",
       "artwork": "track-6.jpg",
       "fields": {
@@ -104,6 +115,7 @@
       },
       "master_begin_seconds": 588.696,
       "master_end_seconds": 647.372,
+      "source": "precise",
       "source_files": [
         "d000-018.wav",
         "d001-026b.wav",
@@ -113,6 +125,7 @@
       "use_logo": false
     },
     "7": {
+      "anchor": "YoureJamieMy",
       "artist": "Jamie Myerson",
       "artwork": "track-7.jpg",
       "fields": {
@@ -123,6 +136,7 @@
       },
       "master_begin_seconds": 647.372,
       "master_end_seconds": 1102.848,
+      "source": "precise",
       "source_files": [
         "d000-018.wav",
         "d001-026b.wav",
@@ -133,6 +147,7 @@
       "use_logo": false
     },
     "8": {
+      "anchor": "CrucialJamie",
       "artist": "Jamie Myerson",
       "artwork": "track-8.jpg",
       "fields": {
@@ -143,6 +158,7 @@
       },
       "master_begin_seconds": 1102.848,
       "master_end_seconds": 1577.475,
+      "source": "precise",
       "source_files": [
         "d000-018.wav",
         "d001-026b.wav",
@@ -154,6 +170,7 @@
       "use_logo": false
     },
     "9": {
+      "anchor": "Promo3Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {
@@ -161,6 +178,7 @@
       },
       "master_begin_seconds": 1579.66,
       "master_end_seconds": 1613.771,
+      "source": "precise",
       "source_files": [
         "d001-026b.wav",
         "d019-040.wav",
@@ -171,6 +189,7 @@
       "use_logo": true
     },
     "10": {
+      "anchor": "ArtificialOdyssey",
       "artist": "Odyssey",
       "artwork": "track-10.jpg",
       "fields": {
@@ -183,6 +202,7 @@
       },
       "master_begin_seconds": 1613.771,
       "master_end_seconds": 2134.772,
+      "source": "precise",
       "source_files": [
         "d001-026b.wav",
         "d019-040.wav",
@@ -193,6 +213,7 @@
       "use_logo": false
     },
     "11": {
+      "anchor": "PianoTricky",
       "artist": "Tricky",
       "artwork": "track-11.jpg",
       "fields": {
@@ -202,6 +223,7 @@
       },
       "master_begin_seconds": 2134.772,
       "master_end_seconds": 2420.48,
+      "source": "precise",
       "source_files": [
         "d019-040.wav",
         "d026-045.wav",
@@ -212,6 +234,7 @@
       "use_logo": false
     },
     "12": {
+      "anchor": "ArboledaEighty",
       "artist": "Eighty Mile Beach",
       "artwork": "track-12.jpg",
       "fields": {
@@ -223,6 +246,7 @@
       },
       "master_begin_seconds": 2420.48,
       "master_end_seconds": 2762.348,
+      "source": "precise",
       "source_files": [
         "d019-040.wav",
         "d026-045.wav",
@@ -234,6 +258,7 @@
       "use_logo": false
     },
     "13": {
+      "anchor": "SensesDJ",
       "artist": "DJ Addiction",
       "artwork": "track-13.jpg",
       "fields": {
@@ -245,6 +270,7 @@
       },
       "master_begin_seconds": 2762.348,
       "master_end_seconds": 3153.363,
+      "source": "precise",
       "source_files": [
         "d026-073b.wav",
         "d041-064.wav",
@@ -254,6 +280,7 @@
       "use_logo": false
     },
     "14": {
+      "anchor": "StayMeShell",
       "artist": "Me'Shell NdegéOcello",
       "artwork": "track-14.jpg",
       "fields": {
@@ -263,6 +290,7 @@
       },
       "master_begin_seconds": 3153.363,
       "master_end_seconds": 3334.848,
+      "source": "precise",
       "source_files": [
         "d026-073b.wav",
         "d041-064.wav",
@@ -272,6 +300,7 @@
       "use_logo": false
     },
     "15": {
+      "anchor": "MindDJ",
       "artist": "DJ Crystl",
       "artwork": "track-15.jpg",
       "fields": {
@@ -284,6 +313,7 @@
       },
       "master_begin_seconds": 3334.848,
       "master_end_seconds": 3960.022,
+      "source": "precise",
       "source_files": [
         "d026-073b.wav",
         "d041-064.wav",
@@ -295,6 +325,7 @@
       "use_logo": false
     },
     "16": {
+      "anchor": "TheSkyjuice",
       "artist": "Skyjuice",
       "artwork": null,
       "fields": {
@@ -304,6 +335,7 @@
       },
       "master_begin_seconds": 3960.022,
       "master_end_seconds": 4255.272,
+      "source": "precise",
       "source_files": [
         "d026-073b.wav",
         "d065-087.wav",
@@ -314,6 +346,7 @@
       "use_logo": false
     },
     "17": {
+      "anchor": "OnErykah",
       "artist": "Erykah Badu",
       "artwork": "track-17.jpg",
       "fields": {
@@ -324,6 +357,7 @@
       },
       "master_begin_seconds": 4255.272,
       "master_end_seconds": 4731.62,
+      "source": "precise",
       "source_files": [
         "d026-073b.wav",
         "d065-087.wav",
@@ -334,6 +368,7 @@
       "use_logo": false
     },
     "18": {
+      "anchor": "TheBugs",
       "artist": "Bugs",
       "artwork": null,
       "fields": {
@@ -343,6 +378,7 @@
       },
       "master_begin_seconds": 4731.62,
       "master_end_seconds": 5058.848,
+      "source": "precise",
       "source_files": [
         "d065-087.wav",
         "d066-085.wav",
@@ -353,6 +389,7 @@
       "use_logo": false
     },
     "19": {
+      "anchor": "JamesMonty",
       "artist": "Monty Norman",
       "artwork": null,
       "fields": {
@@ -360,6 +397,7 @@
       },
       "master_begin_seconds": 5058.848,
       "master_end_seconds": 5267.518,
+      "source": "precise",
       "source_files": [
         "d065-087.wav",
         "d066-085.wav",
@@ -372,6 +410,7 @@
       "use_logo": false
     },
     "20": {
+      "anchor": "TwinAngelo",
       "artist": "Angelo Badalamenti & David Lynch",
       "artwork": null,
       "fields": {
@@ -379,6 +418,7 @@
       },
       "master_begin_seconds": 5267.52,
       "master_end_seconds": 5269.45,
+      "source": "precise",
       "source_files": [
         "d065-087.wav",
         "d084-103b.wav",
@@ -389,6 +429,7 @@
       "use_logo": false
     },
     "21": {
+      "anchor": "JWalkinBlame",
       "artist": "Blame",
       "artwork": "track-21.jpg",
       "fields": {
@@ -401,6 +442,7 @@
       },
       "master_begin_seconds": 5269.45,
       "master_end_seconds": 5693.32,
+      "source": "precise",
       "source_files": [
         "d084-103b.wav",
         "d086-105.wav",
@@ -410,6 +452,7 @@
       "use_logo": false
     },
     "22": {
+      "anchor": "JunkleCallisto",
       "artist": "Callisto",
       "artwork": null,
       "fields": {
@@ -419,6 +462,7 @@
       },
       "master_begin_seconds": 5693.32,
       "master_end_seconds": 6070.578,
+      "source": "precise",
       "source_files": [
         "d084-103b.wav",
         "d086-105.wav",
@@ -428,6 +472,7 @@
       "use_logo": false
     },
     "23": {
+      "anchor": "63rdThe",
       "artist": "The Amalgamation of Soundz",
       "artwork": "track-23.jpg",
       "fields": {
@@ -438,6 +483,7 @@
       },
       "master_begin_seconds": 6070.578,
       "master_end_seconds": 6456.899,
+      "source": "precise",
       "source_files": [
         "d084-103b.wav",
         "d086-105.wav",
@@ -449,6 +495,7 @@
       "use_logo": false
     },
     "24": {
+      "anchor": "ShoeshinerCrash",
       "artist": "Crash",
       "artwork": null,
       "fields": {
@@ -457,6 +504,7 @@
       },
       "master_begin_seconds": 6456.899,
       "master_end_seconds": 6669.768,
+      "source": "precise",
       "source_files": [
         "d088-107.wav",
         "d107-121b.wav",
@@ -467,6 +515,7 @@
       "use_logo": false
     },
     "25": {
+      "anchor": "HappySpring",
       "artist": "Spring Heel Jack",
       "artwork": "track-25.jpg",
       "fields": {
@@ -476,6 +525,7 @@
       },
       "master_begin_seconds": 6669.768,
       "master_end_seconds": 7014.188,
+      "source": "precise",
       "source_files": [
         "d107-121b.wav",
         "d106-125.wav",
@@ -485,6 +535,7 @@
       "use_logo": false
     },
     "26": {
+      "anchor": "SeriousEndemic",
       "artist": "Endemic Void",
       "artwork": "track-26.jpg",
       "fields": {
@@ -496,6 +547,7 @@
       },
       "master_begin_seconds": 7014.188,
       "master_end_seconds": 7338.146,
+      "source": "precise",
       "source_files": [
         "d107-121b.wav",
         "d106-125.wav",
@@ -506,6 +558,7 @@
       "use_logo": false
     },
     "27": {
+      "anchor": "CruzerCujo",
       "artist": "Cujo",
       "artwork": null,
       "fields": {
@@ -515,6 +568,7 @@
       },
       "master_begin_seconds": 7338.146,
       "master_end_seconds": 7675.757,
+      "source": "precise",
       "source_files": [
         "d107-121b.wav",
         "d106-125.wav",
@@ -526,6 +580,7 @@
       "use_logo": false
     },
     "28": {
+      "anchor": "AtSpaceways",
       "artist": "Spaceways",
       "artwork": null,
       "fields": {
@@ -535,6 +590,7 @@
       },
       "master_begin_seconds": 7675.757,
       "master_end_seconds": 7973.335,
+      "source": "precise",
       "source_files": [
         "d122-144.wav",
         "d122-144b.wav",
@@ -544,6 +600,7 @@
       "use_logo": false
     },
     "29": {
+      "anchor": "QueenRockers",
       "artist": "Rockers Hi-Fi",
       "artwork": null,
       "fields": {
@@ -552,6 +609,7 @@
       },
       "master_begin_seconds": 7973.335,
       "master_end_seconds": 8259.453,
+      "source": "precise",
       "source_files": [
         "d122-144.wav",
         "d122-144b.wav",
@@ -561,6 +619,7 @@
       "use_logo": false
     },
     "30": {
+      "anchor": "CrusoeRed",
       "artist": "Red Snapper",
       "artwork": null,
       "fields": {
@@ -570,6 +629,7 @@
       },
       "master_begin_seconds": 8259.453,
       "master_end_seconds": 8657.243,
+      "source": "precise",
       "source_files": [
         "d122-144.wav",
         "d122-144b.wav",
@@ -581,11 +641,13 @@
       "use_logo": false
     },
     "31": {
+      "anchor": "Promo4Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 8657.243,
       "master_end_seconds": 8681.834,
+      "source": "precise",
       "source_files": [
         "d122-144.wav",
         "d126-145.wav",
@@ -596,6 +658,7 @@
       "use_logo": false
     },
     "32": {
+      "anchor": "CrystalSkycutter",
       "artist": "Skycutter & Kiki Mojo",
       "artwork": null,
       "fields": {
@@ -603,6 +666,7 @@
       },
       "master_begin_seconds": 8681.834,
       "master_end_seconds": 9083.374,
+      "source": "precise",
       "source_files": [
         "d126-145.wav",
         "d145-164b.wav",
@@ -613,6 +677,7 @@
       "use_logo": false
     },
     "33": {
+      "anchor": "ProblemSquarepusher",
       "artist": "Squarepusher",
       "artwork": null,
       "fields": {
@@ -622,6 +687,7 @@
       },
       "master_begin_seconds": 9083.374,
       "master_end_seconds": 9424.643,
+      "source": "precise",
       "source_files": [
         "d145-164b.wav",
         "d145-164.wav"
@@ -630,6 +696,7 @@
       "use_logo": false
     },
     "34": {
+      "anchor": "YouThe",
       "artist": "The Advocate",
       "artwork": null,
       "fields": {
@@ -637,6 +704,7 @@
       },
       "master_begin_seconds": 9424.643,
       "master_end_seconds": 9877.211,
+      "source": "precise",
       "source_files": [
         "d145-164b.wav",
         "d145-164.wav",
@@ -647,6 +715,7 @@
       "use_logo": false
     },
     "35": {
+      "anchor": "CircuitDecoder",
       "artist": "Decoder",
       "artwork": null,
       "fields": {
@@ -654,6 +723,7 @@
       },
       "master_begin_seconds": 9877.211,
       "master_end_seconds": 10340.178,
+      "source": "precise",
       "source_files": [
         "d145-164b.wav",
         "d145-164.wav",
@@ -664,6 +734,7 @@
       "use_logo": false
     },
     "36": {
+      "anchor": "TheSlak",
       "artist": "Slak & Snuggles",
       "artwork": null,
       "fields": {
@@ -671,6 +742,7 @@
       },
       "master_begin_seconds": 10340.178,
       "master_end_seconds": 10690.792,
+      "source": "precise",
       "source_files": [
         "d165-186b.wav",
         "d165-186.wav"
@@ -679,6 +751,7 @@
       "use_logo": false
     },
     "37": {
+      "anchor": "InputFierce",
       "artist": "Fierce & Nico",
       "artwork": null,
       "fields": {
@@ -688,6 +761,7 @@
       },
       "master_begin_seconds": 10690.792,
       "master_end_seconds": 11177.637,
+      "source": "precise",
       "source_files": [
         "d165-186b.wav",
         "d165-186.wav",
@@ -699,6 +773,7 @@
       "use_logo": false
     },
     "38": {
+      "anchor": "DarkFriends",
       "artist": "Friends, Lovers & Family",
       "artwork": null,
       "fields": {
@@ -706,6 +781,7 @@
       },
       "master_begin_seconds": 11177.637,
       "master_end_seconds": 11714.748,
+      "source": "precise",
       "source_files": [
         "d165-186b.wav",
         "d165-186.wav",
@@ -717,11 +793,13 @@
       "use_logo": false
     },
     "39": {
+      "anchor": "Promo5Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 11714.748,
       "master_end_seconds": 11748.836,
+      "source": "precise",
       "source_files": [
         "d-14Nov10-a.au",
         "d187-216b.wav"
@@ -730,6 +808,7 @@
       "use_logo": false
     },
     "40": {
+      "anchor": "HopelessDavid",
       "artist": "David Kristian",
       "artwork": null,
       "fields": {
@@ -737,6 +816,7 @@
       },
       "master_begin_seconds": 11748.836,
       "master_end_seconds": 11964.971,
+      "source": "precise",
       "source_files": [
         "d-14Nov10-a.au",
         "d187-216b.wav"
@@ -745,6 +825,7 @@
       "use_logo": false
     },
     "41": {
+      "anchor": "StrengthThe",
       "artist": "The Sonar Circle",
       "artwork": null,
       "fields": {
@@ -754,6 +835,7 @@
       },
       "master_begin_seconds": 11964.971,
       "master_end_seconds": 12293.941,
+      "source": "precise",
       "source_files": [
         "d-14Nov10-a.au",
         "d187-216b.wav",
@@ -763,11 +845,13 @@
       "use_logo": false
     },
     "42": {
+      "anchor": "ScienceJustin",
       "artist": "Justin Tewn & Hunter A.D.",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 12293.941,
       "master_end_seconds": 12713.248,
+      "source": "precise",
       "source_files": [
         "d187-216b.wav",
         "d-14Nov10-b.au"
@@ -776,6 +860,7 @@
       "use_logo": false
     },
     "43": {
+      "anchor": "WavesDave",
       "artist": "Dave Wallace",
       "artwork": null,
       "fields": {
@@ -784,6 +869,7 @@
       },
       "master_begin_seconds": 12713.248,
       "master_end_seconds": 13017.461,
+      "source": "precise",
       "source_files": [
         "d187-216b.wav",
         "d-14Nov10-b.au",
@@ -794,6 +880,7 @@
       "use_logo": false
     },
     "44": {
+      "anchor": "RetroEZ",
       "artist": "E-Z Rollers",
       "artwork": null,
       "fields": {
@@ -802,6 +889,7 @@
       },
       "master_begin_seconds": 13017.461,
       "master_end_seconds": 13485.922,
+      "source": "precise",
       "source_files": [
         "d187-216b.wav",
         "d-14Nov10-b.au",
@@ -813,6 +901,7 @@
       "use_logo": false
     },
     "45": {
+      "anchor": "ItsDr",
       "artist": "Dr S Gachet",
       "artwork": null,
       "fields": {
@@ -821,6 +910,7 @@
       },
       "master_begin_seconds": 13485.922,
       "master_end_seconds": 13784.821,
+      "source": "precise",
       "source_files": [
         "dnb-14Nov02-b.au",
         "d217-242.wav",
@@ -831,6 +921,7 @@
       "use_logo": false
     },
     "46": {
+      "anchor": "TheArcon",
       "artist": "Arcon 2",
       "artwork": null,
       "fields": {
@@ -839,6 +930,7 @@
       },
       "master_begin_seconds": 13784.821,
       "master_end_seconds": 14115.278,
+      "source": "precise",
       "source_files": [
         "dnb-14Nov02-b.au",
         "d217-242.wav",
@@ -849,11 +941,13 @@
       "use_logo": false
     },
     "47": {
+      "anchor": "RealismAlpha",
       "artist": "Alpha Omega",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 14115.278,
       "master_end_seconds": 14521.31,
+      "source": "precise",
       "source_files": [
         "dnb-14Nov02-b.au",
         "d217-242.wav",
@@ -866,11 +960,13 @@
       "use_logo": false
     },
     "48": {
+      "anchor": "HerDownpour",
       "artist": "Downpour",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 14521.31,
       "master_end_seconds": 14699.005,
+      "source": "precise",
       "source_files": [
         "d217-242.wav",
         "d228-247.wav",
@@ -881,11 +977,13 @@
       "use_logo": false
     },
     "49": {
+      "anchor": "FallingGMoney",
       "artist": "G-Money",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 14699.005,
       "master_end_seconds": 15152.075,
+      "source": "precise",
       "source_files": [
         "d228-247.wav",
         "d-14Nov10-d.au",
@@ -896,11 +994,13 @@
       "use_logo": false
     },
     "50": {
+      "anchor": "CairoDJ",
       "artist": "DJ 3D",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 15152.075,
       "master_end_seconds": 15510.677,
+      "source": "precise",
       "source_files": [
         "d-14Nov10-d.au",
         "d242-268.wav",
@@ -910,11 +1010,13 @@
       "use_logo": false
     },
     "51": {
+      "anchor": "NightriderESassin",
       "artist": "E-Sassin",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 15510.677,
       "master_end_seconds": 15839.956,
+      "source": "precise",
       "source_files": [
         "d-14Nov10-d.au",
         "d242-268.wav",
@@ -925,11 +1027,13 @@
       "use_logo": false
     },
     "52": {
+      "anchor": "DietBBoy",
       "artist": "B-Boy 3000",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 15839.956,
       "master_end_seconds": 16096.484,
+      "source": "precise",
       "source_files": [
         "d242-268.wav",
         "d-14Nov10-e.au",
@@ -940,11 +1044,13 @@
       "use_logo": false
     },
     "53": {
+      "anchor": "Promo6Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 16096.484,
       "master_end_seconds": 16120.923,
+      "source": "precise",
       "source_files": [
         "d242-268.wav",
         "d-14Nov10-e.au",
@@ -955,6 +1061,7 @@
       "use_logo": false
     },
     "54": {
+      "anchor": "DreamsCodename",
       "artist": "Codename John",
       "artwork": null,
       "fields": {
@@ -963,6 +1070,7 @@
       },
       "master_begin_seconds": 16120.923,
       "master_end_seconds": 16487.65,
+      "source": "precise",
       "source_files": [
         "d-14Nov10-e.au",
         "d268-287.wav",
@@ -973,11 +1081,13 @@
       "use_logo": false
     },
     "55": {
+      "anchor": "SecretsJohn",
       "artist": "John B",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 16487.65,
       "master_end_seconds": 17021.016,
+      "source": "precise",
       "source_files": [
         "d-14Nov10-e.au",
         "d268-287.wav",
@@ -988,6 +1098,7 @@
       "use_logo": false
     },
     "56": {
+      "anchor": "GreyOptical",
       "artist": "Optical",
       "artwork": null,
       "fields": {
@@ -996,6 +1107,7 @@
       },
       "master_begin_seconds": 17021.016,
       "master_end_seconds": 17390.149,
+      "source": "precise",
       "source_files": [
         "d-14Nov10-e.au",
         "d268-287.wav",
@@ -1007,6 +1119,7 @@
       "use_logo": false
     },
     "57": {
+      "anchor": "MuteMatrix",
       "artist": "Matrix",
       "artwork": null,
       "fields": {
@@ -1014,6 +1127,7 @@
       },
       "master_begin_seconds": 17390.149,
       "master_end_seconds": 17653.042,
+      "source": "precise",
       "source_files": [
         "d276-293b.wav",
         "d-14Nov10-f.au",
@@ -1023,6 +1137,7 @@
       "use_logo": false
     },
     "58": {
+      "anchor": "DeepCodename",
       "artist": "Codename John",
       "artwork": null,
       "fields": {
@@ -1031,6 +1146,7 @@
       },
       "master_begin_seconds": 17653.042,
       "master_end_seconds": 18124.508,
+      "source": "precise",
       "source_files": [
         "d-14Nov10-f.au",
         "d288-307.wav"
@@ -1039,6 +1155,7 @@
       "use_logo": false
     },
     "59": {
+      "anchor": "SilverDillinja",
       "artist": "Dillinja",
       "artwork": null,
       "fields": {
@@ -1047,6 +1164,7 @@
       },
       "master_begin_seconds": 18124.508,
       "master_end_seconds": 18493.708,
+      "source": "precise",
       "source_files": [
         "d-14Nov10-f.au",
         "d288-307.wav",
@@ -1056,6 +1174,7 @@
       "use_logo": false
     },
     "60": {
+      "anchor": "LocustEd",
       "artist": "Ed Rush & Fierce",
       "artwork": null,
       "fields": {
@@ -1064,6 +1183,7 @@
       },
       "master_begin_seconds": 18493.708,
       "master_end_seconds": 19022.707,
+      "source": "precise",
       "source_files": [
         "d288-307.wav",
         "d308-327.wav",
@@ -1073,6 +1193,7 @@
       "use_logo": false
     },
     "61": {
+      "anchor": "WarnedCodename",
       "artist": "Codename John feat. Grooverider",
       "artwork": null,
       "fields": {
@@ -1081,6 +1202,7 @@
       },
       "master_begin_seconds": 19022.707,
       "master_end_seconds": 19390.923,
+      "source": "precise",
       "source_files": [
         "d308-327.wav",
         "d316-335.wav",
@@ -1090,6 +1212,7 @@
       "use_logo": false
     },
     "62": {
+      "anchor": "StillBoymerang",
       "artist": "Boymerang",
       "artwork": null,
       "fields": {
@@ -1098,6 +1221,7 @@
       },
       "master_begin_seconds": 19390.923,
       "master_end_seconds": 19864.709,
+      "source": "precise",
       "source_files": [
         "d308-327.wav",
         "d316-335.wav",
@@ -1108,6 +1232,7 @@
       "use_logo": false
     },
     "63": {
+      "anchor": "CityLemon",
       "artist": "Lemon D",
       "artwork": null,
       "fields": {
@@ -1115,6 +1240,7 @@
       },
       "master_begin_seconds": 19864.709,
       "master_end_seconds": 20272.589,
+      "source": "precise",
       "source_files": [
         "d316-335.wav",
         "d-14Nov10-h.au",
@@ -1124,11 +1250,13 @@
       "use_logo": false
     },
     "64": {
+      "anchor": "Promo7Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 20272.589,
       "master_end_seconds": 20306.708,
+      "source": "precise",
       "source_files": [
         "d328-342.wav"
       ],
@@ -1136,11 +1264,13 @@
       "use_logo": false
     },
     "65": {
+      "anchor": "MakeDr",
       "artist": "Dr. Know",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 20306.708,
       "master_end_seconds": 20667.817,
+      "source": "precise",
       "source_files": [
         "d328-342.wav"
       ],
@@ -1148,6 +1278,7 @@
       "use_logo": false
     },
     "66": {
+      "anchor": "FreeJMJ",
       "artist": "JMJ & Richie",
       "artwork": null,
       "fields": {
@@ -1155,10 +1286,370 @@
         "spotify": "https://open.spotify.com/track/6g3R4uXxxo6vnGO7g8DKTp"
       },
       "master_begin_seconds": 20667.817,
+      "master_end_seconds": 21008.0,
+      "source": "precise",
       "source_files": [
         "d328-342.wav"
       ],
       "title": "Free La Funk (PFM Remix)",
+      "use_logo": false
+    },
+    "67": {
+      "anchor": "Mystery",
+      "artist": null,
+      "artwork": null,
+      "fields": {},
+      "kind": "mystery",
+      "master_begin_seconds": 21008.0,
+      "master_end_seconds": 21192.0,
+      "source": "rough",
+      "source_files": [
+        "d336-355.wav"
+      ],
+      "title": "Mystery Track 3 ?? Coo-ooo-ooh-ooh yeah song",
+      "use_logo": false
+    },
+    "68": {
+      "anchor": "MysteryTrack",
+      "artist": null,
+      "artwork": null,
+      "fields": {},
+      "kind": "mystery",
+      "master_begin_seconds": 21192.0,
+      "master_end_seconds": 21413.0,
+      "source": "rough",
+      "source_files": [
+        "d356-375.wav"
+      ],
+      "title": "Mystery Track 4 ?? Hey Man You Want A Tune song",
+      "use_logo": false
+    },
+    "69": {
+      "anchor": "HypnotisingPFM",
+      "artist": "PFM",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 21413.0,
+      "master_end_seconds": 21703.0,
+      "source": "rough",
+      "source_files": [
+        "d356-375.wav"
+      ],
+      "title": "Hypnotising",
+      "use_logo": false
+    },
+    "70": {
+      "anchor": "UrbanDead",
+      "artist": "Dead Calm",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 21703.0,
+      "master_end_seconds": 22022.0,
+      "source": "rough",
+      "source_files": [
+        "d356-375.wav"
+      ],
+      "title": "Urban Style (Original Mix)",
+      "use_logo": false
+    },
+    "71": {
+      "anchor": "FokusOn",
+      "artist": "On Line (Original Mix)",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 22022.0,
+      "master_end_seconds": 22293.0,
+      "source": "rough",
+      "source_files": [
+        "d356-375.wav"
+      ],
+      "title": "Fokus",
+      "use_logo": false
+    },
+    "72": {
+      "anchor": "YourJ",
+      "artist": "J Majik",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 22293.0,
+      "master_end_seconds": 22564.0,
+      "source": "rough",
+      "source_files": [
+        "d376-395.wav"
+      ],
+      "title": "Your Sound",
+      "use_logo": false
+    },
+    "73": {
+      "anchor": "OnHidden",
+      "artist": "Hidden Agenda",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 22564.0,
+      "master_end_seconds": 22847.0,
+      "source": "rough",
+      "source_files": [
+        "d376-395.wav"
+      ],
+      "title": "On The Roof",
+      "use_logo": false
+    },
+    "74": {
+      "anchor": "MysteryTrack5",
+      "artist": null,
+      "artwork": null,
+      "fields": {},
+      "kind": "mystery",
+      "master_begin_seconds": 22847.0,
+      "master_end_seconds": 23117.0,
+      "source": "rough",
+      "source_files": [
+        "d376-395.wav"
+      ],
+      "title": "Mystery Track 5",
+      "use_logo": false
+    },
+    "75": {
+      "anchor": "SeaGoldie",
+      "artist": "Goldie",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 23117.0,
+      "master_end_seconds": 23408.0,
+      "source": "rough",
+      "source_files": [
+        "d376-395.wav"
+      ],
+      "title": "Sea of Tears",
+      "use_logo": false
+    },
+    "76": {
+      "anchor": "MysteryTrack6",
+      "artist": null,
+      "artwork": null,
+      "fields": {},
+      "kind": "mystery",
+      "master_begin_seconds": 23408.0,
+      "master_end_seconds": 23718.0,
+      "source": "rough",
+      "source_files": [
+        "d376-395.wav"
+      ],
+      "title": "Mystery Track 6 (drumline change)",
+      "use_logo": false
+    },
+    "77": {
+      "anchor": "TheDillinja",
+      "artist": "Dillinja",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 23718.0,
+      "master_end_seconds": 23967.0,
+      "source": "rough",
+      "source_files": [
+        "d396-415.wav"
+      ],
+      "title": "The Angels Fell",
+      "use_logo": false
+    },
+    "78": {
+      "anchor": "JaDillinja",
+      "artist": "Dillinja",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 23967.0,
+      "master_end_seconds": 24275.0,
+      "source": "rough",
+      "source_files": [
+        "d396-415.wav"
+      ],
+      "title": "Ja Know Ya Big",
+      "use_logo": false
+    },
+    "79": {
+      "anchor": "TheHidden",
+      "artist": "Hidden Agenda Is It Love?",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 24275.0,
+      "master_end_seconds": 24735.0,
+      "source": "rough",
+      "source_files": [
+        "d396-415.wav"
+      ],
+      "title": "The Flute Tune",
+      "use_logo": false
+    },
+    "80": {
+      "anchor": "TheWax",
+      "artist": "Wax Doctor",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 24735.0,
+      "master_end_seconds": 24949.0,
+      "source": "rough",
+      "source_files": [
+        "d416-435.wav"
+      ],
+      "title": "The Spectrum",
+      "use_logo": false
+    },
+    "81": {
+      "anchor": "UniversalJMJ",
+      "artist": "JMJ & Richie",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 24949.0,
+      "master_end_seconds": 25233.0,
+      "source": "rough",
+      "source_files": [
+        "d416-435.wav"
+      ],
+      "title": "Universal Horn (J. Majik Remix)",
+      "use_logo": false
+    },
+    "82": {
+      "anchor": "AlienKid",
+      "artist": "Kid Loops",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 25233.0,
+      "master_end_seconds": 25434.0,
+      "source": "rough",
+      "source_files": [
+        "d416-435.wav"
+      ],
+      "title": "Alien Resident",
+      "use_logo": false
+    },
+    "83": {
+      "anchor": "PassLuger",
+      "artist": "Luger",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 25434.0,
+      "master_end_seconds": 25593.0,
+      "source": "rough",
+      "source_files": [
+        "d416-435.wav"
+      ],
+      "title": "Pass Agent",
+      "use_logo": false
+    },
+    "84": {
+      "anchor": "MysteryTrack7",
+      "artist": null,
+      "artwork": null,
+      "fields": {},
+      "kind": "mystery",
+      "master_begin_seconds": 25593.0,
+      "master_end_seconds": 25922.0,
+      "source": "rough",
+      "source_files": [
+        "d416-435.wav"
+      ],
+      "title": "Mystery Track 7 (15:21.776 in new aup)",
+      "use_logo": false
+    },
+    "85": {
+      "anchor": "MysteryTrack8",
+      "artist": null,
+      "artwork": null,
+      "fields": {},
+      "kind": "mystery",
+      "master_begin_seconds": 25922.0,
+      "master_end_seconds": 26262.0,
+      "source": "rough",
+      "source_files": [
+        "d436-455.wav"
+      ],
+      "title": "Mystery Track 8",
+      "use_logo": false
+    },
+    "86": {
+      "anchor": "MysteryTrack9",
+      "artist": null,
+      "artwork": null,
+      "fields": {},
+      "kind": "mystery",
+      "master_begin_seconds": 26262.0,
+      "master_end_seconds": 26487.0,
+      "source": "rough",
+      "source_files": [
+        "d436-455.wav"
+      ],
+      "title": "Mystery Track 9",
+      "use_logo": false
+    },
+    "87": {
+      "anchor": "RiteSystem",
+      "artist": "System 7",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 26487.0,
+      "master_end_seconds": 26872.0,
+      "source": "rough",
+      "source_files": [
+        "d436-455.wav"
+      ],
+      "title": "Rite of Spring (Doc Scott Remix)",
+      "use_logo": false
+    },
+    "88": {
+      "anchor": "OmenMakai",
+      "artist": "Makai (vs. Nico)",
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 26872.0,
+      "master_end_seconds": 27143.0,
+      "source": "rough",
+      "source_files": [
+        "d436-455.wav"
+      ],
+      "title": "Omen (Director's Cut)",
+      "use_logo": false
+    },
+    "89": {
+      "anchor": "MysteryTrack10",
+      "artist": null,
+      "artwork": null,
+      "fields": {},
+      "kind": "mystery",
+      "master_begin_seconds": 27143.0,
+      "master_end_seconds": 27356.0,
+      "source": "rough",
+      "source_files": [
+        "d456-470.wav"
+      ],
+      "title": "Mystery Track 10",
+      "use_logo": false
+    },
+    "90": {
+      "anchor": "Home",
+      "artist": null,
+      "artwork": null,
+      "fields": {},
+      "master_begin_seconds": 27356.0,
+      "master_end_seconds": 27521.0,
+      "source": "rough",
+      "source_files": [
+        "d456-470.wav"
+      ],
+      "title": "Home (Jedi Knights Remix (Drowning In Time))",
+      "use_logo": false
+    },
+    "91": {
+      "anchor": "MysteryTrack11",
+      "artist": null,
+      "artwork": null,
+      "fields": {},
+      "kind": "mystery",
+      "master_begin_seconds": 27521.0,
+      "source": "rough",
+      "source_files": [
+        "d456-470.wav"
+      ],
+      "title": "Mystery Track 11",
       "use_logo": false
     }
   }
