@@ -41,6 +41,7 @@
         "spotify": "https://open.spotify.com/track/0fZTgg3myT66xokM5Z7Okt?si=fc78d3eba99a498a",
         "year": "1998"
       },
+      "master_end_seconds": 311.581,
       "master_seconds": 59.91,
       "source_files": [
         "d-25-005b.wav",
@@ -60,6 +61,7 @@
         "release": "Jamie Myerson – The Listen Project (1998, CD)",
         "year": "1998"
       },
+      "master_end_seconds": 586.754,
       "master_seconds": 303.949,
       "source_files": [
         "d-25-005b.wav",
@@ -97,6 +99,7 @@
         "release": "Jamie Myerson – The Listen Project (1998, CD)",
         "year": "1998"
       },
+      "master_end_seconds": 890.037,
       "master_seconds": 588.696,
       "source_files": [
         "d000-018.wav",
@@ -115,6 +118,7 @@
         "release": "Jamie Myerson – The Listen Project (1998, CD)",
         "year": "1998"
       },
+      "master_end_seconds": 1111.162,
       "master_seconds": 647.372,
       "source_files": [
         "d000-018.wav",
@@ -134,6 +138,7 @@
         "release": "Jamie Myerson – The Listen Project (1998, CD)",
         "year": "1998"
       },
+      "master_end_seconds": 1577.475,
       "master_seconds": 1102.848,
       "source_files": [
         "d000-018.wav",
@@ -172,6 +177,7 @@
         "spotify": "https://open.spotify.com/track/4x7N412NH6MlodXpKpETyO",
         "year": "1997"
       },
+      "master_end_seconds": 2140.404,
       "master_seconds": 1613.771,
       "source_files": [
         "d001-026b.wav",
@@ -190,6 +196,7 @@
         "release": "Tricky – Makes Me Wanna Die (1997, CD2, CD)",
         "year": "1997"
       },
+      "master_end_seconds": 2429.87,
       "master_seconds": 2134.772,
       "source_files": [
         "d019-040.wav",
@@ -210,6 +217,7 @@
         "spotify": "https://open.spotify.com/track/5INAC3IYcR4x9pp4XMDc7t",
         "year": "1997"
       },
+      "master_end_seconds": 2769.795,
       "master_seconds": 2420.48,
       "source_files": [
         "d019-040.wav",
@@ -231,6 +239,7 @@
         "release": "LTJ Bukem - Earth Volume Two",
         "year": "1997"
       },
+      "master_end_seconds": 3193.614,
       "master_seconds": 2762.348,
       "source_files": [
         "d026-073b.wav",
@@ -248,6 +257,7 @@
         "release": "Me'Shell NdegéOcello – Stay (1996, CD)",
         "year": "1996"
       },
+      "master_end_seconds": 3357.627,
       "master_seconds": 3153.363,
       "source_files": [
         "d026-073b.wav",
@@ -268,6 +278,7 @@
         "spotify": "https://open.spotify.com/track/4FawryquKj8Lh3Csj0ne58",
         "year": "1997"
       },
+      "master_end_seconds": 3988.614,
       "master_seconds": 3334.848,
       "source_files": [
         "d026-073b.wav",
@@ -287,6 +298,7 @@
         "release": "Various - No Categories: A Ubiquity Compilation",
         "spotify": "https://open.spotify.com/track/2p6ct0x7ojZISVVsYViV0g"
       },
+      "master_end_seconds": 4266.121,
       "master_seconds": 3960.022,
       "source_files": [
         "d026-073b.wav",
@@ -306,6 +318,7 @@
         "spotify": "https://open.spotify.com/track/1AsXX1fycUqDDdq22c03Fm",
         "year": "1997"
       },
+      "master_end_seconds": 4742.739,
       "master_seconds": 4255.272,
       "source_files": [
         "d026-073b.wav",
@@ -324,6 +337,7 @@
         "release": "Various - No Categories: A Ubiquity Compilation",
         "spotify": "https://open.spotify.com/track/3x5MorCXAUuoDSd6UI9o48"
       },
+      "master_end_seconds": 5174.737,
       "master_seconds": 4731.62,
       "source_files": [
         "d065-087.wav",
@@ -340,6 +354,7 @@
       "fields": {
         "release": "Various - Serialement Vôtre"
       },
+      "master_end_seconds": 5267.518,
       "master_seconds": 5058.848,
       "source_files": [
         "d065-087.wav",
@@ -358,6 +373,7 @@
       "fields": {
         "release": "Various - Serialement Vôtre"
       },
+      "master_end_seconds": 5509.515,
       "master_seconds": 5267.52,
       "source_files": [
         "d065-087.wav",
@@ -379,6 +395,7 @@
         "spotify": "https://open.spotify.com/track/3wrmgQYGLm76xZcPH6uNtX",
         "year": "1997"
       },
+      "master_end_seconds": 5698.193,
       "master_seconds": 5269.45,
       "source_files": [
         "d084-103b.wav",
@@ -396,6 +413,7 @@
         "release": "Callisto – The Paradigm EP (1997, Vinyl)",
         "spotify": "https://open.spotify.com/track/03PuhOxcqLscc2769QpKU1"
       },
+      "master_end_seconds": 6076.555,
       "master_seconds": 5693.32,
       "source_files": [
         "d084-103b.wav",
@@ -414,6 +432,7 @@
         "spotify": "https://open.spotify.com/track/2JSjcqsbBx4uUqLCrSY5nm",
         "year": "1997"
       },
+      "master_end_seconds": 6462.45,
       "master_seconds": 6070.578,
       "source_files": [
         "d084-103b.wav",
@@ -432,6 +451,7 @@
         "release": "Various - Shake The Bones",
         "youtube": "https://www.youtube.com/watch?v=1Qjvdx4TUr8"
       },
+      "master_end_seconds": 6672.288,
       "master_seconds": 6456.899,
       "source_files": [
         "d088-107.wav",
@@ -450,6 +470,7 @@
         "release": "Spring Heel Jack - Busy Curious Thirsty",
         "year": "1997"
       },
+      "master_end_seconds": 7016.672,
       "master_seconds": 6669.768,
       "source_files": [
         "d107-121b.wav",
@@ -469,6 +490,7 @@
         "spotify": "https://open.spotify.com/track/2cSjXwfKB59uTcEqaT82P6",
         "year": "1996"
       },
+      "master_end_seconds": 7341.641,
       "master_seconds": 7014.188,
       "source_files": [
         "d107-121b.wav",
@@ -506,6 +528,7 @@
         "release": "Spaceways - Trad",
         "spotify": "https://open.spotify.com/track/6MYDJmdKLwovYxSlYeVplf"
       },
+      "master_end_seconds": 7980.386,
       "master_seconds": 7675.757,
       "source_files": [
         "d122-144.wav",
@@ -522,6 +545,7 @@
         "release": "Rockers Hi-Fi – Mish Mash (1997, CD)",
         "spotify": "https://open.spotify.com/track/0KsRg4FYlRM2beAxlwP5r4"
       },
+      "master_end_seconds": 8275.205,
       "master_seconds": 7973.335,
       "source_files": [
         "d122-144.wav",
@@ -539,6 +563,7 @@
         "release": "Red Snapper - Prince Blimey",
         "spotify": "https://open.spotify.com/track/3HHeG4FwEYCgQfuHqHOduH"
       },
+      "master_end_seconds": 8658.113,
       "master_seconds": 8259.453,
       "source_files": [
         "d122-144.wav",
@@ -554,6 +579,7 @@
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
+      "master_end_seconds": 8681.834,
       "master_seconds": 8657.243,
       "source_files": [
         "d122-144.wav",
@@ -570,6 +596,7 @@
       "fields": {
         "release": "Various - Infinite Beat Vol. 1"
       },
+      "master_end_seconds": 9089.059,
       "master_seconds": 8681.834,
       "source_files": [
         "d126-145.wav",
@@ -588,6 +615,7 @@
         "release": "Various - Infinite Beat Vol. 1",
         "spotify": "https://open.spotify.com/track/390Sa6cSOITqIlQyz7zCCR"
       },
+      "master_end_seconds": 9426.569,
       "master_seconds": 9083.374,
       "source_files": [
         "d145-164b.wav",
@@ -602,6 +630,7 @@
       "fields": {
         "release": "Various - Infinite Beat Vol. 1"
       },
+      "master_end_seconds": 9882.235,
       "master_seconds": 9424.643,
       "source_files": [
         "d145-164b.wav",
@@ -618,6 +647,7 @@
       "fields": {
         "release": "Various - Infinite Beat Vol. 1"
       },
+      "master_end_seconds": 10346.35,
       "master_seconds": 9877.211,
       "source_files": [
         "d145-164b.wav",
@@ -634,6 +664,7 @@
       "fields": {
         "release": "Various - Infinite Beat Vol. 1"
       },
+      "master_end_seconds": 10695.949,
       "master_seconds": 10340.178,
       "source_files": [
         "d165-186b.wav",
@@ -650,6 +681,7 @@
         "release": "Various - Infinite Beat Vol. 1",
         "spotify": "https://open.spotify.com/track/63yH8Ix9hndGVKMkAsIdVf"
       },
+      "master_end_seconds": 11182.177,
       "master_seconds": 10690.792,
       "source_files": [
         "d165-186b.wav",
@@ -667,6 +699,7 @@
       "fields": {
         "release": "Various - Infinite Beat Vol. 1"
       },
+      "master_end_seconds": 11717.023,
       "master_seconds": 11177.637,
       "source_files": [
         "d165-186b.wav",
@@ -682,6 +715,7 @@
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
+      "master_end_seconds": 11748.836,
       "master_seconds": 11714.748,
       "source_files": [
         "d-14Nov10-a.au",
@@ -696,6 +730,7 @@
       "fields": {
         "release": "Various - Ultra Mix Drum & Bass"
       },
+      "master_end_seconds": 11965.516,
       "master_seconds": 11748.836,
       "source_files": [
         "d-14Nov10-a.au",
@@ -712,6 +747,7 @@
         "release": "Various - Ultra Mix Drum & Bass",
         "spotify": "https://open.spotify.com/track/2CWmAxkuS2yIRnxO9tXGYD"
       },
+      "master_end_seconds": 12295.079,
       "master_seconds": 11964.971,
       "source_files": [
         "d-14Nov10-a.au",
@@ -725,6 +761,7 @@
       "artist": "Justin Tewn & Hunter A.D.",
       "artwork": null,
       "fields": {},
+      "master_end_seconds": 12713.459,
       "master_seconds": 12293.941,
       "source_files": [
         "d187-216b.wav",
@@ -740,6 +777,7 @@
         "apple": "https://music.apple.com/ie/album/waves-kid-loops-remix/109684573?i=109684508&uo=4",
         "spotify": "https://open.spotify.com/track/46ZOCGsw1gCCVLQQQSZbSP"
       },
+      "master_end_seconds": 13018.456,
       "master_seconds": 12713.248,
       "source_files": [
         "d187-216b.wav",
@@ -757,6 +795,7 @@
         "apple": "https://music.apple.com/ie/album/retro/119057801?i=119057793&uo=4",
         "spotify": "https://open.spotify.com/track/07W1YALP8xTvUbWK9CS7i9"
       },
+      "master_end_seconds": 13494.019,
       "master_seconds": 13017.461,
       "source_files": [
         "d187-216b.wav",
@@ -775,6 +814,7 @@
         "apple": "https://music.apple.com/ie/album/its-all-gone-sideways/1822736342?i=1822736360&uo=4",
         "spotify": "https://open.spotify.com/track/1WqEyLO6FFIr5PLlzKmEhG"
       },
+      "master_end_seconds": 13785.454,
       "master_seconds": 13485.922,
       "source_files": [
         "dnb-14Nov02-b.au",
@@ -792,6 +832,7 @@
         "apple": "https://music.apple.com/ie/album/the-beckoning/292438381?i=292438383&uo=4",
         "spotify": "https://open.spotify.com/track/2kMrfYnqAgYnIgPDqZ5icE"
       },
+      "master_end_seconds": 14115.314,
       "master_seconds": 13784.821,
       "source_files": [
         "dnb-14Nov02-b.au",
@@ -806,6 +847,7 @@
       "artist": "Alpha Omega",
       "artwork": null,
       "fields": {},
+      "master_end_seconds": 14527.804,
       "master_seconds": 14115.278,
       "source_files": [
         "dnb-14Nov02-b.au",
@@ -822,6 +864,7 @@
       "artist": "Downpour",
       "artwork": null,
       "fields": {},
+      "master_end_seconds": 14699.005,
       "master_seconds": 14521.31,
       "source_files": [
         "d217-242.wav",
@@ -836,6 +879,7 @@
       "artist": "G-Money",
       "artwork": null,
       "fields": {},
+      "master_end_seconds": 15153.328,
       "master_seconds": 14699.005,
       "source_files": [
         "d228-247.wav",
@@ -850,6 +894,7 @@
       "artist": "DJ 3D",
       "artwork": null,
       "fields": {},
+      "master_end_seconds": 15510.677,
       "master_seconds": 15152.075,
       "source_files": [
         "d-14Nov10-d.au",
@@ -863,6 +908,7 @@
       "artist": "E-Sassin",
       "artwork": null,
       "fields": {},
+      "master_end_seconds": 15846.818,
       "master_seconds": 15510.677,
       "source_files": [
         "d-14Nov10-d.au",
@@ -877,6 +923,7 @@
       "artist": "B-Boy 3000",
       "artwork": null,
       "fields": {},
+      "master_end_seconds": 16100.556,
       "master_seconds": 15839.956,
       "source_files": [
         "d242-268.wav",
@@ -891,6 +938,7 @@
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
+      "master_end_seconds": 16120.923,
       "master_seconds": 16096.484,
       "source_files": [
         "d242-268.wav",
@@ -908,6 +956,7 @@
         "apple": "https://music.apple.com/ie/album/dreams-of-heaven/1884390532?i=1884390533&uo=4",
         "spotify": "https://open.spotify.com/track/4GK0WHo63fjFd1RDNKM7W1"
       },
+      "master_end_seconds": 16490.155,
       "master_seconds": 16120.923,
       "source_files": [
         "d-14Nov10-e.au",
@@ -922,6 +971,7 @@
       "artist": "John B",
       "artwork": null,
       "fields": {},
+      "master_end_seconds": 17026.797,
       "master_seconds": 16487.65,
       "source_files": [
         "d-14Nov10-e.au",
@@ -939,6 +989,7 @@
         "apple": "https://music.apple.com/ie/album/grey-odyssey/1884390532?i=1884390535&uo=4",
         "spotify": "https://open.spotify.com/track/3M2TPesh5eS02Pz4GeGVEp"
       },
+      "master_end_seconds": 17395.914,
       "master_seconds": 17021.016,
       "source_files": [
         "d-14Nov10-e.au",
@@ -956,6 +1007,7 @@
       "fields": {
         "apple": "https://music.apple.com/ie/album/mute/1884390532?i=1884390537&uo=4"
       },
+      "master_end_seconds": 17657.316,
       "master_seconds": 17390.149,
       "source_files": [
         "d276-293b.wav",
@@ -972,6 +1024,7 @@
         "apple": "https://music.apple.com/ie/album/deep-inside/1884390532?i=1884390538&uo=4",
         "spotify": "https://open.spotify.com/track/3PUvWk7RGnFyZXvP8gJkaN"
       },
+      "master_end_seconds": 18126.915,
       "master_seconds": 17653.042,
       "source_files": [
         "d-14Nov10-f.au",
@@ -987,6 +1040,7 @@
         "apple": "https://music.apple.com/ie/album/silver-blade/1884390532?i=1884390539&uo=4",
         "spotify": "https://open.spotify.com/track/4sv4d6ivzBMlekB3ai2dY7"
       },
+      "master_end_seconds": 18496.66,
       "master_seconds": 18124.508,
       "source_files": [
         "d-14Nov10-f.au",
@@ -1003,6 +1057,7 @@
         "apple": "https://music.apple.com/ie/album/locust/1884390532?i=1884390540&uo=4",
         "spotify": "https://open.spotify.com/track/2GtUptzwODui9yMfJMmGdT"
       },
+      "master_end_seconds": 19024.849,
       "master_seconds": 18493.708,
       "source_files": [
         "d288-307.wav",
@@ -1019,6 +1074,7 @@
         "apple": "https://music.apple.com/ie/album/warned/1884390532?i=1884390541&uo=4",
         "spotify": "https://open.spotify.com/track/0Wvax7062wdeSxzKzvD31f"
       },
+      "master_end_seconds": 19394.942,
       "master_seconds": 19022.707,
       "source_files": [
         "d308-327.wav",
@@ -1035,6 +1091,7 @@
         "apple": "https://music.apple.com/ie/album/still/696885634?i=696888469&uo=4",
         "spotify": "https://open.spotify.com/track/1pcB1FnnHXBe2qvYsRafYK"
       },
+      "master_end_seconds": 19867.952,
       "master_seconds": 19390.923,
       "source_files": [
         "d308-327.wav",
@@ -1051,6 +1108,7 @@
       "fields": {
         "spotify": "https://open.spotify.com/track/0hIFvmvRS6ot1VxRtM6DO7"
       },
+      "master_end_seconds": 20274.26,
       "master_seconds": 19864.709,
       "source_files": [
         "d316-335.wav",
@@ -1064,6 +1122,7 @@
       "artist": "Net Radio",
       "artwork": null,
       "fields": {},
+      "master_end_seconds": 20306.708,
       "master_seconds": 20272.589,
       "source_files": [
         "d328-342.wav"
@@ -1075,6 +1134,7 @@
       "artist": "Dr. Know",
       "artwork": null,
       "fields": {},
+      "master_end_seconds": 20677.26,
       "master_seconds": 20306.708,
       "source_files": [
         "d328-342.wav"

@@ -55,7 +55,11 @@ def read_label_rows():
                 seconds = parse_float(parts[0], None)
                 if seconds is None:
                     continue
-                rows.append({"path": str(path), "seconds": seconds, "text": parts[2].strip()})
+                # parts[1] is the Audacity region END column; for point labels it
+                # equals parts[0], for region labels (e.g. a `startNNN:` whose span
+                # runs to the track's mix-end) it is later.
+                rows.append({"path": str(path), "seconds": seconds,
+                             "end": parse_float(parts[1], None), "text": parts[2].strip()})
     return rows
 
 
@@ -174,10 +178,57 @@ def original_from_mp3(mp3_name):
 
 ID_ROW_RE = re.compile(r"^ID0*(\d+):", re.I)  # bare `IDNNN:` continuation marker
 
+# Track-end markers (all anchored at the start of the label text so that
+# forward-reference notes like `note d122-144: mix end: 027` — which describe a
+# DIFFERENT file — are excluded; only a row that IS the end marker matches).
+ORIG_END_RE = re.compile(r"^orig0*(\d+)\s+end:", re.I)     # `origNNN end: A`
+MIX_END_RE = re.compile(r"^mix\s+end:\s*0*(\d+)\b", re.I)  # `mix end: NNN`
+
+
+def compute_track_ends(label_rows, timeline, current_by_path):
+    """Per-track master END time, derived from the labels only.
+
+    A track's end is the LATEST master timestamp of any of its end markers:
+      - `origNNN end: <x>`  — end of original source NNN (a point label);
+      - `mix end: NNN`       — where track NNN's mix finished (a point label);
+      - `startNNN: ID: …`    — when that start row is a *region* label, its end
+                               column (col 1) is the track's mix-end directly.
+    Each marker's local offset is mapped to master time through the owning file's
+    window, exactly like the start rows. Returns {number: master_end_seconds}.
+    """
+    ends = {}
+
+    def master_of(path, local):
+        owning = current_by_path.get(path) or owning_file_for_label_path(path)
+        start = (timeline.get(owning) or {}).get("master_start_seconds")
+        return start + local if start is not None else None
+
+    for row in label_rows:
+        text = row["text"]
+        markers = []  # (track_number, local_offset_seconds)
+        m = ORIG_END_RE.match(text)
+        if m:
+            markers.append((int(m.group(1)), row["seconds"]))
+        m = MIX_END_RE.match(text)
+        if m:
+            markers.append((int(m.group(1)), row["seconds"]))
+        start = parse_label_track_id_text(text)
+        region_end = row.get("end")
+        if start and region_end is not None and region_end > row["seconds"] + 0.001:
+            markers.append((start[0], region_end))
+        for number, local in markers:
+            master = master_of(row["path"], local)
+            if master is None:
+                continue
+            if number not in ends or master > ends[number]:
+                ends[number] = master
+    return ends
+
 
 def parse_label_track_ids():
     label_rows = read_label_rows()
     timeline, current_by_path = parse_file_timeline(label_rows)
+    track_ends = compute_track_ends(label_rows, timeline, current_by_path)
 
     def owning_original_for(path):
         owning = current_by_path.get(path) or owning_file_for_label_path(path)
@@ -248,6 +299,15 @@ def parse_label_track_ids():
                 if s - 0.05 <= end and e + 0.05 >= master:  # window overlaps [master, end]
                     files.add(name)
         record["source_files"] = sorted(files, key=lambda n: (start_of.get(n) is None, start_of.get(n) or 0.0, n))
+        end = track_ends.get(record["track_number"])
+        # Keep an end only if it is after this track's start. An end that also
+        # overshoots the track-AFTER-next's start is almost always a duplicate-
+        # capture mis-pick (the same track tagged in a differently-positioned
+        # capture), so discard it and let the player fall back to the next start.
+        after_next = ordered[index + 2]["master_seconds"] if index + 2 < len(ordered) else None
+        bogus = end is not None and after_next is not None and end > after_next
+        record["master_end_seconds"] = end if (end is not None and master is not None
+                                               and end > master and not bogus) else None
 
     return result, conflicts
 
@@ -318,8 +378,17 @@ def main():
             entry["master_seconds"] = round(label["master_seconds"], 3)
         else:
             no_master.append(number)
+        # Label-derived per-track end (latest orig/mix-end or region-end marker).
+        # None when no end marker resolves yet — the player then falls back to the
+        # next track's start (contiguous), so a missing end never invents a gap.
+        if label.get("master_end_seconds") is not None:
+            entry["master_end_seconds"] = round(label["master_end_seconds"], 3)
+        else:
+            entry.pop("master_end_seconds", None)
 
-    print("identified tracks: %d  (added %d, filled title/artist %d)" % (len(ids), len(added), filled))
+    with_end = sum(1 for n in ids if ids[n].get("master_end_seconds") is not None)
+    print("identified tracks: %d  (added %d, filled title/artist %d, label-derived ends %d)"
+          % (len(ids), len(added), filled, with_end))
     if no_master:
         print("  WARN no master position: %s" % sorted(no_master))
     for n, f, have, lab in kept:

@@ -71,6 +71,72 @@ class LiveTests(unittest.TestCase):
         self.assertIn("d-14Nov10-c.au", ids[44]["source_files"])  # E-Z Rollers - Retro
 
 
+class ComputeTrackEndsTests(unittest.TestCase):
+    """master_end_seconds is the LATEST master timestamp of a track's end markers
+    (`origNNN end:`, `mix end: NNN`, or a `startNNN:` region-end), with forward-
+    reference notes excluded."""
+
+    PATH = "/x/fileA.labels.tsv"
+    TIMELINE = {"fileA.mp3": {"master_start_seconds": 1000.0, "master_end_seconds": 2000.0}}
+
+    def _ends(self, rows):
+        rows = [{"path": self.PATH, "seconds": s, "end": e, "text": t} for s, e, t in rows]
+        return b.compute_track_ends(rows, self.TIMELINE, {self.PATH: "fileA.mp3"})
+
+    def test_orig_and_mix_end_take_the_latest(self):
+        ends = self._ends([(50.0, 50.0, "orig005 end: A"),
+                           (60.0, 60.0, "mix end: 005")])
+        self.assertAlmostEqual(ends[5], 1060.0)  # latest marker wins
+
+    def test_region_end_uses_the_end_column(self):
+        ends = self._ends([(10.0, 70.0, "start005: ID: Artist - Title")])
+        self.assertAlmostEqual(ends[5], 1070.0)  # 1000 + col1 (70), not col0 (10)
+
+    def test_point_start_row_is_not_a_region_end(self):
+        # A start row whose end column equals its start (a point label) contributes
+        # no end (only its start position matters, handled elsewhere).
+        self.assertEqual(self._ends([(10.0, 10.0, "start005: ID: Artist - Title")]), {})
+
+    def test_forward_reference_note_is_excluded(self):
+        # `note d122-144: mix end: 027` describes a DIFFERENT file; it must not set
+        # track 27's end. Only an anchored `mix end:`/`origNNN end:` row counts.
+        ends = self._ends([(60.0, 60.0, "mix end: 027"),
+                           (99999.0, 99999.0, "note d122-144: mix end: 027 (but no sigh)")])
+        self.assertAlmostEqual(ends[27], 1060.0)
+
+    def test_zero_padded_numbers(self):
+        ends = self._ends([(40.0, 40.0, "orig008 end: A")])
+        self.assertIn(8, ends)
+
+
+@unittest.skipUnless((REPO / "labels").is_dir(), "labels/ unavailable")
+class LiveEndTests(unittest.TestCase):
+    def test_most_tracks_get_a_label_derived_end(self):
+        ids, _ = b.parse_label_track_ids()
+        with_end = [n for n, r in ids.items() if r.get("master_end_seconds") is not None]
+        self.assertGreaterEqual(len(with_end), 55)
+
+    def test_track_ends_after_it_starts(self):
+        ids, _ = b.parse_label_track_ids()
+        for n, r in ids.items():
+            end, start = r.get("master_end_seconds"), r.get("master_seconds")
+            if end is not None and start is not None:
+                self.assertGreater(end, start, "track %s end before start" % n)
+
+    def test_no_end_overshoots_the_track_after_next(self):
+        # The duplicate-capture sanity guard: no end may exceed the start of the
+        # track two positions later (that signalled a mis-picked duplicate).
+        ids, _ = b.parse_label_track_ids()
+        ordered = sorted((r for r in ids.values() if r.get("master_seconds") is not None),
+                         key=lambda r: r["master_seconds"])
+        for i, r in enumerate(ordered):
+            end = r.get("master_end_seconds")
+            if end is None or i + 2 >= len(ordered):
+                continue
+            self.assertLessEqual(end, ordered[i + 2]["master_seconds"],
+                                 "track %s end overshoots track-after-next" % r["track_number"])
+
+
 class SavePreservesAlbumsTests(unittest.TestCase):
     """save() must round-trip the schema-v2 `albums` map (and any other top-level
     keys), so a --seed regenerate never drops the player's album curation."""
