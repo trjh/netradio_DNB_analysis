@@ -123,18 +123,44 @@ class LiveEndTests(unittest.TestCase):
             if end is not None and start is not None:
                 self.assertGreater(end, start, "track %s end before start" % n)
 
-    def test_no_end_overshoots_the_track_after_next(self):
-        # The duplicate-capture sanity guard: no end may exceed the start of the
-        # track two positions later (that signalled a mis-picked duplicate).
+    def test_segments_do_not_overlap_the_next_track(self):
+        # Definitive non-overlapping segments: every end is clamped to the next
+        # track's begin, so master_end_seconds[n] <= master_seconds[n+1] always.
         ids, _ = b.parse_label_track_ids()
         ordered = sorted((r for r in ids.values() if r.get("master_seconds") is not None),
                          key=lambda r: r["master_seconds"])
-        for i, r in enumerate(ordered):
+        for i, r in enumerate(ordered[:-1]):
             end = r.get("master_end_seconds")
-            if end is None or i + 2 >= len(ordered):
+            if end is None:
                 continue
-            self.assertLessEqual(end, ordered[i + 2]["master_seconds"],
-                                 "track %s end overshoots track-after-next" % r["track_number"])
+            self.assertLessEqual(end, ordered[i + 1]["master_seconds"] + 1e-6,
+                                 "track %s end overlaps the next track" % r["track_number"])
+
+    def test_overlapping_end_is_clamped_to_next_begin(self):
+        # Track 3's raw label end (~311.6) runs past track 4's begin (~303.9); the
+        # written end must be clamped to track 4's begin, not the raw musical end.
+        ids, _ = b.parse_label_track_ids()
+        self.assertAlmostEqual(ids[3]["master_end_seconds"], ids[4]["master_seconds"], places=2)
+
+    def test_output_writes_master_begin_seconds_with_alias(self):
+        # The written JSON carries master_begin_seconds (canonical) plus the
+        # deprecated master_seconds alias with the same value.
+        import json
+        import sys
+        import tempfile
+        out = tempfile.mktemp(suffix=".json")
+        argv = sys.argv
+        sys.argv = ["build_track_metadata.py", "--out", out]
+        try:
+            b.main()
+            data = json.load(open(out, encoding="utf-8"))
+        finally:
+            sys.argv = argv
+            if os.path.exists(out):
+                os.remove(out)
+        t3 = data["tracks"]["3"]
+        self.assertIn("master_begin_seconds", t3)
+        self.assertEqual(t3["master_begin_seconds"], t3["master_seconds"])
 
 
 class SavePreservesAlbumsTests(unittest.TestCase):

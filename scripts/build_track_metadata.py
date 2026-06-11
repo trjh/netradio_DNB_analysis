@@ -299,15 +299,19 @@ def parse_label_track_ids():
                 if s - 0.05 <= end and e + 0.05 >= master:  # window overlaps [master, end]
                     files.add(name)
         record["source_files"] = sorted(files, key=lambda n: (start_of.get(n) is None, start_of.get(n) or 0.0, n))
+        # Definitive, NON-OVERLAPPING segment end: the label-derived end CLAMPED to
+        # the next track's start, so master_end_seconds[n] is never past the next
+        # track's begin. The player switches track info at one unambiguous boundary;
+        # a genuine labelled gap (end < next begin) stays a gap → a future
+        # "Unidentified"/Mystery segment. Clamping also neutralises duplicate-capture
+        # phantom ends (e.g. #27, which over-ran by ~9 min). The track's TRUE musical
+        # extent — which legitimately overlaps the next track — is a separate future
+        # "individual play" start/stop field, not this one.
         end = track_ends.get(record["track_number"])
-        # Keep an end only if it is after this track's start. An end that also
-        # overshoots the track-AFTER-next's start is almost always a duplicate-
-        # capture mis-pick (the same track tagged in a differently-positioned
-        # capture), so discard it and let the player fall back to the next start.
-        after_next = ordered[index + 2]["master_seconds"] if index + 2 < len(ordered) else None
-        bogus = end is not None and after_next is not None and end > after_next
-        record["master_end_seconds"] = end if (end is not None and master is not None
-                                               and end > master and not bogus) else None
+        if end is not None and master is not None and end > master:
+            record["master_end_seconds"] = min(end, nxt) if nxt is not None else end
+        else:
+            record["master_end_seconds"] = None
 
     return result, conflicts
 
@@ -375,12 +379,16 @@ def main():
         entry["source_files"] = label["source_files"]  # original capture files (.wav/.au)
         entry.pop("source_file", None)  # supersede the earlier singular field
         if label["master_seconds"] is not None:
-            entry["master_seconds"] = round(label["master_seconds"], 3)
+            begin = round(label["master_seconds"], 3)
+            entry["master_begin_seconds"] = begin
+            # Deprecated alias of master_begin_seconds, kept so the mirrored player
+            # (which still reads master_seconds) doesn't break before it migrates.
+            entry["master_seconds"] = begin
         else:
             no_master.append(number)
-        # Label-derived per-track end (latest orig/mix-end or region-end marker).
-        # None when no end marker resolves yet — the player then falls back to the
-        # next track's start (contiguous), so a missing end never invents a gap.
+        # Label-derived per-track end, clamped to the next begin (see Pass 2). None
+        # when no end marker resolves yet — the player then falls back to the next
+        # track's start (contiguous), so a missing end never invents a gap.
         if label.get("master_end_seconds") is not None:
             entry["master_end_seconds"] = round(label["master_end_seconds"], 3)
         else:
