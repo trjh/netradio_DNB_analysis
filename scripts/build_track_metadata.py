@@ -22,7 +22,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 LABELS_DIR = REPO / "labels"
 OUT_PATH = REPO / "track-metadata.json"
-SCHEMA = "netradio.track-metadata.v1"
+SCHEMA = "netradio.track-metadata.v2"
 
 
 def parse_float(value, default=None):
@@ -259,14 +259,25 @@ def _track_sort_key(key):
         return (1, str(key))
 
 
+def _ordered(entries):
+    out = {}
+    for key in sorted(entries, key=_track_sort_key):
+        entry = entries[key]
+        out[key] = {k: (dict(sorted(entry[k].items())) if isinstance(entry[k], dict) else entry[k])
+                    for k in sorted(entry)}
+    return out
+
+
 def save(data, path):
-    tracks = data.get("tracks", {})
-    ordered = {}
-    for key in sorted(tracks, key=_track_sort_key):
-        entry = tracks[key]
-        ordered[key] = {k: (dict(sorted(entry[k].items())) if isinstance(entry[k], dict) else entry[k])
-                        for k in sorted(entry)}
-    out = {"schema": data.get("schema", SCHEMA), "tracks": ordered}
+    out = {"schema": data.get("schema", SCHEMA)}
+    # Preserve the schema-v2 album records (album-shared metadata + per-track
+    # `album` refs) — the player's curation flows back through --seed, so dropping
+    # `albums` here would lose every album cover/year/link on a regenerate.
+    if "albums" in data:
+        out["albums"] = _ordered(data.get("albums") or {})
+    out["tracks"] = _ordered(data.get("tracks", {}))
+    for key in data:  # carry forward any other top-level keys, untouched
+        out.setdefault(key, data[key])
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(out, handle, indent=2, ensure_ascii=False, sort_keys=False)
         handle.write("\n")
