@@ -70,8 +70,34 @@ PYTHONPATH=scripts python3 -m streamalign align d000-018 d001-026b
   median conf 0.991. Skip *positions* land ~2 s early (8 s-window edge) — magnitudes
   are exact; position refinement (narrow second pass within the bracket) is a TODO.
 
+### 2026-06-12 — P4 groundwork: blind alignment + overlap-graph discovery
+
+- `graph.py`: `blind_offset()` aligns two captures with NO seed (probe windows of
+  one, find them in the other) — validated to recover known offsets to ±1 sample,
+  and confidence cleanly separates overlap (~0.99) from none (~0.1).
+  `discover_overlaps()` blind-aligns candidate pairs (pruned by filename-range
+  proximity) and keeps the real overlaps; `connected_components()` finds islands.
+- **Key structural finding — the tail is disconnected islands.** Running discovery
+  over the tail-region captures + the placed boundary files:
+  - `d356-375`, `d376-395`, `d396-415` each **overlap nothing** (isolated 1200 s
+    tiles).
+  - `d416-435…d456-470` form one connected cluster (via the d425-444/d425-438b
+    bridges); `d465-484…d505-531b` form another. Neither connects to the anchor.
+  - The anchored component (`d328-342↔d336-355`) does **not** reach the tail.
+  - i.e. the tail captures **abut contiguously with no overlap at the boundaries**,
+    so there is no audio bridge from the master-anchored region into the tail.
+  **Consequence:** audio alignment can place files *within* an island precisely, but
+  the *absolute* master position of each island can't be recovered by alignment —
+  it needs the contiguity assumption (each island abuts the previous) or external
+  info. This is a decision point for Tim (were the tail captures recorded
+  back-to-back with no gaps?), flagged rather than assumed.
+
 ### Next
 
+- **P4 solve (validate first on the anchored overlapping region)** — propagate
+  blind/seeded offsets over the graph from `d000-018=0`; reproduce the hand
+  master-starts; then internally solve the tail islands and chain them by the
+  contiguity assumption (once Tim confirms it) with per-boundary uncertainty.
 - **P2 refinement** — narrow skip positions (binary search within the bracket);
   adaptive radius for large skips; auto-seed the walk (no hand offset) and derive
   the overlap region from file lengths so it runs on unlabelled files.

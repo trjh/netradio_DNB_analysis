@@ -12,7 +12,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
 
-from streamalign import align, audio, groundtruth, score, skips  # noqa: E402
+from streamalign import align, audio, graph, groundtruth, score, skips  # noqa: E402
 
 # Known hand values from TIMELINE_GUIDE / the labels (master_start seconds).
 SMOKE = {
@@ -101,6 +101,35 @@ class SkipDetectionTests(unittest.TestCase):
         got = sorted(round(s["delta_s"], 3) for s in r["skips"])
         for got_d, exp_d in zip(got, [0.672, 1.248, 1.248, 1.632]):
             self.assertAlmostEqual(got_d, exp_d, places=2)
+
+
+class GraphTests(unittest.TestCase):
+    def test_filename_range(self):
+        self.assertEqual(graph.filename_range("d356-375"), (356, 375))
+        self.assertEqual(graph.filename_range("d425-438b"), (425, 438))
+        self.assertIsNone(graph.filename_range("dnb-14Nov02-a"))
+
+    def test_candidate_pairs_prunes_distant(self):
+        stems = ["d356-375", "d376-395", "d505-524"]
+        pairs = graph.candidate_pairs(stems, max_gap_min=30)
+        self.assertIn(("d356-375", "d376-395"), pairs)
+        self.assertNotIn(("d356-375", "d505-524"), pairs)  # 149 min apart
+
+    def test_connected_components(self):
+        stems = ["a", "b", "c", "d"]
+        edges = [{"a": "a", "b": "b"}, {"a": "b", "b": "c"}]
+        comps = graph.connected_components(stems, edges)
+        self.assertEqual(comps[0], {"a", "b", "c"})
+        self.assertIn({"d"}, comps)
+
+    def test_blind_offset_known_pair(self):
+        if not _have_audio("d000-018", "d006-025"):
+            self.skipTest("audio/ffmpeg not available")
+        gt = groundtruth.resolve_starts()
+        off, conf = graph.blind_offset("d000-018", "d006-025")
+        expected = gt["d006-025"] - gt["d000-018"]
+        self.assertLess(abs(off - expected) * audio.SR, 16)
+        self.assertGreater(conf, 0.9)
 
 
 if __name__ == "__main__":
