@@ -172,6 +172,19 @@ class SolveTests(unittest.TestCase):
         pos = solve.solve_positions(edges, anchor="x")
         self.assertNotIn("orphan", pos)
 
+    def test_placement_diagnostics(self):
+        # y is corroborated by two agreeing edges; z is single-edge (uncorroborated).
+        pos = {"x": 0.0, "y": 10.0, "z": 30.0}
+        edges = [
+            {"a": "x", "b": "y", "offset_s": 10.0, "conf": 0.9},
+            {"a": "x", "b": "y", "offset_s": 10.02, "conf": 0.9},  # agrees (<0.1 s)
+            {"a": "y", "b": "z", "offset_s": 20.0, "conf": 0.9},
+        ]
+        diag = solve.placement_diagnostics(pos, edges)
+        self.assertTrue(diag["y"]["corroborated"])
+        self.assertFalse(diag["z"]["corroborated"])  # only one edge
+        self.assertEqual(diag["z"]["edges"], 1)
+
     def test_clean_region_solves_to_sub_ms(self):
         # The anchored clean overlap chain places files to ~1 sample. Use a small
         # known-clean edge set so loop/skip edges don't enter (those are the

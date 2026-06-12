@@ -84,6 +84,37 @@ def solve_from_verified(labels_dir=None, conf_min=0.7, anchor="d000-018"):
     return positions, edges
 
 
+def placement_diagnostics(positions, edges):
+    """Per-file reliability of a solve, from how its edges agree with the result.
+
+    For each placed file, look at every edge touching it and compare the measured
+    offset to the offset the solution implies; report the worst disagreement and the
+    edge count. A file placed via a single edge is **uncorroborated** (residual 0 by
+    construction — nothing cross-checks it, so a confident-but-wrong edge like the
+    loop/pre-roll d-25-005b case is invisible to this check); a file with redundant
+    edges and a small max residual is **corroborated**. Returns
+    {stem: {edges, max_residual_s, corroborated}}.
+    """
+    by_file = defaultdict(list)
+    for e in edges:
+        a, b = e["a"], e["b"]
+        if a in positions and b in positions:
+            resid = abs(e["offset_s"] - (positions[b] - positions[a]))
+            by_file[a].append(resid)
+            by_file[b].append(resid)
+    diag = {}
+    for stem in positions:
+        rs = by_file.get(stem, [])
+        max_resid = max(rs) if rs else None
+        diag[stem] = {
+            "edges": len(rs),
+            "max_residual_s": max_resid,
+            # corroborated == cross-checked by >1 edge AND consistent to <0.1 s
+            "corroborated": len(rs) > 1 and max_resid is not None and max_resid < 0.1,
+        }
+    return diag
+
+
 def _dedupe(pairs):
     seen, out = set(), []
     for a, b in pairs:

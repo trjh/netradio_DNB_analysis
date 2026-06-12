@@ -114,10 +114,17 @@ PYTHONPATH=scripts python3 -m streamalign align d000-018 d001-026b
   (redundant overlaps). That should both fix the ~1 s skip errors and catch the
   multi-match gross errors, and raise coverage beyond 19 files.
 
+- **Honesty pass:** `solve.placement_diagnostics()` flags each placed file as
+  *corroborated* (cross-checked by >1 agreeing edge) or *uncorroborated* (single
+  edge — nothing catches a confident-but-wrong edge). On the real solve: 12/19
+  corroborated; the gross `d-25-005b` error lands in the uncorroborated 5, so it's
+  flagged "trust less" rather than silently presented as a result.
+
 ### Next
 
-- **P4 robustness** — skip-aware edge measurement + consistency-based outlier
-  rejection (above); raise coverage on the labelled region toward all 55.
+- **P4 robustness** — skip-aware edge measurement (fix the ~1 s skip errors) +
+  consistency-based outlier *rejection* (auto-drop, beyond today's flagging);
+  multi-match needs the bounded-search idea. Raise coverage toward all 55.
 - **P2 refinement** — narrow skip positions (binary search within the bracket);
   adaptive radius for large skips; auto-seed the walk (no hand offset) and derive
   the overlap region from file lengths so it runs on unlabelled files.
