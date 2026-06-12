@@ -36,7 +36,7 @@ From the analysis repo (`scripts/` on the path), with the captures on disk:
 PYTHONPATH=scripts python3 -m streamalign groundtruth         # the hand answer key
 PYTHONPATH=scripts python3 -m streamalign align d000-018 d001-026b   # one pair + error
 PYTHONPATH=scripts python3 -m streamalign --labels <dir> validate    # align every hand pair, score
-PYTHONPATH=scripts python3 -m unittest discover -s tests      # 84 tests
+PYTHONPATH=scripts python3 -m unittest discover -s tests      # 85 tests
 ```
 
 Read order to understand it: `scripts/streamalign/README.md` (status) →

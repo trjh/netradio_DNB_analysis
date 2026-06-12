@@ -117,8 +117,9 @@ PYTHONPATH=scripts python3 -m streamalign align d000-018 d001-026b
 - **Honesty pass:** `solve.placement_diagnostics()` flags each placed file as
   *corroborated* (cross-checked by >1 agreeing edge) or *uncorroborated* (single
   edge — nothing catches a confident-but-wrong edge). On the real solve: 12/19
-  corroborated; the gross `d-25-005b` error lands in the uncorroborated 5, so it's
-  flagged "trust less" rather than silently presented as a result.
+  corroborated, 7 uncorroborated (5 of those single-edge); the gross `d-25-005b`
+  error is among the uncorroborated, so it's flagged "trust less" rather than
+  silently presented as a result.
 
 ### Next
 
