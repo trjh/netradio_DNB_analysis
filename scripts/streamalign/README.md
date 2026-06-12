@@ -96,12 +96,28 @@ PYTHONPATH=scripts python3 -m streamalign align d000-018 d001-026b
     is unknown**, and any contiguity assumption for placing isolated tail files is a
     decision for Tim (were the tail captures recorded back-to-back, no gaps?).
 
+### 2026-06-12 — P4 global solve (mechanism validated)
+
+- `solve.py`: `measure_edges()` aligns Tim's `verified` pairs with the precise
+  aligner (drops conf<0.7); `solve_positions()` propagates offsets from
+  `d000-018=0` by best-first (highest-confidence-path) BFS → absolute master starts.
+- **Validated vs ground truth:** of 19 files placed from the verified edges,
+  **11/19 match to ≤1 ms** (median 1.06 samples). The propagation mechanism is
+  sound. The errors are all from **edge measurement**, not the solve:
+  - gross error on `d-25-005b` (loop/pre-roll **multi-match** — `align_pair` locked
+    a confident WRONG offset);
+  - ~0.96 s on `d026-045`/`d041-064` (a **skip inside the overlap** — a single
+    global offset can't represent it).
+- **Conclusion:** the weak link is robust, skip-aware edge measurement. Next:
+  measure each edge with `characterise_overlap` (use the segment offset nearest the
+  file boundary) and reject inconsistent edges via `score.consistency_report`
+  (redundant overlaps). That should both fix the ~1 s skip errors and catch the
+  multi-match gross errors, and raise coverage beyond 19 files.
+
 ### Next
 
-- **P4 solve (validate first on the anchored overlapping region)** — propagate
-  blind/seeded offsets over the graph from `d000-018=0`; reproduce the hand
-  master-starts; then internally solve the tail islands and chain them by the
-  contiguity assumption (once Tim confirms it) with per-boundary uncertainty.
+- **P4 robustness** — skip-aware edge measurement + consistency-based outlier
+  rejection (above); raise coverage on the labelled region toward all 55.
 - **P2 refinement** — narrow skip positions (binary search within the bracket);
   adaptive radius for large skips; auto-seed the walk (no hand offset) and derive
   the overlap region from file lengths so it runs on unlabelled files.

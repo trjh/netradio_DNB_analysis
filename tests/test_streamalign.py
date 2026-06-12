@@ -12,7 +12,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
 
-from streamalign import align, audio, graph, groundtruth, score, skips  # noqa: E402
+from streamalign import align, audio, graph, groundtruth, score, skips, solve  # noqa: E402
 
 # Known hand values from TIMELINE_GUIDE / the labels (master_start seconds).
 SMOKE = {
@@ -143,6 +143,48 @@ class GraphTests(unittest.TestCase):
         _off, conf = graph.blind_offset("d065-087", "d084-103b")
         self.assertLess(conf, 0.8, "small-overlap limitation unexpectedly resolved "
                         "(conf=%.3f); update blind_offset scope + README" % conf)
+
+
+class SolveTests(unittest.TestCase):
+    def test_propagates_offsets_from_anchor(self):
+        edges = [
+            {"a": "x", "b": "y", "offset_s": 10.0, "conf": 0.99},
+            {"a": "y", "b": "z", "offset_s": 20.0, "conf": 0.99},
+        ]
+        pos = solve.solve_positions(edges, anchor="x", anchor_master=0.0)
+        self.assertAlmostEqual(pos["x"], 0.0)
+        self.assertAlmostEqual(pos["y"], 10.0)
+        self.assertAlmostEqual(pos["z"], 30.0)
+
+    def test_prefers_higher_confidence_path(self):
+        # y reachable from x directly (noisy, offset 99) or via the high-conf chain
+        # x->w->y (offsets 10 then 5 = 15). Best-first should take the clean path.
+        edges = [
+            {"a": "x", "b": "y", "offset_s": 99.0, "conf": 0.50},
+            {"a": "x", "b": "w", "offset_s": 10.0, "conf": 0.99},
+            {"a": "w", "b": "y", "offset_s": 5.0, "conf": 0.99},
+        ]
+        pos = solve.solve_positions(edges, anchor="x")
+        self.assertAlmostEqual(pos["y"], 15.0)
+
+    def test_unconnected_files_omitted(self):
+        edges = [{"a": "x", "b": "y", "offset_s": 1.0, "conf": 0.9}]
+        pos = solve.solve_positions(edges, anchor="x")
+        self.assertNotIn("orphan", pos)
+
+    def test_clean_region_solves_to_sub_ms(self):
+        # The anchored clean overlap chain places files to ~1 sample. Use a small
+        # known-clean edge set so loop/skip edges don't enter (those are the
+        # documented edge-measurement limits, validated separately).
+        if not _have_audio("d000-018", "d006-025", "d019-040"):
+            self.skipTest("audio/ffmpeg not available")
+        edges = solve.measure_edges(
+            [("d000-018", "d006-025"), ("d006-025", "d019-040")], conf_min=0.7)
+        pos = solve.solve_positions(edges, anchor="d000-018")
+        gt = groundtruth.resolve_starts()
+        for stem in ("d006-025", "d019-040"):
+            self.assertIn(stem, pos)
+            self.assertLess(abs(pos[stem] - gt[stem]) * audio.SR, 16)
 
 
 if __name__ == "__main__":
