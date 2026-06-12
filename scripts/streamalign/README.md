@@ -77,20 +77,24 @@ PYTHONPATH=scripts python3 -m streamalign align d000-018 d001-026b
   and confidence cleanly separates overlap (~0.99) from none (~0.1).
   `discover_overlaps()` blind-aligns candidate pairs (pruned by filename-range
   proximity) and keeps the real overlaps; `connected_components()` finds islands.
-- **Key structural finding — the tail is disconnected islands.** Running discovery
-  over the tail-region captures + the placed boundary files:
-  - `d356-375`, `d376-395`, `d396-415` each **overlap nothing** (isolated 1200 s
-    tiles).
-  - `d416-435…d456-470` form one connected cluster (via the d425-444/d425-438b
-    bridges); `d465-484…d505-531b` form another. Neither connects to the anchor.
-  - The anchored component (`d328-342↔d336-355`) does **not** reach the tail.
-  - i.e. the tail captures **abut contiguously with no overlap at the boundaries**,
-    so there is no audio bridge from the master-anchored region into the tail.
-  **Consequence:** audio alignment can place files *within* an island precisely, but
-  the *absolute* master position of each island can't be recovered by alignment —
-  it needs the contiguity assumption (each island abuts the previous) or external
-  info. This is a decision point for Tim (were the tail captures recorded
-  back-to-back with no gaps?), flagged rather than assumed.
+- **PRELIMINARY observation (NOT a proven conclusion).** Discovery over the
+  tail-region captures + the placed boundary suggested the tail splits into clusters
+  (`d416-435…d456-470`, `d465-484…d505-531b`) with `d356-375`/`d376-395`/`d396-415`
+  apparently isolated, none reaching the anchor. **But this cannot be trusted yet:**
+  `blind_offset` false-negatives on small and skip-heavy overlaps (see its docstring
+  and the limitation below), so an "isolated" file may simply have an overlap the
+  detector missed. The earlier wording ("the tail is disconnected islands") was an
+  overstatement — corrected here.
+  - **Open problem:** robust *blind* detection of small / skip-heavy overlaps.
+    Tried and rejected: decimated x-corr (aliases DnB highs), energy-envelope
+    correlation, and full-file PHAT — all fail on a 210 s overlap inside ~1300 s
+    files because the true peak doesn't dominate an unbounded search. Only a
+    *bounded* search near a known offset locks (which is why seeded
+    `characterise_overlap` works at conf 0.99 on the same pair). A real detector
+    likely needs a coarse prior (filename ranges give ±~5 min) to bound the search,
+    or a multi-peak / segmented strategy. **Until then, the tail's true connectivity
+    is unknown**, and any contiguity assumption for placing isolated tail files is a
+    decision for Tim (were the tail captures recorded back-to-back, no gaps?).
 
 ### Next
 

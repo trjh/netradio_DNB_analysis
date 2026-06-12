@@ -122,7 +122,8 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(comps[0], {"a", "b", "c"})
         self.assertIn({"d"}, comps)
 
-    def test_blind_offset_known_pair(self):
+    def test_blind_offset_clean_pair(self):
+        # Large, clean overlap: blind_offset locks to ±1 sample at high confidence.
         if not _have_audio("d000-018", "d006-025"):
             self.skipTest("audio/ffmpeg not available")
         gt = groundtruth.resolve_starts()
@@ -130,6 +131,18 @@ class GraphTests(unittest.TestCase):
         expected = gt["d006-025"] - gt["d000-018"]
         self.assertLess(abs(off - expected) * audio.SR, 16)
         self.assertGreater(conf, 0.9)
+
+    def test_blind_offset_small_overlap_limitation(self):
+        # Pins the documented limitation: blind_offset is UNRELIABLE on a small /
+        # skip-heavy overlap (d084-103b overlaps d065-087 over only ~210 s, with 4
+        # skips). It scores low here even though the files DO overlap, so callers
+        # must not treat a low score as "no overlap". If a future detector fixes
+        # this, update blind_offset's scope docs and this test together.
+        if not _have_audio("d065-087", "d084-103b"):
+            self.skipTest("audio/ffmpeg not available")
+        _off, conf = graph.blind_offset("d065-087", "d084-103b")
+        self.assertLess(conf, 0.8, "small-overlap limitation unexpectedly resolved "
+                        "(conf=%.3f); update blind_offset scope + README" % conf)
 
 
 if __name__ == "__main__":

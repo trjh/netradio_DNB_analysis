@@ -53,27 +53,38 @@ def find_window_in(probe, signal):
     return lag, ncc
 
 
-def blind_offset(a_name, b_name, win_s=20.0, probes=(0.1, 0.35, 0.6, 0.85),
-                 sr=_audio.SR):
-    """Offset between two captures with NO seed: probe windows of B, find in A.
+def blind_offset(a_name, b_name, win_s=20.0, n_probes=8, sr=_audio.SR):
+    """Seedless offset estimate: probe several windows of B, find them in A.
 
     Returns (offset_seconds, confidence). offset = master_start(b)-master_start(a)
-    (a[i] ~ b[i-offset]); confidence is the best probe's normalized correlation, so
-    a low value means "these don't overlap".
+    (a[i] ~ b[i-offset]); confidence is the best probe's normalized correlation.
+
+    SCOPE / RELIABILITY (important): this reliably finds **large, mostly-clean**
+    overlaps (confidence ~0.99) and reliably rejects non-overlaps (~0.1-0.3). It is
+    NOT a definitive overlap test: a **small overlap** (a short region of two long
+    files) or a **skip-heavy** overlap can score low (a 20 s probe rarely lands in a
+    clean sub-segment of a short overlap, and an unbounded full-file search does not
+    make the true — possibly quiet — peak dominate). Such pairs return low
+    confidence even though they DO overlap (e.g. d084-103b/d065-087 ≈ 0.6,
+    d086-105/d065-087 ≈ 0.1). So a low score means "no large clean overlap found",
+    not "no overlap". Robust detection of small/skip-heavy overlaps is unsolved —
+    see README. Use this for seeding, and prefer Tim's `verified` edges where they
+    exist.
     """
     a = _audio.load_audio(a_name)
     b = _audio.load_audio(b_name)
     win = int(win_s * sr)
+    if len(b) < win or len(a) < win:
+        return 0.0, 0.0
     best_off, best_ncc = 0.0, -1.0
-    for frac in probes:
-        p0 = int(frac * len(b))
-        p0 = max(0, min(p0, len(b) - win))
-        if len(b) < win:
-            break
-        ta, ncc = find_window_in(b[p0:p0 + win], a)
+    for i in range(n_probes):
+        # spread probes across B, away from the very edges
+        frac = (i + 0.5) / n_probes
+        p0 = max(0, min(int(frac * len(b)), len(b) - win))
+        lag, ncc = find_window_in(b[p0:p0 + win], a)
         if ncc > best_ncc:
             best_ncc = ncc
-            best_off = (ta - p0) / float(sr)
+            best_off = (lag - p0) / float(sr)
     return best_off, best_ncc
 
 
@@ -96,10 +107,16 @@ def candidate_pairs(stems, max_gap_min=30):
 
 
 def discover_overlaps(stems, conf_min=0.8, max_gap_min=30, win_s=20.0):
-    """Blind-align candidate pairs; keep edges that actually overlap.
+    """Blind-align candidate pairs; keep the ones that clearly overlap.
 
-    Returns (edges, skipped) where edges = [{a,b,offset_s,conf}] with conf>=conf_min
-    and skipped is the count of candidate pairs that didn't overlap.
+    Returns (edges, skipped) where edges = [{a,b,offset_s,conf}] with conf>=conf_min.
+
+    BEST-EFFORT, NOT COMPLETE: this finds large, mostly-clean overlaps and will
+    **miss small / skip-heavy ones** (see `blind_offset` scope). So a missing edge
+    does NOT prove two files don't overlap, and `connected_components()` over these
+    edges can show spurious islands from detector false-negatives — do not treat
+    component structure as ground truth. For the labelled region prefer Tim's
+    `alignment_edges()` (known-good overlap pairs).
     """
     edges = []
     skipped = 0
