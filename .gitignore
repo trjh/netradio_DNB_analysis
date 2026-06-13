@@ -49,3 +49,4 @@ AGENT.md
 __pycache__/
 *.pyc
 .context/
+.venv/

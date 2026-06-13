@@ -1,8 +1,19 @@
 """CLI for the stream alignment engine.
 
   python3 -m streamalign groundtruth
+      Prints each file's resolved hand master-start (seconds) and whether its audio
+      is present, then the file count. This is the answer key the engine is graded
+      against.
+
   python3 -m streamalign align d000-018 d001-026b
-  python3 -m streamalign validate            # align every hand-verified pair, score
+      Prints the measured offset (seconds + samples) and confidence for the pair;
+      if both are in the ground truth, also the expected offset and error in ms.
+
+  python3 -m streamalign validate
+      Aligns every hand-verified pair and prints a per-pair error table (error in
+      ms/samples, confidence), worst first, then a summary: median/max error, how
+      many fall within the pass tolerance, and pairs skipped for missing audio.
+      The headline "does the engine match Tim's hand work" check.
 
 Run from the repo's scripts/ dir or with scripts/ on PYTHONPATH.
 """

@@ -1,138 +1,93 @@
 # Stream Alignment Engine
 
 Reconstruct the netradio DNB master timeline by **audio analysis**: place every
-capture file on the master clock (precise, skip-resolved), validate against Tim's
-~55 hand alignments, then emit alignment labels for the captures not yet done by
-hand. See [`../../STREAM_PROVENANCE.md`](../../STREAM_PROVENANCE.md) for what the
-data is and what "master time" means, and the player repo's `TASKLIST.md`
-("Stream Alignment Engine") for the phase plan. For a function-by-function tour of
-how the pieces compose, see [`WALKTHROUGH.md`](./WALKTHROUGH.md).
+capture file on the master clock (precise, skip-resolved), validated against Tim's
+hand alignments, then emit alignment labels for the captures not yet done by hand.
+
+See [`../../STREAM_PROVENANCE.md`](../../STREAM_PROVENANCE.md) for what the data is
+and what "master time" means, and [`WALKTHROUGH.md`](./WALKTHROUGH.md) for a
+function-by-function tour of how the pieces compose.
 
 ## Design
 
-- **Stream-vs-stream is a pure time offset.** Over a skip-free overlap two captures
-  are the *same broadcast samples* (amplitude/noise aside) — no clock drift, no
-  polarity flip (those were original-track-vs-stream artifacts). Verified
-  empirically: hand-aligned pairs reconstruct at confidence 0.97–0.999.
+- **Stream-vs-stream is a pure time offset.** Over a skip-free overlap, two
+  captures are the *same broadcast samples* (amplitude and noise aside). Clock
+  drift and polarity inversion appear only between an *original track* and the
+  stream — never between two stream captures.
+- **The broadcast is a loop.** The captured programme is an ~9-hour loop. Two
+  capture files whose names start `d-<negative>-<n>` (e.g. `d-25-000b`,
+  `d-25-005b` — the leading `-` is a negative pre-roll) contain **both the end and
+  the beginning of the loop**. They therefore match other files at *two* offsets,
+  which any aligner has to expect (it is the cause of the loop/pre-roll
+  "multi-match" mis-locks).
 - **Skips are load-bearing.** A capture's local→master map is piecewise (slope 1,
-  with `+N`/`−N` jumps at "skip ahead/back N"), so `master_end = length + start +
-  Σ skips`, and a missed skip propagates downstream. The engine must find **every**
-  skip — there is no honest "rough master-start".
-- **No third-party audio deps.** ffmpeg decodes any container to float32 mono @
-  16 kHz; numpy does the FFTs. Decoded arrays are cached on disk.
+  with `+N`/`−N` jumps at "skip ahead/back N seconds"), so
+  `master_end = length + start + Σ skips`, and a missed skip propagates to every
+  file placed downstream. Skips must be found, not approximated away.
+- **No third-party audio deps in the core.** ffmpeg decodes any container to
+  float32 mono @ 16 kHz; numpy does the FFTs. Decoded arrays are cached on disk.
+  (Feature-based original-track↔mix work uses `librosa` in `.venv`; see
+  `requirements-streamalign.txt`.)
 
-## Modules
+## Modules — three roles
 
-| module | role |
-|---|---|
-| `audio.py` | ffmpeg → numpy loader (16 kHz mono), disk cache, file resolution |
-| `groundtruth.py` | resolve Tim's hand `file start sync` rows → `{stem: master_start}`; extract `verified` edges. Port of the player's trusted `parse_file_timeline`. |
-| `align.py` | pairwise alignment: decimated FFT cross-correlation (coarse) → GCC-PHAT (sub-sample) |
-| `score.py` | grade vs ground truth (pairwise / absolute) + redundant-overlap consistency |
-| `__main__.py` | CLI: `groundtruth`, `align A B`, `validate` |
+**1. Ground truth (the answer key).** `groundtruth.py` parses the label files for
+Tim's hand-measured alignments — the `file start sync` placements and the
+`verified` pairs — into `{stem: master_start}` and a list of known-overlapping
+pairs. This is the data everything else is graded against.
+
+**2. Find (measure from the audio).**
+- `audio.py` — ffmpeg→numpy loader (16 kHz mono), on-disk decode cache, file
+  resolution.
+- `align.py` — pairwise offset between two captures: decimated FFT
+  cross-correlation (coarse) → GCC-PHAT (sub-sample).
+- `skips.py` — walk an overlap window-by-window tracking the local offset; steps in
+  the offset track are skips (size + direction).
+- `graph.py` — blind (seedless) pairwise alignment + overlap-graph discovery.
+- `solve.py` — propagate pairwise offsets from the anchor (`d000-018 = 0`) into
+  absolute master positions, with per-file corroboration diagnostics.
+
+**3. Score (measure the finding vs the answer key).** `score.py` — pairwise and
+absolute error vs ground truth, plus redundant-overlap self-consistency.
+
+## Usage
 
 ```
-PYTHONPATH=scripts python3 -m streamalign --labels <dir> validate
+PYTHONPATH=scripts python3 -m streamalign groundtruth          # the hand answer key
 PYTHONPATH=scripts python3 -m streamalign align d000-018 d001-026b
+PYTHONPATH=scripts python3 -m streamalign --labels <dir> validate
 ```
 
-## Status / progress log
+- **`groundtruth`** — prints each file's resolved hand master-start (seconds) and
+  whether its audio is present, plus the file count. This is the table the engine
+  is graded against.
+- **`align A B`** — prints the measured offset (seconds + samples) and confidence
+  for the pair, and, if both are in the ground truth, the expected offset and the
+  error in ms.
+- **`validate`** — aligns every hand-verified pair and prints a per-pair error
+  table (error in ms / samples, confidence), worst first, then a summary (median /
+  max error, how many fall within the pass tolerance, and pairs skipped for missing
+  audio). This is the headline "does the engine match Tim's hand work" check.
 
-### 2026-06-11 — P0 + P1 (clean overlaps) working
+## Status (current)
 
-- **P0 ground truth:** `groundtruth.resolve_starts()` exactly matches the player's
-  trusted parser (55 files, 0 mismatches) incl. the chained `d336-355=19875.171`.
-- **P1 pairwise aligner:** on Tim's hand-verified pairs it reproduces the
-  alignments to **±1 sample** (median 0.18 samples; 41/57 within 1 ms),
-  confidence 0.97–0.999. ~0.4 s/pair.
-- **Outliers (16/57) — diagnosed, motivate P2:**
-  - *conf ≈ 0 (partial overlap):* e.g. `d066-085→d026-073b`. When the overlap is a
-    small fraction of a long file, the whole-file cross-correlation peak is swamped
-    → degenerate (≈2^26-sample) result.
-  - *high conf, wrong offset (multi-match):* e.g. `d-25-005b→d000-018` (+94 s, conf
-    0.996), `d228-247→d-14Nov10-c` (−62.7 s, conf 0.998). The pre-roll / loop-edge
-    captures genuinely match at **more than one** offset (the broadcast is a loop).
-  - **Lesson:** a single global offset is the wrong primitive. P2 moves to
-    **localized matched-filter alignment at a seed point, then walk outward
-    detecting skips** — which also directly yields the skip map.
+- **P0 ground truth** — resolves all hand placements; matches the player's trusted
+  parser exactly (55 files, 0 mismatches).
+- **P1 pairwise align** — reproduces hand alignments to ±1 sample on clean overlaps.
+- **P2 skip detection** — recovers documented skips with exact magnitudes
+  (positions ~2 s coarse; refinement pending).
+- **P4 discovery + global solve** — mechanism validated; `placement_diagnostics`
+  separates corroborated from uncorroborated placements.
 
-### 2026-06-12 — P2 skip detection working
+### Known limits (open work)
 
-- `skips.py`: walk the overlap window-by-window tracking the local offset; steps in
-  the offset track are skips. Key tuning learned empirically:
-  - **window ≥ 8 s** — DnB's periodic beat makes short (≤4 s) windows lock onto the
-    wrong beat (conf collapses); 8 s disambiguates (conf 0.99).
-  - **tight search radius (~3 s)** — because the offset is tracked continuously,
-    each skip step is small; a wide radius (≥12 s) invites wrong-beat false locks.
-    (Will widen adaptively for the rare large skip, e.g. the documented 10 s one.)
-- **Validated** against `d084-103b` vs `d065-087` (4 documented skips): recovered
-  all four with **exact magnitudes** (1.632, 0.672, 1.248, 1.248 s; sum 4.800),
-  median conf 0.991. Skip *positions* land ~2 s early (8 s-window edge) — magnitudes
-  are exact; position refinement (narrow second pass within the bracket) is a TODO.
+- Blind discovery of **small / skip-heavy overlaps** is unreliable; a low blind
+  confidence means "no large clean overlap found", not "no overlap".
+- Edge measurement still errs on **loop/pre-roll multi-match** (the loop-wrap files
+  above) and **skip-in-overlap** pairs; these are flagged by
+  `placement_diagnostics`, not yet fixed.
+- The unlabelled **tail** captures do not overlap the anchored region by enough for
+  blind alignment to bridge them; placing them needs either a robust small-overlap
+  detector or confirmation that they were recorded contiguously.
 
-### 2026-06-12 — P4 groundwork: blind alignment + overlap-graph discovery
-
-- `graph.py`: `blind_offset()` aligns two captures with NO seed (probe windows of
-  one, find them in the other) — validated to recover known offsets to ±1 sample,
-  and confidence cleanly separates overlap (~0.99) from none (~0.1).
-  `discover_overlaps()` blind-aligns candidate pairs (pruned by filename-range
-  proximity) and keeps the real overlaps; `connected_components()` finds islands.
-- **PRELIMINARY observation (NOT a proven conclusion).** Discovery over the
-  tail-region captures + the placed boundary suggested the tail splits into clusters
-  (`d416-435…d456-470`, `d465-484…d505-531b`) with `d356-375`/`d376-395`/`d396-415`
-  apparently isolated, none reaching the anchor. **But this cannot be trusted yet:**
-  `blind_offset` false-negatives on small and skip-heavy overlaps (see its docstring
-  and the limitation below), so an "isolated" file may simply have an overlap the
-  detector missed. The earlier wording ("the tail is disconnected islands") was an
-  overstatement — corrected here.
-  - **Open problem:** robust *blind* detection of small / skip-heavy overlaps.
-    Tried and rejected: decimated x-corr (aliases DnB highs), energy-envelope
-    correlation, and full-file PHAT — all fail on a 210 s overlap inside ~1300 s
-    files because the true peak doesn't dominate an unbounded search. Only a
-    *bounded* search near a known offset locks (which is why seeded
-    `characterise_overlap` works at conf 0.99 on the same pair). A real detector
-    likely needs a coarse prior (filename ranges give ±~5 min) to bound the search,
-    or a multi-peak / segmented strategy. **Until then, the tail's true connectivity
-    is unknown**, and any contiguity assumption for placing isolated tail files is a
-    decision for Tim (were the tail captures recorded back-to-back, no gaps?).
-
-### 2026-06-12 — P4 global solve (mechanism validated)
-
-- `solve.py`: `measure_edges()` aligns Tim's `verified` pairs with the precise
-  aligner (drops conf<0.7); `solve_positions()` propagates offsets from
-  `d000-018=0` by best-first (highest-confidence-path) BFS → absolute master starts.
-- **Validated vs ground truth:** of 19 files placed from the verified edges,
-  **11/19 match to ≤1 ms** (median 1.06 samples). The propagation mechanism is
-  sound. The errors are all from **edge measurement**, not the solve:
-  - gross error on `d-25-005b` (loop/pre-roll **multi-match** — `align_pair` locked
-    a confident WRONG offset);
-  - ~0.96 s on `d026-045`/`d041-064` (a **skip inside the overlap** — a single
-    global offset can't represent it).
-- **Conclusion:** the weak link is robust, skip-aware edge measurement. Next:
-  measure each edge with `characterise_overlap` (use the segment offset nearest the
-  file boundary) and reject inconsistent edges via `score.consistency_report`
-  (redundant overlaps). That should both fix the ~1 s skip errors and catch the
-  multi-match gross errors, and raise coverage beyond 19 files.
-
-- **Honesty pass:** `solve.placement_diagnostics()` flags each placed file as
-  *corroborated* (cross-checked by >1 agreeing edge) or *uncorroborated* (single
-  edge — nothing catches a confident-but-wrong edge). On the real solve: 12/19
-  corroborated, 7 uncorroborated (5 of those single-edge); the gross `d-25-005b`
-  error is among the uncorroborated, so it's flagged "trust less" rather than
-  silently presented as a result.
-
-### Next
-
-- **P4 robustness** — skip-aware edge measurement (fix the ~1 s skip errors) +
-  consistency-based outlier *rejection* (auto-drop, beyond today's flagging);
-  multi-match needs the bounded-search idea. Raise coverage toward all 55.
-- **P2 refinement** — narrow skip positions (binary search within the bracket);
-  adaptive radius for large skips; auto-seed the walk (no hand offset) and derive
-  the overlap region from file lengths so it runs on unlabelled files.
-- **P4** global graph solve anchored at `d000-018=0`, redundant-overlap cross-check;
-  produce skip-aware absolute master starts/ends for every file.
-- **P3** audio verification renderer (summed proof clips + inverted-null Audacity
-  label file). **P5** emit labels for the unlabelled tail.
-- **Future (Tim, 2026-06-11):** generalise the pairwise aligner to
-  original-track-vs-stream mapping — that case *does* have speed/drift and polarity,
-  so keep the primitive parameterisable (delay + rate + sign).
+Per-PR build narrative and validation numbers live in the PR descriptions, not here.
