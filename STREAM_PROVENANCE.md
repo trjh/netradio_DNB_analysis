@@ -1,4 +1,6 @@
 # Stream provenance — where these files came from, and what "master time" means
+**AI generated based on conversation**
+
 
 This explains how the netradio DNB capture files came to exist, why they overlap,
 why they contain skips, and — importantly for the [Stream Alignment Engine](#the-reconstruction-problem)
