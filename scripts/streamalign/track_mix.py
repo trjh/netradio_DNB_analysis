@@ -104,19 +104,30 @@ def track_sync_groundtruth(labels_dir=None):
     gt = {}
     for num, pairs in points.items():
         pairs = sorted(pairs, key=lambda p: p["orig_ts"])
-        by_label = {}
-        for p in pairs:
-            by_label.setdefault(p["label"], p)   # first pair per label
+        # A/B endpoints must come from the SAME file (a coherent original/mix
+        # segment): an A in one label file and a B in another are different sections
+        # and pairing them gives a meaningless rate. Compute an A/B rate per file.
+        by_file = {}
+        for p in pairs:   # pairs sorted by orig_ts; last-wins keeps the later (e.g.
+            by_file.setdefault(p["file"], {})[p["label"]] = p   # post-skip) A/B point
+        seg_rates = []
+        for fn, lab in by_file.items():
+            a, b = lab.get("A"), lab.get("B")
+            if a and b and abs(b["orig_ts"] - a["orig_ts"]) > 1e-3:
+                seg_rates.append({"file": fn,
+                                  "rate": (b["track_ts"] - a["track_ts"])
+                                          / (b["orig_ts"] - a["orig_ts"])})
         rate, method = None, None
-        a, b = by_label.get("A"), by_label.get("B")
-        if a and b and abs(b["orig_ts"] - a["orig_ts"]) > 1e-3:
-            rate = (b["track_ts"] - a["track_ts"]) / (b["orig_ts"] - a["orig_ts"])
-            method = "AB"
+        if len(seg_rates) == 1:
+            rate, method = seg_rates[0]["rate"], "AB"
+        elif len(seg_rates) > 1:
+            rate, method = float(np.median([s["rate"] for s in seg_rates])), "AB-multi"
         elif len(pairs) >= 2:
             o = np.array([p["orig_ts"] for p in pairs], dtype=float)
             t = np.array([p["track_ts"] for p in pairs], dtype=float)
             if o.max() - o.min() > 1e-3:
                 rate, method = float(np.polyfit(o, t, 1)[0]), "fit"
         gt[num] = {"pairs": pairs, "n": len(pairs), "rate": rate,
-                   "rate_method": method, "files": sorted({p["file"] for p in pairs})}
+                   "rate_method": method, "segment_rates": seg_rates,
+                   "files": sorted(by_file)}
     return gt

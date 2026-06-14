@@ -127,6 +127,23 @@ class TrackMixTests(unittest.TestCase):
         pts = track_mix.parse_sync_points(d)
         self.assertEqual(pts.get(65, []), [])  # the only candidate is inside a note
 
+    def test_AB_rate_is_per_file_not_cross_file(self):
+        # f1 has a coherent A/B (rate 1.0); f2 has a stray earlier B from another
+        # section. The rate must come from f1's A/B, never f1.A paired with f2.B.
+        import tempfile
+        d = tempfile.mkdtemp()
+        with open(os.path.join(d, "f1.labels.tsv"), "w") as f:
+            f.write("100.0\t100.0\torig047 sync: A\n")
+            f.write("101.0\t101.0\ttrack047 sync: A\n")
+            f.write("200.0\t200.0\torig047 sync: B\n")
+            f.write("201.0\t201.0\ttrack047 sync: B\n")  # f1: (201-101)/(200-100)=1.0
+        with open(os.path.join(d, "f2.labels.tsv"), "w") as f:
+            f.write("10.0\t10.0\torig047 sync: B\n")
+            f.write("99.0\t99.0\ttrack047 sync: B\n")     # stray earlier B, must be ignored
+        gt = track_mix.track_sync_groundtruth(d)
+        self.assertAlmostEqual(gt[47]["rate"], 1.0, places=4)
+        self.assertEqual(gt[47]["rate_method"], "AB")
+
     def test_rate_uses_AB_like_the_sheet(self):
         # track 015 lives in the committed d026-073b labels; rate must match the
         # sheet's (trackB-trackA)/(origB-origA), not a fit over all points.
