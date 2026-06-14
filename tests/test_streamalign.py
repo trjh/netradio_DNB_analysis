@@ -179,11 +179,11 @@ class TrackMixTests(unittest.TestCase):
         # 8 (empty mix, NaN slope) must each be rejected. No audio needed.
         import math
         cases = {            # (confidence, norm_cost, slope) -> expected reliable
-            8:  (0.0,     0.1400, math.nan),
-            10: (0.99846, 0.1960, 1.0),
-            13: (1.0,     0.0172, 1.00216),
-            16: (1.0,     0.0201, 1.01130),
-            23: (0.76887, 0.0530, 1.23228),
+            8:  (0.0,     0.0104, math.nan),   # empty mix -> NaN slope, fails finite
+            10: (0.99846, 0.0206, 1.0),        # degenerate slope -> fails confidence
+            13: (1.0,     0.0112, 1.00216),    # clean match within target
+            16: (1.0,     0.0130, 1.01130),    # clean match within target
+            23: (0.76887, 0.0498, 1.23228),    # wrong-match -> fails conf AND cost
         }
         expect = {8: False, 10: False, 13: True, 16: True, 23: False}
         for trk, (conf, cost, slope) in cases.items():
@@ -192,10 +192,10 @@ class TrackMixTests(unittest.TestCase):
 
     def test_chroma_dtw_recovers_rate_and_offset(self):
         # On a clean same-speed excerpt the warp path is a straight diagonal: rate ~1,
-        # offset ~where the excerpt starts, confidence high. (Pure-tone chroma cost
-        # runs higher than real music, so the absolute cost gate is unit-tested above,
-        # not here — here we check rate/offset recovery and that a real match scores a
-        # far lower cost than a noise mix.)
+        # offset ~where the excerpt starts, and the match is reliable. The excerpt ends
+        # mid-original (not at its last frame), so this is the regression for scoring
+        # `norm_cost` at the SELECTED subsequence endpoint rather than dist[-1, -1] —
+        # the latter inflated the cost and falsely flagged this clean match.
         try:
             import librosa  # noqa: F401
         except ImportError:
@@ -203,15 +203,17 @@ class TrackMixTests(unittest.TestCase):
         import numpy as np
         sr = track_mix._audio.SR
         orig = self._chroma_signal(12.0, sr)
-        mix = orig[int(2.0 * sr):int(10.0 * sr)]   # same speed, middle excerpt
+        mix = orig[int(2.0 * sr):int(10.0 * sr)]   # same speed, ends 2 s before orig end
         r = track_mix.chroma_dtw_rate(orig, mix, sr=sr, hop=512)
         self.assertAlmostEqual(r["rate"], 1.0, places=1)
         self.assertGreaterEqual(r["confidence"], track_mix._MIN_CONFIDENCE)
         self.assertAlmostEqual(r["offset_orig_s"], 2.0, delta=0.3)
+        self.assertTrue(r["reliable"])             # not falsely flagged by end-cost bug
         rng = np.random.default_rng(0)
         noise = rng.standard_normal(int(6.0 * sr)).astype("float32") * 0.1
         rn = track_mix.chroma_dtw_rate(orig, noise, sr=sr, hop=512)
         self.assertGreater(rn["norm_cost"], r["norm_cost"])   # noise matches worse
+        self.assertFalse(rn["reliable"])
 
 
 class GraphTests(unittest.TestCase):

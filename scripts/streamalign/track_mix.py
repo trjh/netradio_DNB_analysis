@@ -143,13 +143,15 @@ def track_sync_groundtruth(labels_dir=None):
 
 # Reliability gate (precision-first): a recovered rate is only trusted when the warp
 # path is BOTH straight (high R²) AND a good chroma match (low per-frame DTW cost).
-# Validated on tracks 8/10/13/16/23 against the sync ground truth: the two tracks
-# within target (13: err 0.0019, 16: err 6e-5) both clear conf≥0.9999 & cost≤0.03;
-# the three wrong/degenerate ones each fail one gate — track 23 (wrong-match) on
-# confidence (0.77), track 10 (degenerate slope=1.0) on cost (0.196), track 8 (empty
-# mix region) on both. Confidence alone is insufficient: a degenerate flat fit can
-# still score R²≈1, so the cost gate is load-bearing. Thresholds are heuristic (5
-# graded tracks) — widen the validation set before tightening them.
+# Validated on tracks 8/10/13/16/23 against the sync ground truth (norm_cost measured
+# at the selected subsequence endpoint): the two tracks within target (13: err 0.0019,
+# 16: err 6e-5) clear conf≥0.999 & cost≤0.03; the three wrong/degenerate ones each
+# fail a gate — track 23 (wrong-match) on both (conf 0.77, cost 0.050), track 10
+# (degenerate slope=1.0) on confidence (0.99846 < 0.999), track 8 (empty mix → NaN
+# slope) on the finite check. Both gates are load-bearing: confidence rejects the
+# degenerate flat fit (which still scores low cost), the cost gate rejects the
+# wrong-match. Thresholds are heuristic (5 graded tracks) — widen the validation set
+# before tightening them (track 10's 0.99846-vs-0.999 margin is the tightest).
 _MIN_CONFIDENCE = 0.999
 _MAX_NORM_COST = 0.03
 
@@ -194,7 +196,12 @@ def chroma_dtw_rate(orig, mix, sr=_audio.SR, hop=2048):
     pred = slope * x + intercept
     ss_tot = float(np.sum((y - y.mean()) ** 2))
     r2 = 1.0 - float(np.sum((y - pred) ** 2)) / ss_tot if ss_tot > 0 else 0.0
-    norm_cost = float(dist[-1, -1]) / max(1, n)
+    # Cost at the SELECTED subsequence endpoint, not dist[-1, -1]: subseq DTW lets the
+    # best match end before the original's last frame, so dist[-1, -1] scores aligning
+    # the excerpt to the END of the original — a different alignment than `wp` — which
+    # inflates the cost (and falsely flags) whenever the excerpt isn't end-aligned.
+    end_i, end_j = int(wp[-1, 0]), int(wp[-1, 1])
+    norm_cost = float(dist[end_i, end_j]) / max(1, n)
     return {"rate": float(slope), "offset_orig_s": float(wp[0, 1] * hop / sr),
             "confidence": r2, "norm_cost": norm_cost, "n_path": int(n),
             "reliable": is_reliable(r2, norm_cost, slope)}
