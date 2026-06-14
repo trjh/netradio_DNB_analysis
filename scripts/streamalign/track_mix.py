@@ -21,8 +21,11 @@ import numpy as np
 
 from . import groundtruth as _gt
 
-_ORIG_RE = re.compile(r"\borig(\d+)\s+sync:\s*(\S+)", re.I)
-_TRACK_RE = re.compile(r"\btrack\s+sync:\s*(\S+)", re.I)
+# A primary sync row STARTS with `orig<NNN> sync:` or `track[<NNN>] sync:` (the
+# track number is optional — `track sync: L` and `track015 sync: L` both occur).
+# Anchored at the start so carried-forward note rows like `note d336-355: track
+# sync: 9` (which reference ANOTHER file) are NOT consumed as current-file pairs.
+_SYNC_RE = re.compile(r"^(orig|track)(\d*)\s+sync:\s*(\S+)", re.I)
 _MAX_PAIR_GAP_S = 30.0   # an orig/track pair must sit within this in the same file
 
 
@@ -58,18 +61,24 @@ def parse_sync_points(labels_dir=None):
     rows = _read_rows(labels_dir)
     origs, tracks = [], []
     for r in rows:
-        m = _ORIG_RE.search(r["text"])
-        if m:
-            origs.append({"num": int(m.group(1)), "label": m.group(2),
-                          "t": r["t"], "file": r["file"]})
+        m = _SYNC_RE.match(r["text"].strip())
+        if not m:
             continue
-        m = _TRACK_RE.search(r["text"])
-        if m:
-            tracks.append({"label": m.group(1), "t": r["t"], "file": r["file"]})
+        kind = m.group(1).lower()
+        num = int(m.group(2)) if m.group(2) else None
+        rec = {"num": num, "label": m.group(3), "t": r["t"], "file": r["file"]}
+        if kind == "orig":
+            if num is not None:   # an orig sync must name its track
+                origs.append(rec)
+        else:
+            tracks.append(rec)   # track sync; num may be explicit (trackNNN) or None
     out = {}
     for o in origs:
+        # a track row matches by label, same file; if it names a track number it
+        # must equal the orig's, otherwise (plain `track sync`) any number is ok.
         cands = [tk for tk in tracks
-                 if tk["file"] == o["file"] and tk["label"] == o["label"]]
+                 if tk["file"] == o["file"] and tk["label"] == o["label"]
+                 and (tk["num"] is None or tk["num"] == o["num"])]
         if not cands:
             continue
         best = min(cands, key=lambda tk: abs(tk["t"] - o["t"]))
@@ -82,21 +91,32 @@ def parse_sync_points(labels_dir=None):
 
 
 def track_sync_groundtruth(labels_dir=None):
-    """{track_num: {pairs, n, rate, files}} for tracks with >=1 sync pair.
+    """{track_num: {pairs, n, rate, rate_method, files}} for tracks with sync pairs.
 
-    `rate` = least-squares slope of track_ts vs orig_ts (mix seconds per original
-    second; ~1.0 means same speed, <1 slowed, >1 sped up). None with <2 pairs.
+    `rate` = mix seconds per original second (~1.0 same speed, <1 slowed, >1 sped
+    up). Computed from the designated **A and B** sync points the way the sheet does
+    (`(trackB − trackA) / (origB − origA)`, sheetscript/Code.js) when both exist;
+    otherwise (no A/B) a least-squares slope over all pairs as a fallback. The A/B
+    points are deliberate speed endpoints, so a fit over every point — which mixes
+    separate sections — is wrong; use A/B when present.
     """
     points = parse_sync_points(labels_dir)
     gt = {}
     for num, pairs in points.items():
         pairs = sorted(pairs, key=lambda p: p["orig_ts"])
-        rate = None
-        if len(pairs) >= 2:
+        by_label = {}
+        for p in pairs:
+            by_label.setdefault(p["label"], p)   # first pair per label
+        rate, method = None, None
+        a, b = by_label.get("A"), by_label.get("B")
+        if a and b and abs(b["orig_ts"] - a["orig_ts"]) > 1e-3:
+            rate = (b["track_ts"] - a["track_ts"]) / (b["orig_ts"] - a["orig_ts"])
+            method = "AB"
+        elif len(pairs) >= 2:
             o = np.array([p["orig_ts"] for p in pairs], dtype=float)
             t = np.array([p["track_ts"] for p in pairs], dtype=float)
             if o.max() - o.min() > 1e-3:
-                rate = float(np.polyfit(o, t, 1)[0])
+                rate, method = float(np.polyfit(o, t, 1)[0]), "fit"
         gt[num] = {"pairs": pairs, "n": len(pairs), "rate": rate,
-                   "files": sorted({p["file"] for p in pairs})}
+                   "rate_method": method, "files": sorted({p["file"] for p in pairs})}
     return gt
