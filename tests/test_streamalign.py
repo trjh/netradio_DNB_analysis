@@ -5,6 +5,7 @@ skip gracefully when the capture files / ffmpeg aren't present (they live on Tim
 disk, not in the repo).
 """
 
+import json
 import os
 import shutil
 import sys
@@ -12,7 +13,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
 
-from streamalign import align, audio, graph, groundtruth, score, skips, solve  # noqa: E402
+from streamalign import align, audio, clips, graph, groundtruth, score, skips, solve  # noqa: E402
 
 # Known hand values from TIMELINE_GUIDE / the labels (master_start seconds).
 SMOKE = {
@@ -143,6 +144,33 @@ class GraphTests(unittest.TestCase):
         _off, conf = graph.blind_offset("d065-087", "d084-103b")
         self.assertLess(conf, 0.8, "small-overlap limitation unexpectedly resolved "
                         "(conf=%.3f); update blind_offset scope + README" % conf)
+
+
+class ClipTests(unittest.TestCase):
+    def test_skip_ahead_clip_construction(self):
+        import numpy as np
+        sr = audio.SR
+        ref = np.sin(np.arange(int(60 * sr)) * 0.01).astype(float)
+        skp = ref.copy()  # content irrelevant for length/annotation checks
+        # skip-ahead 1s at skipper-local 20s; offset goes -5 -> -6 (more negative).
+        walk = ([(float(t), -5.0, 1.0) for t in range(10, 20)]
+                + [(float(t), -6.0, 1.0) for t in range(20, 30)])
+        skip = {"at_s": 20.0, "before_s": 19.0, "after_s": 21.0, "delta_s": -1.0}
+        made = clips.make_skip_clip(skp, ref, skip, walk, pad_s=2.0)
+        self.assertIsNotNone(made)
+        clip, ann = made
+        self.assertAlmostEqual(len(clip) / sr, 5.0, delta=0.2)  # pad + gap + pad
+        self.assertIn("AHEAD", " ".join(a["label"] for a in ann))
+
+    def test_manifest_append_dedups_by_id(self):
+        import tempfile
+        d = tempfile.mkdtemp()
+        clips._append_manifest(d, [{"id": "x", "audio": "x.mp3"}])
+        clips._append_manifest(d, [{"id": "x", "audio": "x2.mp3"}, {"id": "y", "audio": "y.mp3"}])
+        data = json.load(open(os.path.join(d, "manifest.json")))
+        by_id = {c["id"]: c for c in data["clips"]}
+        self.assertEqual(len(by_id), 2)
+        self.assertEqual(by_id["x"]["audio"], "x2.mp3")  # replaced, not duplicated
 
 
 class SolveTests(unittest.TestCase):
