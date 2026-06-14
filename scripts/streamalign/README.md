@@ -46,6 +46,8 @@ pairs. This is the data everything else is graded against.
 - `graph.py` — blind (seedless) pairwise alignment + overlap-graph discovery.
 - `solve.py` — propagate pairwise offsets from the anchor (`d000-018 = 0`) into
   absolute master positions, with per-file corroboration diagnostics.
+- `clips.py` — render skip-check review clips (A+B across a skip, B bridging the
+  gap) into the clip player's `manifest.json` for Tim to verify by ear.
 
 `track_mix.py` (original-track↔mix, G2) parses Tim's `origNNN`/`track` sync points
 into per-track ground truth (the **rate** = mix-seconds per original-second) that
@@ -87,8 +89,9 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix \
 - **P1 pairwise align** — reproduces hand alignments to ±1 sample on clean overlaps.
 - **P2 skip detection** — recovers documented skips with exact magnitudes
   (positions ~2 s coarse; refinement pending).
-- **P4 discovery + global solve** — mechanism validated; `placement_diagnostics`
-  separates corroborated from uncorroborated placements.
+- **P4 discovery + global solve** — skip-aware edge measurement (offset over the
+  earliest skip-free segment) + consistency-based outlier rejection;
+  `placement_diagnostics` separates corroborated from uncorroborated placements.
 - **G2 / T1 original-track↔mix rate** — chroma + subsequence-DTW recovers the
   mix/original rate where waveform correlation cannot, with a **precision-first
   reliability gate** (`is_reliable`: warp-path R² ≥ 0.999 **and** mean DTW cost ≤
