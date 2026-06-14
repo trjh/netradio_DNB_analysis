@@ -90,3 +90,36 @@ Append-only record of the autonomous choices/assumptions I make while running
 - **Open / needs Tim:** (1) tail contiguity confirmation to unblock G3 + tail
   placement; (2) G1 AUTO GENERATED labels.tsv emission still pending (also gated on
   tail placement for the unlabelled tail recordings).
+
+## 2026-06-14 — Tim approved all 3 unblocked efforts; sourcing done, G3 doubly blocked
+
+Tim (via the checkpoint questions): will check tail contiguity himself (now the
+NEXT_STEPS headline); approved **all three** of sourcing-sweep + AcoustID + G2-2nd-pass.
+
+- **G4 pass-2 sourcing sweep — DONE.** Ran a 50-agent Workflow (one research agent per
+  identified gap, WebSearch over Discogs/Bandcamp/Juno/streaming) → 50 dossiers in
+  `data/sourcing/` + index, **PR #18**. Breakdown: 31 buy-digital, 11 buy-physical→rip,
+  5 streaming-only, 3 not-applicable (Net Radio promos); zero "no source". Decision:
+  Workflow IS the right tool here (agent-judgment fan-out), unlike the numeric T2 batch.
+  Caveat documented: confidence is the agents' — Tim must verify the exact version
+  (remix traps, e.g. 035 Decoder only-the-2013-remix-is-digital).
+- **AcoustID on track 67 — BLOCKED on a valid key.** Built+proved the pipeline
+  (extract mix region → `fpcalc -json` → POST acoustid lookup; request well-formed).
+  The provided key `vR4IuLRX` returns `{"error":code 4,"invalid API key"}` — it's not a
+  valid **application** key for lookups. Needs Tim to register an app key + replace
+  `.env`. (Also only track 67 is fingerprintable; the other 8 are in the unplaced tail.)
+- **G2 2nd pass — diagnosed, NOT piecewise.** For the 3 reliable-but-rate-disagrees
+  tracks (8,10,19), per-quarter warp slopes are CONSTANT within each track (8≈0.996,
+  10≈1.003, 19≈1.000) — so DJ piecewise-edit modeling won't help. The AB hand-gt spans
+  are large (208–421 s) so the gt isn't fragile → these are likely wrong-section chroma
+  locks (or genuine disagreements) that need an **ear-check**, per the loop rule. Logged
+  as a finding rather than over-built; the aligner is otherwise correct (15/26 within
+  strict tol). Next if wanted: orig-vs-mix review clips for 8/10/19.
+- **INCIDENT — `brew install chromaprint` broke the analysis venv.** It pulled in
+  python@3.14 and removed the python@3.13 keg the `.venv` symlinks to. Fixed with
+  `brew install python@3.13` (restored the interpreter; venv imports numpy/librosa/scipy
+  again). Lesson: brew installs can disturb the venv's base python — verify the venv
+  after any brew install.
+- **Net state:** G2 (PR #16) + G4 pass-1 (PR #17) + G4 pass-2 (PR #18) open. Top
+  remaining work (G3 mystery IDs, G1 tail labels, full timeline) is blocked on Tim:
+  (1) tail contiguity, (2) a valid AcoustID application key.
