@@ -12,7 +12,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
 
-from streamalign import align, audio, graph, groundtruth, score, skips, solve  # noqa: E402
+from streamalign import align, audio, graph, groundtruth, score, skips, solve, track_mix  # noqa: E402
 
 # Known hand values from TIMELINE_GUIDE / the labels (master_start seconds).
 SMOKE = {
@@ -101,6 +101,32 @@ class SkipDetectionTests(unittest.TestCase):
         got = sorted(round(s["delta_s"], 3) for s in r["skips"])
         for got_d, exp_d in zip(got, [0.672, 1.248, 1.248, 1.632]):
             self.assertAlmostEqual(got_d, exp_d, places=2)
+
+
+class TrackMixTests(unittest.TestCase):
+    def test_pairs_orig_track_by_nearest_label(self):
+        import tempfile
+        d = tempfile.mkdtemp()
+        with open(os.path.join(d, "x.labels.tsv"), "w") as f:
+            f.write("10.0\t10.0\torig041 sync: 2\n")
+            f.write("11.0\t11.0\ttrack sync: 2\n")
+            f.write("20.0\t20.0\torig041 sync: 3\n")
+            f.write("22.0\t22.0\ttrack sync: 3\n")
+        pts = track_mix.parse_sync_points(d)
+        self.assertIn(41, pts)
+        self.assertEqual(len(pts[41]), 2)
+        gt = track_mix.track_sync_groundtruth(d)
+        # rate = d(track)/d(orig) = (22-11)/(20-10) = 1.1
+        self.assertAlmostEqual(gt[41]["rate"], 1.1, places=3)
+
+    def test_real_sync_rates_near_one(self):
+        gt = track_mix.track_sync_groundtruth()
+        if not gt:
+            self.skipTest("no sync points in the committed labels")
+        rates = [g["rate"] for g in gt.values() if g["rate"] is not None]
+        for r in rates:
+            self.assertGreater(r, 0.9, "implausible rate %.3f" % r)
+            self.assertLess(r, 1.1, "implausible rate %.3f" % r)
 
 
 class GraphTests(unittest.TestCase):

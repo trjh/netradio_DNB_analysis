@@ -47,6 +47,10 @@ pairs. This is the data everything else is graded against.
 - `solve.py` — propagate pairwise offsets from the anchor (`d000-018 = 0`) into
   absolute master positions, with per-file corroboration diagnostics.
 
+`track_mix.py` (original-track↔mix, G2) parses Tim's `origNNN`/`track` sync points
+into per-track ground truth (the **rate** = mix-seconds per original-second) that
+the chroma+DTW aligner is graded against.
+
 **3. Score (measure the finding vs the answer key).** `score.py` — pairwise and
 absolute error vs ground truth, plus redundant-overlap self-consistency.
 
