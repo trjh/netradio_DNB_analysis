@@ -114,9 +114,10 @@ acoustic-fingerprint lookup (settled OK), Whisper transcript of any vocal/spoken
 hook → search queries, and a chroma self-match against the source library as a
 backup. Output a dossier + clip per track for Tim.
 **Done when:** each missing track has a dossier with the best available leads.
-**Needs from Tim before G3:** an AcoustID API key (free, from acoustid.org) — I'll
-install `fpcalc`/chromaprint myself. Until the key exists I'll do everything except
-the AcoustID lookup and flag it.
+**AcoustID key:** provided and stored in the analysis repo's **gitignored `.env`**
+as `ACOUSTID_API_KEY` (read from env at runtime, never committed). Tim wants to
+**rotate it later** — replace the value in `.env` when he does. I'll install
+`fpcalc`/chromaprint myself.
 
 ---
 
