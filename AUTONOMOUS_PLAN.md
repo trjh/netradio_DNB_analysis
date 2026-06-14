@@ -25,8 +25,9 @@ at every decision (which is what limited the first overnight run).
 > prompt each wake-up.
 >
 > Goals, in order: **G0** clip review player → **G1** finish master-timeline
-> mapping → **G2** originals→mix mapping (1st then 2nd pass) → **G3** identify
-> missing tracks. Details in `AUTONOMOUS_PLAN.md`.
+> mapping (emit AUTO GENERATED labels.tsv for every un-labelled recording) → **G2**
+> originals→mix mapping (1st then 2nd pass) → **G3** identify missing tracks → **G4**
+> find missing original files + sources. Details in `AUTONOMOUS_PLAN.md`.
 
 ---
 
@@ -47,6 +48,9 @@ at every decision (which is what limited the first overnight run).
    the next goal rather than halting the loop.
 6. **Use a Workflow for fan-out.** Once a per-item method works (e.g. align one
    track), run the many-item version (all ~40 tracks) as a Workflow, not serially.
+7. **Every label I generate ends with " AUTO GENERATED".** Hard rule — it's how Tim
+   distinguishes and corrects my labels vs his hand work. Never overwrite a file Tim
+   already labelled; only create missing ones.
 
 ---
 
@@ -57,6 +61,8 @@ lightweight web page that plays **clips I generate**, each with:
 - a **rolling ~2 s timestamp window** with my **annotations** (e.g. "file
   transition", "skip ahead 1.248 s", "A solo → A+B → B solo"),
 - a **playback-position indicator** moving through that window,
+- a **seek slider** to scrub to any timestamp in the clip (per Tim),
+- a **variable playback-speed** control (per Tim),
 - the clip list with a one-line description each.
 
 Think "a tiny slice of what Audacity shows, without launching it." It indexes a
@@ -86,9 +92,18 @@ A small **standalone** page served by the player repo's stdlib http.server
    - *A skipped back* → split B at the skip and **rewind B** to the point A skipped
      back to; A and B continue together.
    15 s before the skip + 15 s after.
-6. **Emit** candidate `.labels.tsv` rows for the unlabelled tail (review diff).
-**Done when:** every reachable file placed with a skip map, validated where ground
-truth exists, with clips for the unverifiable boundaries.
+6. **Emit `labels.tsv` for every stream recording that doesn't already have one**
+   (the headline end goal). Use the label grammar documented in
+   `data/sheet/analysis notes.csv` (`file start sync`, `file end`, `startNNN: ID:
+   artist - trackname`, `file note`, skip notes, etc.), derived from the engine's
+   computed placement + skip map + the track timeline.
+   - **MANDATORY:** every label I generate **ends with the literal text
+     " AUTO GENERATED"** so Tim can tell mine from his hand labels and correct them.
+     This is a hard rule for all of G1's output (see Operating rules).
+   - Never overwrite a file Tim already hand-labelled; only create the missing ones.
+**Done when:** every stream recording without a hand label has an AUTO GENERATED
+`labels.tsv` (placement + skips), validated where ground truth exists, with
+skip-check clips for the unverifiable boundaries.
 
 ## G2 — Map originals → mix (1st pass, then 2nd pass)
 
@@ -119,6 +134,22 @@ as `ACOUSTID_API_KEY` (read from env at runtime, never committed). Tim wants to
 **rotate it later** — replace the value in `.env` when he does. I'll install
 `fpcalc`/chromaprint myself.
 
+## G4 — Find missing original audio files + good sources to acquire them
+
+Distinct from G3 (G3 = name the *unknown* tracks; G4 = the track is *known* but we
+lack a good original audio file). Two passes:
+- **Pass 1 — inventory the gaps.** Cross-reference the identified tracklist against
+  `sources_local/` to list every track whose original is **missing or a placeholder**
+  (e.g. the 0-byte `…Stay (The Midnight Rockers Remix).null`, `.null`/empty stubs),
+  or where the only source is poor quality. Output a "missing originals" table.
+- **Pass 2 — source them.** For each gap, search for a **good acquisition source**
+  (Discogs/Bandcamp/iTunes/streaming/used CD) and produce a per-track sourcing
+  dossier: where to buy/stream, format/quality, price, link, confidence. Tim's
+  example: he still wants to buy *Stay (The Midnight Rockers Remix)* and hasn't
+  found a good source — exactly this.
+**Done when:** a missing-originals table + a sourcing dossier per gap, for Tim to act
+on. (Acquiring/downloading is Tim's call — I surface options, I don't buy.)
+
 ---
 
 ## Decisions (settled with Tim 2026-06-14)
@@ -129,9 +160,10 @@ as `ACOUSTID_API_KEY` (read from env at runtime, never committed). Tim wants to
    Only destructive/outward-facing actions pause for him.
 3. **G2 tolerance:** ±50 ms at sync points.
 4. **G3 fingerprinting:** AcoustID approved (needs an API key from Tim; see G3).
-5. **Order:** my call → **G0 → G1 → G2 → G3**, but breadth-first within reason: G0
+5. **Order:** my call → **G0 → G1 → G2 → G3 → G4**, breadth-first within reason: G0
    first because it's how Tim verifies; G1 next because it feeds clips to G0 and the
-   master timeline underpins G2; then G2, then G3. Switch goals at any hard wall.
+   master timeline underpins G2; then G2, G3, G4. G4's pass-1 (inventory missing
+   originals) is cheap and can run early opportunistically. Switch goals at any wall.
 6. **Cadence:** dynamic-pacing `/loop`, Workflows for fan-out.
 
 **Separately handled (not loop work):** the iPhone lock-screen MediaSession player
