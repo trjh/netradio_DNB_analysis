@@ -5,6 +5,7 @@ skip gracefully when the capture files / ffmpeg aren't present (they live on Tim
 disk, not in the repo).
 """
 
+import json
 import os
 import shutil
 import sys
@@ -12,7 +13,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
 
-from streamalign import align, audio, emit_labels, graph, groundtruth, score, skips, solve  # noqa: E402
+from streamalign import align, audio, clips, emit_labels, graph, groundtruth, score, skips, solve  # noqa: E402
 
 # Known hand values from TIMELINE_GUIDE / the labels (master_start seconds).
 SMOKE = {
@@ -106,27 +107,32 @@ class SkipDetectionTests(unittest.TestCase):
 class EmitLabelsTests(unittest.TestCase):
     def test_emit_roundtrips_and_is_auto_generated(self):
         import tempfile
-        out, hand = tempfile.mkdtemp(), tempfile.mkdtemp()
+        out = tempfile.mkdtemp()
         positions = {"d900-901": 100.5, "d902-903": 250.0}
-        emit_labels.emit_labels(positions, out, hand,
-                                {"d900-901": 60.0, "d902-903": 60.0})
-        for fn in os.listdir(out):
+        emit_labels.emit_labels(positions, out, {"d900-901": 60.0, "d902-903": 60.0})
+        files = sorted(os.listdir(out))
+        # programmatic output is ALWAYS <stem>.auto.labels.tsv
+        self.assertEqual(files, ["d900-901.auto.labels.tsv", "d902-903.auto.labels.tsv"])
+        for fn in files:
             with open(os.path.join(out, fn)) as f:
                 for line in f:
                     self.assertTrue(line.rstrip("\n").endswith("AUTO GENERATED"), line)
-        starts = groundtruth.resolve_starts(out)
+        starts = groundtruth.resolve_starts(out)   # reads *.auto.labels.tsv too
         self.assertAlmostEqual(starts["d900-901"], 100.5, places=3)
         self.assertAlmostEqual(starts["d902-903"], 250.0, places=3)
 
-    def test_does_not_overwrite_hand_labels(self):
+    def test_always_auto_suffix_and_never_overwrites_hand(self):
         import tempfile
-        out, hand = tempfile.mkdtemp(), tempfile.mkdtemp()
-        with open(os.path.join(hand, "d900-901.labels.tsv"), "w") as f:
+        out = tempfile.mkdtemp()
+        # a hand <stem>.labels.tsv sitting in the SAME dir must be left untouched
+        hand_path = os.path.join(out, "d900-901.labels.tsv")
+        with open(hand_path, "w") as f:
             f.write("0\t0\thand label\n")
-        emit_labels.emit_labels({"d900-901": 5.0}, out, hand, {"d900-901": 10.0})
-        # hand-labelled stem -> supplementary .auto.labels.tsv, never the canonical
+        emit_labels.emit_labels({"d900-901": 5.0}, out, {"d900-901": 10.0})
+        # programmatic output goes to .auto.labels.tsv; the hand file is unchanged
         self.assertTrue(os.path.exists(os.path.join(out, "d900-901.auto.labels.tsv")))
-        self.assertFalse(os.path.exists(os.path.join(out, "d900-901.labels.tsv")))
+        with open(hand_path) as f:
+            self.assertEqual(f.read(), "0\t0\thand label\n")
 
 
 class GraphTests(unittest.TestCase):
@@ -171,6 +177,33 @@ class GraphTests(unittest.TestCase):
                         "(conf=%.3f); update blind_offset scope + README" % conf)
 
 
+class ClipTests(unittest.TestCase):
+    def test_skip_ahead_clip_construction(self):
+        import numpy as np
+        sr = audio.SR
+        ref = np.sin(np.arange(int(60 * sr)) * 0.01).astype(float)
+        skp = ref.copy()  # content irrelevant for length/annotation checks
+        # skip-ahead 1s at skipper-local 20s; offset goes -5 -> -6 (more negative).
+        walk = ([(float(t), -5.0, 1.0) for t in range(10, 20)]
+                + [(float(t), -6.0, 1.0) for t in range(20, 30)])
+        skip = {"at_s": 20.0, "before_s": 19.0, "after_s": 21.0, "delta_s": -1.0}
+        made = clips.make_skip_clip(skp, ref, skip, walk, pad_s=2.0)
+        self.assertIsNotNone(made)
+        clip, ann = made
+        self.assertAlmostEqual(len(clip) / sr, 5.0, delta=0.2)  # pad + gap + pad
+        self.assertIn("AHEAD", " ".join(a["label"] for a in ann))
+
+    def test_manifest_append_dedups_by_id(self):
+        import tempfile
+        d = tempfile.mkdtemp()
+        clips._append_manifest(d, [{"id": "x", "audio": "x.mp3"}])
+        clips._append_manifest(d, [{"id": "x", "audio": "x2.mp3"}, {"id": "y", "audio": "y.mp3"}])
+        data = json.load(open(os.path.join(d, "manifest.json")))
+        by_id = {c["id"]: c for c in data["clips"]}
+        self.assertEqual(len(by_id), 2)
+        self.assertEqual(by_id["x"]["audio"], "x2.mp3")  # replaced, not duplicated
+
+
 class SolveTests(unittest.TestCase):
     def test_propagates_offsets_from_anchor(self):
         edges = [
@@ -197,6 +230,33 @@ class SolveTests(unittest.TestCase):
         edges = [{"a": "x", "b": "y", "offset_s": 1.0, "conf": 0.9}]
         pos = solve.solve_positions(edges, anchor="x")
         self.assertNotIn("orphan", pos)
+
+    def test_solve_robust_drops_outlier_with_redundancy(self):
+        # z is reached by three edges; two agree (z=15) and one (x->z=100) is a gross
+        # outlier. With independent corroboration (>=3 edges at z), it's dropped.
+        edges = [
+            {"a": "x", "b": "y", "offset_s": 10.0, "conf": 0.95},
+            {"a": "x", "b": "w", "offset_s": 20.0, "conf": 0.95},
+            {"a": "y", "b": "z", "offset_s": 5.0, "conf": 0.95},   # z = 15
+            {"a": "w", "b": "z", "offset_s": -5.0, "conf": 0.95},  # z = 15
+            {"a": "x", "b": "z", "offset_s": 100.0, "conf": 0.99}, # bad (high conf)
+        ]
+        pos, dropped = solve.solve_robust(edges, anchor="x", max_residual_s=0.5)
+        self.assertEqual(len(dropped), 1)
+        self.assertEqual({dropped[0]["a"], dropped[0]["b"]}, {"x", "z"})
+        self.assertAlmostEqual(pos["z"], 15.0)
+
+    def test_solve_robust_keeps_ambiguous_triangle(self):
+        # Bare triangle with a HIGH-conf bad edge: which edge is wrong is genuinely
+        # ambiguous, so nothing is dropped (better than dropping a good edge) — the
+        # inconsistency is left for placement_diagnostics to flag.
+        edges = [
+            {"a": "x", "b": "y", "offset_s": 100.0, "conf": 0.99},  # bad, but confident
+            {"a": "x", "b": "z", "offset_s": 30.0, "conf": 0.90},
+            {"a": "y", "b": "z", "offset_s": 20.0, "conf": 0.90},
+        ]
+        _pos, dropped = solve.solve_robust(edges, anchor="x", max_residual_s=0.5)
+        self.assertEqual(dropped, [])  # no good edge wrongly dropped
 
     def test_placement_diagnostics(self):
         # y is corroborated by two agreeing edges; z is single-edge (uncorroborated).

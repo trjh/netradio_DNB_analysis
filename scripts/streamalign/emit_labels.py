@@ -6,14 +6,16 @@ sync`, `file end`, and skip `file note`s). Two hard rules:
 
   * **Every emitted label line ends with " AUTO GENERATED"** so Tim can tell mine
     from his hand labels and correct them.
-  * **Never overwrite a hand-made labels.tsv.** Everything is written to a separate
-    `out_dir` Tim reviews; within it, a recording Tim hasn't hand-labelled gets the
-    canonical `<stem>.labels.tsv`, one he has gets `<stem>.auto.labels.tsv`
-    (a supplement). The hand-labels dir is only ever read, never written.
+  * **Programmatic output is ALWAYS `<stem>.auto.labels.tsv`.** The plain
+    `<stem>.labels.tsv` name is reserved for hand-generated/confirmed labels and is
+    never written here — so auto files can safely sit alongside hand labels and a
+    hand-made `<stem>.labels.tsv` is never overwritten. Consumers (analysis, playback,
+    media generation) read BOTH; where labels conflict, the hand `<stem>.labels.tsv`
+    takes precedence. (That read-side precedence lives in the consumers, not here.)
 
 This is solve-agnostic (takes positions in), so feed it the best available solve
 (skip-aware once that lands). Round-trips: `groundtruth.resolve_starts(out_dir)`
-recovers the emitted master-starts.
+recovers the emitted master-starts (it reads `*.auto.labels.tsv` too).
 """
 
 import os
@@ -50,23 +52,22 @@ def write_labels_tsv(rows, path):
     os.replace(tmp, path)
 
 
-def emit_labels(positions, out_dir, hand_labels_dir, durations=None, skip_maps=None):
-    """Write an AUTO GENERATED labels.tsv per placed file into `out_dir`.
+def emit_labels(positions, out_dir, durations=None, skip_maps=None):
+    """Write an AUTO GENERATED `<stem>.auto.labels.tsv` per placed file into `out_dir`.
 
-    Un-hand-labelled stems -> `<stem>.labels.tsv`; hand-labelled stems ->
-    `<stem>.auto.labels.tsv`. `durations`/`skip_maps` are {stem: ...} (optional).
-    Returns {stem: written_path}. Never writes into `hand_labels_dir`.
+    Programmatic output is ALWAYS `<stem>.auto.labels.tsv` (never the plain
+    `<stem>.labels.tsv`, reserved for hand-generated/confirmed labels), so it can sit
+    alongside hand labels without ever overwriting them. `durations`/`skip_maps` are
+    {stem: ...} (optional). Returns {stem: written_path}.
     """
     os.makedirs(out_dir, exist_ok=True)
     durations = durations or {}
     skip_maps = skip_maps or {}
     written = {}
     for stem, master_start in positions.items():
-        has_hand = os.path.isfile(os.path.join(hand_labels_dir, stem + ".labels.tsv"))
-        fn = (stem + ".auto.labels.tsv") if has_hand else (stem + ".labels.tsv")
         rows = _rows_for_file(stem, master_start, durations.get(stem),
                               skip_maps.get(stem))
-        path = os.path.join(out_dir, fn)
+        path = os.path.join(out_dir, stem + ".auto.labels.tsv")
         write_labels_tsv(rows, path)
         written[stem] = path
     return written
