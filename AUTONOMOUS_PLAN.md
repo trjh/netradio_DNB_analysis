@@ -49,8 +49,10 @@ at every decision (which is what limited the first overnight run).
 6. **Use a Workflow for fan-out.** Once a per-item method works (e.g. align one
    track), run the many-item version (all ~40 tracks) as a Workflow, not serially.
 7. **Every label I generate ends with " AUTO GENERATED".** Hard rule — it's how Tim
-   distinguishes and corrects my labels vs his hand work. Never overwrite a file Tim
-   already labelled; only create missing ones.
+   distinguishes and corrects my labels vs his hand work. **Never overwrite/replace a
+   labels.tsv Tim made by hand.** But I *may* create my **own** AUTO GENERATED label
+   file that overlaps or supplements his data — as a **separate file** (distinct
+   name, e.g. `<stem>.auto.labels.tsv`), so he can compare and merge what's useful.
 
 ---
 
@@ -100,7 +102,12 @@ A small **standalone** page served by the player repo's stdlib http.server
    - **MANDATORY:** every label I generate **ends with the literal text
      " AUTO GENERATED"** so Tim can tell mine from his hand labels and correct them.
      This is a hard rule for all of G1's output (see Operating rules).
-   - Never overwrite a file Tim already hand-labelled; only create the missing ones.
+   - **Never overwrite/replace Tim's hand-made `labels.tsv`.** For a recording he
+     *hasn't* labelled, write the canonical `<stem>.labels.tsv` (all AUTO
+     GENERATED). For one he *has*, I may still emit my own AUTO GENERATED file that
+     **overlaps/supplements** his — to a **separate name** (e.g.
+     `<stem>.auto.labels.tsv`) so his file is untouched and he can compare/merge.
+     (Exact naming + how the parser de-dups his vs mine: finalised in G1, flagged.)
 **Done when:** every stream recording without a hand label has an AUTO GENERATED
 `labels.tsv` (placement + skips), validated where ground truth exists, with
 skip-check clips for the unverifiable boundaries.
