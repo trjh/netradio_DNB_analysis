@@ -1,7 +1,7 @@
 # Autonomous loop plan — netradio analysis
 
-**Status: DRAFT for Tim to refine (PR #12). We build this together; nothing runs
-autonomously until Tim approves the loop prompt below.**
+**Status: decisions settled with Tim 2026-06-14 (see bottom). Awaiting Tim's review
+of the goals/loop prompt before the loop starts — nothing runs autonomously yet.**
 
 The goal of this doc is a self-contained **loop prompt** I can run under `/loop`
 (dynamic pacing) to make maximal unattended progress toward three goals, plus the
@@ -61,8 +61,8 @@ lightweight web page that plays **clips I generate**, each with:
 
 Think "a tiny slice of what Audacity shows, without launching it." It indexes a
 folder of generated clips + per-clip annotation sidecars (JSON: `[{t, label}]`).
-Likely a small standalone page served by the player repo's stdlib http.server (to
-confirm: standalone vs extend the main player).
+A small **standalone** page served by the player repo's stdlib http.server
+(settled — separate from the main player).
 **Done when:** Tim can open it, pick a clip, and hear it with rolling annotations.
 
 ## G1 — Finish mapping files to the master timeline
@@ -101,7 +101,7 @@ sync points (dozens of tracks). Waveform correlation already proven NOT to work
   validate vs the sync points; emit clips. Fan-out over all synced tracks via a
   Workflow.
 - **2nd pass:** refine — piecewise DJ-edit segmentation, tighter rate, polarity;
-  hit a tolerance (propose **±50 ms** at sync points — confirm); then produce
+  hit a tolerance of **±50 ms** at sync points (settled); then produce
   candidate mappings + clips for tracks **without** sync points.
 **Done when:** every synced track maps within tolerance; candidate maps + clips for
 the rest.
@@ -109,23 +109,46 @@ the rest.
 ## G3 — Identify missing / unidentified tracks
 
 The 9 "Mystery Track N" segments + any unidentified spans. Per missing track,
-build a **dossier**: a clean extracted clip, BPM + musical key, an acoustic
-fingerprint attempt (chromaprint/AcoustID if a key is available — else chroma
-self-match against the source library), Whisper transcript of any vocal/spoken
-hook → search queries. Output a dossier + clip per track for Tim.
+build a **dossier**: a clean extracted clip, BPM + musical key, an **AcoustID**
+acoustic-fingerprint lookup (settled OK), Whisper transcript of any vocal/spoken
+hook → search queries, and a chroma self-match against the source library as a
+backup. Output a dossier + clip per track for Tim.
 **Done when:** each missing track has a dossier with the best available leads.
+**Needs from Tim before G3:** an AcoustID API key (free, from acoustid.org) — I'll
+install `fpcalc`/chromaprint myself. Until the key exists I'll do everything except
+the AcoustID lookup and flag it.
 
 ---
 
-## Open decisions for Tim (let's settle these, then I run)
+## Decisions (settled with Tim 2026-06-14)
 
-1. **Clip player:** standalone page in the player repo, or extend the main player?
-   (Lean: standalone — simplest, self-contained.)
-2. **"Don't wait on me" scope:** confirm I should proceed through all decisions
-   except destructive/outward-facing ones, documenting assumptions as I go.
-3. **G2 tolerance:** is ±50 ms at sync points the right "good enough"?
-4. **G3 fingerprinting:** OK to use AcoustID (needs a free API key + network) for
-   the mystery tracks, or keep it local-only (chroma self-match + BPM/key + Whisper)?
-5. **Order/scope:** is G0→G1→G2→G3 right, and is anything missing or over-scoped?
-6. **Cadence:** dynamic-pacing `/loop` + Workflows for fan-out — good, or do you
-   want fixed-interval check-ins?
+1. **Clip player:** standalone page in the **player** repo.
+2. **Autonomy:** push through **all non-destructive decisions**; record each choice
+   + assumption in `LOOP_DECISIONS.md` (append-only) for Tim to review at the end.
+   Only destructive/outward-facing actions pause for him.
+3. **G2 tolerance:** ±50 ms at sync points.
+4. **G3 fingerprinting:** AcoustID approved (needs an API key from Tim; see G3).
+5. **Order:** my call → **G0 → G1 → G2 → G3**, but breadth-first within reason: G0
+   first because it's how Tim verifies; G1 next because it feeds clips to G0 and the
+   master timeline underpins G2; then G2, then G3. Switch goals at any hard wall.
+6. **Cadence:** dynamic-pacing `/loop`, Workflows for fan-out.
+
+**Separately handled (not loop work):** the iPhone lock-screen MediaSession player
+feature — done in player PR #24.
+
+## How the loop stays unstuck (re Tim's question)
+
+The `/loop` wakes me on a timer I set; it doesn't auto-detect "stuck". What keeps it
+moving is the design:
+- **Each wake-up re-states the goals** (the loop prompt), so I re-orient even after a
+  context summarisation — that's the "restart" effect.
+- **At a wall I switch goals** (operating rule 5) instead of halting, and log the
+  wall in `LOOP_DECISIONS.md`.
+- **I only fully stop** when every goal is met or blocked on Tim, or an action is
+  destructive — and then I send one notification rather than spin.
+- A standing **"stuck rule":** if a sub-task makes no progress for ~2 consecutive
+  ticks, I drop it to a logged "blocked/needs-Tim" item and move on, rather than
+  burning ticks on it.
+
+So: the loop keeps me going and re-focused; *I* manage stuck-ness by switching and
+logging, and surface a blocker only when it's truly Tim's to resolve.
