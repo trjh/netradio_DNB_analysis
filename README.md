@@ -32,9 +32,40 @@ help in summarizing and cross-referencing the information.
 * [logo](./logo) -- netradio.com logo files retrieved from archive.org and other places
 * [scripts](./scripts) -- misc. helper scripts mostly oriented around Audacity 2.1.x metadata files
 
+
+## Process
+
+The analysis process is a manual+scripted Audacity workflow built around a single master timeline for the whole netradio DNB stream.
+
+1. **Start from the notes.** Use [tracklist-2017.txt](./tracklist-2017.txt), the current label TSVs, and any remainder/progress notes to choose the next stream audio file to analyze.
+2. **Open the stream file in Audacity.** Load the stream capture tile and create/use a label track.
+3. **Carry labels forward.** Bring in useful labels from the previous or overlapping stream file so the new file starts with known track IDs, file boundaries, and sync context.
+4. **Overlay adjacent stream files.** Load overlapping stream captures and find sync points between them. Label file starts, file ends, verified sync points, skips, and spans of sync.
+5. **Add original/source audio where known.** Overlay the original track/source recording when available. Label source start/end/note points.
+6. **Label paired sync points.** Add stream-vs-original sync pairs such as `track sync: A`, `track sync: B`, `origNNN sync: A`, and `origNNN sync: B`.
+7. **Calculate speed/slow values.** The Google Apps Script importer in [sheetscript/Code.js](./sheetscript/Code.js) computes the sheet speed value when it has all four sync points:
+   ```javascript
+   (trackB - trackA) / (origB - origA)
+   ```
+   [scripts/alignfinder.py](./scripts/alignfinder.py) can also help find alignment points and prints diagnostic speed comparisons.
+8. **Export labels.** Export Audacity labels to [labels](./labels) as `*.labels.tsv`.
+9. **Sort and sanity-check labels.** Use [labels/sort_tsv.py](./labels/sort_tsv.py) to sort labels, check recognized label grammar, split secondary-file entries, and compare live Audacity labels when needed:
+   ```bash
+   cd labels
+   python3 sort_tsv.py d019-040.labels.tsv --test
+   python3 sort_tsv.py d019-040.labels.tsv
+   python3 sort_tsv.py d019-040.labels.tsv --live
+   ```
+10. **Import labels into the sheet.** The Apps Script in [sheetscript/Code.js](./sheetscript/Code.js) reads label TSVs from GitHub, parses them, computes normalized rows and speed values, and writes them into the active Google Sheet.
+11. **Export/back up the spreadsheet.** The local CSV export (`Netradio DNB ISDN Analysis - Tracklist - preskipfix.csv`) is consumed by downstream tools, including the player. Automatic spreadsheet backup is still a major TODO: set up a repeatable export from Google Sheets/Drive or Apps Script, avoid secrets, and keep dated backups.
+12. **Validate downstream.** Run timeline/player smoke tests after label or sheet changes, especially around file transitions and overlapping captures.
+
+See [AGENT.md](./AGENT.md) for a file-by-file repo guide, label grammar notes, git-history summary, and operational cautions for future agents.
+
 ## TODO
 
 What I'd like to accomplish
+* [ ] Automatically back up/export the Google Sheet so the spreadsheet state is versioned and recoverable
 * [ ] Determine complete tracklist
 * [ ] Build playlist of tracks from the stream (as much as possible) on YouTube, Apple Music, and Soundcloud
 * [ ] Compile definitive recording of stream, perhaps in five 1-2 hour chunks
