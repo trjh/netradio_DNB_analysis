@@ -82,6 +82,13 @@ PYTHONPATH=scripts python3 -m streamalign --labels <dir> validate
   (positions ~2 s coarse; refinement pending).
 - **P4 discovery + global solve** — mechanism validated; `placement_diagnostics`
   separates corroborated from uncorroborated placements.
+- **G2 / T1 original-track↔mix rate** — chroma + subsequence-DTW recovers the
+  mix/original rate where waveform correlation cannot. Graded against the sync
+  ground truth on tracks 8/10/13/16/23: the two clean matches land within target
+  (track 16 err 6e-5, track 13 err 0.0019), and a **precision-first reliability
+  gate** (`is_reliable`: warp-path R² ≥ 0.999 **and** mean DTW cost ≤ 0.03) rejects
+  all three bad cases — wrong-match (track 23), degenerate slope (track 10), and
+  empty mix region (track 8) — so the engine flags rather than emits a wrong rate.
 
 ### Known limits (open work)
 

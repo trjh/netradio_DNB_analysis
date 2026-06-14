@@ -153,6 +153,66 @@ class TrackMixTests(unittest.TestCase):
         self.assertAlmostEqual(gt[15]["rate"], 1.010651, places=4)
         self.assertEqual(gt[15]["rate_method"], "AB")
 
+    def _chroma_signal(self, seconds, sr):
+        # A deterministic, non-repeating melody: a distinct pitch class every 0.5 s
+        # walking up the chromatic scale. Many unique chroma columns give the
+        # subsequence DTW a single unambiguous diagonal path (so the slope is a clean
+        # rate and the offset is well-defined) — no audio files needed.
+        import numpy as np
+        t = np.arange(int(seconds * sr)) / sr
+        step = 0.5
+        y = np.zeros_like(t)
+        n = int(seconds / step)
+        for i in range(n):
+            semitone = i % 12               # chromatic walk, one note per 0.5 s
+            f0 = 220.0 * (2 ** (semitone / 12.0))
+            m = (t >= i * step) & (t < (i + 1) * step)
+            for h in (1, 2, 3):             # a few harmonics for chroma richness
+                y[m] += np.sin(2 * np.pi * f0 * h * t[m]) / h
+        return (y / 2).astype("float32")
+
+    def test_reliability_gate_matches_real_validation(self):
+        # The precision-first gate, fed the actual measured (confidence, norm_cost,
+        # slope) from aligning tracks 8/10/13/16/23 to their mix regions. Only 13 and
+        # 16 — the two whose recovered rate is within target of the sync ground truth
+        # — must pass; 23 (wrong-match, low R²), 10 (degenerate slope, high cost) and
+        # 8 (empty mix, NaN slope) must each be rejected. No audio needed.
+        import math
+        cases = {            # (confidence, norm_cost, slope) -> expected reliable
+            8:  (0.0,     0.1400, math.nan),
+            10: (0.99846, 0.1960, 1.0),
+            13: (1.0,     0.0172, 1.00216),
+            16: (1.0,     0.0201, 1.01130),
+            23: (0.76887, 0.0530, 1.23228),
+        }
+        expect = {8: False, 10: False, 13: True, 16: True, 23: False}
+        for trk, (conf, cost, slope) in cases.items():
+            self.assertEqual(track_mix.is_reliable(conf, cost, slope), expect[trk],
+                             "track %d gate" % trk)
+
+    def test_chroma_dtw_recovers_rate_and_offset(self):
+        # On a clean same-speed excerpt the warp path is a straight diagonal: rate ~1,
+        # offset ~where the excerpt starts, confidence high. (Pure-tone chroma cost
+        # runs higher than real music, so the absolute cost gate is unit-tested above,
+        # not here — here we check rate/offset recovery and that a real match scores a
+        # far lower cost than a noise mix.)
+        try:
+            import librosa  # noqa: F401
+        except ImportError:
+            self.skipTest("librosa not installed (core python)")
+        import numpy as np
+        sr = track_mix._audio.SR
+        orig = self._chroma_signal(12.0, sr)
+        mix = orig[int(2.0 * sr):int(10.0 * sr)]   # same speed, middle excerpt
+        r = track_mix.chroma_dtw_rate(orig, mix, sr=sr, hop=512)
+        self.assertAlmostEqual(r["rate"], 1.0, places=1)
+        self.assertGreaterEqual(r["confidence"], track_mix._MIN_CONFIDENCE)
+        self.assertAlmostEqual(r["offset_orig_s"], 2.0, delta=0.3)
+        rng = np.random.default_rng(0)
+        noise = rng.standard_normal(int(6.0 * sr)).astype("float32") * 0.1
+        rn = track_mix.chroma_dtw_rate(orig, noise, sr=sr, hop=512)
+        self.assertGreater(rn["norm_cost"], r["norm_cost"])   # noise matches worse
+
 
 class GraphTests(unittest.TestCase):
     def test_filename_range(self):

@@ -19,6 +19,7 @@ import re
 
 import numpy as np
 
+from . import audio as _audio
 from . import groundtruth as _gt
 
 # A primary sync row STARTS with `orig<NNN> sync:` or `track[<NNN>] sync:` (the
@@ -131,3 +132,121 @@ def track_sync_groundtruth(labels_dir=None):
                    "rate_method": method, "segment_rates": seg_rates,
                    "files": sorted(by_file)}
     return gt
+
+
+# --- T1: chroma + DTW original→mix aligner ------------------------------------
+# Waveform correlation does not lock original-to-mix (DJ EQ + lossy 16 kHz mix vs a
+# clean source); chroma is robust to timbre/EQ and subsequence-DTW finds where the
+# played excerpt sits in the original, recovering the rate (warp-path slope). librosa
+# is imported lazily so the rest of the module loads under the core (no-librosa)
+# python; run callers with .venv/bin/python.
+
+# Reliability gate (precision-first): a recovered rate is only trusted when the warp
+# path is BOTH straight (high R²) AND a good chroma match (low per-frame DTW cost).
+# Validated on tracks 8/10/13/16/23 against the sync ground truth: the two tracks
+# within target (13: err 0.0019, 16: err 6e-5) both clear conf≥0.9999 & cost≤0.03;
+# the three wrong/degenerate ones each fail one gate — track 23 (wrong-match) on
+# confidence (0.77), track 10 (degenerate slope=1.0) on cost (0.196), track 8 (empty
+# mix region) on both. Confidence alone is insufficient: a degenerate flat fit can
+# still score R²≈1, so the cost gate is load-bearing. Thresholds are heuristic (5
+# graded tracks) — widen the validation set before tightening them.
+_MIN_CONFIDENCE = 0.999
+_MAX_NORM_COST = 0.03
+
+
+def is_reliable(confidence, norm_cost, slope):
+    """The precision-first gate: trust a recovered rate only when the warp path is
+    both straight (R² ≥ _MIN_CONFIDENCE) and a close chroma match (mean per-frame
+    cost ≤ _MAX_NORM_COST), and the slope is finite. See the calibration note above."""
+    return bool(np.isfinite(slope) and confidence >= _MIN_CONFIDENCE
+                and norm_cost <= _MAX_NORM_COST)
+
+
+def chroma_dtw_rate(orig, mix, sr=_audio.SR, hop=2048):
+    """Recover the mix/orig rate by chroma + subsequence DTW.
+
+    `orig` (full original track) and `mix` (the mix region where it plays) are mono
+    float arrays. Returns {rate, offset_orig_s, confidence, norm_cost, n_path,
+    reliable}: rate = d(mix_time)/d(orig_time) (the warp-path slope; ~1.0 same
+    speed), offset_orig_s = where in the original the mix excerpt begins,
+    `confidence` = warp-path R², `norm_cost` = mean per-frame DTW cost, `reliable` =
+    the precision-first gate (both confidence and cost good enough to trust `rate`).
+    """
+    import librosa  # lazy: only T1 needs it (.venv)
+    # Floor the chroma so silent frames aren't all-zero columns (cosine distance is
+    # NaN on a zero-norm vector — e.g. track 8's quiet intro).
+    co = librosa.feature.chroma_cqt(y=np.asarray(orig, dtype="float32"),
+                                    sr=sr, hop_length=hop) + 1e-6
+    cm = librosa.feature.chroma_cqt(y=np.asarray(mix, dtype="float32"),
+                                    sr=sr, hop_length=hop) + 1e-6
+    # subsequence DTW: locate the mix (X) within the original (Y).
+    dist, wp = librosa.sequence.dtw(X=cm, Y=co, subseq=True, metric="cosine")
+    wp = wp[::-1].astype(float)          # ascending; columns: (mix_frame, orig_frame)
+    n = len(wp)
+    # Trim the subsequence-DTW boundary flats (the path often runs flat/vertical at
+    # the ends while it "searches"), then take a robust (Theil-Sen) slope so a few
+    # erratic segments don't swing the rate.
+    lo, hi = int(0.1 * n), int(0.9 * n)
+    seg = wp[lo:hi] if hi - lo > 10 else wp
+    x, y = seg[:, 1], seg[:, 0]          # orig frames, mix frames
+    from scipy import stats
+    slope, intercept = stats.theilslopes(y, x)[:2]
+    pred = slope * x + intercept
+    ss_tot = float(np.sum((y - y.mean()) ** 2))
+    r2 = 1.0 - float(np.sum((y - pred) ** 2)) / ss_tot if ss_tot > 0 else 0.0
+    norm_cost = float(dist[-1, -1]) / max(1, n)
+    return {"rate": float(slope), "offset_orig_s": float(wp[0, 1] * hop / sr),
+            "confidence": r2, "norm_cost": norm_cost, "n_path": int(n),
+            "reliable": is_reliable(r2, norm_cost, slope)}
+
+
+def find_original(track_num, sources_dir):
+    """Path to the original source file for a track number, or None.
+
+    Looks for `<NNN>-*.{mp3,flac,m4a,opus,wav,aif,aiff}` in `sources_dir`.
+    """
+    prefix = "%03d-" % int(track_num)
+    if not os.path.isdir(sources_dir):
+        return None
+    for fn in sorted(os.listdir(sources_dir)):
+        if fn.startswith(prefix) and fn.rsplit(".", 1)[-1].lower() in (
+                "mp3", "flac", "m4a", "opus", "wav", "aif", "aiff"):
+            return os.path.join(sources_dir, fn)
+    return None
+
+
+def align_track(track_num, track_metadata, sources_dir, labels_dir=None,
+                audio_dir=None, hop=2048):
+    """Chroma+DTW-align track NNN's original to its mix region; grade vs sync rate.
+
+    `track_metadata` is the loaded track-metadata.json tracks dict. The mix region is
+    the track's [master_begin, master_end] inside its primary `source_files` capture
+    (capture master start from the resolved hand placements). Returns a dict with the
+    recovered `rate`, `offset_orig_s`, the ground-truth `gt_rate`/`rate_method`, and
+    `rate_err`; or {"error": ...} if inputs are missing.
+    """
+    e = track_metadata.get(str(track_num)) or {}
+    mb, me = e.get("master_begin_seconds"), e.get("master_end_seconds")
+    srcs = e.get("source_files") or []
+    if mb is None or me is None or not srcs:
+        return {"error": "no master span / source_files"}
+    orig_path = find_original(track_num, sources_dir)
+    if not orig_path:
+        return {"error": "no original audio"}
+    cap = os.path.splitext(os.path.basename(srcs[0]))[0]
+    starts = _gt.resolve_starts(labels_dir)
+    if cap not in starts:
+        return {"error": "capture %s not placed" % cap}
+    cstart = starts[cap]
+    if not _audio.find_audio_file(cap, audio_dir):
+        return {"error": "capture %s audio missing" % cap}
+    cap_audio = _audio.load_audio(cap, audio_dir=audio_dir)
+    sr = _audio.SR
+    mix = cap_audio[int((mb - cstart) * sr):int((me - cstart) * sr)]
+    orig = _audio.load_audio(orig_path, audio_dir=audio_dir)
+    r = chroma_dtw_rate(orig, mix, sr=sr, hop=hop)
+    g = track_sync_groundtruth(labels_dir).get(int(track_num), {})
+    r.update({"track": int(track_num), "gt_rate": g.get("rate"),
+              "rate_method": g.get("rate_method"),
+              "rate_err": (abs(r["rate"] - g["rate"]) if g.get("rate") else None)})
+    return r
