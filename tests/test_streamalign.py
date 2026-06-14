@@ -172,18 +172,32 @@ class SolveTests(unittest.TestCase):
         pos = solve.solve_positions(edges, anchor="x")
         self.assertNotIn("orphan", pos)
 
-    def test_solve_robust_drops_conflicting_edge(self):
-        # x->y (10) and x->z (30) are clean & high-conf; a low-conf y->z edge claims
-        # 50 (implying z=60), contradicting z=30. Robust solve drops the bad edge.
+    def test_solve_robust_drops_outlier_with_redundancy(self):
+        # z is reached by three edges; two agree (z=15) and one (x->z=100) is a gross
+        # outlier. With independent corroboration (>=3 edges at z), it's dropped.
         edges = [
-            {"a": "x", "b": "y", "offset_s": 10.0, "conf": 0.99},
-            {"a": "x", "b": "z", "offset_s": 30.0, "conf": 0.99},
-            {"a": "y", "b": "z", "offset_s": 50.0, "conf": 0.60},
+            {"a": "x", "b": "y", "offset_s": 10.0, "conf": 0.95},
+            {"a": "x", "b": "w", "offset_s": 20.0, "conf": 0.95},
+            {"a": "y", "b": "z", "offset_s": 5.0, "conf": 0.95},   # z = 15
+            {"a": "w", "b": "z", "offset_s": -5.0, "conf": 0.95},  # z = 15
+            {"a": "x", "b": "z", "offset_s": 100.0, "conf": 0.99}, # bad (high conf)
         ]
         pos, dropped = solve.solve_robust(edges, anchor="x", max_residual_s=0.5)
         self.assertEqual(len(dropped), 1)
-        self.assertEqual({dropped[0]["a"], dropped[0]["b"]}, {"y", "z"})
-        self.assertAlmostEqual(pos["z"], 30.0)
+        self.assertEqual({dropped[0]["a"], dropped[0]["b"]}, {"x", "z"})
+        self.assertAlmostEqual(pos["z"], 15.0)
+
+    def test_solve_robust_keeps_ambiguous_triangle(self):
+        # Bare triangle with a HIGH-conf bad edge: which edge is wrong is genuinely
+        # ambiguous, so nothing is dropped (better than dropping a good edge) — the
+        # inconsistency is left for placement_diagnostics to flag.
+        edges = [
+            {"a": "x", "b": "y", "offset_s": 100.0, "conf": 0.99},  # bad, but confident
+            {"a": "x", "b": "z", "offset_s": 30.0, "conf": 0.90},
+            {"a": "y", "b": "z", "offset_s": 20.0, "conf": 0.90},
+        ]
+        _pos, dropped = solve.solve_robust(edges, anchor="x", max_residual_s=0.5)
+        self.assertEqual(dropped, [])  # no good edge wrongly dropped
 
     def test_placement_diagnostics(self):
         # y is corroborated by two agreeing edges; z is single-edge (uncorroborated).

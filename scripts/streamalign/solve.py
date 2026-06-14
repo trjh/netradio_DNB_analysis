@@ -129,31 +129,43 @@ def solve_positions(edges, anchor="d000-018", anchor_master=0.0):
 
 
 def solve_robust(edges, anchor="d000-018", anchor_master=0.0,
-                 max_residual_s=0.5, max_drops=10):
-    """Solve, then iteratively drop edges that contradict the solution.
+                 max_residual_s=0.5, min_support=3, max_drops=20):
+    """Solve, then drop only edges that are outliers vs *independently corroborated*
+    placements.
 
-    After a solve, a *redundant* edge whose measured offset disagrees with the
-    solution by more than `max_residual_s` is an outlier (a wrong lock / wrong
-    overlap); drop the worst and re-solve, up to `max_drops` times. Catches
-    conflicts wherever the graph has redundancy. (A single-edge "leaf" placement has
-    nothing to contradict it, so it can't be caught this way — those stay flagged by
-    placement_diagnostics instead.) Returns (positions, dropped_edges).
+    Naively dropping the worst residual against a confidence-ordered spanning tree is
+    unsafe: a high-confidence *wrong* edge can enter the tree and make the residual
+    pass blame a correct edge. So an edge is dropped only when, at one of its nodes,
+    it disagrees (> `max_residual_s`) with the **median** of that node's incident
+    edges AND the node has at least `min_support` incident edges (so the median has
+    independent backing). Low-redundancy conflicts — a bare triangle, or a leaf —
+    are genuinely ambiguous (especially if the bad edge is the confident one); those
+    are NEVER dropped here and instead stay visible via `placement_diagnostics`.
+    Returns (positions, dropped_edges).
     """
     kept = list(edges)
     dropped = []
     for _ in range(max_drops):
         pos = solve_positions(kept, anchor, anchor_master)
-        worst = None
+        incident = defaultdict(list)  # node -> [(edge, position it implies)]
         for e in kept:
             if e["a"] in pos and e["b"] in pos:
-                resid = abs(e["offset_s"] - (pos[e["b"]] - pos[e["a"]]))
-                if worst is None or resid > worst[0]:
-                    worst = (resid, e)
-        if worst and worst[0] > max_residual_s:
-            kept.remove(worst[1])
-            dropped.append({**worst[1], "residual_s": worst[0]})
-        else:
+                incident[e["b"]].append((e, pos[e["a"]] + e["offset_s"]))
+                incident[e["a"]].append((e, pos[e["b"]] - e["offset_s"]))
+        worst = None  # (deviation, edge)
+        for _node, lst in incident.items():
+            if len(lst) < min_support:
+                continue
+            implied = sorted(p for _e, p in lst)
+            med = implied[len(implied) // 2]
+            for e, p in lst:
+                dev = abs(p - med)
+                if dev > max_residual_s and (worst is None or dev > worst[0]):
+                    worst = (dev, e)
+        if worst is None:
             break
+        kept.remove(worst[1])
+        dropped.append({**worst[1], "deviation_s": worst[0]})
     return solve_positions(kept, anchor, anchor_master), dropped
 
 
