@@ -1,0 +1,15 @@
+# Stream Alignment Engine dependencies.
+#
+# Core engine (P0-P4: groundtruth/audio/align/skips/graph/solve) needs only numpy
+# plus a system ffmpeg on PATH. It runs under the system python3.
+#
+# The original-track <-> mix feature alignment (track_mix, chroma + DTW) needs
+# librosa, which pulls numba/llvmlite. numba has no Python 3.14 wheels yet, so the
+# venv uses python3.13. Recreate the venv with:
+#
+#     python3.13 -m venv .venv
+#     .venv/bin/pip install -r requirements-streamalign.txt
+#
+# then run the track_mix tools with .venv/bin/python.
+numpy>=2
+librosa>=0.11
