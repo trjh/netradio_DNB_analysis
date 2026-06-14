@@ -76,8 +76,9 @@ PYTHONPATH=scripts python3 -m streamalign --labels <dir> validate
 - **P1 pairwise align** — reproduces hand alignments to ±1 sample on clean overlaps.
 - **P2 skip detection** — recovers documented skips with exact magnitudes
   (positions ~2 s coarse; refinement pending).
-- **P4 discovery + global solve** — mechanism validated; `placement_diagnostics`
-  separates corroborated from uncorroborated placements.
+- **P4 discovery + global solve** — skip-aware edge measurement (offset over the
+  earliest skip-free segment) + consistency-based outlier rejection;
+  `placement_diagnostics` separates corroborated from uncorroborated placements.
 
 ### Known limits (open work)
 
