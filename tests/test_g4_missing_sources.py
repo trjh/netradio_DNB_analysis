@@ -86,6 +86,25 @@ class G4MissingSourcesTests(unittest.TestCase):
         inv = g4.inventory(meta_path, src)
         self.assertEqual(inv["tracks"][0]["status"], "have")
 
+    def test_cli_fails_fast_on_missing_sources_dir(self):
+        # A missing --sources would classify every track as missing -> a false "buy
+        # everything" list. The CLI must reject it (non-zero exit), not print it.
+        meta_path, src = self._build()
+        bad = os.path.join(os.path.dirname(src), "does-not-exist")
+        with self.assertRaises(SystemExit) as cm:
+            g4.main(["--meta", meta_path, "--sources", bad])
+        self.assertNotEqual(cm.exception.code, 0)
+
+    def test_cli_fails_fast_on_missing_meta(self):
+        meta_path, src = self._build()
+        with self.assertRaises(SystemExit) as cm:
+            g4.main(["--meta", meta_path + ".nope", "--sources", src])
+        self.assertNotEqual(cm.exception.code, 0)
+
+    def test_cli_runs_on_valid_paths(self):
+        meta_path, src = self._build()
+        g4.main(["--meta", meta_path, "--sources", src, "--gaps-only"])  # no raise
+
     def test_name_matching_helpers(self):
         self.assertTrue(g4._name_matches(
             "014-Me'Shell - Stay (Midnight Rockers).null",

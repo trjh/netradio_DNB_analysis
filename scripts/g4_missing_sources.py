@@ -160,6 +160,14 @@ def main(argv=None):
     p.add_argument("--json", default=None, help="write full inventory JSON here")
     p.add_argument("--gaps-only", action="store_true", help="print only the gaps")
     args = p.parse_args(argv)
+    # Fail fast on a bad path: a missing/typo'd --sources (or an unmounted originals
+    # folder) would otherwise classify EVERY track as missing — a credible but false
+    # "buy everything" worklist. `inventory()` stays permissive for library/test use.
+    if not os.path.isfile(args.meta):
+        p.error("metadata file not found: %s" % args.meta)
+    if not os.path.isdir(args.sources):
+        p.error("sources directory not found: %s (every track would look missing)"
+                % args.sources)
     inv = inventory(args.meta, args.sources)
     print("%4s %-9s %7s  %-26s %s" % ("trk", "status", "size", "artist", "title"))
     for r in inv["tracks"]:
