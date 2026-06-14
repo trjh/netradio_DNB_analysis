@@ -46,6 +46,8 @@ pairs. This is the data everything else is graded against.
 - `graph.py` — blind (seedless) pairwise alignment + overlap-graph discovery.
 - `solve.py` — propagate pairwise offsets from the anchor (`d000-018 = 0`) into
   absolute master positions, with per-file corroboration diagnostics.
+- `clips.py` — render skip-check review clips (A+B across a skip, B bridging the
+  gap) into the clip player's `manifest.json` for Tim to verify by ear.
 
 **3. Score (measure the finding vs the answer key).** `score.py` — pairwise and
 absolute error vs ground truth, plus redundant-overlap self-consistency.
