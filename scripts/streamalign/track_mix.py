@@ -181,6 +181,16 @@ def chroma_dtw_rate(orig, mix, sr=_audio.SR, hop=2048):
                                     sr=sr, hop_length=hop) + 1e-6
     cm = librosa.feature.chroma_cqt(y=np.asarray(mix, dtype="float32"),
                                     sr=sr, hop_length=hop) + 1e-6
+    # Subsequence DTW finds the mix (the query X) WITHIN the original (the database Y),
+    # which requires the mix to be no longer than the original. If the mix region is
+    # longer (e.g. a master span that exceeds the source length — track 40), the
+    # premise is violated: librosa reorients X/Y so `wp` no longer indexes `dist`
+    # consistently, and any recovered rate would be meaningless. Flag and bail rather
+    # than crash or emit a bogus rate.
+    if cm.shape[1] > co.shape[1]:
+        return {"rate": float("nan"), "offset_orig_s": 0.0, "confidence": 0.0,
+                "norm_cost": float("nan"), "n_path": 0, "reliable": False,
+                "note": "mix region longer than original (subsequence premise violated)"}
     # subsequence DTW: locate the mix (X) within the original (Y).
     dist, wp = librosa.sequence.dtw(X=cm, Y=co, subseq=True, metric="cosine")
     wp = wp[::-1].astype(float)          # ascending; columns: (mix_frame, orig_frame)
@@ -222,15 +232,45 @@ def find_original(track_num, sources_dir):
     return None
 
 
+def _select_capture(srcs, mb, me, starts, audio_dir=None):
+    """Pick the source capture that actually CONTAINS the master span [mb, me].
+
+    `source_files` is ordered by overlap, not by which capture holds the track, so
+    `srcs[0]` often starts after (or ends before) the track's region — slicing it then
+    yields an empty mix (the track 8/12/20/27/38 nan cases). Walk the candidates and
+    take the first placed, audio-present capture whose [start, end] fully covers
+    [mb, me]; fall back to the one with the largest overlap. Returns (cap, cstart) or
+    (None, reason)."""
+    sr = _audio.SR
+    best, best_overlap, reason = None, 0.0, "no placed capture with audio"
+    for s in srcs:
+        cap = os.path.splitext(os.path.basename(s))[0]
+        if cap not in starts:
+            continue
+        if not _audio.find_audio_file(cap, audio_dir):
+            continue
+        cstart = starts[cap]
+        cend = cstart + len(_audio.load_audio(cap, audio_dir=audio_dir)) / sr
+        if cstart <= mb and cend >= me:
+            return cap, cstart                      # fully contains the span
+        overlap = max(0.0, min(cend, me) - max(cstart, mb))
+        if overlap > best_overlap:
+            best, best_overlap, reason = (cap, cstart), overlap, "partial overlap only"
+    if best is not None and best_overlap > 0:
+        return best                                  # best partial (caller may flag)
+    return None, reason
+
+
 def align_track(track_num, track_metadata, sources_dir, labels_dir=None,
                 audio_dir=None, hop=2048):
     """Chroma+DTW-align track NNN's original to its mix region; grade vs sync rate.
 
     `track_metadata` is the loaded track-metadata.json tracks dict. The mix region is
-    the track's [master_begin, master_end] inside its primary `source_files` capture
-    (capture master start from the resolved hand placements). Returns a dict with the
-    recovered `rate`, `offset_orig_s`, the ground-truth `gt_rate`/`rate_method`, and
-    `rate_err`; or {"error": ...} if inputs are missing.
+    the track's [master_begin, master_end] inside the `source_files` capture that
+    actually contains that span (capture master start from the resolved hand
+    placements; see `_select_capture`). Returns a dict with the recovered `rate`,
+    `offset_orig_s`, the ground-truth `gt_rate`/`rate_method`, and `rate_err`; or
+    {"error": ...} if inputs are missing.
     """
     e = track_metadata.get(str(track_num)) or {}
     mb, me = e.get("master_begin_seconds"), e.get("master_end_seconds")
@@ -240,20 +280,50 @@ def align_track(track_num, track_metadata, sources_dir, labels_dir=None,
     orig_path = find_original(track_num, sources_dir)
     if not orig_path:
         return {"error": "no original audio"}
-    cap = os.path.splitext(os.path.basename(srcs[0]))[0]
     starts = _gt.resolve_starts(labels_dir)
-    if cap not in starts:
-        return {"error": "capture %s not placed" % cap}
-    cstart = starts[cap]
-    if not _audio.find_audio_file(cap, audio_dir):
-        return {"error": "capture %s audio missing" % cap}
+    cap, cstart = _select_capture(srcs, mb, me, starts, audio_dir=audio_dir)
+    if cap is None:
+        return {"error": "no source capture contains span (%s)" % cstart}
     cap_audio = _audio.load_audio(cap, audio_dir=audio_dir)
     sr = _audio.SR
     mix = cap_audio[int((mb - cstart) * sr):int((me - cstart) * sr)]
     orig = _audio.load_audio(orig_path, audio_dir=audio_dir)
     r = chroma_dtw_rate(orig, mix, sr=sr, hop=hop)
     g = track_sync_groundtruth(labels_dir).get(int(track_num), {})
-    r.update({"track": int(track_num), "gt_rate": g.get("rate"),
+    r.update({"track": int(track_num), "capture": cap, "gt_rate": g.get("rate"),
               "rate_method": g.get("rate_method"),
               "rate_err": (abs(r["rate"] - g["rate"]) if g.get("rate") else None)})
     return r
+
+
+def batch_align(track_metadata, sources_dir, labels_dir=None, audio_dir=None,
+                hop=2048, tracks=None, rate_tol=0.005):
+    """G2 1st pass at scale: align every synced track that has an original + capture.
+
+    `tracks` limits to a subset (default: every track with a T0 sync `rate`). Each
+    result is `align_track`'s dict plus `within_tol` (reliable AND |rate_err| ≤
+    `rate_tol`). Returns {results, reliable, within_tol, flagged, no_original,
+    errored} where the lists hold track numbers — `no_original` is the G4 signal
+    (synced track, no source file)."""
+    gt = track_sync_groundtruth(labels_dir)
+    nums = tracks if tracks is not None else sorted(
+        k for k, v in gt.items() if v.get("rate") is not None)
+    results, reliable, within, flagged, no_orig, errored = [], [], [], [], [], []
+    for tn in nums:
+        if find_original(tn, sources_dir) is None:
+            no_orig.append(tn)
+            continue
+        r = align_track(tn, track_metadata, sources_dir, labels_dir=labels_dir,
+                        audio_dir=audio_dir, hop=hop)
+        if "error" in r:
+            errored.append(tn)
+            results.append({"track": tn, "error": r["error"]})
+            continue
+        err = r.get("rate_err")
+        r["within_tol"] = bool(r.get("reliable") and err is not None and err <= rate_tol)
+        results.append(r)
+        (reliable if r.get("reliable") else flagged).append(tn)
+        if r["within_tol"]:
+            within.append(tn)
+    return {"results": results, "reliable": reliable, "within_tol": within,
+            "flagged": flagged, "no_original": no_orig, "errored": errored}

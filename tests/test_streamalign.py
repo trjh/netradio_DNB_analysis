@@ -215,6 +215,58 @@ class TrackMixTests(unittest.TestCase):
         self.assertGreater(rn["norm_cost"], r["norm_cost"])   # noise matches worse
         self.assertFalse(rn["reliable"])
 
+    def test_chroma_dtw_flags_mix_longer_than_original(self):
+        # When the mix region is longer than the whole original (a master span that
+        # exceeds the source — track 40), subsequence DTW's premise is violated:
+        # librosa reorients X/Y and indexing the endpoint would crash. Must flag, not
+        # crash, and not emit a rate.
+        try:
+            import librosa  # noqa: F401
+        except ImportError:
+            self.skipTest("librosa not installed (core python)")
+        sr = track_mix._audio.SR
+        orig = self._chroma_signal(6.0, sr)
+        mix = self._chroma_signal(10.0, sr)        # longer than the original
+        r = track_mix.chroma_dtw_rate(orig, mix, sr=sr, hop=512)
+        self.assertFalse(r["reliable"])
+        self.assertIn("note", r)
+        self.assertNotEqual(r["rate"], r["rate"])  # NaN
+
+    def test_select_capture_picks_containing_capture(self):
+        # source_files is ordered by overlap, not containment: srcs[0] may start after
+        # (or end before) the track region. _select_capture must pick the capture whose
+        # [start, start+len] fully covers [mb, me], not srcs[0]. Stub the audio layer
+        # so no real files are needed (capture length comes from load_audio()).
+        sr = track_mix._audio.SR
+        lengths = {"capA": 100, "capB": 600, "capC": 200}   # seconds
+        starts = {"capA": 0.0, "capB": 90.0, "capC": 700.0}
+
+        class _Stub:
+            SR = sr
+
+            @staticmethod
+            def find_audio_file(stem, audio_dir=None):
+                return stem in lengths
+
+            @staticmethod
+            def load_audio(stem, audio_dir=None):
+                import numpy as np
+                return np.zeros(int(lengths[stem] * sr), dtype="float32")
+
+        orig_audio = track_mix._audio
+        track_mix._audio = _Stub
+        try:
+            # span [200, 540] sits inside capB (90..690), not capA (0..100, srcs[0]).
+            srcs = ["capA.wav", "capB.wav", "capC.wav"]
+            cap, cstart = track_mix._select_capture(srcs, 200.0, 540.0, starts)
+            self.assertEqual(cap, "capB")
+            self.assertEqual(cstart, 90.0)
+            # span fully outside every capture -> best partial / None reason
+            cap2, info2 = track_mix._select_capture(srcs, 2000.0, 2100.0, starts)
+            self.assertIsNone(cap2)
+        finally:
+            track_mix._audio = orig_audio
+
 
 class GraphTests(unittest.TestCase):
     def test_filename_range(self):

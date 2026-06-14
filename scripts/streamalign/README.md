@@ -60,6 +60,8 @@ absolute error vs ground truth, plus redundant-overlap self-consistency.
 PYTHONPATH=scripts python3 -m streamalign groundtruth          # the hand answer key
 PYTHONPATH=scripts python3 -m streamalign align d000-018 d001-026b
 PYTHONPATH=scripts python3 -m streamalign --labels <dir> validate
+PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix \
+    --meta track-metadata.json --sources sources_local        # G2 1st pass (needs librosa)
 ```
 
 - **`groundtruth`** — prints each file's resolved hand master-start (seconds) and
@@ -72,6 +74,11 @@ PYTHONPATH=scripts python3 -m streamalign --labels <dir> validate
   table (error in ms / samples, confidence), worst first, then a summary (median /
   max error, how many fall within the pass tolerance, and pairs skipped for missing
   audio). This is the headline "does the engine match Tim's hand work" check.
+- **`track-mix`** — G2 1st pass: chroma+DTW-align every synced original to its mix
+  region, grade the recovered rate against the sync ground truth, and print a
+  per-track table (rate / gt_rate / err / confidence / cost / reliable / within-tol)
+  plus a summary (reliable, within-tolerance, flagged, no-original). `--json` writes
+  the full results. Needs librosa — run with `.venv/bin/python`.
 
 ## Status (current)
 
@@ -83,12 +90,18 @@ PYTHONPATH=scripts python3 -m streamalign --labels <dir> validate
 - **P4 discovery + global solve** — mechanism validated; `placement_diagnostics`
   separates corroborated from uncorroborated placements.
 - **G2 / T1 original-track↔mix rate** — chroma + subsequence-DTW recovers the
-  mix/original rate where waveform correlation cannot. Graded against the sync
-  ground truth on tracks 8/10/13/16/23: the two clean matches land within target
-  (track 16 err 6e-5, track 13 err 0.0019), and a **precision-first reliability
-  gate** (`is_reliable`: warp-path R² ≥ 0.999 **and** mean DTW cost ≤ 0.03) rejects
-  all three bad cases — wrong-match (track 23), degenerate slope (track 10), and
-  empty mix region (track 8) — so the engine flags rather than emits a wrong rate.
+  mix/original rate where waveform correlation cannot, with a **precision-first
+  reliability gate** (`is_reliable`: warp-path R² ≥ 0.999 **and** mean DTW cost ≤
+  0.03) so the engine flags rather than emits a wrong rate.
+- **G2 / T2 1st pass at scale** (`batch_align` / `track-mix` CLI) — align every
+  synced original to the mix region of the capture that actually **contains** its
+  master span (not blindly `source_files[0]`, which is ordered by overlap). Of the 26
+  synced tracks with an original on disk: **18 pass the gate, 15 within the strict
+  rate tolerance (≤0.005)**; the rest are correctly flagged (gross mismatch / span
+  longer than source / too-short region) for hand or 2nd-pass attention. Three
+  reliable-but-rate-disagrees tracks (8, 10, 19) are the piecewise/2nd-pass
+  candidates. A further **30 synced tracks have no original file** — the G4
+  missing-source signal, surfaced in the same report.
 
 ### Known limits (open work)
 
