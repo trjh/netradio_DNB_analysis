@@ -12,7 +12,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
 
-from streamalign import align, audio, graph, groundtruth, score, skips, solve  # noqa: E402
+from streamalign import align, audio, emit_labels, graph, groundtruth, score, skips, solve  # noqa: E402
 
 # Known hand values from TIMELINE_GUIDE / the labels (master_start seconds).
 SMOKE = {
@@ -101,6 +101,32 @@ class SkipDetectionTests(unittest.TestCase):
         got = sorted(round(s["delta_s"], 3) for s in r["skips"])
         for got_d, exp_d in zip(got, [0.672, 1.248, 1.248, 1.632]):
             self.assertAlmostEqual(got_d, exp_d, places=2)
+
+
+class EmitLabelsTests(unittest.TestCase):
+    def test_emit_roundtrips_and_is_auto_generated(self):
+        import tempfile
+        out, hand = tempfile.mkdtemp(), tempfile.mkdtemp()
+        positions = {"d900-901": 100.5, "d902-903": 250.0}
+        emit_labels.emit_labels(positions, out, hand,
+                                {"d900-901": 60.0, "d902-903": 60.0})
+        for fn in os.listdir(out):
+            with open(os.path.join(out, fn)) as f:
+                for line in f:
+                    self.assertTrue(line.rstrip("\n").endswith("AUTO GENERATED"), line)
+        starts = groundtruth.resolve_starts(out)
+        self.assertAlmostEqual(starts["d900-901"], 100.5, places=3)
+        self.assertAlmostEqual(starts["d902-903"], 250.0, places=3)
+
+    def test_does_not_overwrite_hand_labels(self):
+        import tempfile
+        out, hand = tempfile.mkdtemp(), tempfile.mkdtemp()
+        with open(os.path.join(hand, "d900-901.labels.tsv"), "w") as f:
+            f.write("0\t0\thand label\n")
+        emit_labels.emit_labels({"d900-901": 5.0}, out, hand, {"d900-901": 10.0})
+        # hand-labelled stem -> supplementary .auto.labels.tsv, never the canonical
+        self.assertTrue(os.path.exists(os.path.join(out, "d900-901.auto.labels.tsv")))
+        self.assertFalse(os.path.exists(os.path.join(out, "d900-901.labels.tsv")))
 
 
 class GraphTests(unittest.TestCase):

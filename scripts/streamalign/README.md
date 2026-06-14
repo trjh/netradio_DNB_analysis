@@ -50,6 +50,11 @@ pairs. This is the data everything else is graded against.
 **3. Score (measure the finding vs the answer key).** `score.py` — pairwise and
 absolute error vs ground truth, plus redundant-overlap self-consistency.
 
+**4. Emit.** `emit_labels.py` — write AUTO GENERATED `labels.tsv` from a solve's
+placements (every label ends `" AUTO GENERATED"`; never overwrites a hand label —
+canonical name for un-labelled recordings, `<stem>.auto.labels.tsv` to supplement a
+hand-labelled one). `clips.py` — skip-check review clips for by-ear verification.
+
 ## Usage
 
 ```
