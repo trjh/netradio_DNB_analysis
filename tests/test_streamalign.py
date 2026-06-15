@@ -13,7 +13,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
 
-from streamalign import align, audio, clips, graph, groundtruth, score, skips, solve, track_mix  # noqa: E402
+from streamalign import align, audio, clips, emit_labels, graph, groundtruth, score, skips, solve, track_mix  # noqa: E402
 
 # Known hand values from TIMELINE_GUIDE / the labels (master_start seconds).
 SMOKE = {
@@ -267,6 +267,37 @@ class TrackMixTests(unittest.TestCase):
             self.assertIsNone(cap2)
         finally:
             track_mix._audio = orig_audio
+
+
+class EmitLabelsTests(unittest.TestCase):
+    def test_emit_roundtrips_and_is_auto_generated(self):
+        import tempfile
+        out = tempfile.mkdtemp()
+        positions = {"d900-901": 100.5, "d902-903": 250.0}
+        emit_labels.emit_labels(positions, out, {"d900-901": 60.0, "d902-903": 60.0})
+        files = sorted(os.listdir(out))
+        # programmatic output is ALWAYS <stem>.auto.labels.tsv
+        self.assertEqual(files, ["d900-901.auto.labels.tsv", "d902-903.auto.labels.tsv"])
+        for fn in files:
+            with open(os.path.join(out, fn)) as f:
+                for line in f:
+                    self.assertTrue(line.rstrip("\n").endswith("AUTO GENERATED"), line)
+        starts = groundtruth.resolve_starts(out)   # reads *.auto.labels.tsv too
+        self.assertAlmostEqual(starts["d900-901"], 100.5, places=3)
+        self.assertAlmostEqual(starts["d902-903"], 250.0, places=3)
+
+    def test_always_auto_suffix_and_never_overwrites_hand(self):
+        import tempfile
+        out = tempfile.mkdtemp()
+        # a hand <stem>.labels.tsv sitting in the SAME dir must be left untouched
+        hand_path = os.path.join(out, "d900-901.labels.tsv")
+        with open(hand_path, "w") as f:
+            f.write("0\t0\thand label\n")
+        emit_labels.emit_labels({"d900-901": 5.0}, out, {"d900-901": 10.0})
+        # programmatic output goes to .auto.labels.tsv; the hand file is unchanged
+        self.assertTrue(os.path.exists(os.path.join(out, "d900-901.auto.labels.tsv")))
+        with open(hand_path) as f:
+            self.assertEqual(f.read(), "0\t0\thand label\n")
 
 
 class GraphTests(unittest.TestCase):
