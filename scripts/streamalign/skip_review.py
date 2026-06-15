@@ -302,12 +302,47 @@ def clip_id(cand, index):
     return "%s_%s_skip%d" % (cand["skipper"], cand["reference"], index + 1)
 
 
-def generate_clips(candidates, out_dir, sr=_audio.SR):
+def _candidate_rejected(cand, rejections):
+    """True if this candidate's skip has been rejected, under either orientation
+    (recorded against the skipper by default, or against the reference via --owner)."""
+    if is_rejected(cand["skipper"], cand["at_s"], cand["delta_s"], rejections):
+        return True
+    try:
+        stem, at, delta, _b, _a, _r = reattribute(cand, cand["reference"])
+    except ValueError:
+        return False
+    return is_rejected(stem, at, delta, rejections)
+
+
+def _prune_manifest(out_dir, drop_ids):
+    """Remove the given clip ids from out_dir/manifest.json (atomic). Other clips
+    (incl. non-skip ones) are untouched."""
+    path = os.path.join(out_dir, "manifest.json")
+    if not os.path.isfile(path):
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return
+    data["clips"] = [c for c in data.get("clips", []) if c.get("id") not in drop_ids]
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2)
+    os.replace(tmp, path)
+
+
+def generate_clips(candidates, out_dir, labels_dir=None, sr=_audio.SR):
     """Render one skip-check clip per candidate into out_dir + manifest + sidecar.
 
     Reuses clips.make_skip_clip / write_clip / _append_manifest, then persists the
     candidate metadata to `skip-candidates.json` keyed by clip id, so confirm/reject
     can act on a clip id later without re-detecting. Returns the manifest entries.
+
+    On every run, any skip Tim has since **rejected** is pruned from the manifest, the
+    sidecar, and disk — so a rerun never resurfaces a rejected clip in the review player
+    (enumerate already drops rejected candidates from the new batch; this also clears
+    stale entries persisted by an earlier run).
     """
     os.makedirs(out_dir, exist_ok=True)
     entries = []
@@ -343,6 +378,16 @@ def generate_clips(candidates, out_dir, sr=_audio.SR):
         })
         sidecar[cid] = dict(cand, id=cid)
     _clips._append_manifest(out_dir, entries)
+    # prune any now-rejected skip from both stores + disk so it never resurfaces
+    rejections = load_rejections(labels_dir)
+    drop = {cid for cid, c in sidecar.items() if _candidate_rejected(c, rejections)}
+    if drop:
+        sidecar = {cid: c for cid, c in sidecar.items() if cid not in drop}
+        _prune_manifest(out_dir, drop)
+        for cid in drop:
+            mp3 = os.path.join(out_dir, cid + ".mp3")
+            if os.path.isfile(mp3):
+                os.remove(mp3)
     save_candidates(out_dir, sidecar)
     return entries
 

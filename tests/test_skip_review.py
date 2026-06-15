@@ -293,6 +293,38 @@ class GenerateClipsTests(unittest.TestCase):
         self.assertIn(cid, sidecar)
         self.assertEqual(sidecar[cid]["delta_s"], -1.2)
 
+    def test_rerun_prunes_rejected_clip_from_manifest_sidecar_and_disk(self):
+        labels = tempfile.mkdtemp()
+        cid = "d100-119_d099-118_skip1"
+        # seed a prior run: manifest + sidecar + on-disk mp3 for the clip
+        import streamalign.clips as _clips
+        _clips._append_manifest(self.out, [{"id": cid, "audio": cid + ".mp3",
+                                            "title": "old rejected"}])
+        skip_review.save_candidates(self.out, {cid: {
+            "id": cid, "skipper": "d100-119", "reference": "d099-118",
+            "at_s": 50.0, "delta_s": -1.2, "before_s": 49.4, "after_s": 50.6}})
+        mp3 = os.path.join(self.out, cid + ".mp3")
+        open(mp3, "wb").close()
+        # Tim rejects it; a rerun produces no matching candidate
+        skip_review.reject_skip("d100-119", 50.0, -1.2, labels_dir=labels)
+        skip_review.generate_clips([], self.out, labels_dir=labels)
+        # gone from BOTH stores and disk; the player will never resurface it
+        with open(os.path.join(self.out, "manifest.json")) as f:
+            ids = [c.get("id") for c in json.load(f)["clips"]]
+        self.assertNotIn(cid, ids)
+        self.assertNotIn(cid, skip_review.load_candidates(self.out))
+        self.assertFalse(os.path.exists(mp3))
+
+    def test_rerun_keeps_unrelated_clips(self):
+        labels = tempfile.mkdtemp()
+        import streamalign.clips as _clips
+        _clips._append_manifest(self.out, [{"id": "other_tool_clip", "audio": "x.mp3"}])
+        skip_review.reject_skip("d100-119", 50.0, -1.2, labels_dir=labels)
+        skip_review.generate_clips([], self.out, labels_dir=labels)
+        with open(os.path.join(self.out, "manifest.json")) as f:
+            ids = [c.get("id") for c in json.load(f)["clips"]]
+        self.assertIn("other_tool_clip", ids)   # non-skip clips untouched
+
 
 if __name__ == "__main__":
     unittest.main()

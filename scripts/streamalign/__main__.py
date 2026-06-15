@@ -157,7 +157,7 @@ def _cmd_skip_clips(args):
               % (c["skipper"], c["reference"], word, mag, c["at_s"], c["conf"]))
     if not cands:
         return
-    entries = _skip_review.generate_clips(cands, out_dir)
+    entries = _skip_review.generate_clips(cands, out_dir, labels_dir=args.labels)
     print("\nwrote %d clip(s) + manifest + %s to %s"
           % (len(entries), _skip_review.CANDIDATES_NAME, out_dir))
     print("review them in the clip player, then: skip-confirm <id> / skip-reject <id>")
