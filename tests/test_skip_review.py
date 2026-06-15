@@ -1,0 +1,263 @@
+"""Tests for the F1 skip-check runner + confirm/reject write-back.
+
+The decision store, confirm/reject, apply_decisions and the candidate sidecar are
+pure I/O and run anywhere. Candidate enumeration + clip generation stub the audio /
+detection / ffmpeg layers (the captures live on Tim's disk, not in the repo), mirroring
+the _Stub pattern in test_streamalign.py.
+"""
+
+import json
+import os
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+
+import numpy as np  # noqa: E402
+
+from streamalign import emit_labels, groundtruth, skip_review  # noqa: E402
+
+
+class DirectionTests(unittest.TestCase):
+    def test_sign_convention_matches_emit(self):
+        # negative offset step => skipper jumped AHEAD; positive => BACK.
+        self.assertEqual(skip_review._direction(-1.25), ("ahead", 1.25))
+        self.assertEqual(skip_review._direction(0.96), ("back", 0.96))
+
+    def test_same_skip_matches_position_and_direction(self):
+        self.assertTrue(skip_review._same_skip(20.0, -1.0, 20.8, -1.2))   # near + same dir
+        self.assertFalse(skip_review._same_skip(20.0, -1.0, 20.0, 1.0))   # opposite dir
+        self.assertFalse(skip_review._same_skip(20.0, -1.0, 30.0, -1.0))  # too far
+
+
+class RejectionStoreTests(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+
+    def test_reject_adds_then_idempotent(self):
+        self.assertEqual(skip_review.reject_skip("d100-119", 42.0, -1.0, "d099-118",
+                                                 note="doubling", labels_dir=self.dir), "added")
+        self.assertEqual(skip_review.reject_skip("d100-119", 42.4, -1.1, "d099-118",
+                                                 labels_dir=self.dir), "already")
+        rej = skip_review.load_rejections(self.dir)
+        self.assertEqual(len(rej), 1)
+        self.assertEqual(rej[0]["stem"], "d100-119")
+        self.assertEqual(rej[0]["note"], "doubling")
+
+    def test_is_rejected_tolerant_match(self):
+        skip_review.reject_skip("d100-119", 42.0, -1.0, labels_dir=self.dir)
+        self.assertTrue(skip_review.is_rejected("d100-119", 42.5, -0.9, labels_dir=self.dir))
+        self.assertFalse(skip_review.is_rejected("d100-119", 42.5, 0.9, labels_dir=self.dir))  # dir flip
+        self.assertFalse(skip_review.is_rejected("dXXX", 42.0, -1.0, labels_dir=self.dir))
+
+    def test_file_has_header_and_is_tsv(self):
+        skip_review.reject_skip("d100-119", 42.0, -1.0, labels_dir=self.dir)
+        with open(os.path.join(self.dir, skip_review.REJECTIONS_NAME)) as f:
+            lines = f.read().splitlines()
+        self.assertTrue(lines[0].startswith("#"))
+        self.assertEqual(lines[1].split("\t")[0], "d100-119")
+
+
+class ConfirmTests(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+
+    def test_confirm_appends_hand_grammar_row(self):
+        status = skip_review.confirm_skip("d100-119", 50.0, -1.248, reference="d099-118",
+                                          before_s=49.4, after_s=50.6, labels_dir=self.dir)
+        self.assertEqual(status, "added")
+        path = os.path.join(self.dir, "d100-119.labels.tsv")
+        with open(path) as f:
+            row = f.read().splitlines()[-1]
+        cols = row.split("\t")
+        self.assertAlmostEqual(float(cols[0]), 49.4, places=3)
+        self.assertAlmostEqual(float(cols[1]), 50.6, places=3)
+        self.assertEqual(cols[2], "file note: skip ahead 1.248s verified d099-118")
+        # NOT auto-generated: a confirmed skip is now ground truth (hand grammar)
+        self.assertNotIn("AUTO GENERATED", row)
+
+    def test_confirm_never_overwrites_existing_hand_content(self):
+        path = os.path.join(self.dir, "d100-119.labels.tsv")
+        with open(path, "w") as f:
+            f.write("0.000000\t0.000000\tfile start sync: d100-119.wav 123.0 verified d099-118\n")
+        skip_review.confirm_skip("d100-119", 50.0, -1.0, reference="d099-118", labels_dir=self.dir)
+        with open(path) as f:
+            content = f.read()
+        self.assertIn("file start sync: d100-119.wav 123.0", content)   # original preserved
+        self.assertIn("file note: skip ahead 1.000s verified d099-118", content)
+
+    def test_confirm_idempotent_for_nearby_same_direction(self):
+        skip_review.confirm_skip("d100-119", 50.0, -1.0, "d099-118", labels_dir=self.dir)
+        self.assertEqual(
+            skip_review.confirm_skip("d100-119", 50.7, -1.1, "d099-118", labels_dir=self.dir),
+            "already")
+        with open(os.path.join(self.dir, "d100-119.labels.tsv")) as f:
+            self.assertEqual(len([ln for ln in f if "skip" in ln]), 1)
+
+
+class ApplyDecisionsTests(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+
+    def test_drops_only_rejected_skips(self):
+        skip_review.reject_skip("d100-119", 50.0, -1.0, labels_dir=self.dir)
+        skip_maps = {"d100-119": [{"at_s": 50.2, "delta_s": -1.0},   # rejected
+                                  {"at_s": 80.0, "delta_s": 0.5}],   # kept
+                     "d120-139": [{"at_s": 10.0, "delta_s": -2.0}]}  # kept
+        out = skip_review.apply_decisions(skip_maps, labels_dir=self.dir)
+        self.assertEqual([s["at_s"] for s in out["d100-119"]], [80.0])
+        self.assertEqual(len(out["d120-139"]), 1)
+
+    def test_emit_labels_excludes_rejected_skip(self):
+        skip_review.reject_skip("d900-901", 30.0, -1.0, labels_dir=self.dir)
+        out = tempfile.mkdtemp()
+        emit_labels.emit_labels({"d900-901": 0.0}, out, durations={"d900-901": 120.0},
+                                skip_maps={"d900-901": [{"at_s": 30.0, "delta_s": -1.0},
+                                                        {"at_s": 90.0, "delta_s": 0.7}]},
+                                labels_dir=self.dir)
+        with open(os.path.join(out, "d900-901.auto.labels.tsv")) as f:
+            text = f.read()
+        self.assertNotIn("skip ahead", text)   # the rejected one is gone
+        self.assertIn("skip back 0.700s", text)  # the other survives
+
+
+class OrientationTests(unittest.TestCase):
+    def test_reference_is_better_anchored_capture(self):
+        # b nearer the anchor (smaller start) => b is reference, a is skipper, seed kept
+        self.assertEqual(skip_review._orient("d100-119", "d090-109", 5.0),
+                         ("d100-119", "d090-109", 5.0))
+        # a nearer the anchor => a is reference, b becomes skipper, seed negated
+        self.assertEqual(skip_review._orient("d090-109", "d100-119", 5.0),
+                         ("d100-119", "d090-109", -5.0))
+
+    def test_filename_start_parsing(self):
+        self.assertEqual(skip_review._filename_start("d356-375"), 356)
+        self.assertEqual(skip_review._filename_start("d-25-005b"), 25)
+
+
+class SidecarAndDecideTests(unittest.TestCase):
+    def setUp(self):
+        self.out = tempfile.mkdtemp()
+        self.labels = tempfile.mkdtemp()
+        self.cand = {"skipper": "d100-119", "reference": "d099-118", "at_s": 50.0,
+                     "delta_s": -1.2, "before_s": 49.4, "after_s": 50.6,
+                     "seed_offset_s": 600.0, "conf": 0.95}
+        skip_review.save_candidates(self.out, {"d100-119_d099-118_skip1": dict(self.cand,
+                                                                               id="d100-119_d099-118_skip1")})
+
+    def test_roundtrip_sidecar(self):
+        loaded = skip_review.load_candidates(self.out)
+        self.assertIn("d100-119_d099-118_skip1", loaded)
+        self.assertEqual(loaded["d100-119_d099-118_skip1"]["delta_s"], -1.2)
+
+    def test_decide_confirm_writes_hand_label(self):
+        status, cand = skip_review.decide("d100-119_d099-118_skip1", "confirm", self.out,
+                                          labels_dir=self.labels)
+        self.assertEqual(status, "added")
+        with open(os.path.join(self.labels, "d100-119.labels.tsv")) as f:
+            self.assertIn("file note: skip ahead 1.200s verified d099-118", f.read())
+
+    def test_decide_reject_writes_rejection(self):
+        status, _ = skip_review.decide("d100-119_d099-118_skip1", "reject", self.out,
+                                       labels_dir=self.labels, note="doubling")
+        self.assertEqual(status, "added")
+        self.assertTrue(skip_review.is_rejected("d100-119", 50.0, -1.2, labels_dir=self.labels))
+
+    def test_decide_owner_override_reattributes(self):
+        skip_review.decide("d100-119_d099-118_skip1", "confirm", self.out,
+                           labels_dir=self.labels, owner="d099-118")
+        self.assertTrue(os.path.exists(os.path.join(self.labels, "d099-118.labels.tsv")))
+        self.assertFalse(os.path.exists(os.path.join(self.labels, "d100-119.labels.tsv")))
+
+    def test_decide_unknown_id_raises(self):
+        with self.assertRaises(KeyError):
+            skip_review.decide("nope", "confirm", self.out, labels_dir=self.labels)
+
+
+class _AudioStub:
+    SR = skip_review._audio.SR
+    lengths = {"d100-119": 1200.0, "d099-118": 1200.0}
+
+    @staticmethod
+    def find_audio_file(stem, audio_dir=None):
+        return stem in _AudioStub.lengths
+
+    @staticmethod
+    def load_audio(stem, audio_dir=None):
+        return np.zeros(int(_AudioStub.lengths[stem] * _AudioStub.SR), dtype="float32")
+
+
+class EnumerateTests(unittest.TestCase):
+    """enumerate_candidates with the audio/detection layers stubbed."""
+    def setUp(self):
+        self.labels = tempfile.mkdtemp()
+        self._a, self._sk, self._so = skip_review._audio, skip_review._skips, skip_review._solve
+        skip_review._audio = _AudioStub
+        skip_review._solve = type("S", (), {
+            "measure_edge_skipaware": staticmethod(lambda a, b: {"offset_s": 600.0, "conf": 0.95}),
+            "_dedupe": staticmethod(self._so._dedupe),
+        })
+        skip_review._skips = type("K", (), {
+            "characterise_overlap": staticmethod(lambda skp, ref, lo, hi, seed: {
+                "skips": [{"at_s": 50.0, "delta_s": -1.2, "before_s": 49.0, "after_s": 51.0}]}),
+        })
+
+    def tearDown(self):
+        skip_review._audio, skip_review._skips, skip_review._solve = self._a, self._sk, self._so
+
+    def test_enumerate_orients_and_filters_rejected(self):
+        cands = skip_review.enumerate_candidates(
+            self.labels, pairs=[("d099-118", "d100-119")])
+        self.assertEqual(len(cands), 1)
+        c = cands[0]
+        self.assertEqual(c["skipper"], "d100-119")    # higher start => skipper
+        self.assertEqual(c["reference"], "d099-118")
+        self.assertEqual(c["seed_offset_s"], -600.0)  # seed negated by the flip
+        # now reject it and confirm a re-run drops it
+        skip_review.reject_skip("d100-119", 50.0, -1.2, labels_dir=self.labels)
+        self.assertEqual(skip_review.enumerate_candidates(
+            self.labels, pairs=[("d099-118", "d100-119")]), [])
+
+
+class GenerateClipsTests(unittest.TestCase):
+    """generate_clips with audio + ffmpeg write + clip builder stubbed."""
+    def setUp(self):
+        self.out = tempfile.mkdtemp()
+        self._a, self._clips_mk, self._clips_wr, self._walk = (
+            skip_review._audio, skip_review._clips.make_skip_clip,
+            skip_review._clips.write_clip, skip_review._skips.walk_overlap)
+        skip_review._audio = _AudioStub
+        skip_review._skips.walk_overlap = staticmethod(lambda *a, **k: [])
+        skip_review._clips.make_skip_clip = staticmethod(
+            lambda a, b, skip, walk, sr=0: (np.zeros(int(_AudioStub.SR * 5)),
+                                            [{"t": 0.0, "label": "x"}]))
+        self._written = []
+        skip_review._clips.write_clip = staticmethod(
+            lambda arr, path, sr=0: self._written.append(path))
+
+    def tearDown(self):
+        skip_review._audio = self._a
+        skip_review._clips.make_skip_clip = self._clips_mk
+        skip_review._clips.write_clip = self._clips_wr
+        skip_review._skips.walk_overlap = self._walk
+
+    def test_generates_manifest_and_sidecar(self):
+        cand = {"skipper": "d100-119", "reference": "d099-118", "at_s": 50.0,
+                "delta_s": -1.2, "before_s": 49.0, "after_s": 51.0,
+                "seed_offset_s": -600.0, "conf": 0.95}
+        entries = skip_review.generate_clips([cand], self.out)
+        self.assertEqual(len(entries), 1)
+        cid = entries[0]["id"]
+        self.assertEqual(cid, "d100-119_d099-118_skip1")
+        self.assertTrue(self._written[0].endswith(cid + ".mp3"))
+        with open(os.path.join(self.out, "manifest.json")) as f:
+            manifest = json.load(f)
+        self.assertEqual(manifest["clips"][0]["id"], cid)
+        sidecar = skip_review.load_candidates(self.out)
+        self.assertIn(cid, sidecar)
+        self.assertEqual(sidecar[cid]["delta_s"], -1.2)
+
+
+if __name__ == "__main__":
+    unittest.main()

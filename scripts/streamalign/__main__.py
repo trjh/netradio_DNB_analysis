@@ -28,11 +28,23 @@ import argparse
 import json
 import sys
 
+import os
+
 from . import align as _align
 from . import audio as _audio
 from . import groundtruth as _gt
 from . import score as _score
+from . import skip_review as _skip_review
 from . import track_mix as _track_mix
+
+
+def _default_clips_dir():
+    """Where skip-check clips land: $NETRADIO_CLIPS_DIR, else repo-local clips_out/.
+
+    Point NETRADIO_CLIPS_DIR at the player's `public/clips` so the clip review player
+    (PR #25) picks them up directly."""
+    return os.environ.get("NETRADIO_CLIPS_DIR",
+                          os.path.join(_gt.REPO_ROOT, "clips_out"))
 
 
 def _cmd_groundtruth(args):
@@ -135,6 +147,51 @@ def _cmd_track_mix(args):
         print("\nwrote %s" % args.json)
 
 
+def _cmd_skip_clips(args):
+    out_dir = args.out or _default_clips_dir()
+    cands = _skip_review.enumerate_candidates(args.labels, conf_min=args.conf_min)
+    print("found %d skip candidate(s) over the verified overlaps" % len(cands))
+    for c in cands:
+        word, mag = _skip_review._direction(c["delta_s"])
+        print("  %-13s vs %-13s  skip %-5s %.3fs @ %.1fs (conf %.2f)"
+              % (c["skipper"], c["reference"], word, mag, c["at_s"], c["conf"]))
+    if not cands:
+        return
+    entries = _skip_review.generate_clips(cands, out_dir)
+    print("\nwrote %d clip(s) + manifest + %s to %s"
+          % (len(entries), _skip_review.CANDIDATES_NAME, out_dir))
+    print("review them in the clip player, then: skip-confirm <id> / skip-reject <id>")
+
+
+def _cmd_skip_confirm(args):
+    out_dir = args.out or _default_clips_dir()
+    status, cand = _skip_review.decide(args.id, "confirm", out_dir, labels_dir=args.labels,
+                                       owner=args.owner)
+    stem = args.owner or cand["skipper"]
+    word, mag = _skip_review._direction(cand["delta_s"])
+    print("%s: confirmed skip %s %.3fs into %s.labels.tsv (verified %s)"
+          % (status, word, mag, stem, cand["reference"]))
+
+
+def _cmd_skip_reject(args):
+    out_dir = args.out or _default_clips_dir()
+    status, cand = _skip_review.decide(args.id, "reject", out_dir, labels_dir=args.labels,
+                                       owner=args.owner, note=args.note or "")
+    stem = args.owner or cand["skipper"]
+    word, mag = _skip_review._direction(cand["delta_s"])
+    print("%s: rejected skip %s %.3fs for %s → %s"
+          % (status, word, mag, stem, _skip_review.REJECTIONS_NAME))
+
+
+def _cmd_skip_rejections(args):
+    rej = _skip_review.load_rejections(args.labels)
+    for r in rej:
+        word, mag = _skip_review._direction(r["delta_s"])
+        print("%-13s skip %-5s %.3fs @ %.1fs  ref=%s  %s"
+              % (r["stem"], word, mag, r["at_s"], r["reference"], r["note"]))
+    print("# %d rejection(s)" % len(rej))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="streamalign", description=__doc__)
     parser.add_argument("--labels", default=None, help="labels dir (default: repo labels/)")
@@ -153,9 +210,31 @@ def main(argv=None):
     pt.add_argument("--rate-tol", type=float, default=0.005, help="rate err pass tolerance")
     pt.add_argument("--tracks", nargs="*", help="limit to these track numbers")
     pt.add_argument("--json", default=None, help="write full results JSON here")
+
+    ps = sub.add_parser("skip-clips",
+                        help="F1: detect skips over verified overlaps + render review clips")
+    ps.add_argument("--out", default=None,
+                    help="clip output dir (default: $NETRADIO_CLIPS_DIR or clips_out/; "
+                         "point at player/public/clips)")
+    ps.add_argument("--conf-min", type=float, default=0.7, help="min edge confidence")
+    pc = sub.add_parser("skip-confirm",
+                        help="F1: confirm a skip clip → skipper's hand <stem>.labels.tsv")
+    pc.add_argument("id", help="clip id from the manifest / skip-candidates.json")
+    pc.add_argument("--out", default=None, help="clip dir holding skip-candidates.json")
+    pc.add_argument("--owner", default=None, help="attribute the skip to this stem instead")
+    pr = sub.add_parser("skip-reject",
+                        help="F1: reject a skip clip → labels/skip-rejections.tsv")
+    pr.add_argument("id", help="clip id from the manifest / skip-candidates.json")
+    pr.add_argument("--out", default=None, help="clip dir holding skip-candidates.json")
+    pr.add_argument("--owner", default=None, help="attribute the skip to this stem instead")
+    pr.add_argument("--note", default=None, help="optional note recorded with the rejection")
+    sub.add_parser("skip-rejections", help="F1: list recorded skip rejections")
+
     args = parser.parse_args(argv)
     {"groundtruth": _cmd_groundtruth, "align": _cmd_align,
-     "validate": _cmd_validate, "track-mix": _cmd_track_mix}[args.cmd](args)
+     "validate": _cmd_validate, "track-mix": _cmd_track_mix,
+     "skip-clips": _cmd_skip_clips, "skip-confirm": _cmd_skip_confirm,
+     "skip-reject": _cmd_skip_reject, "skip-rejections": _cmd_skip_rejections}[args.cmd](args)
 
 
 if __name__ == "__main__":

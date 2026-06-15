@@ -52,17 +52,27 @@ def write_labels_tsv(rows, path):
     os.replace(tmp, path)
 
 
-def emit_labels(positions, out_dir, durations=None, skip_maps=None):
+def emit_labels(positions, out_dir, durations=None, skip_maps=None,
+                exclude_rejected=True, labels_dir=None):
     """Write an AUTO GENERATED `<stem>.auto.labels.tsv` per placed file into `out_dir`.
 
     Programmatic output is ALWAYS `<stem>.auto.labels.tsv` (never the plain
     `<stem>.labels.tsv`, reserved for hand-generated/confirmed labels), so it can sit
     alongside hand labels without ever overwriting them. `durations`/`skip_maps` are
     {stem: ...} (optional). Returns {stem: written_path}.
+
+    When `exclude_rejected` (default), skips Tim has by-ear rejected
+    (`labels/skip-rejections.tsv`, read from `labels_dir`) are dropped before emit, so
+    a wrong auto-detected skip never reaches the auto labels (F1's "solve consumes
+    rejections"). Confirmed skips already live in the hand labels and take precedence
+    there, so they are not re-emitted here.
     """
     os.makedirs(out_dir, exist_ok=True)
     durations = durations or {}
     skip_maps = skip_maps or {}
+    if exclude_rejected and skip_maps:
+        from . import skip_review as _skip_review
+        skip_maps = _skip_review.apply_decisions(skip_maps, labels_dir=labels_dir)
     written = {}
     for stem, master_start in positions.items():
         rows = _rows_for_file(stem, master_start, durations.get(stem),
