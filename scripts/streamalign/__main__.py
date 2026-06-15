@@ -36,6 +36,7 @@ from . import groundtruth as _gt
 from . import score as _score
 from . import skip_review as _skip_review
 from . import track_mix as _track_mix
+from . import track_mix_labels as _tml
 
 
 def _default_clips_dir():
@@ -195,6 +196,60 @@ def _cmd_skip_rejections(args):
     print("# %d rejection(s)" % len(rej))
 
 
+def _load_meta_and_results(args):
+    """Load track-metadata + run batch_align (shared by track-mix clips/emit)."""
+    with open(args.meta, "r", encoding="utf-8") as handle:
+        meta = json.load(handle)
+    tracks = meta.get("tracks", meta)
+    only = [int(t) for t in args.tracks] if args.tracks else None
+    out = _track_mix.batch_align(tracks, args.sources, labels_dir=args.labels,
+                                 hop=args.hop, tracks=only, rate_tol=args.rate_tol)
+    return tracks, out
+
+
+def _cmd_track_mix_clips(args):
+    out_dir = args.out or _default_clips_dir()
+    tracks, out = _load_meta_and_results(args)
+    entries = _tml.generate_review_clips(out["results"], args.sources, tracks, out_dir,
+                                         labels_dir=args.labels, dur_s=args.dur)
+    print("wrote %d track-mix review clip(s) + manifest + %s to %s"
+          % (len(entries), _tml.CANDIDATES_NAME, out_dir))
+    print("review in the clip player, then: track-mix-confirm <id> / track-mix-reject <id>")
+
+
+def _cmd_track_mix_confirm(args):
+    out_dir = args.out or _default_clips_dir()
+    rec = _tml.decide_clip(args.id, "confirm", out_dir, labels_dir=args.labels)
+    print("confirmed track %s (rate %.5f) — eligible for emission" %
+          (args.id, rec["rate"] or float("nan")))
+
+
+def _cmd_track_mix_reject(args):
+    out_dir = args.out or _default_clips_dir()
+    _tml.decide_clip(args.id, "reject", out_dir, labels_dir=args.labels, note=args.note or "")
+    print("rejected %s → %s" % (args.id, _tml.DECISIONS_NAME))
+
+
+def _cmd_track_mix_emit(args):
+    tracks, out = _load_meta_and_results(args)
+    emitted = _tml.emit_track_labels(out["results"], args.out, tracks,
+                                     labels_dir=args.labels,
+                                     only_confirmed=not args.all)
+    print("emitted %d track(s) → %s/<cap>.trackmix.auto.labels.tsv" % (len(emitted), args.out))
+    for tn, cap in sorted(emitted.items()):
+        print("  track %d → %s" % (tn, cap))
+
+
+def _cmd_track_mix_decisions(args):
+    dec = _tml.load_decisions(args.labels)
+    for tn in sorted(dec):
+        d = dec[tn]
+        print("track %-3d %-8s rate=%s cap=%s %s"
+              % (tn, d["decision"], ("%.5f" % d["rate"]) if d["rate"] else "-",
+                 d["capture"], d["note"]))
+    print("# %d decision(s)" % len(dec))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="streamalign", description=__doc__)
     parser.add_argument("--labels", default=None, help="labels dir (default: repo labels/)")
@@ -233,11 +288,42 @@ def main(argv=None):
     pr.add_argument("--note", default=None, help="optional note recorded with the rejection")
     sub.add_parser("skip-rejections", help="F1: list recorded skip rejections")
 
+    def _add_tm_inputs(p):
+        p.add_argument("--meta", default="track-metadata.json", help="track-metadata.json")
+        p.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
+        p.add_argument("--hop", type=int, default=2048, help="chroma hop length")
+        p.add_argument("--rate-tol", type=float, default=0.005, help="rate err tolerance")
+        p.add_argument("--tracks", nargs="*", help="limit to these track numbers")
+
+    ptc = sub.add_parser("track-mix-clips",
+                         help="F3: overlay each original on its mix region → review clips")
+    _add_tm_inputs(ptc)
+    ptc.add_argument("--out", default=None, help="clip dir (default $NETRADIO_CLIPS_DIR)")
+    ptc.add_argument("--dur", type=float, default=20.0, help="clip length (s)")
+    pcf = sub.add_parser("track-mix-confirm",
+                         help="F3: confirm a track-mix clip → eligible for emission")
+    pcf.add_argument("id", help="clip id from track-mix-candidates.json")
+    pcf.add_argument("--out", default=None, help="clip dir holding the sidecar")
+    prj = sub.add_parser("track-mix-reject", help="F3: reject a track-mix clip")
+    prj.add_argument("id", help="clip id from track-mix-candidates.json")
+    prj.add_argument("--out", default=None, help="clip dir holding the sidecar")
+    prj.add_argument("--note", default=None, help="optional note")
+    pem = sub.add_parser("track-mix-emit",
+                         help="F3: emit confirmed alignments → <cap>.trackmix.auto.labels.tsv")
+    _add_tm_inputs(pem)
+    pem.add_argument("--out", required=True, help="OUTPUT dir (must not be labels/)")
+    pem.add_argument("--all", action="store_true",
+                     help="emit every aligned track, not just confirmed (debug)")
+    sub.add_parser("track-mix-decisions", help="F3: list track-mix by-ear decisions")
+
     args = parser.parse_args(argv)
     {"groundtruth": _cmd_groundtruth, "align": _cmd_align,
      "validate": _cmd_validate, "track-mix": _cmd_track_mix,
      "skip-clips": _cmd_skip_clips, "skip-confirm": _cmd_skip_confirm,
-     "skip-reject": _cmd_skip_reject, "skip-rejections": _cmd_skip_rejections}[args.cmd](args)
+     "skip-reject": _cmd_skip_reject, "skip-rejections": _cmd_skip_rejections,
+     "track-mix-clips": _cmd_track_mix_clips, "track-mix-confirm": _cmd_track_mix_confirm,
+     "track-mix-reject": _cmd_track_mix_reject, "track-mix-emit": _cmd_track_mix_emit,
+     "track-mix-decisions": _cmd_track_mix_decisions}[args.cmd](args)
 
 
 if __name__ == "__main__":
