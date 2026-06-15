@@ -140,9 +140,12 @@ class SidecarAndDecideTests(unittest.TestCase):
     def setUp(self):
         self.out = tempfile.mkdtemp()
         self.labels = tempfile.mkdtemp()
+        # off_after - off_before == delta_s (-1.2); offsets chosen so reference-local
+        # times stay positive (skipper_t - offset).
         self.cand = {"skipper": "d100-119", "reference": "d099-118", "at_s": 50.0,
                      "delta_s": -1.2, "before_s": 49.4, "after_s": 50.6,
-                     "seed_offset_s": 600.0, "conf": 0.95}
+                     "off_before_s": -10.0, "off_after_s": -11.2,
+                     "seed_offset_s": -10.0, "conf": 0.95}
         skip_review.save_candidates(self.out, {"d100-119_d099-118_skip1": dict(self.cand,
                                                                                id="d100-119_d099-118_skip1")})
 
@@ -164,11 +167,42 @@ class SidecarAndDecideTests(unittest.TestCase):
         self.assertEqual(status, "added")
         self.assertTrue(skip_review.is_rejected("d100-119", 50.0, -1.2, labels_dir=self.labels))
 
-    def test_decide_owner_override_reattributes(self):
+    def test_decide_owner_override_transforms_coords_and_direction(self):
+        # reattribute to the reference: times → reference-local (skipper_t - offset),
+        # direction inverted (ahead→back), verified-ref points back at the skipper.
         skip_review.decide("d100-119_d099-118_skip1", "confirm", self.out,
                            labels_dir=self.labels, owner="d099-118")
-        self.assertTrue(os.path.exists(os.path.join(self.labels, "d099-118.labels.tsv")))
         self.assertFalse(os.path.exists(os.path.join(self.labels, "d100-119.labels.tsv")))
+        path = os.path.join(self.labels, "d099-118.labels.tsv")
+        with open(path) as f:
+            cols = f.read().splitlines()[-1].split("\t")
+        # before 49.4 - (-10.0) = 59.4 ; after 50.6 - (-11.2) = 61.8
+        self.assertAlmostEqual(float(cols[0]), 59.4, places=3)
+        self.assertAlmostEqual(float(cols[1]), 61.8, places=3)
+        self.assertEqual(cols[2], "file note: skip back 1.200s verified d100-119")
+
+    def test_decide_owner_override_reject_uses_reference_coords(self):
+        skip_review.decide("d100-119_d099-118_skip1", "reject", self.out,
+                           labels_dir=self.labels, owner="d099-118")
+        rej = skip_review.load_rejections(self.labels)
+        self.assertEqual(len(rej), 1)
+        self.assertEqual(rej[0]["stem"], "d099-118")
+        self.assertGreater(rej[0]["delta_s"], 0)        # direction inverted (was -1.2)
+        self.assertAlmostEqual(rej[0]["at_s"], 60.6, places=3)  # midpoint of 59.4..61.8
+        self.assertEqual(rej[0]["reference"], "d100-119")
+
+    def test_decide_rejects_owner_not_in_pair(self):
+        with self.assertRaises(ValueError):
+            skip_review.decide("d100-119_d099-118_skip1", "confirm", self.out,
+                               labels_dir=self.labels, owner="d999-998")
+
+    def test_reattribute_to_reference_needs_offsets(self):
+        skip_review.save_candidates(self.out, {"x": {
+            "skipper": "d100-119", "reference": "d099-118", "at_s": 50.0, "delta_s": -1.2,
+            "before_s": 49.4, "after_s": 50.6, "id": "x"}})  # no off_before/after_s
+        with self.assertRaises(ValueError):
+            skip_review.decide("x", "confirm", self.out, labels_dir=self.labels,
+                               owner="d099-118")
 
     def test_decide_unknown_id_raises(self):
         with self.assertRaises(KeyError):
@@ -200,6 +234,7 @@ class EnumerateTests(unittest.TestCase):
         })
         skip_review._skips = type("K", (), {
             "characterise_overlap": staticmethod(lambda skp, ref, lo, hi, seed: {
+                "walk": [(49.0, -10.0, 0.95), (51.0, -11.2, 0.95)],
                 "skips": [{"at_s": 50.0, "delta_s": -1.2, "before_s": 49.0, "after_s": 51.0}]}),
         })
 

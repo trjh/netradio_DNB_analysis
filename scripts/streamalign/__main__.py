@@ -167,18 +167,18 @@ def _cmd_skip_confirm(args):
     out_dir = args.out or _default_clips_dir()
     status, cand = _skip_review.decide(args.id, "confirm", out_dir, labels_dir=args.labels,
                                        owner=args.owner)
-    stem = args.owner or cand["skipper"]
-    word, mag = _skip_review._direction(cand["delta_s"])
+    stem, _at, delta, _b, _a, ref = _skip_review.reattribute(cand, args.owner)
+    word, mag = _skip_review._direction(delta)
     print("%s: confirmed skip %s %.3fs into %s.labels.tsv (verified %s)"
-          % (status, word, mag, stem, cand["reference"]))
+          % (status, word, mag, stem, ref))
 
 
 def _cmd_skip_reject(args):
     out_dir = args.out or _default_clips_dir()
     status, cand = _skip_review.decide(args.id, "reject", out_dir, labels_dir=args.labels,
                                        owner=args.owner, note=args.note or "")
-    stem = args.owner or cand["skipper"]
-    word, mag = _skip_review._direction(cand["delta_s"])
+    stem, _at, delta, _b, _a, _ref = _skip_review.reattribute(cand, args.owner)
+    word, mag = _skip_review._direction(delta)
     print("%s: rejected skip %s %.3fs for %s → %s"
           % (status, word, mag, stem, _skip_review.REJECTIONS_NAME))
 

@@ -263,10 +263,15 @@ def enumerate_candidates(labels_dir=None, pairs=None, conf_min=0.7,
         for sk in char["skips"]:
             if skip_rejected and is_rejected(skipper, sk["at_s"], sk["delta_s"], rejections):
                 continue
+            # local skipper→reference offsets bracketing the skip, so the write-back can
+            # convert into the reference's timeline if Tim reattributes (--owner).
+            off_before = _clips._offset_at(char["walk"], sk["before_s"])
+            off_after = _clips._offset_at(char["walk"], sk["after_s"])
             candidates.append({
                 "skipper": skipper, "reference": reference,
                 "at_s": sk["at_s"], "delta_s": sk["delta_s"],
                 "before_s": sk["before_s"], "after_s": sk["after_s"],
+                "off_before_s": off_before, "off_after_s": off_after,
                 "seed_offset_s": seed_off, "conf": edge["conf"],
             })
     return candidates
@@ -365,24 +370,50 @@ def save_candidates(out_dir, sidecar):
     os.replace(tmp, path)
 
 
+def reattribute(cand, owner):
+    """Resolve a candidate to (stem, at_s, delta_s, before_s, after_s, reference) for the
+    chosen `owner`, transforming coordinates when the owner is the reference.
+
+    Default (owner None or the skipper) keeps the candidate's skipper-local values. To
+    attribute the skip to the **reference** instead, convert into the reference's local
+    timeline — `reference_t = skipper_t − offset` using the per-point offsets bracketing
+    the skip — and **invert the offset-step direction** (a skipper "ahead" is a reference
+    "back"); the `verified` ref then points back at the original skipper. `owner` must be
+    one of the pair's two members.
+    """
+    skipper, ref = cand["skipper"], cand["reference"]
+    if owner in (None, skipper):
+        lo, hi = cand.get("before_s"), cand.get("after_s")
+        at = cand["at_s"] if lo is None or hi is None else 0.5 * (lo + hi)
+        return skipper, at, cand["delta_s"], lo, hi, ref
+    if owner != ref:
+        raise ValueError("--owner must be the skipper (%s) or reference (%s); got %r"
+                         % (skipper, ref, owner))
+    obf, oaf = cand.get("off_before_s"), cand.get("off_after_s")
+    if obf is None or oaf is None:
+        raise ValueError("cannot reattribute to %s: per-point offsets missing from the "
+                         "candidate (re-run skip-clips to record them)" % ref)
+    rb, ra = cand["before_s"] - obf, cand["after_s"] - oaf   # → reference-local times
+    lo, hi = sorted((rb, ra))
+    return ref, 0.5 * (lo + hi), -cand["delta_s"], lo, hi, skipper
+
+
 def decide(clip_id_, decision, out_dir, labels_dir=None, owner=None, note=""):
     """Apply a confirm/reject to a clip by id, using the candidates sidecar.
 
-    `decision` is "confirm" or "reject". `owner` overrides the skipper the skip is
-    attributed to (Tim can reattribute by ear). Returns (status, candidate).
-    Raises KeyError if the clip id isn't in the sidecar.
+    `decision` is "confirm" or "reject". `owner` (optional) reattributes the skip to the
+    pair's reference instead of the skipper — coordinates + direction are transformed into
+    that file's timeline (see `reattribute`). Returns (status, candidate). Raises KeyError
+    if the clip id isn't in the sidecar, ValueError for a bad owner.
     """
     sidecar = load_candidates(out_dir)
     cand = sidecar[clip_id_]
-    stem = owner or cand["skipper"]
-    ref = cand["reference"]
+    stem, at, delta, before_s, after_s, ref = reattribute(cand, owner)
     if decision == "confirm":
-        status = confirm_skip(stem, cand["at_s"], cand["delta_s"], reference=ref,
-                              before_s=cand.get("before_s"), after_s=cand.get("after_s"),
-                              labels_dir=labels_dir)
+        status = confirm_skip(stem, at, delta, reference=ref,
+                              before_s=before_s, after_s=after_s, labels_dir=labels_dir)
     elif decision == "reject":
-        status = reject_skip(stem, cand["at_s"], cand["delta_s"], reference=ref,
-                             note=note, labels_dir=labels_dir)
+        status = reject_skip(stem, at, delta, reference=ref, note=note, labels_dir=labels_dir)
     else:
         raise ValueError("decision must be 'confirm' or 'reject', got %r" % decision)
     return status, cand
