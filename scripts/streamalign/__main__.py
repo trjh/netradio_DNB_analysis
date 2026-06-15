@@ -155,9 +155,12 @@ def _cmd_skip_clips(args):
         word, mag = _skip_review._direction(c["delta_s"])
         print("  %-13s vs %-13s  skip %-5s %.3fs @ %.1fs (conf %.2f)"
               % (c["skipper"], c["reference"], word, mag, c["at_s"], c["conf"]))
-    if not cands:
-        return
+    # always call generate_clips — even with zero candidates it prunes any now-rejected
+    # clip from the manifest/sidecar/disk, so an all-rejected rerun clears the player.
     entries = _skip_review.generate_clips(cands, out_dir, labels_dir=args.labels)
+    if not cands:
+        print("(no new clips; pruned any rejected clips from %s)" % out_dir)
+        return
     print("\nwrote %d clip(s) + manifest + %s to %s"
           % (len(entries), _skip_review.CANDIDATES_NAME, out_dir))
     print("review them in the clip player, then: skip-confirm <id> / skip-reject <id>")

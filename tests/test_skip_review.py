@@ -326,5 +326,38 @@ class GenerateClipsTests(unittest.TestCase):
         self.assertIn("other_tool_clip", ids)   # non-skip clips untouched
 
 
+class CliSkipClipsTests(unittest.TestCase):
+    """The skip-clips CLI must prune rejected clips even when enumeration is empty."""
+    def setUp(self):
+        import argparse
+        import streamalign.__main__ as main_mod
+        import streamalign.clips as _clips
+        self.main_mod = main_mod
+        self.out = tempfile.mkdtemp()
+        self.labels = tempfile.mkdtemp()
+        self.cid = "d100-119_d099-118_skip1"
+        _clips._append_manifest(self.out, [{"id": self.cid, "audio": self.cid + ".mp3"}])
+        skip_review.save_candidates(self.out, {self.cid: {
+            "id": self.cid, "skipper": "d100-119", "reference": "d099-118",
+            "at_s": 50.0, "delta_s": -1.2, "before_s": 49.4, "after_s": 50.6}})
+        self.mp3 = os.path.join(self.out, self.cid + ".mp3")
+        open(self.mp3, "wb").close()
+        skip_review.reject_skip("d100-119", 50.0, -1.2, labels_dir=self.labels)
+        self._enum = skip_review.enumerate_candidates
+        skip_review.enumerate_candidates = staticmethod(lambda *a, **k: [])
+        self.args = argparse.Namespace(out=self.out, conf_min=0.7, labels=self.labels)
+
+    def tearDown(self):
+        skip_review.enumerate_candidates = self._enum
+
+    def test_cli_prunes_rejected_when_no_new_candidates(self):
+        self.main_mod._cmd_skip_clips(self.args)   # the documented rerun path
+        with open(os.path.join(self.out, "manifest.json")) as f:
+            ids = [c.get("id") for c in json.load(f)["clips"]]
+        self.assertNotIn(self.cid, ids)
+        self.assertNotIn(self.cid, skip_review.load_candidates(self.out))
+        self.assertFalse(os.path.exists(self.mp3))
+
+
 if __name__ == "__main__":
     unittest.main()
