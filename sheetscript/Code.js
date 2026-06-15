@@ -7,9 +7,8 @@ var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
 var syncPoints = {};
 
 function GithubImport() {
-  // Get the PAT from the "SECRETS" sheet, assuming it's stored in cell A2
-  var secretsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('SECRETS');
-  var authToken = secretsSheet.getRange('A2').getValue();
+  // Get the PAT from script properties
+  var authToken = PropertiesService.getScriptProperties().getProperty('GITHUB_PAT');
 
   // Fetch the list of files in the GitHub repository
   var headers = { 'Authorization': 'token ' + authToken };
