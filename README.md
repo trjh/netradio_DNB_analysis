@@ -56,9 +56,11 @@ The whole loop is tracked on the spreadsheet's **File List** tab, which carries 
 1. **Pick the next file.** Use the **File List** tab's complete/verified columns (plus
    [tracklist-2017.txt](./tracklist-2017.txt) and any remainder notes) to choose the next
    capture to analyze.
-2. **Open the capture in Audacity.** Create/use a label track.
-3. **Carry labels forward.** Bring in useful labels from the previous/overlapping file so
-   the new file starts with known track IDs, file boundaries, and sync context.
+2. **Open the capture in Audacity.**
+    - e.g. jaz_links/d336-355.wav
+3. **Carry data forward**
+    - load time-adjusted labels track (see below for how it was created)
+    - possibly others
 4. **Overlay adjacent captures.** Load overlapping stream captures, find sync points, and
    label file starts, file ends, **verified** syncs, skips, and spans of sync.
 5. **Overlay originals where known.** Add the original track/source recording when
