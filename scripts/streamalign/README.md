@@ -46,9 +46,22 @@ pairs. This is the data everything else is graded against.
 - `graph.py` — blind (seedless) pairwise alignment + overlap-graph discovery.
 - `solve.py` — propagate pairwise offsets from the anchor (`d000-018 = 0`) into
   absolute master positions, with per-file corroboration diagnostics.
+- `clips.py` — render skip-check review clips (A+B across a skip, B bridging the
+  gap) into the clip player's `manifest.json` for Tim to verify by ear.
+
+`track_mix.py` (original-track↔mix, G2) parses Tim's `origNNN`/`track` sync points
+into per-track ground truth (the **rate** = mix-seconds per original-second) that
+the chroma+DTW aligner is graded against.
 
 **3. Score (measure the finding vs the answer key).** `score.py` — pairwise and
 absolute error vs ground truth, plus redundant-overlap self-consistency.
+
+**4. Emit.** `emit_labels.py` — write AUTO GENERATED labels from a solve's placements:
+every label ends `" AUTO GENERATED"` and programmatic output always goes to
+`<stem>.auto.labels.tsv` (the plain `<stem>.labels.tsv` name is reserved for
+hand-generated/confirmed labels, so a hand file is never overwritten). Consumers read
+both; hand labels win on conflict. `clips.py` — skip-check review clips for by-ear
+verification.
 
 ## Usage
 
@@ -56,6 +69,8 @@ absolute error vs ground truth, plus redundant-overlap self-consistency.
 PYTHONPATH=scripts python3 -m streamalign groundtruth          # the hand answer key
 PYTHONPATH=scripts python3 -m streamalign align d000-018 d001-026b
 PYTHONPATH=scripts python3 -m streamalign --labels <dir> validate
+PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix \
+    --meta track-metadata.json --sources sources_local        # G2 1st pass (needs librosa)
 ```
 
 - **`groundtruth`** — prints each file's resolved hand master-start (seconds) and
@@ -68,6 +83,11 @@ PYTHONPATH=scripts python3 -m streamalign --labels <dir> validate
   table (error in ms / samples, confidence), worst first, then a summary (median /
   max error, how many fall within the pass tolerance, and pairs skipped for missing
   audio). This is the headline "does the engine match Tim's hand work" check.
+- **`track-mix`** — G2 1st pass: chroma+DTW-align every synced original to its mix
+  region, grade the recovered rate against the sync ground truth, and print a
+  per-track table (rate / gt_rate / err / confidence / cost / reliable / within-tol)
+  plus a summary (reliable, within-tolerance, flagged, no-original). `--json` writes
+  the full results. Needs librosa — run with `.venv/bin/python`.
 
 ## Status (current)
 
@@ -76,8 +96,22 @@ PYTHONPATH=scripts python3 -m streamalign --labels <dir> validate
 - **P1 pairwise align** — reproduces hand alignments to ±1 sample on clean overlaps.
 - **P2 skip detection** — recovers documented skips with exact magnitudes
   (positions ~2 s coarse; refinement pending).
-- **P4 discovery + global solve** — mechanism validated; `placement_diagnostics`
-  separates corroborated from uncorroborated placements.
+- **P4 discovery + global solve** — skip-aware edge measurement (offset over the
+  earliest skip-free segment) + consistency-based outlier rejection;
+  `placement_diagnostics` separates corroborated from uncorroborated placements.
+- **G2 / T1 original-track↔mix rate** — chroma + subsequence-DTW recovers the
+  mix/original rate where waveform correlation cannot, with a **precision-first
+  reliability gate** (`is_reliable`: warp-path R² ≥ 0.999 **and** mean DTW cost ≤
+  0.03) so the engine flags rather than emits a wrong rate.
+- **G2 / T2 1st pass at scale** (`batch_align` / `track-mix` CLI) — align every
+  synced original to the mix region of the capture that actually **contains** its
+  master span (not blindly `source_files[0]`, which is ordered by overlap). Of the 26
+  synced tracks with an original on disk: **18 pass the gate, 15 within the strict
+  rate tolerance (≤0.005)**; the rest are correctly flagged (gross mismatch / span
+  longer than source / too-short region) for hand or 2nd-pass attention. Three
+  reliable-but-rate-disagrees tracks (8, 10, 19) are the piecewise/2nd-pass
+  candidates. A further **30 synced tracks have no original file** — the G4
+  missing-source signal, surfaced in the same report.
 
 ### Known limits (open work)
 

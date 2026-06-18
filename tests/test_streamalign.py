@@ -5,6 +5,7 @@ skip gracefully when the capture files / ffmpeg aren't present (they live on Tim
 disk, not in the repo).
 """
 
+import json
 import os
 import shutil
 import sys
@@ -12,7 +13,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
 
-from streamalign import align, audio, graph, groundtruth, score, skips, solve  # noqa: E402
+from streamalign import align, audio, clips, emit_labels, graph, groundtruth, score, skips, solve, track_mix  # noqa: E402
 
 # Known hand values from TIMELINE_GUIDE / the labels (master_start seconds).
 SMOKE = {
@@ -103,6 +104,202 @@ class SkipDetectionTests(unittest.TestCase):
             self.assertAlmostEqual(got_d, exp_d, places=2)
 
 
+class TrackMixTests(unittest.TestCase):
+    def test_pairs_plain_and_numbered_track_sync(self):
+        import tempfile
+        d = tempfile.mkdtemp()
+        with open(os.path.join(d, "x.labels.tsv"), "w") as f:
+            f.write("10.0\t10.0\torig041 sync: 2\n")        # plain `track sync`
+            f.write("11.0\t11.0\ttrack sync: 2\n")
+            f.write("20.0\t20.0\torig015 sync: A\n")         # numbered `track015 sync`
+            f.write("21.0\t21.0\ttrack015 sync: A\n")
+        pts = track_mix.parse_sync_points(d)
+        self.assertEqual(len(pts.get(41, [])), 1)
+        self.assertEqual(len(pts.get(15, [])), 1)
+
+    def test_note_prefixed_sync_not_consumed(self):
+        # A carried-forward note (`note <file>: track sync: N`) references ANOTHER
+        # file and must NOT be paired as a current-file sync point.
+        import tempfile
+        d = tempfile.mkdtemp()
+        with open(os.path.join(d, "x.labels.tsv"), "w") as f:
+            f.write("5.0\t5.0\torig065 sync: 9\n")
+            f.write("100.0\t100.0\tnote d336-355: track sync: 9\n")
+        pts = track_mix.parse_sync_points(d)
+        self.assertEqual(pts.get(65, []), [])  # the only candidate is inside a note
+
+    def test_AB_rate_is_per_file_not_cross_file(self):
+        # f1 has a coherent A/B (rate 1.0); f2 has a stray earlier B from another
+        # section. The rate must come from f1's A/B, never f1.A paired with f2.B.
+        import tempfile
+        d = tempfile.mkdtemp()
+        with open(os.path.join(d, "f1.labels.tsv"), "w") as f:
+            f.write("100.0\t100.0\torig047 sync: A\n")
+            f.write("101.0\t101.0\ttrack047 sync: A\n")
+            f.write("200.0\t200.0\torig047 sync: B\n")
+            f.write("201.0\t201.0\ttrack047 sync: B\n")  # f1: (201-101)/(200-100)=1.0
+        with open(os.path.join(d, "f2.labels.tsv"), "w") as f:
+            f.write("10.0\t10.0\torig047 sync: B\n")
+            f.write("99.0\t99.0\ttrack047 sync: B\n")     # stray earlier B, must be ignored
+        gt = track_mix.track_sync_groundtruth(d)
+        self.assertAlmostEqual(gt[47]["rate"], 1.0, places=4)
+        self.assertEqual(gt[47]["rate_method"], "AB")
+
+    def test_rate_uses_AB_like_the_sheet(self):
+        # track 015 lives in the committed d026-073b labels; rate must match the
+        # sheet's (trackB-trackA)/(origB-origA), not a fit over all points.
+        gt = track_mix.track_sync_groundtruth()
+        if 15 not in gt or gt[15]["rate"] is None:
+            self.skipTest("track 15 sync points not in committed labels")
+        self.assertAlmostEqual(gt[15]["rate"], 1.010651, places=4)
+        self.assertEqual(gt[15]["rate_method"], "AB")
+
+    def _chroma_signal(self, seconds, sr):
+        # A deterministic, non-repeating melody: a distinct pitch class every 0.5 s
+        # walking up the chromatic scale. Many unique chroma columns give the
+        # subsequence DTW a single unambiguous diagonal path (so the slope is a clean
+        # rate and the offset is well-defined) — no audio files needed.
+        import numpy as np
+        t = np.arange(int(seconds * sr)) / sr
+        step = 0.5
+        y = np.zeros_like(t)
+        n = int(seconds / step)
+        for i in range(n):
+            semitone = i % 12               # chromatic walk, one note per 0.5 s
+            f0 = 220.0 * (2 ** (semitone / 12.0))
+            m = (t >= i * step) & (t < (i + 1) * step)
+            for h in (1, 2, 3):             # a few harmonics for chroma richness
+                y[m] += np.sin(2 * np.pi * f0 * h * t[m]) / h
+        return (y / 2).astype("float32")
+
+    def test_reliability_gate_matches_real_validation(self):
+        # The precision-first gate, fed the actual measured (confidence, norm_cost,
+        # slope) from aligning tracks 8/10/13/16/23 to their mix regions. Only 13 and
+        # 16 — the two whose recovered rate is within target of the sync ground truth
+        # — must pass; 23 (wrong-match, low R²), 10 (degenerate slope, high cost) and
+        # 8 (empty mix, NaN slope) must each be rejected. No audio needed.
+        import math
+        cases = {            # (confidence, norm_cost, slope) -> expected reliable
+            8:  (0.0,     0.0104, math.nan),   # empty mix -> NaN slope, fails finite
+            10: (0.99846, 0.0206, 1.0),        # degenerate slope -> fails confidence
+            13: (1.0,     0.0112, 1.00216),    # clean match within target
+            16: (1.0,     0.0130, 1.01130),    # clean match within target
+            23: (0.76887, 0.0498, 1.23228),    # wrong-match -> fails conf AND cost
+        }
+        expect = {8: False, 10: False, 13: True, 16: True, 23: False}
+        for trk, (conf, cost, slope) in cases.items():
+            self.assertEqual(track_mix.is_reliable(conf, cost, slope), expect[trk],
+                             "track %d gate" % trk)
+
+    def test_chroma_dtw_recovers_rate_and_offset(self):
+        # On a clean same-speed excerpt the warp path is a straight diagonal: rate ~1,
+        # offset ~where the excerpt starts, and the match is reliable. The excerpt ends
+        # mid-original (not at its last frame), so this is the regression for scoring
+        # `norm_cost` at the SELECTED subsequence endpoint rather than dist[-1, -1] —
+        # the latter inflated the cost and falsely flagged this clean match.
+        try:
+            import librosa  # noqa: F401
+        except ImportError:
+            self.skipTest("librosa not installed (core python)")
+        import numpy as np
+        sr = track_mix._audio.SR
+        orig = self._chroma_signal(12.0, sr)
+        mix = orig[int(2.0 * sr):int(10.0 * sr)]   # same speed, ends 2 s before orig end
+        r = track_mix.chroma_dtw_rate(orig, mix, sr=sr, hop=512)
+        self.assertAlmostEqual(r["rate"], 1.0, places=1)
+        self.assertGreaterEqual(r["confidence"], track_mix._MIN_CONFIDENCE)
+        self.assertAlmostEqual(r["offset_orig_s"], 2.0, delta=0.3)
+        self.assertTrue(r["reliable"])             # not falsely flagged by end-cost bug
+        rng = np.random.default_rng(0)
+        noise = rng.standard_normal(int(6.0 * sr)).astype("float32") * 0.1
+        rn = track_mix.chroma_dtw_rate(orig, noise, sr=sr, hop=512)
+        self.assertGreater(rn["norm_cost"], r["norm_cost"])   # noise matches worse
+        self.assertFalse(rn["reliable"])
+
+    def test_chroma_dtw_flags_mix_longer_than_original(self):
+        # When the mix region is longer than the whole original (a master span that
+        # exceeds the source — track 40), subsequence DTW's premise is violated:
+        # librosa reorients X/Y and indexing the endpoint would crash. Must flag, not
+        # crash, and not emit a rate.
+        try:
+            import librosa  # noqa: F401
+        except ImportError:
+            self.skipTest("librosa not installed (core python)")
+        sr = track_mix._audio.SR
+        orig = self._chroma_signal(6.0, sr)
+        mix = self._chroma_signal(10.0, sr)        # longer than the original
+        r = track_mix.chroma_dtw_rate(orig, mix, sr=sr, hop=512)
+        self.assertFalse(r["reliable"])
+        self.assertIn("note", r)
+        self.assertNotEqual(r["rate"], r["rate"])  # NaN
+
+    def test_select_capture_picks_containing_capture(self):
+        # source_files is ordered by overlap, not containment: srcs[0] may start after
+        # (or end before) the track region. _select_capture must pick the capture whose
+        # [start, start+len] fully covers [mb, me], not srcs[0]. Stub the audio layer
+        # so no real files are needed (capture length comes from load_audio()).
+        sr = track_mix._audio.SR
+        lengths = {"capA": 100, "capB": 600, "capC": 200}   # seconds
+        starts = {"capA": 0.0, "capB": 90.0, "capC": 700.0}
+
+        class _Stub:
+            SR = sr
+
+            @staticmethod
+            def find_audio_file(stem, audio_dir=None):
+                return stem in lengths
+
+            @staticmethod
+            def load_audio(stem, audio_dir=None):
+                import numpy as np
+                return np.zeros(int(lengths[stem] * sr), dtype="float32")
+
+        orig_audio = track_mix._audio
+        track_mix._audio = _Stub
+        try:
+            # span [200, 540] sits inside capB (90..690), not capA (0..100, srcs[0]).
+            srcs = ["capA.wav", "capB.wav", "capC.wav"]
+            cap, cstart = track_mix._select_capture(srcs, 200.0, 540.0, starts)
+            self.assertEqual(cap, "capB")
+            self.assertEqual(cstart, 90.0)
+            # span fully outside every capture -> best partial / None reason
+            cap2, info2 = track_mix._select_capture(srcs, 2000.0, 2100.0, starts)
+            self.assertIsNone(cap2)
+        finally:
+            track_mix._audio = orig_audio
+
+
+class EmitLabelsTests(unittest.TestCase):
+    def test_emit_roundtrips_and_is_auto_generated(self):
+        import tempfile
+        out = tempfile.mkdtemp()
+        positions = {"d900-901": 100.5, "d902-903": 250.0}
+        emit_labels.emit_labels(positions, out, {"d900-901": 60.0, "d902-903": 60.0})
+        files = sorted(os.listdir(out))
+        # programmatic output is ALWAYS <stem>.auto.labels.tsv
+        self.assertEqual(files, ["d900-901.auto.labels.tsv", "d902-903.auto.labels.tsv"])
+        for fn in files:
+            with open(os.path.join(out, fn)) as f:
+                for line in f:
+                    self.assertTrue(line.rstrip("\n").endswith("AUTO GENERATED"), line)
+        starts = groundtruth.resolve_starts(out)   # reads *.auto.labels.tsv too
+        self.assertAlmostEqual(starts["d900-901"], 100.5, places=3)
+        self.assertAlmostEqual(starts["d902-903"], 250.0, places=3)
+
+    def test_always_auto_suffix_and_never_overwrites_hand(self):
+        import tempfile
+        out = tempfile.mkdtemp()
+        # a hand <stem>.labels.tsv sitting in the SAME dir must be left untouched
+        hand_path = os.path.join(out, "d900-901.labels.tsv")
+        with open(hand_path, "w") as f:
+            f.write("0\t0\thand label\n")
+        emit_labels.emit_labels({"d900-901": 5.0}, out, {"d900-901": 10.0})
+        # programmatic output goes to .auto.labels.tsv; the hand file is unchanged
+        self.assertTrue(os.path.exists(os.path.join(out, "d900-901.auto.labels.tsv")))
+        with open(hand_path) as f:
+            self.assertEqual(f.read(), "0\t0\thand label\n")
+
+
 class GraphTests(unittest.TestCase):
     def test_filename_range(self):
         self.assertEqual(graph.filename_range("d356-375"), (356, 375))
@@ -145,6 +342,33 @@ class GraphTests(unittest.TestCase):
                         "(conf=%.3f); update blind_offset scope + README" % conf)
 
 
+class ClipTests(unittest.TestCase):
+    def test_skip_ahead_clip_construction(self):
+        import numpy as np
+        sr = audio.SR
+        ref = np.sin(np.arange(int(60 * sr)) * 0.01).astype(float)
+        skp = ref.copy()  # content irrelevant for length/annotation checks
+        # skip-ahead 1s at skipper-local 20s; offset goes -5 -> -6 (more negative).
+        walk = ([(float(t), -5.0, 1.0) for t in range(10, 20)]
+                + [(float(t), -6.0, 1.0) for t in range(20, 30)])
+        skip = {"at_s": 20.0, "before_s": 19.0, "after_s": 21.0, "delta_s": -1.0}
+        made = clips.make_skip_clip(skp, ref, skip, walk, pad_s=2.0)
+        self.assertIsNotNone(made)
+        clip, ann = made
+        self.assertAlmostEqual(len(clip) / sr, 5.0, delta=0.2)  # pad + gap + pad
+        self.assertIn("AHEAD", " ".join(a["label"] for a in ann))
+
+    def test_manifest_append_dedups_by_id(self):
+        import tempfile
+        d = tempfile.mkdtemp()
+        clips._append_manifest(d, [{"id": "x", "audio": "x.mp3"}])
+        clips._append_manifest(d, [{"id": "x", "audio": "x2.mp3"}, {"id": "y", "audio": "y.mp3"}])
+        data = json.load(open(os.path.join(d, "manifest.json")))
+        by_id = {c["id"]: c for c in data["clips"]}
+        self.assertEqual(len(by_id), 2)
+        self.assertEqual(by_id["x"]["audio"], "x2.mp3")  # replaced, not duplicated
+
+
 class SolveTests(unittest.TestCase):
     def test_propagates_offsets_from_anchor(self):
         edges = [
@@ -171,6 +395,33 @@ class SolveTests(unittest.TestCase):
         edges = [{"a": "x", "b": "y", "offset_s": 1.0, "conf": 0.9}]
         pos = solve.solve_positions(edges, anchor="x")
         self.assertNotIn("orphan", pos)
+
+    def test_solve_robust_drops_outlier_with_redundancy(self):
+        # z is reached by three edges; two agree (z=15) and one (x->z=100) is a gross
+        # outlier. With independent corroboration (>=3 edges at z), it's dropped.
+        edges = [
+            {"a": "x", "b": "y", "offset_s": 10.0, "conf": 0.95},
+            {"a": "x", "b": "w", "offset_s": 20.0, "conf": 0.95},
+            {"a": "y", "b": "z", "offset_s": 5.0, "conf": 0.95},   # z = 15
+            {"a": "w", "b": "z", "offset_s": -5.0, "conf": 0.95},  # z = 15
+            {"a": "x", "b": "z", "offset_s": 100.0, "conf": 0.99}, # bad (high conf)
+        ]
+        pos, dropped = solve.solve_robust(edges, anchor="x", max_residual_s=0.5)
+        self.assertEqual(len(dropped), 1)
+        self.assertEqual({dropped[0]["a"], dropped[0]["b"]}, {"x", "z"})
+        self.assertAlmostEqual(pos["z"], 15.0)
+
+    def test_solve_robust_keeps_ambiguous_triangle(self):
+        # Bare triangle with a HIGH-conf bad edge: which edge is wrong is genuinely
+        # ambiguous, so nothing is dropped (better than dropping a good edge) — the
+        # inconsistency is left for placement_diagnostics to flag.
+        edges = [
+            {"a": "x", "b": "y", "offset_s": 100.0, "conf": 0.99},  # bad, but confident
+            {"a": "x", "b": "z", "offset_s": 30.0, "conf": 0.90},
+            {"a": "y", "b": "z", "offset_s": 20.0, "conf": 0.90},
+        ]
+        _pos, dropped = solve.solve_robust(edges, anchor="x", max_residual_s=0.5)
+        self.assertEqual(dropped, [])  # no good edge wrongly dropped
 
     def test_placement_diagnostics(self):
         # y is corroborated by two agreeing edges; z is single-edge (uncorroborated).

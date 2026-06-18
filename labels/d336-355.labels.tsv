@@ -1,0 +1,273 @@
+1492.985398	1492.985398	069 .
+1516.245774	1516.245774	orig069 note: light percussion starts
+1519.346426	1520.941047	orig069 note: first twinkles
+1539.939127	1539.941531	orig069 sync: 0
+1551.571882	1551.571882	orig069 note: rs1
+1557.182379	1558.851748	orig069 sync: 1 first "Hypnotising"
+1586.364808	1586.364808	orig069 note: drums start
+1586.387939	1586.393817	orig069 sync: A
+1586.393248	1586.393559	orig069 note: sync with vinyl
+1692.034456	1692.039490	orig069 sync: 3
+1749.559864	1749.561882	orig069 sync: 4
+1767.009524	1768.629116	orig069 note: "hypnotising" - not in mix
+1767.753832	1767.780680	note: rough sync
+1768.701971	1768.701971	orig069-dig note: stopped sync work here, switched to sync with vinyl
+1047.364875	1047.364875	orig067 start: .
+1094.775798	1098.540876	orig067 note: first bowps
+1102.566430	1103.342622	orig067 sync: 0 inital
+1118.565166	1121.295579	orig067 note: rough sync "oooh ooh ooh yeah" with mix
+1130.444417	1133.535345	orig067 note: rough sync with percussion start in mix
+1147.944591	1148.039048	orig067 sync: A
+1153.335870	1153.347876	orig067 sync: 2 pre-not-skip
+1153.612406	1153.621906	orig067 note: rough pre-not-skip sync
+1153.711540	1153.711540	orig067 note: skip that wasn't a skip
+1156.521063	1156.539467	orig067 note: rough sync 2
+1159.107512	1159.846982	orig067 note: bow bow
+1161.871217	1161.896208	orig067 note: rs3
+1178.164604	1180.573302	orig067 note: dreamy bit
+1193.096973	1193.227043	orig067 note: rs4
+1205.368811	1205.372939	orig067 sync: B (2) end of 336-355
+1211.322805	1211.333334	orig067 sync: 3
+1294.526514	1294.532713	orig067 sync: 4
+1317.734610	1317.750122	orig067 sync: 5 end
+1320.811641	1419.372125	orig067 note: this range not used in mix
+1419.372125	1419.372125	orig067 end: 5
+728.480612	728.480612	orig066 start: B
+773.137334	774.248308	orig066 note: "forever"
+774.635502	776.563757	orig066 sync: A first four-note
+812.022663	812.023220	orig066 sync: 1
+919.190722	919.191836	orig066 sync: 2
+1040.839632	1040.843263	orig066 sync: 3
+1112.898872	1112.917883	orig066 sync: 4
+1123.058131	1123.418580	orig066 note: last rough sync?
+1136.943620	1136.949316	orig066 sync: B end in mix
+1137.848098	1239.296667	orig066 note: this range not used in mix
+1239.296667	1239.296667	orig066 end: B
+434.104400	434.104400	orig065 start: 5
+434.234677	434.234677	orig065 sync: 0 start
+437.009796	437.186657	orig065 sync: 1
+441.213220	441.213220	orig065 note: tone change 2
+457.483549	457.506429	orig065 sync: 2 - only starts sync
+482.667272	482.669029	orig065 sync: 3 pre-skip
+483.389483	483.390680	orig065 sync: 4 pre-skip
+483.580436	483.581558	orig065 sync: 5 pre-skip
+483.665636	483.665636	orig065 note: split to find skip in mix
+509.480432	509.480432	orig065 note: resume from split
+509.571496	509.573935	orig065 sync: A post-skip
+605.880747	605.882828	orig065 sync: 7 post-skip
+648.237242	648.245438	orig065 sync: B
+751.612392	751.613521	orig065 sync: 9
+752.896252	752.898289	orig065 sync: 10
+755.132816	755.138180	orig065 sync: 11 post-skip2 in sync with point 10
+763.476167	763.478049	orig065 sync: 12
+769.245298	773.460491	orig065 note: voice saying something "... give me .."? in both track and mix
+769.295820	769.295820	orig065 note: rough sync 13 (rs13)
+778.755263	779.488068	orig065 note: rs14
+780.168757	780.941731	orig065 note: rs15
+781.988286	783.330134	orig065 note: "yeah, yeah"
+786.241790	786.395950	orig065 note: rs16
+791.345030	791.433057	orig065 note: last rough sync
+791.433057	792.646221	orig065 note: fade out if in at all
+792.646221	802.088807	orig065 note: range not used in mix
+802.088807	802.088807	orig065 end: .
+13.848500	13.858685	orig063 sync: 2 pre-skip
+14.263064	14.263064	orig063 note: split to find skip in mix
+15.041388	15.041388	orig063 note: resume from split
+15.349731	15.352489	orig063 sync: A post-skip
+80.865425	80.867872	orig063 sync: 4 post-skip
+198.880604	198.882997	orig063 sync: 5
+353.384938	353.386755	orig063 sync: 6 post-skip
+396.659058	396.662125	orig063 sync: B post-skip end
+397.376191	399.088646	orig063 note: end 1.712s range not used in mix
+399.088646	399.088646	orig063 end: B
+0.000000	397.417944	start063: ID: Lemon D - City Lights
+14.263064	16.541786	note: SKIP back 2.279s (multiple files)
+397.417944	431.537061	start064: ID: Net Radio - Promo7 Club Groove 
+483.665636	493.729561	note: SKIP back 10.064s (both files)
+794.174498	794.174498	orig065 end: B
+800.547119	800.547119	065e12
+2409.187701	2409.187701	second your-sound knocks
+2419.213808	2419.213808	Your Sound (changeover to YS drumline)
+2465.939417	2467.811014	"Your Sound"
+2488.179819	2489.197132	last chords of Urban Style Music
+2679.607599	2679.607599	transition starts - OTR piano audible
+2689.741801	2689.741801	On the Roof (otr volume increases)
+2713.445477	2713.445477	horns/synth of OTR starts
+2728.188592	2728.188592	end of Your Sound
+2783.959696	2783.959696	last beat before drum break
+2831.450791	2831.450791	dreamy bit starts
+2867.796646	2867.796646	last significant beat before break
+2893.195551	2894.303207	"in a restroom"
+2898.802069	2899.913123	"in a restroom"
+2947.425834	2947.425834	transition start
+2958.151333	2958.151333	"be-eee"
+2972.453078	2972.453078	Mystery Track 5 (last OTR beat)
+3242.855737	3242.860000	align1 SoT file: before skip
+3243.150340	3243.150340	Sea of Tears
+3243.202282	3243.217803	window
+3291.189769	3291.189769	guitar enters
+3291.191073	3291.193213	peaks
+3312.603909	3312.603909	SKIP?
+3318.187329	3318.200032	align2
+3366.229743	3366.229743	drums enter
+3526.001584	3526.001584	start overlap
+3533.759227	3533.759227	drumline change
+3563.713322	3563.713322	end of SOT drumline
+3581.708570	3581.708570	last "tears"
+3590.597146	3591.459588	"what are you doing here"
+3591.517899	3591.517899	end Sea of Tears
+1136.312679	1318.418612	start067: ID: Aquarius - Wave Forms
+1203.135000	1203.135000	file_d356-375: file start sync: d356-375.wav MARK verified by 067 Wave Forms
+1207.884847	1207.895376	track sync: 3
+1276.260000	1276.260000	start overlap
+1281.479825	1283.978678	note: chords from 068 start
+1293.122354	1293.122354	end drumline
+1293.699549	1296.456131	note: distorted voice from 068
+1293.769305	1293.775505	track sync: 4
+1317.734610	1317.750122	track sync: 5 end
+1318.418612	1318.418612	start068: ID: Mystery Track 4
+1319.380019	1320.469765	note: end of 067 in mix
+1341.379984	1341.379984	shazam unknown
+1368.140140	1371.327713	drum starts
+1400.875691	1406.642859	~"Hey man, you want a tune? Yeah I got a tune for ya"
+1406.937771	1409.538160	drums in earnest
+1415.746312	1415.746312	067eB
+1415.934167	1415.934167	067e3
+1419.372125	1419.372125	orig067 end: 5
+1483.561882	1483.561882	note: dig-069s0
+1483.745079	1483.745079	069s0
+1484.138594	1484.138594	note: dig-069s1
+1484.262562	1484.262562	069s1
+1485.694830	1485.694830	note: dig-orig069 start: A
+1486.196893	1486.196893	orig069 start: A
+1491.393991	1491.393991	note: dig-069s3
+1492.985397	1492.985397	note: dig-orig069 start: 4+rough sync
+1493.313719	1493.313719	069s3
+1521.216171	1522.483200	note: first strains of Hypnotising
+1527.173762	1527.173762	note: transition volume step up
+1530.498521	1530.498521	note: Hypnotising start of phrase
+1530.515612	1530.518016	track069 sync: 0 first audible start of phrase 
+1530.516876	1530.517506	note: core
+1539.116673	1539.116673	note: horn
+1542.585363	1542.585363	note: Hypnotising start of phrase - rs1
+1548.335588	1550.004957	track069 sync: 1 "Hypnotising"
+1573.104299	1575.304105	last xylophone notes of Mystery 4
+1579.068075	1579.068075	start069: ID: P.F.M. - Hypnotising
+1579.097374	1579.103251	track sync: A (2) drums
+1579.100312	1579.100685	note: peak
+1653.444975	1659.240179	transition - organ?
+1690.443050	1690.448084	track sync: 3 - note mix inverted from orig?
+1690.445632	1690.446067	note: peak
+1749.227800	1749.229819	track sync: 4 - inverted
+1767.009524	1768.629116	note: *no* "hypnotising"
+1767.753832	1767.780680	note: rough sync
+1784.772789	1788.145488	note: "Music's hypnotising..."
+1814.560167	1814.561885	audiofile align point for sync2
+1815.610982	1815.610995	audiofile align point for sync1
+1815.738000	1815.738000	melody stops, drums remain
+1823.320405	1823.327347	track sync: 5
+1824.076901	1824.076901	transition starts
+1829.222921	1829.222921	Urban Style Music (louder chord starts)
+1843.841707	1847.012011	"to create a whole form of urban style music"
+1865.728939	1865.730757	track sync: B - start of vinyl fade-out
+1865.729568	1865.729739	peak
+1881.620480	1881.620480	note: 30s longer version on Radical Beauty CD?
+1881.620480	1881.620480	note: 069 only starts to fade here, despite having faded on vinyl 15s ago
+1891.272585	1891.272585	069e5
+1891.390805	1894.547456	note: "Musics Hypnotising" despite vinyl audio being gone now
+1956.273423	1956.273423	urban.style.music (sync1)
+2053.368012	2053.368012	sync2.1-spectro
+2053.372640	2053.372640	transition: peak of last cymbal hit before swooning synth (sync2)
+2100.995778	2100.995778	drum transition
+2148.249326	2148.249326	On Line (transition/beat change)
+2171.829888	2171.829888	big shift, ah-aah
+2201.103450	2218.716322	final drum change
+2218.755643	2218.755643	end of U.S.M. drums
+2224.778134	2230.804057	break: wah-oh-ah-ooh...
+2378.584318	2378.584318	quietly fade in Your Sound
+2396.339369	2396.339369	first your-sound knock
+3582.307876	3582.307876	last Tears
+3591.238402	3591.238402	"what are you doing here?"
+1545.821098	1545.823502	orig069 sync: 0
+1545.847303	1545.856342	orig069 note: local lowest peak - start of phrase?
+1557.770917	1557.770917	orig069 note: rs1 start oh phrase
+1563.123587	1564.792956	orig069 sync: 1 "Hypnotising"
+1591.951062	1591.956939	orig069 sync: A
+1591.951901	1591.952212	sync A with digital
+1603.770423	1603.770423	mark
+1696.179913	1696.184947	orig069 sync: 3
+1727.780965	1727.780965	vinyl
+1752.930975	1752.932993	orig069 sync: 4
+1824.685326	1824.692267	orig069 sync: 5
+1865.728939	1865.730757	orig069 sync: B
+0.000000	0.000000	file start sync: d336-355.wav 19637.763068 verified d328-342
+0.000000	392.839625	file note: in sync with d328-342 over this range
+392.839625	394.087625	file note: SKIP ahead 1.248s
+394.087625	640.704000	file note: in sync with d328-342 over this range
+431.537061	792.646221	start065: ID: Dr. Know - Make Me Feel
+719.993088	719.993088	orig066 start: A
+720.850503	720.850503	066s1 
+742.731525	744.859045	note: can maybe hear the first tones of 066
+749.535684	749.536813	track sync: 9 - just before mix?
+750.890669	750.892706	track sync: 10 pre-skip2
+751.015062	751.015062	SKIP - perhaps intentional - split here
+751.015062	752.902043	note: SKIP range - ahead 1.887s 
+753.127232	753.132596	NOTE: after skip signal now inverted?
+753.127232	753.132596	track sync: 11 post-skip in sync with point 10
+761.934480	761.936362	track sync: 12 NOW NOT INVERTED maybe? confused.
+764.609915	765.771957	note: "forever" from 066
+766.147982	768.076236	track066 sync: A first four-note
+766.542979	766.920510	note: first of four-note
+768.076236	768.076236	note: rough sync 13 (rs13)
+778.068013	778.800818	note: rs14
+779.586820	780.359794	note: rs15
+781.497542	783.065202	note: "yeah, yeah" very low in the mix now
+785.952998	786.107159	note: rs16
+791.345030	791.433057	note: last rough sync
+792.646221	1136.312679	start066: ID: JMJ & Richie - Free La Funk (PFM Remix)
+800.083223	800.083223	065e10 and 11
+802.088807	802.088807	orig065 end: last rough sync
+804.392558	804.393115	track sync: 1 - note not inverted
+914.074736	914.075850	track sync: 2
+940.150959	952.928743	note: horn solo
+964.723627	964.723627	note: synth returns
+989.285222	991.854334	note: "get your mind together"
+1005.009958	1008.708593	note: "maybe it could be mine forever(everever)"
+1013.902185	1016.814584	note: "you could go and press up the sea"
+1038.591061	1038.594692	track sync: 3
+1040.380667	1040.380667	067s0
+1041.874958	1041.874958	orig067 start: A
+1042.041187	1042.041187	067s2
+1095.582222	1099.779177	note: start mix in of 067?
+1095.582222	1096.358415	track067 sync: 0 inital notes
+1101.955170	1103.497191	note: bow-bowp from 067 #3
+1103.887541	1104.286196	note: sounds like maybe a skip but is not
+1107.885167	1109.623747	note: bow-bowp from 067 #5
+1112.117379	1114.847793	note: "oooh ooh ooh yeah" from 067
+1122.760739	1123.121188	note: last rough sync?
+1124.407214	1127.498142	note: percussion from 067 starts
+1129.634028	1132.490090	last "maybe it will be mine forever"
+1136.312679	1318.418612	start067: ID: Aquarius - Wave Forms
+1136.312679	1137.848098	note: last "you can go and press on the sea" from 066
+1136.943620	1136.949316	track066 sync: B ending
+1142.454679	1142.549136	track sync: A start
+1142.470188	1142.472948	note: core sync
+1148.012183	1148.024189	track sync: 2 pre-not-skip
+1148.301552	1148.311052	note: rough pre-not-skip sync
+1148.400686	1148.400686	note: (seems like) SKIP -- next bits seem to sync tho
+1148.400686	1148.591288	note: this section not in my orig file
+1149.124815	1149.792024	note: oh-oh-wa
+1151.230017	1152.796875	note: orig and mix seem "back in sync" here
+1151.288334	1151.306738	note: rough sync 2
+1153.959072	1154.705768	note: bow bow
+1156.830842	1156.855833	note: rs3
+1157.772041	1158.215242	note: looks like a skip but isn't?
+1164.860840	1166.219345	note: another siren-y sound starting here? or just compression artifact?
+1173.652587	1177.169287	note: dreamy bit
+1189.077890	1189.207960	note: rs4
+1201.742998	1201.747127	track sync: B (3) end of 336-355
+1203.135000	1203.135000	file end: d336-355.wav COMPLETE
+1234.180680	1234.180680	066e2
+1237.048095	1237.048095	066e3
+1239.296667	1239.296667	orig066 end: B
+1415.746312	1415.746312	orig067 end: B

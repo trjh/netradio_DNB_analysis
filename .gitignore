@@ -50,3 +50,6 @@ __pycache__/
 *.pyc
 .context/
 .venv/
+
+# F1 skip-check clip output (default dir when NETRADIO_CLIPS_DIR unset)
+clips_out/
