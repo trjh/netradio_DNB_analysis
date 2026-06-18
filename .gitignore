@@ -42,8 +42,8 @@ alignscore.log
 sheetscript/logs
 .env
 
-# Private/local agent guide (machine paths, remotes, secret locations)
-AGENT.md
+# Local/private files — not committed
+TIM-ENV.md
 
 # streamalign / agent artifacts
 __pycache__/
@@ -53,3 +53,6 @@ __pycache__/
 
 # F1 skip-check clip output (default dir when NETRADIO_CLIPS_DIR unset)
 clips_out/
+
+# Local env file — not committed
+.env_vars

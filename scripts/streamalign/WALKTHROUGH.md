@@ -1,5 +1,8 @@
 # Stream Alignment Engine — code walkthrough
 
+> **What this is:** Stream Alignment Engine — how the functions compose (reference).
+> **Fits in:** [../../README](../../README.md) (master index).
+
 A function-by-function tour of how the `streamalign` package fits together to
 reconstruct the netradio master timeline from the capture audio. Read
 [`README.md`](./README.md) first for the *what* and *why*; this is the *how*.

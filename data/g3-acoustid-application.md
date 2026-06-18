@@ -14,7 +14,7 @@ AcoustID has two key types:
 - **User API key** — per-user, only for **submitting** new fingerprints (`user=`).
   Should not be embedded in app code.
 
-The key currently in `.env` (`vR4IuLRX`) returns `{"error": {"code": 4, "message":
+The key currently in `.env` (the old user key) returns `{"error": {"code": 4, "message":
 "invalid API key"}}` on lookup — it's a user/account key, not an application key, so
 it can't be used as `client=`. Registering an application gives the correct key.
 
@@ -28,7 +28,7 @@ it can't be used as `client=`. Registering an application gives the correct key.
 2. Go to <https://acoustid.org/new-application>.
 3. Fill the form with the values below.
 4. Copy the generated **API key** into `.env` as `ACOUSTID_API_KEY=...`
-   (replacing `vR4IuLRX`). Then G3 lookups work — the pipeline is already built.
+   (replacing the old user key). Then G3 lookups work — the pipeline is already built.
 
 ## Draft application form values
 

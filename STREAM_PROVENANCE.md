@@ -1,4 +1,7 @@
 # Stream provenance — where these files came from, and what "master time" means
+
+> **What this is:** how the capture files came to exist + what "master time" is (reference).
+> **Fits in:** [README](./README.md) (master index).
 **AI generated based on conversation**
 
 
