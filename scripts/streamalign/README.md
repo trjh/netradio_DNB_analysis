@@ -1,5 +1,8 @@
 # Stream Alignment Engine
 
+> **What this is:** Stream Alignment Engine — status & usage (reference).
+> **Fits in:** [../../README](../../README.md) (master index).
+
 Reconstruct the netradio DNB master timeline by **audio analysis**: place every
 capture file on the master clock (precise, skip-resolved), validated against Tim's
 hand alignments, then emit alignment labels for the captures not yet done by hand.

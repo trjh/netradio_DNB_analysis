@@ -1,5 +1,8 @@
 # Netradio Drum and Bass ISDN - mix analysis
 
+> **What this is:** the **master index** for this repo — the master-timeline +
+> track-identification analysis of the 1998 netradio.com Drum & Bass ISDN stream.
+
 ## Introduction
 
 In 1998 I discovered Drum & Bass courtesy of a netradio.com station called
@@ -32,7 +35,7 @@ help in summarizing and cross-referencing the information.
 * [logo](./logo) -- netradio.com logo files retrieved from archive.org and other places
 * [scripts](./scripts) -- misc. helper scripts mostly oriented around Audacity 2.1.x metadata files
 * [STREAM_PROVENANCE.md](./STREAM_PROVENANCE.md) -- how the capture files came to exist (RealAudio loop -> `/dev/audio` dump -> hex -> wav/au), why they overlap and contain skips, and what "master time" actually is
-
+* [scripts/streamalign/](./scripts/streamalign) -- the Stream Alignment Engine; see its [README](./scripts/streamalign/README.md) (status) and [WALKTHROUGH](./scripts/streamalign/WALKTHROUGH.md) (how the functions compose)
 
 ## Process (the old, manual + scripted Audacity workflow)
 
@@ -184,9 +187,6 @@ file's `file start sync` offset yields **master time**.
 - `mix start|end|note: …`, `note[ TAG]: …` — mix markers and free/tagged notes.
 - Skips are notes: `note: SKIP back 2.279s (multiple files)`, `file note: SKIP ahead 1.248s` —
   they mark stream discontinuities in the RealAudio capture (see [STREAM_PROVENANCE.md](./STREAM_PROVENANCE.md)).
-
-See [AGENT.md](./AGENT.md) for a file-by-file repo guide, more label-grammar notes, a
-git-history summary, and operational cautions for future agents.
 
 ## TODO
 
