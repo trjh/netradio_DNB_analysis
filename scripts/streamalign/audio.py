@@ -20,9 +20,11 @@ import numpy as np
 # sample = 62.5 us and Audacity's 0.001 s label granularity is 16 samples.
 SR = 16000
 
-# Where the original captures live. Override with NETRADIO_AUDIO_DIR.
+# Where the original captures live. Override with NETRADIO_AUDIO_DIR; defaults to the
+# repo's jaz_links/ symlink (repo root = two levels up from scripts/streamalign/).
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 AUDIO_DIR = os.environ.get(
-    "NETRADIO_AUDIO_DIR", "/Users/timh/Downloads/Netradio/jaz_links")
+    "NETRADIO_AUDIO_DIR", os.path.join(_REPO_ROOT, "jaz_links"))
 
 # Decoded-array cache (keyed by source path + size + mtime + params).
 CACHE_DIR = os.environ.get(
