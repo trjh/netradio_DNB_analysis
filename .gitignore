@@ -36,14 +36,23 @@ dropbox
 ._*
 .DS_Store
 Makefile.audio
-jaz_links
-scripts/__pycache__/
 alignscore.log
 sheetscript/logs
 .env
 
 # Local/private files — not committed
+.claude/
+.env_vars
+Archive/
+audacity/
+jaz_links
+labels/tmp/
+logo-tmp/
+sources_local
 TIM-ENV.md
+tmp_o
+tmp_t
+tmp/
 
 # streamalign / agent artifacts
 __pycache__/
@@ -53,6 +62,3 @@ __pycache__/
 
 # F1 skip-check clip output (default dir when NETRADIO_CLIPS_DIR unset)
 clips_out/
-
-# Local env file — not committed
-.env_vars
