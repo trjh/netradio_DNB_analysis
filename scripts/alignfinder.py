@@ -4,8 +4,9 @@ import pydub
 import argparse
 import sys
 import matplotlib.pyplot as plt
-# import pipeclient from scripts for Audacity
-sys.path.append('/Users/timh/Downloads/Netradio/netradio_DNB_localdisk/scripts')
+# import pipeclient from this script's own directory for Audacity
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import pipeclient
 import json
 import time
