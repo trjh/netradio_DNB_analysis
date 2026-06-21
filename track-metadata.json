@@ -47,11 +47,16 @@
     },
     "erykah-badu-on-on-1997-vinyl": {
       "artist": "Erykah Badu",
+      "artwork": "album-erykah-badu-on-on-1997-vinyl.webp",
       "fields": {
+        "apple": "https://music.apple.com/us/album/on-and-on-single/1490881167",
         "discogs": "https://www.discogs.com/release/226192",
         "year": "1997"
       },
-      "title": "On & On"
+      "title": "On & On - Single",
+      "verified": {
+        "discogs": "2026-06-20"
+      }
     },
     "jamie-myerson-the-listen-project-1998-cd": {
       "artist": "Jamie Myerson",
@@ -69,13 +74,14 @@
     },
     "ltj-bukem-earth-volume-two": {
       "artist": "LTJ Bukem",
-      "artwork": "album-ltj-bukem-earth-volume-two.jpg",
+      "artwork": "album-ltj-bukem-earth-volume-two.webp",
       "fields": {
         "allmusic": "https://www.allmusic.com/album/earth-vol-2-mw0000014088",
+        "apple": "https://music.apple.com/us/album/fictions/595866402?i=595866477",
         "discogs": "https://www.discogs.com/release/9715-LTJ-Bukem-Earth-Volume-Two",
         "year": "1997"
       },
-      "title": "LTJ Bukem - Earth Volume Two",
+      "title": "Earth Volume Two",
       "verified": {
         "allmusic": "2026-06-18",
         "discogs": "2026-06-18"
@@ -88,7 +94,7 @@
         "discogs": "https://www.discogs.com/release/1640975",
         "year": "1996"
       },
-      "title": "Me'Shell NdegéOcello – Stay (1996, CD)"
+      "title": "Stay"
     },
     "pseudo-names-94-98-suicidelp024": {
       "artist": "Klute",
@@ -106,7 +112,7 @@
     "red-snapper-prince-blimey": {
       "artist": "Red Snapper",
       "fields": {},
-      "title": "Red Snapper - Prince Blimey"
+      "title": "Prince Blimey"
     },
     "rockers-hi-fi-mish-mash-1997-cd": {
       "artist": "Rockers Hi-Fi",
@@ -159,8 +165,15 @@
     },
     "various-serialement-v-tre": {
       "artist": "Various",
-      "fields": {},
-      "title": "Various - Serialement Vôtre"
+      "artwork": "album-various-serialement-v-tre.jpg",
+      "fields": {
+        "discogs": "https://www.discogs.com/master/74270-Various-Serialement-V%C3%B4tre",
+        "year": "1997"
+      },
+      "title": "Serialement Vôtre",
+      "verified": {
+        "discogs": "2026-06-20"
+      }
     },
     "various-shake-the-bones": {
       "artist": "Various",
@@ -388,7 +401,7 @@
       "album": "eighty-mile-beach-arboleda-de-manzanitas-1997-vinyl",
       "anchor": "ArboledaEighty",
       "artist": "Eighty Mile Beach",
-      "artwork": "track-12.jpg",
+      "artwork": null,
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/29/dd/35/mzi.nnomiyag.jpg/1200x630wp-60.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/arboleda-de-manzanitas-drum-bass-mix/439852478?i=439852488",
@@ -412,7 +425,7 @@
       "album": "ltj-bukem-earth-volume-two",
       "anchor": "SensesDJ",
       "artist": "DJ Addiction",
-      "artwork": "track-13.jpg",
+      "artwork": null,
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x630wp-60.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/senses/595866402?i=595866531"
@@ -497,7 +510,7 @@
       "album": "erykah-badu-on-on-1997-vinyl",
       "anchor": "OnErykah",
       "artist": "Erykah Badu",
-      "artwork": "track-17.jpg",
+      "artwork": null,
       "artwork_url": "https://i.scdn.co/image/ab67616d0000b273a0fc624eddb64d00369dae39",
       "fields": {
         "spotify": "https://open.spotify.com/track/1AsXX1fycUqDDdq22c03Fm"
@@ -642,7 +655,10 @@
         "d106-125.wav"
       ],
       "title": "63rd Suite",
-      "use_logo": false
+      "use_logo": false,
+      "verified": {
+        "discogs": "2026-06-21"
+      }
     },
     "24": {
       "album": "various-shake-the-bones",
