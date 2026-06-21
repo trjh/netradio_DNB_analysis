@@ -15,7 +15,7 @@ sheet:
 1. **Notate** — by hand in Audacity (and the labelling tools) → `labels/*.tsv`. The master
    timeline + track IDs + sync points live here. Engine output is always
    `<stem>.auto.labels.tsv` and **never** overwrites your hand `<stem>.labels.tsv`; seed files
-   are `<stem>.starter.labels.tsv` (lowest priority).
+   are `<stem>.starter.labels.tsv` / `<stem>.start-unprocessed.labels.tsv` (lowest priority).
 2. **Build** — `scripts/build_track_metadata.py` turns the labels into the authoritative
    **`track-metadata.json`**.
 3. **Serve** — `track-metadata.json` drives the player.
@@ -29,8 +29,10 @@ sheet:
 > writer of the JSON.
 
 The golden rule of the file naming: **hand** = `<stem>.labels.tsv` (yours, authoritative),
-**engine** = `<stem>.auto.labels.tsv` (regenerable), **seed** = `<stem>.starter.labels.tsv`
-(throwaway pre-positioning, excluded from import/solve/build).
+**engine** = `<stem>.auto.labels.tsv` (regenerable), **seed** = a starter in one of two states:
+`<stem>.start-unprocessed.labels.tsv` (just emitted from a not-yet-published owner — **don't
+load it yet**) → `<stem>.starter.labels.tsv` (**ready** to load; `publish` promotes it once the
+owner is published). Both seed states are throwaway and excluded from import/solve/build.
 
 > ⚠️ **Items tagged `(G5 — not yet on main)` below are not runnable on `main` yet.** The G5
 > labelling tooling — `LABELTRACK` scoping in `sort_tsv.py`, the `streamalign starter` seed
@@ -79,13 +81,20 @@ forward, so the next file's analysis starts from them instead of a blank slate?
 where its neighbour begins, via the `file_<other>:` link):
 
 ```bash
-PYTHONPATH=scripts python3 -m streamalign starter <owner-stem>   # writes <other>.starter.labels.tsv seed(s)
+PYTHONPATH=scripts python3 -m streamalign starter <owner-stem>   # writes <other>.start-unprocessed.labels.tsv seed(s)
 ```
 
-**What you get:** a `<other>.starter.labels.tsv` for the *next* capture — the owner's labels
-at/after the link, time-shifted onto the next file's local timeline, with a derived
-`file start sync` anchor. **What to do with it:** open it in Audacity over the next capture and
-confirm/nudge the seeded labels instead of starting from nothing. (This is the accelerator for
+**What you get:** a `<other>.start-unprocessed.labels.tsv` for the *next* capture — the owner's
+labels at/after the link, time-shifted onto the next file's local timeline, with a derived
+`file start sync` anchor. The **`start-unprocessed`** name is deliberate: the seed came from a
+file you haven't *published* yet, so it's still provisional — **don't load it yet**.
+
+**How do I know when a seed is ready to load?** By its name. **`publish`** finalizes it: when you
+publish the owner file (see [Publish](#publish--labels--github--the-google-sheet)), publish
+re-runs `streamalign starter <owner> --ready` against the now-locked labels, which rewrites the
+seed as **`<other>.starter.labels.tsv`** (and removes the `.start-unprocessed` twin). So when you
+open the next capture: a `.starter.labels.tsv` is **ready** to load and confirm/nudge in Audacity;
+a `.start-unprocessed.labels.tsv` means *publish the owner first*. (This is the accelerator for
 the headline tail-contiguity hand-verification.)
 
 **Why a separate command — why doesn't `sort_tsv.py` just emit it?** Because they're different
@@ -95,9 +104,9 @@ never moves labels *between* files. Pre-seeding **projects** a finished capture'
 command computes that offset and writes the seed; the manual fallback is to copy the labels
 across yourself and rebase with `sort_tsv.py --adjust <seconds>` (you supply the offset by hand).
 
-**And this is *not* the publish step.** Starters are throwaway seeds — excluded from the sheet
-import, the solve, and the build. Publishing *finished* labels to the sheet is a separate thing,
-see [Publish](#publish--labels--github--the-google-sheet) below.
+**And the seed itself is never published** — both states are throwaway, excluded from the sheet
+import, the solve, and the build. Publishing the *owner's finished labels* is what **promotes**
+the seed to ready (above); the two happen in one `publish` run.
 
 **Q:** Is my on-disk `.tsv` in sync with what's live in Audacity?
 
@@ -226,17 +235,20 @@ formulas — no script touches that tab.
 **A:**
 
 ```bash
-python3 labels/publish.py <stem>           # validate → sort → commit → push → refresh
+python3 labels/publish.py <stem>           # validate → sort → commit → push → finalize seeds → refresh
 python3 labels/publish.py <stem> --check   # gate only, no push
 python3 labels/publish.py <stem> --dry-run # show what would happen
 ```
 
 `publish.py` is **all-or-nothing** and hard-gated: it refuses to push bad-syntax rows,
 unverified syncs, `file end` missing `COMPLETE`, missing `LABELTRACK` markers, files with no
-start-sync / `file end … COMPLETE` anchor, and seed/engine (`*.starter`/`*.auto`) files — so a
-half-labelled capture can never reach the sheet. On success it auto-refreshes by POSTing to the
-Apps Script Web App at `NETRADIO_SHEET_WEBHOOK` (whose `doPost` runs `GithubImport()`), else it
-prints the **Reload Data** reminder.
+start-sync / `file end … COMPLETE` anchor, and seed/engine (`*.starter` / `*.start-unprocessed`
+/ `*.auto`) files — so a half-labelled capture can never reach the sheet. **After the push it
+finalizes starter seeds:** it runs `streamalign starter <stem> --ready`, promoting any
+`<other>.start-unprocessed.labels.tsv` the published file produced to the ready
+`<other>.starter.labels.tsv` — so the next capture's seed is marked loadable. On success it
+auto-refreshes by POSTing to the Apps Script Web App at `NETRADIO_SHEET_WEBHOOK` (whose `doPost`
+runs `GithubImport()`), else it prints the **Reload Data** reminder.
 
 ---
 
@@ -246,7 +258,7 @@ prints the **Reload Data** reminder.
 |---|---|---|---|
 | sort + validate a labelled capture | `sort_tsv.py <stem>.labels.txt` | notate | that `.tsv` |
 | scope multiple label tracks in one export | `LABELTRACK <name>` markers + `sort_tsv.py` *(G5)* | notate | that `.tsv` |
-| pass labels forward to seed the next capture | `streamalign starter <owner>` *(G5)* | notate | `<other>.starter.labels.tsv` |
+| pass labels forward to seed the next capture | `streamalign starter <owner>` *(G5)* | notate | `<other>.start-unprocessed.labels.tsv` (→ `.starter` on publish) |
 | diff on-disk vs live Audacity labels | `sort_tsv.py <stem>.labels.tsv --live` | notate | — (read-only) |
 | re-place captures / score the engine | `streamalign groundtruth \| validate \| align` | notate | — (read-only) |
 | resolve skips | `streamalign skip-clips \| skip-confirm \| skip-reject` | notate | clips / hand `.labels.tsv` / rejections |
