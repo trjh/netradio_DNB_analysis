@@ -147,6 +147,20 @@ Each Audacity label is `start_time ⇥ end_time ⇥ text`. `sort_tsv.py` and `Co
 `text` with the same small set of patterns. Timestamps are **local** to the file; adding the
 file's `file start sync` offset yields **master time**.
 
+**Label-track scoping (`LABELTRACK`)**
+
+- `LABELTRACK <name>` — the first (earliest) label of an Audacity label track *names* that
+  track, so one export can carry several tracks unambiguously. `sort_tsv.py` reads it before
+  sorting and scopes every following label to `<name>` until the next `LABELTRACK`; the marker
+  itself is **stripped** from the emitted `.tsv`. `<name>` resolves three ways:
+  the **primary stem** (`== <stem>`) → labels pass through verbatim; **another capture stem**
+  (e.g. `d356-375`) → re-homed onto that file via `file_<name>:` (the secondary mechanism);
+  **anything else** (e.g. `orig069`) → prefix-expanded (`sync: 0` → `orig069 sync: 0`;
+  free text → `orig069 note: <text>`). A file that uses `LABELTRACK` is **validated**: every
+  label-track block (the file start, and each backwards-timestamp boundary) must carry a marker,
+  or `sort_tsv.py` fails before writing. Legacy exports with no `LABELTRACK` markers are sorted
+  unchanged. Use `--stem <name>` to set the primary when reading from stdin.
+
 **File-level markers (the connection backbone)**
 
 - `file start: FILE.wav` — *physical* file start / pre-roll marker. **Not** authoritative;
