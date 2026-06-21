@@ -113,6 +113,25 @@ The whole loop is tracked on the spreadsheet's **File List** tab, which carries 
     file transitions and overlapping captures. *(Automated, formula-preserving spreadsheet
     backup is still a major TODO.)*
 
+### One-command publish (`labels/publish.py`)
+
+Steps 9–11 (sort → push → refresh) collapse into one **hard-gated** command:
+
+```bash
+python3 labels/publish.py d019-040          # validate → sort → commit → push → refresh
+python3 labels/publish.py d019-040 --check  # validate only (gate), no push
+python3 labels/publish.py d019-040 --dry-run
+```
+
+It is **all-or-nothing**: it validates every target first and pushes **nothing** if any
+fails. The gate (reusing `sort_tsv.py`'s checks) refuses **bad-syntax / unrecognized-grammar**
+rows, **unverified** syncs, `file end` missing **COMPLETE**, missing `LABELTRACK` markers, and
+files with no start-sync / `file end … COMPLETE` anchor (a half-labelled tail capture can never
+reach the sheet). `*.starter.labels.tsv` (seed) and `*.auto.labels.tsv` (engine) are refused.
+On success it triggers the sheet refresh by POSTing to the Apps Script Web App at
+`NETRADIO_SHEET_WEBHOOK` (its `doPost` runs `GithubImport()`); if that's unset it prints the
+manual **Reload Data** reminder.
+
 ### Spreadsheet import setup (GitHub token)
 
 `Code.js` authenticates to the GitHub API with a Personal Access Token read from an Apps
