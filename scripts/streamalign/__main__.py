@@ -32,6 +32,7 @@ import os
 
 from . import align as _align
 from . import audio as _audio
+from . import emit_labels as _emit
 from . import groundtruth as _gt
 from . import score as _score
 from . import skip_review as _skip_review
@@ -53,6 +54,16 @@ def _cmd_groundtruth(args):
         have = "audio" if _audio.find_audio_file(stem) else "NO-AUDIO"
         print("%-20s %14.6f  %s" % (stem, g[stem], have))
     print("# %d files" % len(g))
+
+
+def _cmd_starter(args):
+    written = _emit.emit_starter(args.owner, labels_dir=args.labels, out_dir=args.out)
+    if not written:
+        print("no file_<other>: links found in %s.labels.tsv" % _audio.stem_of(args.owner))
+        return
+    for other in sorted(written):
+        print("%-20s -> %s" % (other, written[other]))
+    print("# %d starter file(s) (seed-only; excluded from import/solve/build)" % len(written))
 
 
 def _cmd_align(args):
@@ -232,12 +243,17 @@ def main(argv=None):
     pr.add_argument("--owner", default=None, help="attribute the skip to this stem instead")
     pr.add_argument("--note", default=None, help="optional note recorded with the rejection")
     sub.add_parser("skip-rejections", help="F1: list recorded skip rejections")
+    pst = sub.add_parser("starter",
+                         help="A2: emit <other>.starter.labels.tsv seeds from file_<other>: links")
+    pst.add_argument("owner", help="owner capture stem whose file_<other>: links seed neighbours")
+    pst.add_argument("--out", default=None, help="output dir (default: labels dir)")
 
     args = parser.parse_args(argv)
     {"groundtruth": _cmd_groundtruth, "align": _cmd_align,
      "validate": _cmd_validate, "track-mix": _cmd_track_mix,
      "skip-clips": _cmd_skip_clips, "skip-confirm": _cmd_skip_confirm,
-     "skip-reject": _cmd_skip_reject, "skip-rejections": _cmd_skip_rejections}[args.cmd](args)
+     "skip-reject": _cmd_skip_reject, "skip-rejections": _cmd_skip_rejections,
+     "starter": _cmd_starter}[args.cmd](args)
 
 
 if __name__ == "__main__":

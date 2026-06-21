@@ -35,11 +35,19 @@ def _stem(name):
     return os.path.splitext(os.path.basename((name or "").strip()))[0]
 
 
+def is_pipeline_label_file(name):
+    """True for label files the pipeline consumes: hand `<stem>.labels.tsv` and engine
+    `<stem>.auto.labels.tsv` (both end `.labels.tsv`). Excludes seed-only
+    `<stem>.starter.labels.tsv` (Proposal B), which only pre-positions labels in
+    Audacity and is kept out of import/solve/build."""
+    return name.endswith(".labels.tsv") and not name.endswith(".starter.labels.tsv")
+
+
 def _read_label_rows(labels_dir):
     rows = []
     if not os.path.isdir(labels_dir):
         return rows
-    for fn in sorted(n for n in os.listdir(labels_dir) if n.endswith(".labels.tsv")):
+    for fn in sorted(n for n in os.listdir(labels_dir) if is_pipeline_label_file(n)):
         path = os.path.join(labels_dir, fn)
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as handle:
