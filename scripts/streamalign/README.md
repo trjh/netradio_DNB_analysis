@@ -115,6 +115,9 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix \
   reliable-but-rate-disagrees tracks (8, 10, 19) are the piecewise/2nd-pass
   candidates. A further **30 synced tracks have no original file** — the G4
   missing-source signal, surfaced in the same report.
+  See [RATE_AXIS_SPIKE.md](./RATE_AXIS_SPIKE.md) — the **A7a rate-axis design note + go/no-go**:
+  the rate axis *is* the DTW warp slope (no separate rate-search needed); A7b's open work is
+  **piecewise segmentation** (start on tracks 8/10/19) + polarity, not rate discovery.
 
 ### Known limits (open work)
 
