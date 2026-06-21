@@ -83,6 +83,21 @@ else
   fi
 fi
 
+# --- analysis-side: PR any changed analysis data (track-metadata.json / TRACKLIST.md) — FIRST ---
+if $DRY; then
+  say "  [dry-run] would PR any changed analysis data files (track-metadata.json / TRACKLIST.md)"
+else
+  afiles=""
+  for f in track-metadata.json TRACKLIST.md; do
+    changed_in "$ANALYSIS" "$f" && afiles="$afiles $f"
+  done
+  if [ -n "$afiles" ]; then
+    make_pr "$ANALYSIS" "tracklist-data-$(stamp)" "tracklist: sync track-metadata.json / TRACKLIST.md" "$afiles"
+  else
+    say "analysis repo: no data changes to commit."
+  fi
+fi
+
 # --- player-side: PR any changed data (track-metadata.json / listen_queue.json / marker) ---
 if $DRY; then
   say "  [dry-run] would PR any changed player data files (track-metadata.json / listen_queue.json / marker)"
