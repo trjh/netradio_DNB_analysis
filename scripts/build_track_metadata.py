@@ -46,7 +46,10 @@ def read_label_rows():
     rows = []
     if not LABELS_DIR.is_dir():
         return rows
-    for path in sorted(LABELS_DIR.glob("*.labels.tsv")):
+    # Skip seed-only `<stem>.starter.labels.tsv` (Proposal B): they pre-position labels
+    # in Audacity and must never reach the build.
+    for path in sorted(p for p in LABELS_DIR.glob("*.labels.tsv")
+                       if not p.name.endswith(".starter.labels.tsv")):
         with open(path, "r", encoding="utf-8", errors="replace") as handle:
             for line in handle:
                 parts = line.rstrip("\n").split("\t", 2)

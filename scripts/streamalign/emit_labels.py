@@ -19,10 +19,17 @@ recovers the emitted master-starts (it reads `*.auto.labels.tsv` too).
 """
 
 import os
+import re
 
 from . import audio as _audio
+from . import groundtruth as _gt
 
 SUFFIX = " AUTO GENERATED"
+STARTER_SUFFIX = " STARTER"
+
+# An owner row that homes a neighbour file: `file_<other>: <inner label>` at the
+# neighbour's local start time inside the owner (Proposal B's carry-forward link).
+_LINK_RE = re.compile(r"^file_([^:]+):\s*(.+)", re.IGNORECASE)
 
 
 def _rows_for_file(stem, master_start, duration=None, skips=None):
@@ -90,3 +97,91 @@ def durations_for(stems, audio_dir=None):
         if _audio.find_audio_file(stem, audio_dir):
             out[stem] = _audio.duration_seconds(stem, audio_dir=audio_dir)
     return out
+
+
+def _read_label_lines(path):
+    """Read a `.labels.tsv` as a list of (start_s, end_s, text); skips malformed lines."""
+    rows = []
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                parts = line.rstrip("\n").split("\t", 2)
+                if len(parts) < 3:
+                    continue
+                try:
+                    a, b = float(parts[0]), float(parts[1])
+                except ValueError:
+                    continue
+                rows.append((a, b, parts[2].strip()))
+    except OSError:
+        pass
+    return rows
+
+
+def _links_in(rows):
+    """{other_stem: link_local_time} for each neighbour the owner rows home.
+
+    The link time is the neighbour's `file [start] sync` row when present (its true
+    start inside the owner), else the earliest `file_<other>:` reference.
+    """
+    cands = {}
+    for a, _b, text in rows:
+        m = _LINK_RE.match(text)
+        if not m:
+            continue
+        other = _audio.stem_of(m.group(1))
+        cands.setdefault(other, []).append((a, "start sync" in m.group(2).lower()))
+    links = {}
+    for other, seen in cands.items():
+        starts = [a for a, is_start in seen if is_start]
+        links[other] = min(starts) if starts else min(a for a, _ in seen)
+    return links
+
+
+def emit_starter(owner_stem, labels_dir=None, out_dir=None):
+    """Write `<other>.starter.labels.tsv` seeds for every neighbour the owner links.
+
+    For each `file_<other>:` link in `<owner>.labels.tsv`, carry ALL of the owner's
+    labels at/after the link's local time, shifted onto `<other>`'s local timeline
+    (maximal seed; the labeller prunes), each suffixed `" STARTER"`. The anchor
+    `file start sync: <other>.wav <master> STARTER` at local 0.0 is **derived** from
+    `groundtruth.resolve_starts` (the `file start sync` labels) rather than hand-copied
+    from the sheet — closing the `--adjust` loop.
+
+    Starter files are SEED-ONLY: `<other>.starter.labels.tsv` is excluded from the sheet
+    import (`Code.js`) and from solve/build (`groundtruth`, `track_mix`,
+    `build_track_metadata`), so it never reaches analysis. Returns {other_stem: path}.
+    """
+    labels_dir = labels_dir or _gt.LABELS_DIR
+    out_dir = out_dir or labels_dir
+    owner_stem = _audio.stem_of(owner_stem)
+    rows = _read_label_lines(os.path.join(labels_dir, owner_stem + ".labels.tsv"))
+    if not rows:
+        return {}
+
+    starts = _gt.resolve_starts(labels_dir)
+    owner_master = starts.get(owner_stem)
+
+    written = {}
+    for other, link_t in _links_in(rows).items():
+        # neighbour master start: prefer the resolved value, else owner + link offset
+        if other in starts:
+            other_master = starts[other]
+        elif owner_master is not None:
+            other_master = owner_master + link_t
+        else:
+            other_master = link_t  # owner has no anchor; emit a relative seed
+        out_rows = [(0.0, 0.0, "file start sync: %s.wav %.6f%s"
+                     % (other, other_master, STARTER_SUFFIX))]
+        for a, b, text in rows:
+            if a < link_t - 1e-9:
+                continue  # before the neighbour begins -> not its label
+            lm = _LINK_RE.match(text)
+            if lm and _audio.stem_of(lm.group(1)) == other:
+                continue  # the originating link row -> replaced by the anchor above
+            out_rows.append((a - link_t, b - link_t, text + STARTER_SUFFIX))
+        out_rows.sort(key=lambda r: (r[0], r[1]))
+        path = os.path.join(out_dir, other + ".starter.labels.tsv")
+        write_labels_tsv(out_rows, path)
+        written[other] = path
+    return written

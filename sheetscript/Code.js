@@ -22,8 +22,9 @@ function GithubImport() {
   for (var i = 0; i < repoData.length; i++) {
     var file = repoData[i];
 
-    // Check if the file is a .tsv file
-    if (file.name.endsWith('.tsv')) {
+    // Check if the file is a .tsv file (skip seed-only .starter.labels.tsv — Proposal B,
+    // these only pre-position labels in Audacity and must not reach the sheet)
+    if (file.name.endsWith('.tsv') && !file.name.endsWith('.starter.labels.tsv')) {
       console.log('INFO: Reading file: ' + file.name)
 
       // Get the raw content of the .tsv file
