@@ -2,6 +2,7 @@
 
 import shutil
 import re
+import os
 import sys
 import argparse
 import contextlib
@@ -17,6 +18,11 @@ adjust_value = -1       # value for adjusting timestamps if >0
 debug = False           # print debug information
 filename = None         # filename to read/write, is manipulated by read routine to make backups
 secondaryfile = None    # when processing secondary files, use this to check tag against filename
+primary_stem = None     # stem of the primary file (from filename/--stem); scopes LABELTRACK names
+current_track_name = None  # active LABELTRACK scope while reading sequential input
+prev_ts = None          # previous label's start timestamp, to detect label-track block boundaries
+seen_labeltrack = False # True once any LABELTRACK marker is seen (i.e. the convention is in use)
+missing_markers = []    # (line_number, reason) for label-track blocks lacking a LABELTRACK header
 
 # Define regular expressions for matching keywords
 keyword_patterns = [
@@ -31,6 +37,89 @@ keyword_patterns = [
 
 # Compile regular expressions
 keyword_regexes = [re.compile(pattern, flags=re.IGNORECASE) for pattern in keyword_patterns]
+
+# LABELTRACK <name> (Proposal A, PLAN_labelling_process.md): the first (earliest) label of
+# each Audacity label track names that track. sort_tsv.py scopes every following label to
+# <name> until the next LABELTRACK; the marker itself is stripped from the emitted .tsv.
+labeltrack_regex = re.compile(r"^LABELTRACK\s+(\S+)\s*$", flags=re.IGNORECASE)
+
+# Capture/recording stems follow the project's `d<digits>…` naming (e.g. d336-355, d356-375,
+# d-25-000b, d180_d-14Nov10-a); originals/tracks are orig<NNN>/track<NNN>. A LABELTRACK whose
+# name is a capture stem is re-homed onto that file (file_<name>:); any other name (orig069,
+# track, free text) is prefix-expanded onto the active track.
+capture_stem_regex = re.compile(r"^d-?\d", flags=re.IGNORECASE)
+
+# Known label/audio suffixes, longest-first, so `d336-355.labels.tsv` -> `d336-355` and
+# `d356-375.wav` -> `d356-375` while a bare `orig069` is left untouched.
+_STEM_SUFFIXES = (".starter.labels.tsv", ".auto.labels.tsv", ".labels.tsv", ".labels.txt",
+                  ".tsv", ".txt", ".wav", ".au", ".mp3")
+
+
+def _stem(name):
+    """Reduce a label filename / audio name / bare name to its capture stem."""
+    base = os.path.basename((name or "").strip())
+    lowered = base.lower()
+    for suffix in _STEM_SUFFIXES:
+        if lowered.endswith(suffix):
+            return base[: -len(suffix)]
+    return os.path.splitext(base)[0]
+
+
+def is_capture_stem(name):
+    """True if `name` looks like a capture-file stem (vs an orig/track/free name)."""
+    return bool(capture_stem_regex.match(name or ""))
+
+
+def classify_track(name, primary):
+    """Map a LABELTRACK name to one of: 'primary', 'file', 'prefix'."""
+    stem = _stem(name)
+    if primary is not None and stem == _stem(primary):
+        return "primary"
+    if is_capture_stem(stem):
+        return "file"
+    return "prefix"
+
+
+def expand_label(name, label):
+    """Prefix-expand a label for a non-file LABELTRACK scope (e.g. orig069).
+
+    1. already starts with '<name> '          -> unchanged (idempotent)
+    2. '<name> ' + label matches the grammar  -> use it  (sync: 0 -> orig069 sync: 0)
+    3. otherwise                              -> '<name> note: ' + label
+    """
+    if label.startswith(name + " "):
+        return label
+    candidate = name + " " + label
+    if any(rx.match(candidate) for rx in keyword_regexes):
+        return candidate
+    return name + " note: " + label
+
+
+def scope_label(name, primary, label):
+    """Apply LABELTRACK scoping to one label's text per its name class."""
+    kind = classify_track(name, primary)
+    if kind == "primary":
+        return label
+    if kind == "file":
+        prefix = "file_%s: " % _stem(name)
+        return label if label.startswith(prefix) else prefix + label
+    return expand_label(_stem(name), label)
+
+
+def reset_state():
+    """Reset module-level accumulators (used by tests and re-entrant runs)."""
+    global sort_lines, secondfiles, line_number, adjust_value, secondaryfile
+    global primary_stem, current_track_name, prev_ts, seen_labeltrack, missing_markers
+    sort_lines = []
+    secondfiles = dict()
+    line_number = 0
+    adjust_value = -1
+    secondaryfile = None
+    primary_stem = None
+    current_track_name = None
+    prev_ts = None
+    seen_labeltrack = False
+    missing_markers = []
 
 # Function to sort lines -- put "file start" at the top, always, then sort by
 # timestamp, then sort by label
@@ -94,9 +183,29 @@ def process_entry(parts):
 
     sort_lines.append((parts))
 
+# Activate a LABELTRACK scope from a marker at start time `ts`
+def set_track_scope(name, ts):
+    global current_track_name, prev_ts, seen_labeltrack
+    seen_labeltrack = True
+    current_track_name = _stem(name)
+    prev_ts = ts
+
+# Record a missing-LABELTRACK marker at the start of file or a new label-track block.
+# Audacity exports each label track as an internally time-sorted block, so a timestamp
+# earlier than the previous line's signals a new block; a block that begins without a
+# preceding LABELTRACK marker is flagged. The flag only becomes an error when the file
+# actually uses the convention (see report_missing) -- legacy marker-less files are left alone.
+def check_block_boundary(ts, lineno):
+    if current_track_name is None and prev_ts is None:
+        missing_markers.append((lineno, "no LABELTRACK marker at start of file"))
+    elif prev_ts is not None and ts < prev_ts:
+        missing_markers.append(
+            (lineno, "backwards timestamp jump (%.6f < %.6f) without a LABELTRACK marker"
+             % (ts, prev_ts)))
+
 # Function to turn line strings into tracklist entries and process them with process_entry
 def process_line(line):
-    global line_number
+    global line_number, prev_ts
     line_number += 1
     parts = line.strip().split('\t')
     parts.append(line_number)
@@ -115,6 +224,19 @@ def process_line(line):
             sys.stderr.write(f"Warning: Unrecognized line - parts[{i}]={parts[i]} not a float - {line.strip()}\n")
             return
 
+    # LABELTRACK <name> marker: scope the following labels and strip it from output
+    if match := labeltrack_regex.match(parts[2]):
+        set_track_scope(match.group(1), parts[0])
+        return
+
+    # flag blocks that start without a LABELTRACK header (missing-marker validation)
+    check_block_boundary(parts[0], line_number)
+
+    # scope this label to the active LABELTRACK (no-op for legacy, marker-less files)
+    if current_track_name is not None:
+        parts[2] = scope_label(current_track_name, primary_stem, parts[2])
+
+    prev_ts = parts[0]
     process_entry(parts)
 
 # adjust timestamps if appropriate
@@ -240,12 +362,43 @@ def floatcmp(a,b):
         return -1
     return 1
 
+# Print any missing-LABELTRACK errors; return the count that count as errors.
+# Only files that actually use the LABELTRACK convention are held to it -- a legacy file
+# with no markers at all is left alone (returns 0).
+def report_missing():
+    if not seen_labeltrack or not missing_markers:
+        return 0
+    sys.stderr.write("ERROR: %d label-track block(s) missing a LABELTRACK marker:\n"
+                     % len(missing_markers))
+    for lineno, reason in missing_markers:
+        sys.stderr.write(f"  line {lineno}: {reason}\n")
+    sys.stderr.write("  Add `LABELTRACK <name>` as the first label of each track in Audacity.\n")
+    return len(missing_markers)
+
+# Sort the primary entries and each secondary file's entries into the final write order,
+# applying timestamp adjustment if requested. Returns the assembled list.
+def assemble_write_lines(do_adjustment):
+    global sort_lines, secondaryfile
+    write_lines = []
+    sort_lines.sort(key=tracksort)
+    write_lines.extend(sort_lines)
+    sort_lines = []
+    for sf in secondfiles:
+        sys.stderr.write(f"---\nProcessing secondary entries for file {sf}\n")
+        secondaryfile = sf
+        for entry in secondfiles[sf]:
+            process_entry(entry)
+        sort_lines.sort(key=tracksort)
+        write_lines.extend(sort_lines)
+        sort_lines = []
+    if do_adjustment:
+        write_lines = list(map(adjust_line, write_lines))
+    return write_lines
+
 ## MAIN ##
 
 def main():
-    global sort_lines, debug, filename, secondaryfile
-
-    write_lines = []        # entries ready for writing
+    global sort_lines, debug, filename, secondaryfile, primary_stem
 
     # Initialize the argument parser
     parser = argparse.ArgumentParser(description='Process and adjust input data.')
@@ -253,6 +406,7 @@ def main():
     parser.add_argument('--adjust', action='store_true', help='Subtract timestamp of last "file start" entry from all entries')
     parser.add_argument('--test',   action='store_true', help='Test mode -- do not write or move files, just show notes')
     parser.add_argument('--live',   action='store_true', help='Read labels from currently loaded file(s) in Audacity, but do not write')
+    parser.add_argument('--stem',   help='Primary file stem for LABELTRACK scoping (defaults to the input filename; needed for stdin)')
     parser.add_argument('--debug',  action='store_true', help='Print debug information')
 
     # Parse the command-line arguments
@@ -269,6 +423,10 @@ def main():
     # Get the filename from the command-line arguments
     filename = args.filename
 
+    # Primary stem scopes LABELTRACK names: --stem overrides, else derive from the filename
+    # (None for stdin without --stem, in which case capture-stem tracks route as secondaries).
+    primary_stem = _stem(args.stem) if args.stem else (_stem(filename) if filename else None)
+
     if live_mode:
         # If we are in live mode, get lines from Audacity
         read_labels_audacity()
@@ -276,23 +434,12 @@ def main():
         # Get lines from filename or stdin
         read_labels_filepipe(test_mode)
 
-    sort_lines.sort(key=tracksort)
+    # Fail early (before writing) if the file uses LABELTRACK but a block is missing its marker
+    if report_missing():
+        sys.exit("Exiting: fix the missing LABELTRACK markers above.")
 
-    # now copy entries into write_lines, and process any secondary files similarly
-    write_lines.extend(sort_lines)
-    sort_lines=[]
-    for sf in secondfiles:
-        sys.stderr.write(f"---\nProcessing secondary entries for file {sf}\n")
-        secondaryfile = sf
-        for entry in secondfiles[sf]:
-            process_entry(entry)
-        sort_lines.sort(key=tracksort)
-        write_lines.extend(sort_lines)
-        sort_lines=[]
-
-    # adjust all lines we are writing
-    if do_adjustment:
-        write_lines = map(adjust_line, write_lines)
+    # Sort primary + secondary entries into final write order (with optional adjustment)
+    write_lines = assemble_write_lines(do_adjustment)
 
     # Write the sorted lines and file start lines to the appropriate output
     if not test_mode and not live_mode:
