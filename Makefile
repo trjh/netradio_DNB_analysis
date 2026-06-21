@@ -29,29 +29,20 @@ pip:
 	.env/bin/pip install --upgrade pip
 
 #########################################
-#####   TRACKLIST PUBLISHING (public)   #####
+#####          TRACKLIST            #####
 #########################################
-# This repo is CANONICAL for `track-metadata.json`; the player mirrors it. These targets
-# regenerate the public TRACKLIST.md and publish changes via a branch + PR you accept on the
-# CLI. Cross-repo path comes from the env (no hardcoded paths): set NETRADIO_PLAYER_REPO.
-TRACKLIST_BRANCH ?= tracklist-update-$(shell date +%Y%m%d-%H%M%S)
+# This repo is CANONICAL for `track-metadata.json` (the player mirrors it). `make tracklist`
+# enriches each linked track with artwork_url/full_page_url and renders the public TRACKLIST.md.
+# `make sync` is the cross-repo sync — the SAME script runs in either repo (see scripts/
+# tracklist_sync.sh): it moves track-metadata.json between repos via PRs (never commits to main),
+# detects conflicts, and regenerates TRACKLIST.md. Cross-repo path from the env (no hardcoded
+# paths): set NETRADIO_PLAYER_REPO. Pass ARGS=--dry-run to preview.
 
-tracklist:            ## regenerate TRACKLIST.md (+ artwork cache) from track-metadata.json
+tracklist:            ## resolve artwork into track-metadata.json + render TRACKLIST.md (network)
 	$(PYTHON) scripts/render_tracklist.py
 
-tracklist-check:      ## verify the analysis<->player track-metadata.json copies match
+sync:                 ## cross-repo tracklist sync (3-way, PR-based). Needs NETRADIO_PLAYER_REPO. ARGS=--dry-run
+	NETRADIO_ANALYSIS_REPO=$(CURDIR) bash scripts/tracklist_sync.sh $(ARGS)
+
+tracklist-check:      ## report whether the analysis<->player track-metadata.json copies match
 	NETRADIO_ANALYSIS_REPO=$(CURDIR) bash scripts/check_tracklist_sync.sh
-
-tracklist-pr: tracklist   ## branch with the tracklist JSON + render, and commit it
-	git checkout -b $(TRACKLIST_BRANCH)
-	git add track-metadata.json TRACKLIST.md tracklist_artwork.json
-	git commit -m "tracklist: refresh track-metadata.json + TRACKLIST.md"
-	@echo "branch $(TRACKLIST_BRANCH) ready — run 'make push' to publish + PR."
-
-push:                 ## push the current branch, open a PR, then offer to accept it on the CLI
-	git push -u origin $$(git branch --show-current)
-	gh pr create --fill --base main || echo "(PR may already exist)"
-	@read -r -p "Accept (merge) this PR now? [y/N] " a; \
-	  if [ "$$a" = "y" ] || [ "$$a" = "Y" ]; then \
-	    gh pr merge --merge --delete-branch && echo "merged ✓"; \
-	  else echo "left open for review."; fi

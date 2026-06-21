@@ -2,7 +2,7 @@
 
 > The identified tracks of the mix, in master-timeline order. Auto-generated from `track-metadata.json` by `scripts/render_tracklist.py` — do not edit by hand. Cover art and the service logo link to each track's release page.
 
-**91 tracks** · 36 with cover art · generated 2026-06-21 11:22 UTC
+**91 tracks** · 36 with cover art · generated 2026-06-21 16:04 UTC
 
 | Time | Cover | Track |
 |------|-------|-------|
