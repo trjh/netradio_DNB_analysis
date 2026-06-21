@@ -1,0 +1,290 @@
+{
+  "10": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/artificial-life/595866402?i=595866483",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "12": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/29/dd/35/mzi.nnomiyag.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/arboleda-de-manzanitas-drum-bass-mix/439852478?i=439852488",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "13": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/senses/595866402?i=595866531",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "15": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/mindgames/595866402?i=595866533",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "16": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/2c/3d/ec/2c3dec9b-2910-8cd9-6175-4af3b062f455/62579.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/the-rope-a-dope/1877998672?i=1877998696",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "17": {
+    "artwork_url": "https://i.scdn.co/image/ab67616d0000b273a0fc624eddb64d00369dae39",
+    "colour": "1DB954",
+    "full_page_url": "https://open.spotify.com/track/1AsXX1fycUqDDdq22c03Fm",
+    "label": "Spotify",
+    "service": "spotify",
+    "slug": "spotify"
+  },
+  "18": {
+    "artwork_url": "https://i.scdn.co/image/ab67616d0000b2730cffb21a029bc0133b8ef93b",
+    "colour": "1DB954",
+    "full_page_url": "https://open.spotify.com/track/3x5MorCXAUuoDSd6UI9o48",
+    "label": "Spotify",
+    "service": "spotify",
+    "slug": "spotify"
+  },
+  "21": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/j-walkin/595866402?i=595866484",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "22": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music1/v4/93/57/9e/93579e13-cd12-fc76-500c-301c4bdad237/9210_300dpi.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/junkle-i/995101816?i=995101825",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "23": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music5/v4/7d/65/d2/7d65d214-b713-ec98-c8f1-bb4016852f82/dj.djfivhuf.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/63rd-suite/5575733?i=5575727",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "24": {
+    "artwork_url": "https://i.ytimg.com/vi/1Qjvdx4TUr8/hqdefault.jpg",
+    "colour": "FF0000",
+    "full_page_url": "https://www.youtube.com/watch?v=1Qjvdx4TUr8",
+    "label": "YouTube",
+    "service": "youtube",
+    "slug": "youtube"
+  },
+  "26": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/da/a5/cd/mzi.rkruovjj.tif/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/serious-intent/209772259?i=209772566",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "27": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/2b/83/bb/2b83bb8a-a0cb-f2a5-39f8-6b1016b70584/mzi.smygibdo.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/cruzer/416340057?i=416340135&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "28": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Features/0a/11/11/dj.zjdgrxbm.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/at-home-with-the-snake/208083571?i=208083582&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "29": {
+    "artwork_url": "https://i.scdn.co/image/ab67616d0000b273231fccdbd94c8af9e5c3ba29",
+    "colour": "1DB954",
+    "full_page_url": "https://open.spotify.com/track/0KsRg4FYlRM2beAxlwP5r4",
+    "label": "Spotify",
+    "service": "spotify",
+    "slug": "spotify"
+  },
+  "3": {
+    "artwork_url": "https://i.scdn.co/image/ab67616d0000b2736eab94540fb7cfa4277305c8",
+    "colour": "1DB954",
+    "full_page_url": "https://open.spotify.com/track/0fZTgg3myT66xokM5Z7Okt?si=fc78d3eba99a498a",
+    "label": "Spotify",
+    "service": "spotify",
+    "slug": "spotify"
+  },
+  "30": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/57/b3/c4/mzi.qajwljss.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/crusoe-takes-a-trip/277381532?i=277381609&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "33": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/eb/1c/98/mzi.dokynifr.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/problem-child/279134950?i=279134953&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "37": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/7b/0f/e9/7b0fe97f-395a-55a6-0c12-fc7148ef04ee/5055373553405.png/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/input/1583378328?i=1583378629&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "4": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/1d/1b/de/mzi.andkcdhn.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/everything-is-gonna-be-alright-feat-carol-tripp/273372614?i=273372758&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "41": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/da/ee/83/daee83b4-a3ac-3a15-3c21-6bc94b9c281d/mzi.gbsgaqjh.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/strength/286565339?i=286565449&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "43": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/35/da/7a/mzi.pdkoywgs.tif/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/waves-kid-loops-remix/109684573?i=109684508&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "44": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/4d/f9/02/mzi.vslrhsuv.tif/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/retro/119057801?i=119057793&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "45": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/76/1d/6a/761d6a3f-507a-9992-48d2-0c4c171e7d3d/804733.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/its-all-gone-sideways/1822736342?i=1822736360&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "46": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/5c/1d/c9/mzi.jpcemmoc.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/the-beckoning/292438381?i=292438383&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "54": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/dreams-of-heaven/1884390532?i=1884390533&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "56": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/grey-odyssey/1884390532?i=1884390535&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "57": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/mute/1884390532?i=1884390537&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "58": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/deep-inside/1884390532?i=1884390538&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "59": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/silver-blade/1884390532?i=1884390539&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "60": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/locust/1884390532?i=1884390540&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "61": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/warned/1884390532?i=1884390541&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "62": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/d8/58/21/d858214a-6003-ebd1-60f5-b9288d07f5d2/0724385661051_1772x1772_300dpi.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/still/696885634?i=696888469&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "63": {
+    "artwork_url": "https://i.scdn.co/image/ab67616d0000b2732b05aaa74420c43e44ea2623",
+    "colour": "1DB954",
+    "full_page_url": "https://open.spotify.com/track/0hIFvmvRS6ot1VxRtM6DO7",
+    "label": "Spotify",
+    "service": "spotify",
+    "slug": "spotify"
+  },
+  "65": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/2c/a1/c6/2ca1c697-1524-0eb6-c2a1-c9ea744862b8/8790001340305.png/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/us/album/pseudo-names-94-98/1595891447",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  },
+  "66": {
+    "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/35/e4/23/35e4235a-f25c-ea65-7f1c-ce10e8bc46bb/dj.khjgxnnz.jpg/1200x630wp-60.jpg",
+    "colour": "FA243C",
+    "full_page_url": "https://music.apple.com/ie/album/free-la-funk-pfm-remix/109005996?i=109005705&uo=4",
+    "label": "AppleMusic",
+    "service": "apple",
+    "slug": "applemusic"
+  }
+}
