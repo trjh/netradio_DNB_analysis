@@ -290,7 +290,6 @@
       "anchor": "EverythingJamie",
       "artist": "Jamie Myerson",
       "artwork": "track-4.jpg",
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/1d/1b/de/mzi.andkcdhn.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/everything-is-gonna-be-alright-feat-carol-tripp/273372614?i=273372758&uo=4"
       },
@@ -346,7 +345,6 @@
       "anchor": "YoureJamieMy",
       "artist": "Jamie Myerson",
       "artwork": "track-7.jpg",
-      "artwork_hires": "https://coverartarchive.org/release/845128d3-3c1c-33e4-86d0-89957170776a/front-1200",
       "fields": {},
       "master_begin_seconds": 647.372,
       "master_end_seconds": 1102.848,
@@ -365,7 +363,6 @@
       "anchor": "CrucialJamie",
       "artist": "Jamie Myerson",
       "artwork": "track-8.jpg",
-      "artwork_hires": "https://coverartarchive.org/release/0c1b2c9e-c5ac-4aa1-b93b-4c7fbeab2cc6/front-1200",
       "fields": {},
       "master_begin_seconds": 1102.848,
       "master_end_seconds": 1577.475,
@@ -404,7 +401,6 @@
       "anchor": "ArtificialOdyssey",
       "artist": "Odyssey",
       "artwork": "track-10.jpg",
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/artificial-life/595866402?i=595866483",
         "spotify": "https://open.spotify.com/track/4x7N412NH6MlodXpKpETyO"
@@ -445,7 +441,6 @@
       "anchor": "ArboledaEighty",
       "artist": "Eighty Mile Beach",
       "artwork": null,
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/29/dd/35/mzi.nnomiyag.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/arboleda-de-manzanitas-drum-bass-mix/439852478?i=439852488",
         "spotify": "https://open.spotify.com/track/5INAC3IYcR4x9pp4XMDc7t"
@@ -469,7 +464,6 @@
       "anchor": "SensesDJ",
       "artist": "DJ Addiction",
       "artwork": null,
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/senses/595866402?i=595866531"
       },
@@ -507,7 +501,6 @@
       "anchor": "MindDJ",
       "artist": "DJ Crystl",
       "artwork": "track-15.jpg",
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/mindgames/595866402?i=595866533",
         "spotify": "https://open.spotify.com/track/4FawryquKj8Lh3Csj0ne58"
@@ -531,7 +524,6 @@
       "anchor": "TheSkyjuice",
       "artist": "Skyjuice",
       "artwork": null,
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/2c/3d/ec/2c3dec9b-2910-8cd9-6175-4af3b062f455/62579.jpg/1200x1200bb.jpg",
       "fields": {
         "apple-music": "https://music.apple.com/ie/album/the-rope-a-dope/1877998672?i=1877998696",
         "spotify": "https://open.spotify.com/track/2p6ct0x7ojZISVVsYViV0g"
@@ -575,7 +567,6 @@
       "anchor": "TheBugs",
       "artist": "Bugs",
       "artwork": null,
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/2c/3d/ec/2c3dec9b-2910-8cd9-6175-4af3b062f455/62579.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/us/album/the-oracle-extended-instrumental-remix/1877998672?i=1877998685&uo=4",
         "spotify": "https://open.spotify.com/track/3x5MorCXAUuoDSd6UI9o48"
@@ -636,7 +627,6 @@
       "anchor": "JWalkinBlame",
       "artist": "Blame",
       "artwork": "track-21.jpg",
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/j-walkin/595866402?i=595866484",
         "spotify": "https://open.spotify.com/track/3wrmgQYGLm76xZcPH6uNtX"
@@ -658,7 +648,6 @@
       "anchor": "JunkleCallisto",
       "artist": "Callisto",
       "artwork": null,
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music1/v4/93/57/9e/93579e13-cd12-fc76-500c-301c4bdad237/9210_300dpi.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/junkle-i/995101816?i=995101825",
         "spotify": "https://open.spotify.com/track/03PuhOxcqLscc2769QpKU1"
@@ -731,7 +720,6 @@
       "anchor": "HappySpring",
       "artist": "Spring Heel Jack",
       "artwork": "track-25.jpg",
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/e1/4d/45/e14d454c-98bc-4991-59b0-ca2db3179ab9/00731452443724.rgb.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/us/album/happy-baby/1443789365?i=1443789536&uo=4"
       },
@@ -751,7 +739,6 @@
       "anchor": "SeriousEndemic",
       "artist": "Endemic Void",
       "artwork": "track-26.jpg",
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/da/a5/cd/mzi.rkruovjj.tif/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/serious-intent/209772259?i=209772566",
         "spotify": "https://open.spotify.com/track/2cSjXwfKB59uTcEqaT82P6"
@@ -774,7 +761,6 @@
       "anchor": "CruzerCujo",
       "artist": "Cujo",
       "artwork": null,
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/2b/83/bb/2b83bb8a-a0cb-f2a5-39f8-6b1016b70584/mzi.smygibdo.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/cruzer/416340057?i=416340135&uo=4",
         "spotify": "https://open.spotify.com/track/3EeQ6y44tDrwZLuqBG2Uh2"
@@ -798,7 +784,6 @@
       "anchor": "AtSpaceways",
       "artist": "Spaceways",
       "artwork": null,
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Features/0a/11/11/dj.zjdgrxbm.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/at-home-with-the-snake/208083571?i=208083582&uo=4",
         "spotify": "https://open.spotify.com/track/6MYDJmdKLwovYxSlYeVplf"
@@ -840,7 +825,6 @@
       "anchor": "CrusoeRed",
       "artist": "Red Snapper",
       "artwork": null,
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/57/b3/c4/mzi.qajwljss.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/crusoe-takes-a-trip/277381532?i=277381609&uo=4",
         "spotify": "https://open.spotify.com/track/3HHeG4FwEYCgQfuHqHOduH"
@@ -899,7 +883,6 @@
       "anchor": "ProblemSquarepusher",
       "artist": "Squarepusher",
       "artwork": null,
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/eb/1c/98/mzi.dokynifr.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/problem-child/279134950?i=279134953&uo=4",
         "spotify": "https://open.spotify.com/track/390Sa6cSOITqIlQyz7zCCR"
@@ -938,7 +921,6 @@
       "anchor": "CircuitDecoder",
       "artist": "Decoder",
       "artwork": null,
-      "artwork_hires": "https://coverartarchive.org/release/dfa68653-192f-4f4c-8718-6ae1245566f2/front-1200",
       "fields": {},
       "master_begin_seconds": 9877.211,
       "master_end_seconds": 10340.178,
@@ -973,7 +955,6 @@
       "anchor": "InputFierce",
       "artist": "Fierce & Nico",
       "artwork": null,
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/7b/0f/e9/7b0fe97f-395a-55a6-0c12-fc7148ef04ee/5055373553405.png/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/input/1583378328?i=1583378629&uo=4",
         "spotify": "https://open.spotify.com/track/63yH8Ix9hndGVKMkAsIdVf"
@@ -997,7 +978,6 @@
       "anchor": "DarkFriends",
       "artist": "Friends, Lovers & Family",
       "artwork": null,
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/y2004/m02/d12/h16/s05.xaotediq.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/us/album/dark-fader/5445731?i=5445689&uo=4"
       },
@@ -1034,7 +1014,6 @@
       "anchor": "HopelessDavid",
       "artist": "David Kristian",
       "artwork": null,
-      "artwork_hires": "https://coverartarchive.org/release/189e5d0d-2edc-44fd-a2c0-a9dd75a78dd8/front-1200",
       "fields": {},
       "master_begin_seconds": 11748.836,
       "master_end_seconds": 11964.971,
@@ -1051,7 +1030,6 @@
       "anchor": "StrengthThe",
       "artist": "The Sonar Circle",
       "artwork": null,
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/da/ee/83/daee83b4-a3ac-3a15-3c21-6bc94b9c281d/mzi.gbsgaqjh.jpg/1200x1200bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/strength/286565339?i=286565449&uo=4",
         "spotify": "https://open.spotify.com/track/2CWmAxkuS2yIRnxO9tXGYD"

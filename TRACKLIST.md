@@ -2,7 +2,7 @@
 
 > The identified tracks of the mix, in master-timeline order. Auto-generated from `track-metadata.json` by `scripts/render_tracklist.py` — do not edit by hand. **▶** = listen (Apple Music / Spotify / YouTube); **ⓘ** = Discogs / MusicBrainz. Cover art + links are album-first (a track inherits its album's).
 
-**91 tracks** · 68 with cover art · 50 with a listen link · generated 2026-06-22 09:03 UTC
+**91 tracks** · 68 with cover art · 50 with a listen link · generated 2026-06-22 09:04 UTC
 
 | Time | Cover | Track |
 |------|-------|-------|

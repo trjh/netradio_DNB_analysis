@@ -156,7 +156,9 @@ def main(argv=None):
     cleared = 0
     for t in tracks.values():
         if t.get("album"):
-            if t.pop("artwork_url", None) is not None or t.pop("artwork_hires", None) is not None:
+            had_url = t.pop("artwork_url", None) is not None
+            had_hi = t.pop("artwork_hires", None) is not None   # pop BOTH (no short-circuit)
+            if had_url or had_hi:
                 cleared += 1
 
     print("\n=== %d album covers set, %d albums coverless; cleared per-track covers on %d album-tracks ===" %
