@@ -82,6 +82,7 @@
         "allmusic": "https://www.allmusic.com/album/the-listen-project-mw0000031187",
         "discogs": "https://www.discogs.com/release/376822",
         "musicbrainz": "https://musicbrainz.org/release-group/59a84ae8-3218-39cc-99de-9b4737fa1ddf",
+        "spotify": "https://open.spotify.com/album/2yeUrokRxA4E6u0uwUYiu7",
         "year": "1998"
       },
       "title": "The Listen Project",
@@ -111,8 +112,10 @@
     "me-shell-ndeg-ocello-stay-1996-cd": {
       "artist": "Me'Shell NdegéOcello",
       "artwork": "album-me-shell-ndeg-ocello-stay-1996-cd.jpg",
+      "artwork_hires": "https://i.discogs.com/XXp2HfgizuJJA9gzefJO5kaBXD7fhB4frsGvHHQ_UdE/rs:fit/g:sm/q:90/h:598/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE0MDEw/OTEtMTU0MTM5MjA3/MC03OTkxLmpwZWc.jpeg",
+      "artwork_url": "https://i.discogs.com/XXp2HfgizuJJA9gzefJO5kaBXD7fhB4frsGvHHQ_UdE/rs:fit/g:sm/q:90/h:598/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE0MDEw/OTEtMTU0MTM5MjA3/MC03OTkxLmpwZWc.jpeg",
       "fields": {
-        "discogs": "https://www.discogs.com/release/1640975",
+        "discogs": "https://www.discogs.com/release/1401091",
         "year": "1996"
       },
       "title": "Stay"
@@ -183,10 +186,11 @@
     "various-infinite-beat-vol-1": {
       "artist": "Various",
       "artwork": "album-various-infinite-beat-vol-1.jpg",
-      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/eb/1c/98/mzi.dokynifr.jpg/1200x1200bb.jpg",
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/eb/1c/98/mzi.dokynifr.jpg/600x600bb.jpg",
+      "artwork_hires": "https://coverartarchive.org/release/dfa68653-192f-4f4c-8718-6ae1245566f2/front-1200",
+      "artwork_url": "https://coverartarchive.org/release/dfa68653-192f-4f4c-8718-6ae1245566f2/front-500",
       "fields": {
         "discogs": "https://www.discogs.com/master/276254-Various-Infinite-Beat-Vol-1",
+        "musicbrainz": "https://musicbrainz.org/release/dfa68653-192f-4f4c-8718-6ae1245566f2",
         "segura-inc": "https://segura-inc.com/Geffen-Infinite-Beat",
         "year": "1997"
       },
@@ -232,7 +236,10 @@
       "artist": "Various",
       "artwork_hires": "https://coverartarchive.org/release/189e5d0d-2edc-44fd-a2c0-a9dd75a78dd8/front-1200",
       "artwork_url": "https://coverartarchive.org/release/189e5d0d-2edc-44fd-a2c0-a9dd75a78dd8/front-500",
-      "fields": {},
+      "fields": {
+        "musicbrainz": "https://musicbrainz.org/release/189e5d0d-2edc-44fd-a2c0-a9dd75a78dd8",
+        "year": "1997"
+      },
       "title": "Various - Ultra Mix Drum & Bass"
     }
   },
@@ -431,7 +438,9 @@
       "anchor": "PianoTricky",
       "artist": "Tricky",
       "artwork": "track-11.jpg",
-      "fields": {},
+      "fields": {
+        "youtube": "https://music.youtube.com/watch?v=rE7xKiY-pQg"
+      },
       "master_begin_seconds": 2134.772,
       "master_end_seconds": 2420.48,
       "source": "precise",
@@ -1055,11 +1064,11 @@
       "use_logo": false
     },
     "42": {
+      "album": "various-ultra-mix-drum-bass",
       "anchor": "JunkyardJustin",
       "artist": "Justin Tewn & Hunter A.D.",
       "artwork": null,
       "fields": {
-        "musicbrainz": "https://musicbrainz.org/recording/a842b35b-4dc3-4a01-a9c4-c7985c0e91d1",
         "youtube": "https://youtu.be/abOkIAZ25zA"
       },
       "master_begin_seconds": 12293.941,

@@ -94,6 +94,31 @@ def fmt_time(seconds):
         else "%d:%02d" % (s // 60, s % 60)
 
 
+def clean_album_name(album):
+    """The album's display name, minus the discogs-style description. We show '(name) — (year)'
+    on its own line, so drop any trailing format/year parenthetical ('… (1997, CD2, CD)') and a
+    leading 'Artist - ' duplication (the artist is already on the title line)."""
+    title = (album.get("title") or "").strip()
+    name = re.sub(r"\s*[\(\[][^\)\]]*[\)\]]\s*$", "", title).strip() or title
+    artist = (album.get("artist") or "").strip()
+    if artist:
+        for dash in (" - ", " – ", " — "):
+            prefix = artist + dash
+            if name.lower().startswith(prefix.lower()):
+                name = name[len(prefix):].strip()
+                break
+    return name
+
+
+def album_year(album):
+    """Release year: explicit fields.year, else a 19xx/20xx found in the title."""
+    year = (album.get("fields") or {}).get("year")
+    if year:
+        return str(year)
+    match = re.search(r"\b(?:19|20)\d{2}\b", album.get("title") or "")
+    return match.group(0) if match else None
+
+
 def row(track, albums):
     ll = listen_link(track, albums)
     page = ll[3] if ll else None
@@ -101,21 +126,26 @@ def row(track, albums):
     cover_img = '<img src="%s" width="110" alt="">' % art
     cover = "[%s](%s)" % (cover_img, page) if page else cover_img
 
+    # line 1: **Title — Artist**
     title = md_text(track.get("title") or "(untitled)")
     artist = md_text(track.get("artist"))
-    album = md_text((track.get("album") or "").replace("-", " ")) if track.get("album") else ""
-    label = ("**%s**" % title) + (" — " + artist if artist else "")
+    head = ("**%s — %s**" % (title, artist)) if artist else ("**%s**" % title)
 
-    parts = []
-    parts.append("▶ " + badge(*ll) if ll else "_no listen link_")
-    info = [badge(lab, col, slug, info_field(track, albums, key))
-            for key, lab, col, slug in INFO if info_field(track, albums, key)]
-    if info:
-        parts.append("ⓘ " + " ".join(info))
-    if album:
-        parts.append("_%s_" % album)
-    return "| %s | %s | %s<br>%s |" % (fmt_time(track.get("master_begin_seconds")), cover,
-                                       label, " · ".join(parts))
+    # line 2: the links — listen first, then info; no ▶/ⓘ markers (the badges speak for themselves)
+    links = [badge(*ll)] if ll else []
+    links += [badge(lab, col, slug, info_field(track, albums, key))
+              for key, lab, col, slug in INFO if info_field(track, albums, key)]
+    links_line = " ".join(links) if links else "—"
+
+    # line 3: _Album — Year_ (clean name; album-less singles get no third line)
+    alb = _album(track, albums)
+    cell = head + "<br>" + links_line
+    if alb:
+        name = md_text(clean_album_name(alb))
+        year = album_year(alb)
+        cell += "<br>_%s_" % (("%s — %s" % (name, year)) if year else name)
+
+    return "| %s | %s | %s |" % (fmt_time(track.get("master_begin_seconds")), cover, cell)
 
 
 def render(meta):
@@ -131,8 +161,8 @@ def render(meta):
         "",
         "> The identified tracks of the mix, in master-timeline order. Auto-generated from "
         "`track-metadata.json` by `scripts/render_tracklist.py` — do not edit by hand. "
-        "**▶** = listen (Apple Music / Spotify / YouTube); **ⓘ** = Discogs / MusicBrainz. "
-        "Cover art + links are album-first (a track inherits its album's).",
+        "Each track shows a listen link (Apple Music / Spotify / YouTube) and reference links "
+        "(Discogs / MusicBrainz). Cover art + links are album-first (a track inherits its album's).",
         "",
         "**%d tracks** · %d with cover art · %d with a listen link · generated %s"
         % (len(ordered), arted, listenable, now),
