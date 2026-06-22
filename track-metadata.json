@@ -249,7 +249,8 @@
       "anchor": "EverythingJamie",
       "artist": "Jamie Myerson",
       "artwork": "track-4.jpg",
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/1d/1b/de/mzi.andkcdhn.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/1d/1b/de/mzi.andkcdhn.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/1d/1b/de/mzi.andkcdhn.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/everything-is-gonna-be-alright-feat-carol-tripp/273372614?i=273372758&uo=4"
       },
@@ -361,7 +362,8 @@
       "anchor": "ArtificialOdyssey",
       "artist": "Odyssey",
       "artwork": "track-10.jpg",
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/artificial-life/595866402?i=595866483",
         "spotify": "https://open.spotify.com/track/4x7N412NH6MlodXpKpETyO"
@@ -402,7 +404,8 @@
       "anchor": "ArboledaEighty",
       "artist": "Eighty Mile Beach",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/29/dd/35/mzi.nnomiyag.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/29/dd/35/mzi.nnomiyag.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/29/dd/35/mzi.nnomiyag.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/arboleda-de-manzanitas-drum-bass-mix/439852478?i=439852488",
         "spotify": "https://open.spotify.com/track/5INAC3IYcR4x9pp4XMDc7t"
@@ -426,7 +429,8 @@
       "anchor": "SensesDJ",
       "artist": "DJ Addiction",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/senses/595866402?i=595866531"
       },
@@ -464,7 +468,8 @@
       "anchor": "MindDJ",
       "artist": "DJ Crystl",
       "artwork": "track-15.jpg",
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/mindgames/595866402?i=595866533",
         "spotify": "https://open.spotify.com/track/4FawryquKj8Lh3Csj0ne58"
@@ -488,7 +493,8 @@
       "anchor": "TheSkyjuice",
       "artist": "Skyjuice",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/2c/3d/ec/2c3dec9b-2910-8cd9-6175-4af3b062f455/62579.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/2c/3d/ec/2c3dec9b-2910-8cd9-6175-4af3b062f455/62579.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/2c/3d/ec/2c3dec9b-2910-8cd9-6175-4af3b062f455/62579.jpg/600x600bb.jpg",
       "fields": {
         "apple-music": "https://music.apple.com/ie/album/the-rope-a-dope/1877998672?i=1877998696",
         "spotify": "https://open.spotify.com/track/2p6ct0x7ojZISVVsYViV0g"
@@ -533,8 +539,10 @@
       "anchor": "TheBugs",
       "artist": "Bugs",
       "artwork": null,
-      "artwork_url": "https://i.scdn.co/image/ab67616d0000b2730cffb21a029bc0133b8ef93b",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/2c/3d/ec/2c3dec9b-2910-8cd9-6175-4af3b062f455/62579.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/2c/3d/ec/2c3dec9b-2910-8cd9-6175-4af3b062f455/62579.jpg/600x600bb.jpg",
       "fields": {
+        "apple": "https://music.apple.com/us/album/the-oracle-extended-instrumental-remix/1877998672?i=1877998685&uo=4",
         "spotify": "https://open.spotify.com/track/3x5MorCXAUuoDSd6UI9o48"
       },
       "full_page_url": "https://open.spotify.com/track/3x5MorCXAUuoDSd6UI9o48",
@@ -593,7 +601,8 @@
       "anchor": "JWalkinBlame",
       "artist": "Blame",
       "artwork": "track-21.jpg",
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/2e/9c/0f/2e9c0f26-714c-2ac7-5046-74d640cb6779/7640152970030_Cover.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/j-walkin/595866402?i=595866484",
         "spotify": "https://open.spotify.com/track/3wrmgQYGLm76xZcPH6uNtX"
@@ -615,7 +624,8 @@
       "anchor": "JunkleCallisto",
       "artist": "Callisto",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music1/v4/93/57/9e/93579e13-cd12-fc76-500c-301c4bdad237/9210_300dpi.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music1/v4/93/57/9e/93579e13-cd12-fc76-500c-301c4bdad237/9210_300dpi.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music1/v4/93/57/9e/93579e13-cd12-fc76-500c-301c4bdad237/9210_300dpi.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/junkle-i/995101816?i=995101825",
         "spotify": "https://open.spotify.com/track/03PuhOxcqLscc2769QpKU1"
@@ -636,7 +646,8 @@
       "anchor": "63rdThe",
       "artist": "The Amalgamation of Soundz",
       "artwork": "track-23.jpg",
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music5/v4/7d/65/d2/7d65d214-b713-ec98-c8f1-bb4016852f82/dj.djfivhuf.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music5/v4/7d/65/d2/7d65d214-b713-ec98-c8f1-bb4016852f82/dj.djfivhuf.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music5/v4/7d/65/d2/7d65d214-b713-ec98-c8f1-bb4016852f82/dj.djfivhuf.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/63rd-suite/5575733?i=5575727",
         "discogs": "https://www.discogs.com/release/40027",
@@ -687,7 +698,11 @@
       "anchor": "HappySpring",
       "artist": "Spring Heel Jack",
       "artwork": "track-25.jpg",
-      "fields": {},
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/e1/4d/45/e14d454c-98bc-4991-59b0-ca2db3179ab9/00731452443724.rgb.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/e1/4d/45/e14d454c-98bc-4991-59b0-ca2db3179ab9/00731452443724.rgb.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/us/album/happy-baby/1443789365?i=1443789536&uo=4"
+      },
       "master_begin_seconds": 6669.768,
       "master_end_seconds": 7014.188,
       "source": "precise",
@@ -704,7 +719,8 @@
       "anchor": "SeriousEndemic",
       "artist": "Endemic Void",
       "artwork": "track-26.jpg",
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/da/a5/cd/mzi.rkruovjj.tif/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/da/a5/cd/mzi.rkruovjj.tif/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/da/a5/cd/mzi.rkruovjj.tif/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/serious-intent/209772259?i=209772566",
         "spotify": "https://open.spotify.com/track/2cSjXwfKB59uTcEqaT82P6"
@@ -727,7 +743,8 @@
       "anchor": "CruzerCujo",
       "artist": "Cujo",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/2b/83/bb/2b83bb8a-a0cb-f2a5-39f8-6b1016b70584/mzi.smygibdo.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/2b/83/bb/2b83bb8a-a0cb-f2a5-39f8-6b1016b70584/mzi.smygibdo.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/2b/83/bb/2b83bb8a-a0cb-f2a5-39f8-6b1016b70584/mzi.smygibdo.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/cruzer/416340057?i=416340135&uo=4",
         "spotify": "https://open.spotify.com/track/3EeQ6y44tDrwZLuqBG2Uh2"
@@ -751,7 +768,8 @@
       "anchor": "AtSpaceways",
       "artist": "Spaceways",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Features/0a/11/11/dj.zjdgrxbm.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Features/0a/11/11/dj.zjdgrxbm.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Features/0a/11/11/dj.zjdgrxbm.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/at-home-with-the-snake/208083571?i=208083582&uo=4",
         "spotify": "https://open.spotify.com/track/6MYDJmdKLwovYxSlYeVplf"
@@ -794,7 +812,8 @@
       "anchor": "CrusoeRed",
       "artist": "Red Snapper",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/57/b3/c4/mzi.qajwljss.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/57/b3/c4/mzi.qajwljss.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/57/b3/c4/mzi.qajwljss.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/crusoe-takes-a-trip/277381532?i=277381609&uo=4",
         "spotify": "https://open.spotify.com/track/3HHeG4FwEYCgQfuHqHOduH"
@@ -853,7 +872,8 @@
       "anchor": "ProblemSquarepusher",
       "artist": "Squarepusher",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/eb/1c/98/mzi.dokynifr.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/eb/1c/98/mzi.dokynifr.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/eb/1c/98/mzi.dokynifr.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/problem-child/279134950?i=279134953&uo=4",
         "spotify": "https://open.spotify.com/track/390Sa6cSOITqIlQyz7zCCR"
@@ -926,7 +946,8 @@
       "anchor": "InputFierce",
       "artist": "Fierce & Nico",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/7b/0f/e9/7b0fe97f-395a-55a6-0c12-fc7148ef04ee/5055373553405.png/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/7b/0f/e9/7b0fe97f-395a-55a6-0c12-fc7148ef04ee/5055373553405.png/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/7b/0f/e9/7b0fe97f-395a-55a6-0c12-fc7148ef04ee/5055373553405.png/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/input/1583378328?i=1583378629&uo=4",
         "spotify": "https://open.spotify.com/track/63yH8Ix9hndGVKMkAsIdVf"
@@ -950,7 +971,11 @@
       "anchor": "DarkFriends",
       "artist": "Friends, Lovers & Family",
       "artwork": null,
-      "fields": {},
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/y2004/m02/d12/h16/s05.xaotediq.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/y2004/m02/d12/h16/s05.xaotediq.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/us/album/dark-fader/5445731?i=5445689&uo=4"
+      },
       "master_begin_seconds": 11177.637,
       "master_end_seconds": 11714.748,
       "source": "precise",
@@ -1000,7 +1025,8 @@
       "anchor": "StrengthThe",
       "artist": "The Sonar Circle",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/da/ee/83/daee83b4-a3ac-3a15-3c21-6bc94b9c281d/mzi.gbsgaqjh.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/da/ee/83/daee83b4-a3ac-3a15-3c21-6bc94b9c281d/mzi.gbsgaqjh.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/da/ee/83/daee83b4-a3ac-3a15-3c21-6bc94b9c281d/mzi.gbsgaqjh.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/strength/286565339?i=286565449&uo=4",
         "spotify": "https://open.spotify.com/track/2CWmAxkuS2yIRnxO9tXGYD"
@@ -1036,7 +1062,8 @@
       "anchor": "WavesDave",
       "artist": "Dave Wallace",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/35/da/7a/mzi.pdkoywgs.tif/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/35/da/7a/mzi.pdkoywgs.tif/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/35/da/7a/mzi.pdkoywgs.tif/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/waves-kid-loops-remix/109684573?i=109684508&uo=4",
         "spotify": "https://open.spotify.com/track/46ZOCGsw1gCCVLQQQSZbSP"
@@ -1058,7 +1085,8 @@
       "anchor": "RetroEZ",
       "artist": "E-Z Rollers",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/4d/f9/02/mzi.vslrhsuv.tif/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/4d/f9/02/mzi.vslrhsuv.tif/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/4d/f9/02/mzi.vslrhsuv.tif/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/retro/119057801?i=119057793&uo=4",
         "spotify": "https://open.spotify.com/track/07W1YALP8xTvUbWK9CS7i9"
@@ -1081,7 +1109,8 @@
       "anchor": "ItsDr",
       "artist": "Dr S Gachet",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/76/1d/6a/761d6a3f-507a-9992-48d2-0c4c171e7d3d/804733.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/76/1d/6a/761d6a3f-507a-9992-48d2-0c4c171e7d3d/804733.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/76/1d/6a/761d6a3f-507a-9992-48d2-0c4c171e7d3d/804733.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/its-all-gone-sideways/1822736342?i=1822736360&uo=4",
         "spotify": "https://open.spotify.com/track/1WqEyLO6FFIr5PLlzKmEhG"
@@ -1103,7 +1132,8 @@
       "anchor": "TheArcon",
       "artist": "Arcon 2",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/5c/1d/c9/mzi.jpcemmoc.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/5c/1d/c9/mzi.jpcemmoc.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/5c/1d/c9/mzi.jpcemmoc.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/the-beckoning/292438381?i=292438383&uo=4",
         "spotify": "https://open.spotify.com/track/2kMrfYnqAgYnIgPDqZ5icE"
@@ -1178,7 +1208,11 @@
       "anchor": "CairoDJ",
       "artist": "DJ 3D",
       "artwork": null,
-      "fields": {},
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/2e/80/53/2e80539b-0c6d-5aaf-7641-b742f9a38d50/197368283883_cover.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/2e/80/53/2e80539b-0c6d-5aaf-7641-b742f9a38d50/197368283883_cover.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/us/album/cairo/1670703210?i=1670703211&uo=4"
+      },
       "master_begin_seconds": 15152.075,
       "master_end_seconds": 15510.677,
       "source": "precise",
@@ -1245,7 +1279,8 @@
       "anchor": "DreamsCodename",
       "artist": "Codename John",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/dreams-of-heaven/1884390532?i=1884390533&uo=4",
         "spotify": "https://open.spotify.com/track/4GK0WHo63fjFd1RDNKM7W1"
@@ -1267,7 +1302,11 @@
       "anchor": "SecretsJohn",
       "artist": "John B",
       "artwork": null,
-      "fields": {},
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/gb/album/secrets/1884390532?i=1884390534&uo=4"
+      },
       "master_begin_seconds": 16487.65,
       "master_end_seconds": 17021.016,
       "source": "precise",
@@ -1284,7 +1323,8 @@
       "anchor": "GreyOptical",
       "artist": "Optical",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/grey-odyssey/1884390532?i=1884390535&uo=4",
         "spotify": "https://open.spotify.com/track/3M2TPesh5eS02Pz4GeGVEp"
@@ -1307,7 +1347,8 @@
       "anchor": "MuteMatrix",
       "artist": "Matrix",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/mute/1884390532?i=1884390537&uo=4"
       },
@@ -1327,7 +1368,8 @@
       "anchor": "DeepCodename",
       "artist": "Codename John",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/deep-inside/1884390532?i=1884390538&uo=4",
         "spotify": "https://open.spotify.com/track/3PUvWk7RGnFyZXvP8gJkaN"
@@ -1347,7 +1389,8 @@
       "anchor": "SilverDillinja",
       "artist": "Dillinja",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/silver-blade/1884390532?i=1884390539&uo=4",
         "spotify": "https://open.spotify.com/track/4sv4d6ivzBMlekB3ai2dY7"
@@ -1368,7 +1411,8 @@
       "anchor": "LocustEd",
       "artist": "Ed Rush & Fierce",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/locust/1884390532?i=1884390540&uo=4",
         "spotify": "https://open.spotify.com/track/2GtUptzwODui9yMfJMmGdT"
@@ -1389,7 +1433,8 @@
       "anchor": "WarnedCodename",
       "artist": "Codename John feat. Grooverider",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/warned/1884390532?i=1884390541&uo=4",
         "spotify": "https://open.spotify.com/track/0Wvax7062wdeSxzKzvD31f"
@@ -1410,7 +1455,8 @@
       "anchor": "StillBoymerang",
       "artist": "Boymerang",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/d8/58/21/d858214a-6003-ebd1-60f5-b9288d07f5d2/0724385661051_1772x1772_300dpi.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/d8/58/21/d858214a-6003-ebd1-60f5-b9288d07f5d2/0724385661051_1772x1772_300dpi.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/d8/58/21/d858214a-6003-ebd1-60f5-b9288d07f5d2/0724385661051_1772x1772_300dpi.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/still/696885634?i=696888469&uo=4",
         "spotify": "https://open.spotify.com/track/1pcB1FnnHXBe2qvYsRafYK"
@@ -1432,8 +1478,10 @@
       "anchor": "CityLemon",
       "artist": "Lemon D",
       "artwork": null,
-      "artwork_url": "https://i.scdn.co/image/ab67616d0000b2732b05aaa74420c43e44ea2623",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
       "fields": {
+        "apple": "https://music.apple.com/us/album/city-lights/1884390532?i=1884391113&uo=4",
         "spotify": "https://open.spotify.com/track/0hIFvmvRS6ot1VxRtM6DO7"
       },
       "full_page_url": "https://open.spotify.com/track/0hIFvmvRS6ot1VxRtM6DO7",
@@ -1483,7 +1531,8 @@
       "anchor": "FreeJMJ",
       "artist": "JMJ & Richie",
       "artwork": null,
-      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/35/e4/23/35e4235a-f25c-ea65-7f1c-ce10e8bc46bb/dj.khjgxnnz.jpg/1200x630wp-60.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/35/e4/23/35e4235a-f25c-ea65-7f1c-ce10e8bc46bb/dj.khjgxnnz.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/35/e4/23/35e4235a-f25c-ea65-7f1c-ce10e8bc46bb/dj.khjgxnnz.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/free-la-funk-pfm-remix/109005996?i=109005705&uo=4",
         "spotify": "https://open.spotify.com/track/6g3R4uXxxo6vnGO7g8DKTp"
@@ -1572,7 +1621,11 @@
       "anchor": "YourJ",
       "artist": "J Majik",
       "artwork": null,
-      "fields": {},
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/a9/52/b9/a952b9fa-d598-9302-7cc4-f1287d24dbca/INFRAMET002-Orig.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/a9/52/b9/a952b9fa-d598-9302-7cc4-f1287d24dbca/INFRAMET002-Orig.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/us/album/your-sound/1496835896?i=1496835897&uo=4"
+      },
       "master_begin_seconds": 22293.0,
       "master_end_seconds": 22564.0,
       "source": "rough",
@@ -1586,7 +1639,11 @@
       "anchor": "OnHidden",
       "artist": "Hidden Agenda",
       "artwork": null,
-      "fields": {},
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music7/v4/b0/13/88/b0138861-d761-fb43-9ef5-0712478cade5/cover.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music7/v4/b0/13/88/b0138861-d761-fb43-9ef5-0712478cade5/cover.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/us/album/on-the-roof/1001119769?i=1001119895&uo=4"
+      },
       "master_begin_seconds": 22564.0,
       "master_end_seconds": 22847.0,
       "source": "rough",
@@ -1614,7 +1671,11 @@
       "anchor": "SeaGoldie",
       "artist": "Goldie",
       "artwork": null,
-      "fields": {},
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/f0/0a/a3/f00aa3a7-daec-e9ad-7af3-b417b4bda71c/081227692360.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/f0/0a/a3/f00aa3a7-daec-e9ad-7af3-b417b4bda71c/081227692360.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/us/album/sea-of-tears/1313865504?i=1313865509&uo=4"
+      },
       "master_begin_seconds": 23117.0,
       "master_end_seconds": 23408.0,
       "source": "rough",
@@ -1642,7 +1703,12 @@
       "anchor": "TheDillinja",
       "artist": "Dillinja",
       "artwork": null,
-      "fields": {},
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/74/e5/c5/74e5c5e3-c26d-e251-dfb6-655c022edc3b/5055199502465_cover.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music128/v4/74/e5/c5/74e5c5e3-c26d-e251-dfb6-655c022edc3b/5055199502465_cover.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/us/album/the-angels-fell/1284004103?i=1284005258&uo=4",
+        "discogs": "https://www.discogs.com/release/5512"
+      },
       "master_begin_seconds": 23718.0,
       "master_end_seconds": 23967.0,
       "source": "rough",
@@ -1670,7 +1736,11 @@
       "anchor": "TheHidden",
       "artist": "Hidden Agenda Is It Love?",
       "artwork": null,
-      "fields": {},
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music2/v4/f9/72/3e/f9723ea0-2743-6ccc-39ea-409313206d0a/cover.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music2/v4/f9/72/3e/f9723ea0-2743-6ccc-39ea-409313206d0a/cover.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/us/album/the-flute-tune/853728184?i=853728200&uo=4"
+      },
       "master_begin_seconds": 24275.0,
       "master_end_seconds": 24735.0,
       "source": "rough",
@@ -1684,7 +1754,11 @@
       "anchor": "TheWax",
       "artist": "Wax Doctor",
       "artwork": null,
-      "fields": {},
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music4/v4/f8/2d/71/f82d71e0-2ad8-ec4e-eb82-c42d7d8322a0/cover.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music4/v4/f8/2d/71/f82d71e0-2ad8-ec4e-eb82-c42d7d8322a0/cover.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/us/album/the-spectrum/853661767?i=853661792&uo=4"
+      },
       "master_begin_seconds": 24735.0,
       "master_end_seconds": 24949.0,
       "source": "rough",
@@ -1698,7 +1772,11 @@
       "anchor": "UniversalJMJ",
       "artist": "JMJ & Richie",
       "artwork": null,
-      "fields": {},
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/35/e4/23/35e4235a-f25c-ea65-7f1c-ce10e8bc46bb/dj.khjgxnnz.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/35/e4/23/35e4235a-f25c-ea65-7f1c-ce10e8bc46bb/dj.khjgxnnz.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/us/album/universal-horn-j-majik-remix/109005996?i=109005869&uo=4"
+      },
       "master_begin_seconds": 24949.0,
       "master_end_seconds": 25233.0,
       "source": "rough",
@@ -1712,7 +1790,12 @@
       "anchor": "AlienKid",
       "artist": "Kid Loops",
       "artwork": null,
-      "fields": {},
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/y2004/m04/d19/h16/dj.vavwjmvm.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/y2004/m04/d19/h16/dj.vavwjmvm.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/us/album/alien-resident/5575371?i=5575311&uo=4",
+        "discogs": "https://www.discogs.com/release/8155"
+      },
       "master_begin_seconds": 25233.0,
       "master_end_seconds": 25434.0,
       "source": "rough",
@@ -1726,7 +1809,12 @@
       "anchor": "PassLuger",
       "artist": "Luger",
       "artwork": null,
-      "fields": {},
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/8d/34/2d/8d342d05-fbfb-7aa0-bf80-c73603dcc779/5030094019522.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/8d/34/2d/8d342d05-fbfb-7aa0-bf80-c73603dcc779/5030094019522.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/us/album/pass-agent/1385183341?i=1385183571&uo=4",
+        "discogs": "https://www.discogs.com/release/31233"
+      },
       "master_begin_seconds": 25434.0,
       "master_end_seconds": 25593.0,
       "source": "rough",
@@ -1782,7 +1870,11 @@
       "anchor": "RiteSystem",
       "artist": "System 7",
       "artwork": null,
-      "fields": {},
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/ff/52/0f/ff520f65-090d-51be-0f5a-1e628a886d83/5060016708142_Cover.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/ff/52/0f/ff520f65-090d-51be-0f5a-1e628a886d83/5060016708142_Cover.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/us/album/rite-of-spring-doc-scott-remix/1462989875?i=1462989885&uo=4"
+      },
       "master_begin_seconds": 26487.0,
       "master_end_seconds": 26872.0,
       "source": "rough",
