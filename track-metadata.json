@@ -1622,7 +1622,8 @@
       "artwork_hires": "https://coverartarchive.org/release/545e7c16-c711-4f0f-aa25-2c836850a040/front-1200",
       "artwork_url": "https://coverartarchive.org/release/545e7c16-c711-4f0f-aa25-2c836850a040/front-500",
       "fields": {
-        "musicbrainz": "https://musicbrainz.org/recording/cc1e4b47-68d4-4bdc-a29d-98d7b511d699"
+        "musicbrainz": "https://musicbrainz.org/recording/cc1e4b47-68d4-4bdc-a29d-98d7b511d699",
+        "spotify": "https://open.spotify.com/track/4mUFhBlBMF8MLlaje7qxjP"
       },
       "master_begin_seconds": 21413.0,
       "master_end_seconds": 21703.0,
@@ -1773,7 +1774,8 @@
       "artwork_hires": "https://coverartarchive.org/release/45029b8b-511c-4a0d-a4bd-d4d76855b86a/front-1200",
       "artwork_url": "https://coverartarchive.org/release/45029b8b-511c-4a0d-a4bd-d4d76855b86a/front-500",
       "fields": {
-        "musicbrainz": "https://musicbrainz.org/recording/daef2718-779f-4a9b-b9b7-9e66f5f3ca76"
+        "musicbrainz": "https://musicbrainz.org/recording/daef2718-779f-4a9b-b9b7-9e66f5f3ca76",
+        "spotify": "https://open.spotify.com/track/2qTk8EU1kFLIaYB37sPjCb"
       },
       "master_begin_seconds": 23967.0,
       "master_end_seconds": 24275.0,
