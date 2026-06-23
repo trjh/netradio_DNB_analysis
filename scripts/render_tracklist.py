@@ -58,10 +58,13 @@ def info_field(track, albums, key):
 
 
 def cover_url(track, albums):
-    if track.get("artwork_url"):
-        return track["artwork_url"]
+    # Album-first: a track on an album shows the album's cover when it has one, so every track on a
+    # compilation (e.g. Ultra Mix Drum & Bass) shows the same release art rather than a grab-bag of
+    # per-track single covers. Falls back to the track's own art (singles / album has no cover).
     alb = _album(track, albums)
-    return (alb or {}).get("artwork_url")
+    if alb and alb.get("artwork_url"):
+        return alb["artwork_url"]
+    return track.get("artwork_url")
 
 
 def listen_link(track, albums):
