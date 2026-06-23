@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Cross-repo DATA sync. The ONLY files this ever touches are the shared data files:
+# Cross-repo DATA sync. The files this touches are the shared data files plus TRACKLIST.md, which
+# is a pure render of the data:
 #   * track-metadata.json   (analysis = canonical, player = mirror)  — 3-way synced
 #   * listen_queue.json     (player only)                            — mirrored when it changes
-# It NEVER touches anything else (no TRACKLIST.md, no source/scripts) and NEVER drags unrelated
-# commits into main: every PR is cut from a FRESH worktree off origin/main and contains ONLY the
-# data file(s). It never commits to main directly. Symmetric — `make sync` runs from EITHER repo.
+#   * TRACKLIST.md          (analysis only)                          — regenerated from the synced
+#                            track-metadata.json and included in the analysis PR (render only)
+# It NEVER touches source/scripts and NEVER drags unrelated commits into main: every PR is cut from
+# a FRESH worktree off origin/main and contains ONLY those file(s). It never commits to main
+# directly. Symmetric — `make sync` runs from EITHER repo.
 #
 #   track-metadata.json copies equal      -> verify each repo's main has it (re-PR any that lag)
 #   only player changed since baseline     -> winner = player; land it on BOTH mains
@@ -16,7 +19,6 @@
 # never on a merely-opened/declined PR. Each run re-checks origin/main and recreates a missing
 # PR (on a STABLE per-target branch, so re-runs reuse the same PR instead of duplicating) until
 # it lands. The winning copy is also written into both working trees so local state is consistent.
-# TRACKLIST.md is NOT part of sync — regenerate it separately (render_tracklist.py / make tracklist).
 #
 # Env (no hardcoded paths):  NETRADIO_ANALYSIS_REPO  NETRADIO_PLAYER_REPO
 # Usage:  tracklist_sync.sh [--dry-run]
@@ -41,25 +43,50 @@ nhash() { python3 -c 'import json,sys,hashlib;print(hashlib.sha256(json.dumps(js
 # The PR is cut from a throwaway worktree off origin/main on a STABLE per-target branch, so it can
 # never inherit the current branch's commits and re-runs reuse the same PR instead of duplicating.
 OUTCOME=""
-ensure_on_main() {   # $1=repo  $2=rel  $3=src  $4=branch  $5=commit-msg
-  local repo="$1" rel="$2" src="$3" br="$4" msg="$5"
-  git -C "$repo" fetch -q origin main
+ensure_on_main() {   # $1=repo $2=rel $3=src $4=branch $5=commit-msg [$6=derive-cmd] [extra rel...]
+  local repo="$1" rel="$2" src="$3" br="$4" msg="$5"; shift 5
+  local derive="${1-}"; [ "$#" -gt 0 ] && shift   # optional: a command run IN the worktree after
+  local extras=("$@")                              # the copy (e.g. regen TRACKLIST.md), then the
+  git -C "$repo" fetch -q origin main              # extra files it produces are added to the PR too.
   if $DRY; then
+    local also=""; [ -n "$derive" ] && also=" (+ regen ${extras[*]})"
     if git -C "$repo" show "origin/main:$rel" 2>/dev/null | cmp -s - "$src"; then
       say "  [dry-run] $repo: origin/main already current for $rel"; OUTCOME=NOOP
     else
-      say "  [dry-run] $repo: would PR $rel onto origin/main (branch $br)"; OUTCOME=DRY
+      say "  [dry-run] $repo: would PR $rel$also onto origin/main (branch $br)"; OUTCOME=DRY
     fi
     return 0
   fi
   git -C "$repo" worktree prune
-  local wt; wt="$(mktemp -d)"
+  mkdir -p "$repo/.worktree"                                  # keep throwaway worktrees in-repo (gitignored)
+  local wt; wt="$(mktemp -d "$repo/.worktree/sync.XXXXXX")"
   git -C "$repo" worktree add -q -B "$br" "$wt" origin/main   # -B: create-or-reset the stable branch
   mkdir -p "$wt/$(dirname "$rel")"; cp "$src" "$wt/$rel"
   git -C "$wt" add -- "$rel"
   if git -C "$wt" diff --cached --quiet; then
+    # The primary file is already on origin/main. Do NOTHING — in particular do not regenerate the
+    # derived extras (e.g. TRACKLIST.md carries a 'generated <timestamp>' line, so regenerating it
+    # unconditionally would churn a spurious PR every run). Derived files only follow a real change.
     say "  $repo: origin/main already current for $rel"; OUTCOME=NOOP
   else
+    # Primary file changed -> regenerate the derived extras from it and include them in this PR.
+    # A failed derive is FATAL (not a warning): committing the changed data with a stale extra
+    # would let OUTCOME become MERGED / the marker advance, after which later runs go NOOP and
+    # never regenerate the stale extra. Abort so the data isn't landed without its derived file.
+    local x
+    if [ -n "$derive" ] && ! ( cd "$wt" && eval "$derive" ); then
+      say "  ERROR: derive failed in $repo ($derive); refusing to land $rel with a stale ${extras[*]}." >&2
+      git -C "$repo" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"; git -C "$repo" worktree prune
+      exit 1
+    fi
+    # Verify every declared extra was actually produced (non-empty) before staging/committing.
+    if [ "${#extras[@]}" -gt 0 ]; then
+      for x in "${extras[@]}"; do
+        [ -s "$wt/$x" ] || { say "  ERROR: derive did not produce $x in $repo; aborting." >&2
+          git -C "$repo" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"; git -C "$repo" worktree prune; exit 1; }
+      done
+      git -C "$wt" add -- "${extras[@]}"
+    fi
     git -C "$wt" commit -q -m "$msg"
     git -C "$wt" push -q -f -u origin "$br"
     local existing; existing="$( cd "$wt" && gh pr list --head "$br" --state open --json number --jq '.[0].number // empty' 2>/dev/null || true )"
@@ -67,12 +94,18 @@ ensure_on_main() {   # $1=repo  $2=rel  $3=src  $4=branch  $5=commit-msg
     else ( cd "$wt" && gh pr create --fill --base main ); fi
     if read -r -p "  Accept (merge) the $repo PR for $rel now? [y/N] " ans && [[ "${ans:-}" == [yY] ]]; then
       ( cd "$wt" && gh pr merge --merge --delete-branch ) || true
-      # Trust origin/main, not gh's exit code: OUTCOME is MERGED only if the content is actually
-      # on origin/main now. If anything went wrong it stays OPEN and the next run re-PRs it.
+      # Trust origin/main, not gh's exit code: MERGED only if the primary AND every declared extra
+      # are actually on origin/main now. Anything short of that stays OPEN and the next run re-PRs.
       git -C "$repo" fetch -q origin main
-      if git -C "$repo" show "origin/main:$rel" 2>/dev/null | cmp -s - "$src"; then
-        say "  merged ✓ (confirmed on origin/main)"; OUTCOME=MERGED
-      else say "  merge NOT confirmed on origin/main — left pending"; OUTCOME=OPEN; fi
+      local landed=yes
+      git -C "$repo" show "origin/main:$rel" 2>/dev/null | cmp -s - "$src" || landed=no
+      if [ "$landed" = yes ] && [ "${#extras[@]}" -gt 0 ]; then
+        for x in "${extras[@]}"; do
+          git -C "$repo" show "origin/main:$x" 2>/dev/null | cmp -s - "$wt/$x" || landed=no
+        done
+      fi
+      if [ "$landed" = yes ]; then say "  merged ✓ (confirmed on origin/main)"; OUTCOME=MERGED
+      else say "  merge NOT fully confirmed on origin/main — left pending"; OUTCOME=OPEN; fi
     else say "  left open for review."; OUTCOME=OPEN; fi
   fi
   git -C "$repo" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"
@@ -80,6 +113,10 @@ ensure_on_main() {   # $1=repo  $2=rel  $3=src  $4=branch  $5=commit-msg
 }
 
 landed() { [ "$1" = NOOP ] || [ "$1" = MERGED ]; }   # is the content durably on main?
+
+# Echo the resolved repo paths up front so it's always clear which checkouts are in play.
+say "NETRADIO_ANALYSIS_REPO=$ANALYSIS"
+say "NETRADIO_PLAYER_REPO=$PLAYER"
 
 # --- track-metadata.json: 3-way sync between the canonical (analysis) and the mirror (player) ---
 ha=$(nhash "$A"); hp=$(nhash "$P")
@@ -91,9 +128,24 @@ wsrc=""; whash=""
 if [ "$ha" = "$hp" ]; then
   wsrc="$A"; whash="$ha"; say "working copies already equal -> verifying both mains hold it"
 else
-  [ -n "$base" ] || { say "ERROR: copies differ and no baseline marker exists ($MARKER)." >&2
-                      say "Reconcile the two copies by hand once, write the agreed sha256 to the marker, then re-run." >&2
-                      exit 1; }
+  if [ -z "$base" ]; then
+    {
+      say "ERROR: track-metadata.json copies differ and there is no baseline marker yet."
+      say "  marker: $MARKER"
+      say ""
+      say "Bootstrap it once by recording the baseline hash, then re-run \`make sync\`. Pick one:"
+      say ""
+      say "  # keep the PLAYER copy (it wins; analysis is updated to match):"
+      say "      printf '%s\\n' $ha > '$MARKER'"
+      say ""
+      say "  # keep the ANALYSIS copy (it wins; the player mirror is updated to match):"
+      say "      printf '%s\\n' $hp > '$MARKER'"
+      say ""
+      say "(Each command records the OTHER copy's hash as the last-synced baseline, so the copy"
+      say " you want to keep is detected as the newer one and propagated to both repos.)"
+    } >&2
+    exit 1
+  fi
   pc=false; ac=false
   [ "$hp" != "$base" ] && pc=true
   [ "$ha" != "$base" ] && ac=true
@@ -113,7 +165,11 @@ if ! $DRY; then
 fi
 
 # Land the winner on BOTH repos' origin/main (stable branches -> reused PRs).
-ensure_on_main "$ANALYSIS" "track-metadata.json"          "$wsrc" "sync/track-metadata" "data: sync track-metadata.json"; oa="$OUTCOME"
+# Analysis is canonical AND owns TRACKLIST.md (a pure render of track-metadata.json), so its PR
+# regenerates and includes TRACKLIST.md alongside the data. The player has no TRACKLIST.md.
+ensure_on_main "$ANALYSIS" "track-metadata.json"          "$wsrc" "sync/track-metadata" \
+  "data: sync track-metadata.json + regen TRACKLIST.md" \
+  "python3 scripts/render_tracklist.py >/dev/null" "TRACKLIST.md"; oa="$OUTCOME"
 ensure_on_main "$PLAYER"   "metadata/track-metadata.json" "$wsrc" "sync/track-metadata" "data: sync track-metadata.json"; op="$OUTCOME"
 
 # Advance the marker ONLY when the winner is durably on both mains.
