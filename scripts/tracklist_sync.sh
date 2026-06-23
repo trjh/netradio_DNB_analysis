@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
-# Cross-repo tracklist sync. `track-metadata.json` lives in BOTH repos (analysis = canonical,
-# player = mirror) and `listen_queue.json` lives in the player. This keeps them in sync via
-# PRs — it NEVER commits to main directly — with 3-way conflict detection against a baseline
-# marker (the sha256 of the content at the last successful sync). Symmetric: `make sync` runs
-# this in EITHER repo and it figures out the direction itself.
+# Cross-repo DATA sync. The ONLY files this ever touches are the shared data files:
+#   * track-metadata.json   (analysis = canonical, player = mirror)  — 3-way synced
+#   * listen_queue.json     (player only)                            — mirrored when it changes
+# It NEVER touches anything else (no TRACKLIST.md, no source/scripts) and NEVER drags unrelated
+# commits into main: every PR is cut from a FRESH worktree off origin/main and contains ONLY the
+# data file(s). It never commits to main directly. Symmetric — `make sync` runs from EITHER repo.
 #
-#   copies equal            -> nothing
-#   only player changed      -> branch+PR the player's version INTO analysis (+ regen TRACKLIST.md)
-#   only analysis changed    -> update the player's copy from analysis
-#   both changed since sync   -> report a conflict and exit (touch nothing)
-# Then: PR any changed player data (track-metadata.json / listen_queue.json / marker).
-# `TRACKLIST.md` is regenerated (offline, from the stored fields) whenever track-metadata.json
-# changes on the analysis side. Enriching artwork_url/full_page_url is a separate step
-# (`make tracklist`), so this sync never touches the network.
+#   track-metadata.json copies equal      -> verify each repo's main has it (re-PR any that lag)
+#   only player changed since baseline     -> winner = player; land it on BOTH mains
+#   only analysis changed since baseline   -> winner = analysis; land it on BOTH mains
+#   both changed since baseline            -> report a conflict and exit (touch nothing)
+#
+# DURABILITY: the local (gitignored) baseline marker advances ONLY once the winning content is
+# actually present on BOTH repos' origin/main (a PR was merged, or main was already current) —
+# never on a merely-opened/declined PR. Each run re-checks origin/main and recreates a missing
+# PR (on a STABLE per-target branch, so re-runs reuse the same PR instead of duplicating) until
+# it lands. The winning copy is also written into both working trees so local state is consistent.
+# TRACKLIST.md is NOT part of sync — regenerate it separately (render_tracklist.py / make tracklist).
 #
 # Env (no hardcoded paths):  NETRADIO_ANALYSIS_REPO  NETRADIO_PLAYER_REPO
 # Usage:  tracklist_sync.sh [--dry-run]
@@ -21,41 +25,71 @@ set -euo pipefail
 DRY=false; [ "${1:-}" = "--dry-run" ] && DRY=true
 ANALYSIS="${NETRADIO_ANALYSIS_REPO:?set NETRADIO_ANALYSIS_REPO to the analysis repo path}"
 PLAYER="${NETRADIO_PLAYER_REPO:?set NETRADIO_PLAYER_REPO to the player repo path}"
-A="$ANALYSIS/track-metadata.json"
-P="$PLAYER/metadata/track-metadata.json"
-MARKER="$PLAYER/metadata/.track-metadata.synced"
+A="$ANALYSIS/track-metadata.json"            # canonical
+P="$PLAYER/metadata/track-metadata.json"     # mirror
+PQ="$PLAYER/metadata/listen_queue.json"      # player-only
+MARKER="$PLAYER/metadata/.track-metadata.synced"   # LOCAL baseline (gitignored, never PR'd)
 
 say() { printf '%s\n' "$*"; }
-do_or_show() { if $DRY; then say "  [dry-run] $*"; else eval "$*"; fi; }
-
 nhash() { python3 -c 'import json,sys,hashlib;print(hashlib.sha256(json.dumps(json.load(open(sys.argv[1])),sort_keys=True,separators=(",",":")).encode()).hexdigest())' "$1"; }
-stamp() { date +%Y%m%d-%H%M%S; }
 
-offer_merge() {  # $1 = repo dir
-  if $DRY; then say "  [dry-run] would offer to merge the PR in $1"; return; fi
-  read -r -p "  Accept (merge) this PR now? [y/N] " ans
-  if [[ "${ans:-}" == [yY] ]]; then ( cd "$1" && gh pr merge --merge --delete-branch ) && say "  merged ✓"
-  else say "  left open for review."; fi
+# Ensure $repo's origin/main holds the content of file $src at path $rel. Sets the global OUTCOME:
+#   NOOP   - origin/main already byte-identical (nothing to do)
+#   MERGED - opened/reused a PR and merged it just now
+#   OPEN   - a PR is open and was left unmerged (data NOT on main yet)
+#   DRY    - dry-run; no action taken
+# The PR is cut from a throwaway worktree off origin/main on a STABLE per-target branch, so it can
+# never inherit the current branch's commits and re-runs reuse the same PR instead of duplicating.
+OUTCOME=""
+ensure_on_main() {   # $1=repo  $2=rel  $3=src  $4=branch  $5=commit-msg
+  local repo="$1" rel="$2" src="$3" br="$4" msg="$5"
+  git -C "$repo" fetch -q origin main
+  if $DRY; then
+    if git -C "$repo" show "origin/main:$rel" 2>/dev/null | cmp -s - "$src"; then
+      say "  [dry-run] $repo: origin/main already current for $rel"; OUTCOME=NOOP
+    else
+      say "  [dry-run] $repo: would PR $rel onto origin/main (branch $br)"; OUTCOME=DRY
+    fi
+    return 0
+  fi
+  git -C "$repo" worktree prune
+  local wt; wt="$(mktemp -d)"
+  git -C "$repo" worktree add -q -B "$br" "$wt" origin/main   # -B: create-or-reset the stable branch
+  mkdir -p "$wt/$(dirname "$rel")"; cp "$src" "$wt/$rel"
+  git -C "$wt" add -- "$rel"
+  if git -C "$wt" diff --cached --quiet; then
+    say "  $repo: origin/main already current for $rel"; OUTCOME=NOOP
+  else
+    git -C "$wt" commit -q -m "$msg"
+    git -C "$wt" push -q -f -u origin "$br"
+    local existing; existing="$( cd "$wt" && gh pr list --head "$br" --state open --json number --jq '.[0].number // empty' 2>/dev/null || true )"
+    if [ -n "$existing" ]; then say "  $repo: updated open PR #$existing for $rel"
+    else ( cd "$wt" && gh pr create --fill --base main ); fi
+    if read -r -p "  Accept (merge) the $repo PR for $rel now? [y/N] " ans && [[ "${ans:-}" == [yY] ]]; then
+      ( cd "$wt" && gh pr merge --merge --delete-branch ) || true
+      # Trust origin/main, not gh's exit code: OUTCOME is MERGED only if the content is actually
+      # on origin/main now. If anything went wrong it stays OPEN and the next run re-PRs it.
+      git -C "$repo" fetch -q origin main
+      if git -C "$repo" show "origin/main:$rel" 2>/dev/null | cmp -s - "$src"; then
+        say "  merged ✓ (confirmed on origin/main)"; OUTCOME=MERGED
+      else say "  merge NOT confirmed on origin/main — left pending"; OUTCOME=OPEN; fi
+    else say "  left open for review."; OUTCOME=OPEN; fi
+  fi
+  git -C "$repo" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"
+  git -C "$repo" worktree prune
 }
 
-make_pr() {  # $1=repo  $2=branch  $3=message  $4=space-separated files
-  local repo="$1" br="$2" msg="$3" files="$4"
-  do_or_show "( cd '$repo' && git checkout -b '$br' && git add $files && git commit -m '$msg' && git push -u origin '$br' && gh pr create --fill --base main )"
-  offer_merge "$repo"
-  do_or_show "( cd '$repo' && git checkout main )"
-}
+landed() { [ "$1" = NOOP ] || [ "$1" = MERGED ]; }   # is the content durably on main?
 
-changed_in() {  # $1=repo $2=path -> 0 if working-tree change (tracked or untracked)
-  [ -n "$(cd "$1" && git status --porcelain -- "$2")" ]
-}
-
+# --- track-metadata.json: 3-way sync between the canonical (analysis) and the mirror (player) ---
 ha=$(nhash "$A"); hp=$(nhash "$P")
 base=""; [ -f "$MARKER" ] && base="$(cat "$MARKER")"
 say "track-metadata.json  analysis=${ha:0:12}  player=${hp:0:12}  base=${base:0:12}"
 
+# Pick the winning content (the file whose bytes both repos should converge on).
+wsrc=""; whash=""
 if [ "$ha" = "$hp" ]; then
-  say "in sync — no track-metadata.json transfer needed."
-  [ "$base" = "$ha" ] || do_or_show "printf '%s\n' '$ha' > '$MARKER'"
+  wsrc="$A"; whash="$ha"; say "working copies already equal -> verifying both mains hold it"
 else
   [ -n "$base" ] || { say "ERROR: copies differ and no baseline marker exists ($MARKER)." >&2
                       say "Reconcile the two copies by hand once, write the agreed sha256 to the marker, then re-run." >&2
@@ -66,50 +100,33 @@ else
   if $pc && $ac; then
     say "CONFLICT: BOTH track-metadata.json copies changed since the last sync. Reconcile by hand; exiting." >&2
     exit 1
-  elif $pc; then
-    say "player copy is newer -> publishing to analysis"
-    do_or_show "cp '$P' '$A'"
-    do_or_show "( cd '$ANALYSIS' && python3 scripts/render_tracklist.py --no-resolve >/dev/null )"
-    make_pr "$ANALYSIS" "tracklist-sync-$(stamp)" "tracklist: update track-metadata.json from player + regen TRACKLIST.md" "track-metadata.json TRACKLIST.md"
-    do_or_show "printf '%s\n' '$hp' > '$MARKER'"
-  else
-    say "analysis copy is newer -> updating the player mirror"
-    do_or_show "cp '$A' '$P'"
-    do_or_show "( cd '$ANALYSIS' && python3 scripts/render_tracklist.py --no-resolve >/dev/null )"
-    if ! $DRY && changed_in "$ANALYSIS" TRACKLIST.md; then
-      make_pr "$ANALYSIS" "tracklist-regen-$(stamp)" "tracklist: regen TRACKLIST.md" "TRACKLIST.md"
-    fi
-    do_or_show "printf '%s\n' '$ha' > '$MARKER'"
+  elif $pc; then wsrc="$P"; whash="$hp"; say "player copy is newer -> winner = player"
+  else           wsrc="$A"; whash="$ha"; say "analysis copy is newer -> winner = analysis"
   fi
 fi
 
-# --- analysis-side: PR any changed analysis data (track-metadata.json / TRACKLIST.md) — FIRST ---
-if $DRY; then
-  say "  [dry-run] would PR any changed analysis data files (track-metadata.json / TRACKLIST.md)"
-else
-  afiles=""
-  for f in track-metadata.json TRACKLIST.md; do
-    changed_in "$ANALYSIS" "$f" && afiles="$afiles $f"
-  done
-  if [ -n "$afiles" ]; then
-    make_pr "$ANALYSIS" "tracklist-data-$(stamp)" "tracklist: sync track-metadata.json / TRACKLIST.md" "$afiles"
-  else
-    say "analysis repo: no data changes to commit."
-  fi
+# Reconcile both live working copies to the winner (keeps local state consistent regardless of
+# whether the PRs merge now or later).
+if ! $DRY; then
+  [ "$wsrc" = "$A" ] || cp "$wsrc" "$A"
+  [ "$wsrc" = "$P" ] || cp "$wsrc" "$P"
 fi
 
-# --- player-side: PR any changed data (track-metadata.json / listen_queue.json / marker) ---
-if $DRY; then
-  say "  [dry-run] would PR any changed player data files (track-metadata.json / listen_queue.json / marker)"
+# Land the winner on BOTH repos' origin/main (stable branches -> reused PRs).
+ensure_on_main "$ANALYSIS" "track-metadata.json"          "$wsrc" "sync/track-metadata" "data: sync track-metadata.json"; oa="$OUTCOME"
+ensure_on_main "$PLAYER"   "metadata/track-metadata.json" "$wsrc" "sync/track-metadata" "data: sync track-metadata.json"; op="$OUTCOME"
+
+# Advance the marker ONLY when the winner is durably on both mains.
+if landed "$oa" && landed "$op"; then
+  $DRY || printf '%s\n' "$whash" > "$MARKER"
+  say "track-metadata.json fully synced (analysis=$oa player=$op; marker -> ${whash:0:12})."
 else
-  files=""
-  for f in metadata/track-metadata.json metadata/listen_queue.json metadata/.track-metadata.synced; do
-    changed_in "$PLAYER" "$f" && files="$files $f"
-  done
-  if [ -n "$files" ]; then
-    make_pr "$PLAYER" "data-sync-$(stamp)" "data: sync track-metadata / listen_queue" "$files"
-  else
-    say "player repo: no data changes to commit."
-  fi
+  say "track-metadata.json NOT fully landed (analysis=$oa player=$op) — marker unchanged; re-run after merging the open PR(s)."
+fi
+
+# --- listen_queue.json (player-only): land it on the player main when it differs ---
+if [ -f "$PQ" ]; then
+  ensure_on_main "$PLAYER" "metadata/listen_queue.json" "$PQ" "sync/listen-queue" "data: sync listen_queue.json"
+  say "listen_queue.json: $OUTCOME"
 fi
 say "sync done."
