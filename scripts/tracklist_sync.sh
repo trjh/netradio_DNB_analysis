@@ -53,7 +53,8 @@ ensure_on_main() {   # $1=repo  $2=rel  $3=src  $4=branch  $5=commit-msg
     return 0
   fi
   git -C "$repo" worktree prune
-  local wt; wt="$(mktemp -d)"
+  mkdir -p "$repo/.worktree"                                  # keep throwaway worktrees in-repo (gitignored)
+  local wt; wt="$(mktemp -d "$repo/.worktree/sync.XXXXXX")"
   git -C "$repo" worktree add -q -B "$br" "$wt" origin/main   # -B: create-or-reset the stable branch
   mkdir -p "$wt/$(dirname "$rel")"; cp "$src" "$wt/$rel"
   git -C "$wt" add -- "$rel"
@@ -81,6 +82,10 @@ ensure_on_main() {   # $1=repo  $2=rel  $3=src  $4=branch  $5=commit-msg
 
 landed() { [ "$1" = NOOP ] || [ "$1" = MERGED ]; }   # is the content durably on main?
 
+# Echo the resolved repo paths up front so it's always clear which checkouts are in play.
+say "NETRADIO_ANALYSIS_REPO=$ANALYSIS"
+say "NETRADIO_PLAYER_REPO=$PLAYER"
+
 # --- track-metadata.json: 3-way sync between the canonical (analysis) and the mirror (player) ---
 ha=$(nhash "$A"); hp=$(nhash "$P")
 base=""; [ -f "$MARKER" ] && base="$(cat "$MARKER")"
@@ -91,9 +96,24 @@ wsrc=""; whash=""
 if [ "$ha" = "$hp" ]; then
   wsrc="$A"; whash="$ha"; say "working copies already equal -> verifying both mains hold it"
 else
-  [ -n "$base" ] || { say "ERROR: copies differ and no baseline marker exists ($MARKER)." >&2
-                      say "Reconcile the two copies by hand once, write the agreed sha256 to the marker, then re-run." >&2
-                      exit 1; }
+  if [ -z "$base" ]; then
+    {
+      say "ERROR: track-metadata.json copies differ and there is no baseline marker yet."
+      say "  marker: $MARKER"
+      say ""
+      say "Bootstrap it once by recording the baseline hash, then re-run \`make sync\`. Pick one:"
+      say ""
+      say "  # keep the PLAYER copy (it wins; analysis is updated to match):"
+      say "      printf '%s\\n' $ha > '$MARKER'"
+      say ""
+      say "  # keep the ANALYSIS copy (it wins; the player mirror is updated to match):"
+      say "      printf '%s\\n' $hp > '$MARKER'"
+      say ""
+      say "(Each command records the OTHER copy's hash as the last-synced baseline, so the copy"
+      say " you want to keep is detected as the newer one and propagated to both repos.)"
+    } >&2
+    exit 1
+  fi
   pc=false; ac=false
   [ "$hp" != "$base" ] && pc=true
   [ "$ha" != "$base" ] && ac=true

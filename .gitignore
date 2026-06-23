@@ -62,3 +62,6 @@ __pycache__/
 
 # F1 skip-check clip output (default dir when NETRADIO_CLIPS_DIR unset)
 clips_out/
+
+# throwaway git worktrees created by scripts/tracklist_sync.sh (and ad-hoc review checkouts)
+.worktree/
