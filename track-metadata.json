@@ -173,7 +173,9 @@
     "net-radio": {
       "artist": "",
       "fields": {
-        "wikipedia": "https://en.wikipedia.org/wiki/NetRadio"
+        "discogs": "n/a",
+        "wikipedia": "https://en.wikipedia.org/wiki/NetRadio",
+        "year": "1998"
       },
       "title": "Net Radio"
     },
@@ -354,7 +356,8 @@
       "artwork": null,
       "fields": {
         "note": "Net Radio station promo — no commercial release",
-        "wikipedia": "https://en.wikipedia.org/wiki/NetRadio"
+        "wikipedia": "https://en.wikipedia.org/wiki/NetRadio",
+        "youtube": "https://www.youtube.com/shorts/--sqgYTcrMU"
       },
       "master_begin_seconds": 0.0,
       "master_end_seconds": 35.299,
@@ -373,7 +376,8 @@
       "artist": "Net Radio",
       "artwork": null,
       "fields": {
-        "note": "Net Radio station promo — no commercial release"
+        "note": "Net Radio station promo — no commercial release",
+        "youtube": "https://www.youtube.com/shorts/Av-VmlJUrTA"
       },
       "master_begin_seconds": 35.299,
       "master_end_seconds": 59.91,
@@ -504,7 +508,8 @@
       "artist": "Net Radio",
       "artwork": null,
       "fields": {
-        "note": "Net Radio station promo — no commercial release"
+        "note": "Net Radio station promo — no commercial release",
+        "youtube": "https://www.youtube.com/shorts/--sqgYTcrMU"
       },
       "master_begin_seconds": 1579.66,
       "master_end_seconds": 1613.771,
@@ -961,10 +966,13 @@
       "use_logo": false
     },
     "31": {
+      "album": "net-radio",
       "anchor": "Promo4Net",
       "artist": "Net Radio",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "youtube": "https://www.youtube.com/shorts/Av-VmlJUrTA"
+      },
       "master_begin_seconds": 8657.243,
       "master_end_seconds": 8681.834,
       "source": "precise",
@@ -1112,10 +1120,13 @@
       "use_logo": false
     },
     "39": {
+      "album": "net-radio",
       "anchor": "Promo5Net",
       "artist": "Net Radio",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "youtube": "https://www.youtube.com/shorts/--sqgYTcrMU"
+      },
       "master_begin_seconds": 11714.748,
       "master_end_seconds": 11748.836,
       "source": "precise",
@@ -1417,10 +1428,13 @@
       "use_logo": false
     },
     "53": {
+      "album": "net-radio",
       "anchor": "Promo6Net",
       "artist": "Net Radio",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "youtube": "https://www.youtube.com/shorts/Av-VmlJUrTA"
+      },
       "master_begin_seconds": 16096.484,
       "master_end_seconds": 16120.923,
       "source": "precise",
