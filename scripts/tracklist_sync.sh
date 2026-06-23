@@ -158,10 +158,21 @@ else
 fi
 
 # Reconcile both live working copies to the winner (keeps local state consistent regardless of
-# whether the PRs merge now or later).
+# whether the PRs merge now or later). SAFETY: before overwriting a working copy whose content
+# differs from the winner, stash a timestamp-free backup next to it (gitignored). The 3-way marker
+# can't tell "newer" from "reverted to older", so a regressed side could otherwise silently clobber
+# good local edits (this happened once); the backup makes any such loss trivially recoverable.
+reconcile_to() {   # $1=winner-src  $2=dest working copy
+  [ "$1" = "$2" ] && return 0
+  if [ -f "$2" ] && ! cmp -s "$1" "$2"; then
+    cp "$2" "$2.presync-bak"
+    say "  saved pre-sync backup: $2.presync-bak (before updating it to the sync winner)"
+  fi
+  cp "$1" "$2"
+}
 if ! $DRY; then
-  [ "$wsrc" = "$A" ] || cp "$wsrc" "$A"
-  [ "$wsrc" = "$P" ] || cp "$wsrc" "$P"
+  reconcile_to "$wsrc" "$A"
+  reconcile_to "$wsrc" "$P"
 fi
 
 # Land the winner on BOTH repos' origin/main (stable branches -> reused PRs).
@@ -169,7 +180,7 @@ fi
 # regenerates and includes TRACKLIST.md alongside the data. The player has no TRACKLIST.md.
 ensure_on_main "$ANALYSIS" "track-metadata.json"          "$wsrc" "sync/track-metadata" \
   "data: sync track-metadata.json + regen TRACKLIST.md" \
-  "python3 scripts/render_tracklist.py >/dev/null" "TRACKLIST.md"; oa="$OUTCOME"
+  "make tracklist >/dev/null" "TRACKLIST.md"; oa="$OUTCOME"
 ensure_on_main "$PLAYER"   "metadata/track-metadata.json" "$wsrc" "sync/track-metadata" "data: sync track-metadata.json"; op="$OUTCOME"
 
 # Advance the marker ONLY when the winner is durably on both mains.
