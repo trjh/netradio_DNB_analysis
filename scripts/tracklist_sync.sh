@@ -93,7 +93,9 @@ ensure_on_main() {   # $1=repo $2=rel $3=src $4=branch $5=commit-msg [$6=derive-
     if [ -n "$existing" ]; then say "  $repo: updated open PR #$existing for $rel"
     else ( cd "$wt" && gh pr create --fill --base main ); fi
     if read -r -p "  Accept (merge) the $repo PR for $rel now? [y/N] " ans && [[ "${ans:-}" == [yY] ]]; then
-      ( cd "$wt" && gh pr merge --merge --delete-branch ) || true
+      # NOTE: no `gh pr merge --delete-branch` — it tries to switch THIS worktree to `main` after
+      # merging, which fails ("'main' is already used by worktree") since main is the live checkout.
+      ( cd "$wt" && gh pr merge --merge ) || true
       # Trust origin/main, not gh's exit code: MERGED only if the primary AND every declared extra
       # are actually on origin/main now. Anything short of that stays OPEN and the next run re-PRs.
       git -C "$repo" fetch -q origin main
@@ -104,12 +106,17 @@ ensure_on_main() {   # $1=repo $2=rel $3=src $4=branch $5=commit-msg [$6=derive-
           git -C "$repo" show "origin/main:$x" 2>/dev/null | cmp -s - "$wt/$x" || landed=no
         done
       fi
-      if [ "$landed" = yes ]; then say "  merged ✓ (confirmed on origin/main)"; OUTCOME=MERGED
+      if [ "$landed" = yes ]; then
+        say "  merged ✓ (confirmed on origin/main)"; OUTCOME=MERGED
+        # Only NOW is it safe to delete the merged remote branch (recreated next run). Never delete
+        # it while OUTCOME=OPEN — that would orphan a still-open PR whose merge didn't land.
+        git -C "$repo" push -q origin --delete "$br" 2>/dev/null || true
       else say "  merge NOT fully confirmed on origin/main — left pending"; OUTCOME=OPEN; fi
     else say "  left open for review."; OUTCOME=OPEN; fi
   fi
   git -C "$repo" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"
   git -C "$repo" worktree prune
+  git -C "$repo" branch -D "$br" >/dev/null 2>&1 || true   # local stable branch is free once the worktree is gone
 }
 
 landed() { [ "$1" = NOOP ] || [ "$1" = MERGED ]; }   # is the content durably on main?
