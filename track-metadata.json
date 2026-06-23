@@ -32,6 +32,22 @@
         "discogs": "2026-06-20"
       }
     },
+    "drift-to-the-centre": {
+      "artist": "Aquarius",
+      "artwork": "album-drift-to-the-centre.jpg",
+      "artwork_hires": "https://i.discogs.com/Za-nFcrMX_JdH8yWuSiEEg4iczjW2wIkt8Xf9NzOACw/rs:fit/g:sm/q:90/h:588/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk2NTgt/MTY5MTQ0MTc5Ny0z/NTU4LmpwZWc.jpeg",
+      "artwork_url": "https://archive.org/download/mbid-f7a817ae-6041-4111-a975-30803ea65bce/mbid-f7a817ae-6041-4111-a975-30803ea65bce-11489859254_thumb500.jpg",
+      "fields": {
+        "discogs": "https://www.discogs.com/master/20052-Aquarius-Drift-To-The-Centre",
+        "musicbrainz": "https://musicbrainz.org/release/f7a817ae-6041-4111-a975-30803ea65bce",
+        "year": "1995",
+        "youtube": "https://www.youtube.com/watch?v=05uVHWzY62k"
+      },
+      "title": "Drift to the Centre",
+      "verified": {
+        "discogs": "2026-06-23"
+      }
+    },
     "eighty-mile-beach-arboleda-de-manzanitas-1997-vinyl": {
       "artist": "Eighty Mile Beach",
       "artwork": "album-eighty-mile-beach-arboleda-de-manzanitas-1997-vinyl.jpg",
@@ -1723,7 +1739,9 @@
       "use_logo": false
     },
     "67": {
+      "album": "drift-to-the-centre",
       "anchor": "Mystery",
+      "artist": "Aquarius",
       "artwork": null,
       "fields": {},
       "kind": "mystery",
@@ -1733,7 +1751,7 @@
       "source_files": [
         "d336-355.wav"
       ],
-      "title": "Mystery Track 3 ?? Coo-ooo-ooh-ooh yeah song",
+      "title": "Wave Forms",
       "use_logo": false
     },
     "68": {
