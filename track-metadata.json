@@ -148,12 +148,18 @@
     },
     "rockers-hi-fi-mish-mash-1997-cd": {
       "artist": "Rockers Hi-Fi",
+      "artwork": "album-rockers-hi-fi-mish-mash-1997-cd.jpg",
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/51/f7/d3/51f7d37d-45fc-65eb-b780-e68b27692133/4062548092356.png/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/51/f7/d3/51f7d37d-45fc-65eb-b780-e68b27692133/4062548092356.png/600x600bb.jpg",
       "fields": {
-        "apple": "https://music.apple.com/us/album/mish-mash/1821203592"
+        "apple": "https://music.apple.com/us/album/mish-mash/1821203592",
+        "discogs": "https://www.discogs.com/master/132634-Rockers-Hi-Fi-Mish-Mash",
+        "year": "1997"
       },
-      "title": "Rockers Hi-Fi – Mish Mash (1997, CD)"
+      "title": "Rockers Hi-Fi – Mish Mash (1997, CD)",
+      "verified": {
+        "discogs": "2026-06-23"
+      }
     },
     "spaceways-trad": {
       "artist": "Spaceways",
@@ -181,7 +187,10 @@
         "discogs": "https://www.discogs.com/release/38468",
         "year": "1997"
       },
-      "title": "Makes Me Wanna Die - Single BRCDX 348"
+      "title": "Makes Me Wanna Die - Single BRCDX 348",
+      "verified": {
+        "discogs": "2026-06-23"
+      }
     },
     "various-infinite-beat-vol-1": {
       "artist": "Various",
