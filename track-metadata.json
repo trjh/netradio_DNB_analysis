@@ -130,6 +130,8 @@
     "high-performance": {
       "artist": "Various",
       "artwork": "album-high-performance.jpg",
+      "artwork_hires": "https://i.discogs.com/FmLAChbES1rXJr60EW_A5cNaYJusNZ3u7eAkXQ39fn8/rs:fit/g:sm/q:90/h:519/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTM3OTk4/LTEzNDk0MTYzNTQt/MTg1NC5qcGVn.jpeg",
+      "artwork_url": "https://i.discogs.com/FmLAChbES1rXJr60EW_A5cNaYJusNZ3u7eAkXQ39fn8/rs:fit/g:sm/q:90/h:519/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTM3OTk4/LTEzNDk0MTYzNTQt/MTg1NC5qcGVn.jpeg",
       "fields": {
         "discogs": "https://www.discogs.com/release/37998-Various-High-Performance",
         "musicbrainz": "https://musicbrainz.org/release/2e91ff97-1ee9-40f0-a727-fc34c347b3fd",
