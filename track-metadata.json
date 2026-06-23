@@ -3,13 +3,18 @@
   "albums": {
     "callisto-the-paradigm-ep-1997-vinyl": {
       "artist": "Callisto",
+      "artwork": "album-callisto-the-paradigm-ep-1997-vinyl.jpg",
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music1/v4/93/57/9e/93579e13-cd12-fc76-500c-301c4bdad237/9210_300dpi.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music1/v4/93/57/9e/93579e13-cd12-fc76-500c-301c4bdad237/9210_300dpi.jpg/600x600bb.jpg",
       "fields": {
         "discogs": "https://www.discogs.com/release/410",
-        "musicbrainz": "https://musicbrainz.org/release-group/1796e62e-2bcf-3642-862b-d4f7c2ab403e"
+        "musicbrainz": "https://musicbrainz.org/release-group/1796e62e-2bcf-3642-862b-d4f7c2ab403e",
+        "year": "1997"
       },
-      "title": "The Paradigm EP (1997, Vinyl)"
+      "title": "The Paradigm EP",
+      "verified": {
+        "discogs": "2026-06-23"
+      }
     },
     "cujo-adventures-in-foam-1997-cd": {
       "artist": "Cujo",
@@ -29,7 +34,7 @@
     },
     "eighty-mile-beach-arboleda-de-manzanitas-1997-vinyl": {
       "artist": "Eighty Mile Beach",
-      "artwork": "album-eighty-mile-beach-arboleda-de-manzanitas-1997-vinyl.webp",
+      "artwork": "album-eighty-mile-beach-arboleda-de-manzanitas-1997-vinyl.jpg",
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/29/dd/35/mzi.nnomiyag.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/29/dd/35/mzi.nnomiyag.jpg/600x600bb.jpg",
       "fields": {
@@ -72,6 +77,51 @@
       "title": "On & On - Single",
       "verified": {
         "discogs": "2026-06-20"
+      }
+    },
+    "free-la-funk-universal-horn": {
+      "artist": "JMJ & Richie",
+      "artwork": "album-free-la-funk-universal-horn.webp",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/35/e4/23/35e4235a-f25c-ea65-7f1c-ce10e8bc46bb/dj.khjgxnnz.jpg/1200x1200bb.webp",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/35/e4/23/35e4235a-f25c-ea65-7f1c-ce10e8bc46bb/dj.khjgxnnz.jpg/632x632bb.webp",
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/free-la-funk-pfm-remix/109005996",
+        "discogs": "https://www.discogs.com/master/360200-JMJ-Richie-Free-La-Funk-PFM-Remix-Universal-Horn-J-Majik-Remix",
+        "year": "1995"
+      },
+      "title": "Free La Funk / Universal Horn",
+      "verified": {
+        "discogs": "2026-06-23"
+      }
+    },
+    "grooverider-presents-the-prototype-years": {
+      "artist": "Grooverider",
+      "artwork": "album-grooverider-presents-the-prototype-years.webp",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.webp",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/632x632bb.webp",
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/grooverider-presents-the-prototype-years/1884390532",
+        "discogs": "https://www.discogs.com/master/74290-Grooverider-The-Prototype-Years",
+        "musicbrainz": "https://musicbrainz.org/release/727999b8-21a2-4d17-a96f-611514d78c82",
+        "spotify": "https://open.spotify.com/album/6PaYSot7dNM2iiCnWNLtH2",
+        "year": "1997"
+      },
+      "title": "The Prototype Years",
+      "verified": {
+        "discogs": "2026-06-23"
+      }
+    },
+    "high-performance": {
+      "artist": "Various",
+      "artwork": "album-high-performance.jpg",
+      "fields": {
+        "discogs": "https://www.discogs.com/release/37998-Various-High-Performance",
+        "musicbrainz": "https://musicbrainz.org/release/2e91ff97-1ee9-40f0-a727-fc34c347b3fd",
+        "year": "1997"
+      },
+      "title": "High Performance",
+      "verified": {
+        "discogs": "2026-06-23"
       }
     },
     "jamie-myerson-the-listen-project-1998-cd": {
@@ -120,6 +170,13 @@
       },
       "title": "Stay - Single PRO-A-8554"
     },
+    "net-radio": {
+      "artist": "",
+      "fields": {
+        "wikipedia": "https://en.wikipedia.org/wiki/NetRadio"
+      },
+      "title": "Net Radio"
+    },
     "pseudo-names-94-98-suicidelp024": {
       "artist": "Klute",
       "artwork": "album-pseudo-names-94-98-suicidelp024.jpg",
@@ -129,7 +186,8 @@
         "apple": "https://music.apple.com/us/album/pseudo-names-94-98/1595891447",
         "bandcamp": "https://commercialsuiciderecords.bandcamp.com/album/pseudo-names-94-98-suicidelp024",
         "discogs": "https://www.discogs.com/release/21042478-Klute-Pseudo-Names-94-98",
-        "musicbrainz": "https://musicbrainz.org/release-group/5f5d94fe-a09f-4435-b609-d43cb1fbc637"
+        "musicbrainz": "https://musicbrainz.org/release-group/5f5d94fe-a09f-4435-b609-d43cb1fbc637",
+        "year": "2021"
       },
       "title": "Pseudo Names 94-98 (Suicidelp024)",
       "verified": {
@@ -138,13 +196,19 @@
     },
     "red-snapper-prince-blimey": {
       "artist": "Red Snapper",
+      "artwork": "album-red-snapper-prince-blimey.jpg",
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/57/b3/c4/mzi.qajwljss.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/57/b3/c4/mzi.qajwljss.jpg/600x600bb.jpg",
       "fields": {
         "apple": "https://music.apple.com/ie/album/prince-blimey-expanded-version/1199883680",
-        "musicbrainz": "https://musicbrainz.org/release-group/782fb9c0-9d7f-3794-a527-9a11f6539231"
+        "discogs": "https://www.discogs.com/master/70961-Red-Snapper-Prince-Blimey",
+        "musicbrainz": "https://musicbrainz.org/release-group/782fb9c0-9d7f-3794-a527-9a11f6539231",
+        "year": "1996"
       },
-      "title": "Prince Blimey"
+      "title": "Prince Blimey",
+      "verified": {
+        "discogs": "2026-06-23"
+      }
     },
     "rockers-hi-fi-mish-mash-1997-cd": {
       "artist": "Rockers Hi-Fi",
@@ -163,10 +227,18 @@
     },
     "spaceways-trad": {
       "artist": "Spaceways",
+      "artwork": "album-spaceways-trad.jpg",
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Features/0a/11/11/dj.zjdgrxbm.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Features/0a/11/11/dj.zjdgrxbm.jpg/600x600bb.jpg",
-      "fields": {},
-      "title": "Spaceways - Trad"
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/trad/208083571",
+        "discogs": "https://www.discogs.com/master/54304-Spaceways-Trad",
+        "year": "1996"
+      },
+      "title": "Spaceways - Trad",
+      "verified": {
+        "discogs": "2026-06-23"
+      }
     },
     "spring-heel-jack-busy-curious-thirsty": {
       "artist": "Spring Heel Jack",
@@ -178,7 +250,27 @@
         "spotify": "https://open.spotify.com/album/5jBbt5s5kBVLeaxnGpH2vI",
         "year": "1997"
       },
-      "title": "Spring Heel Jack - Busy Curious Thirsty"
+      "title": "Busy, Curious, Thirsty",
+      "verified": {
+        "discogs": "2026-06-23"
+      }
+    },
+    "the-amalgamation-of-soundz": {
+      "artist": "The Amalgamation of Soundz",
+      "artwork": "album-the-amalgamation-of-soundz.jpg",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music5/v4/7d/65/d2/7d65d214-b713-ec98-c8f1-bb4016852f82/dj.djfivhuf.jpg/1200x1200bb.jpg",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music5/v4/7d/65/d2/7d65d214-b713-ec98-c8f1-bb4016852f82/dj.djfivhuf.jpg/600x600bb.jpg",
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/the-amalgamation-of-soundz/5575733",
+        "discogs": "https://www.discogs.com/release/40027",
+        "musicbrainz": "https://musicbrainz.org/recording/d6a3fc82-b5be-4764-9430-ae24744cb3f1",
+        "spotify": "https://open.spotify.com/track/2JSjcqsbBx4uUqLCrSY5nm",
+        "year": "1997"
+      },
+      "title": "The Amalgamation of Soundz",
+      "verified": {
+        "discogs": "2026-06-23"
+      }
     },
     "tricky-makes-me-wanna-die-1997-cd2-cd": {
       "artist": "Tricky",
@@ -214,9 +306,14 @@
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/2c/3d/ec/2c3dec9b-2910-8cd9-6175-4af3b062f455/62579.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/2c/3d/ec/2c3dec9b-2910-8cd9-6175-4af3b062f455/62579.jpg/600x600bb.jpg",
       "fields": {
-        "apple-music": "https://music.apple.com/ie/album/no-categories-a-ubiquity-compilation/1877998672"
+        "apple-music": "https://music.apple.com/ie/album/no-categories-a-ubiquity-compilation/1877998672",
+        "discogs": "https://www.discogs.com/master/112579-Various-No-Categories-A-Ubiquity-Compilation",
+        "year": "1998"
       },
-      "title": "No Categories: A Ubiquity Compilation"
+      "title": "No Categories: A Ubiquity Compilation",
+      "verified": {
+        "discogs": "2026-06-23"
+      }
     },
     "various-serialement-v-tre": {
       "artist": "Various",
@@ -233,32 +330,31 @@
         "discogs": "2026-06-20"
       }
     },
-    "various-shake-the-bones": {
-      "artist": "Various",
-      "artwork_url": "https://i.ytimg.com/vi/1Qjvdx4TUr8/hqdefault.jpg",
-      "fields": {
-        "discogs": "https://www.discogs.com/master/161814"
-      },
-      "title": "Various - Shake The Bones"
-    },
     "various-ultra-mix-drum-bass": {
       "artist": "Various",
-      "artwork_hires": "https://coverartarchive.org/release/189e5d0d-2edc-44fd-a2c0-a9dd75a78dd8/front-1200",
+      "artwork": "album-various-ultra-mix-drum-bass.jpg",
+      "artwork_hires": "https://dn710602.ca.archive.org/0/items/mbid-189e5d0d-2edc-44fd-a2c0-a9dd75a78dd8/mbid-189e5d0d-2edc-44fd-a2c0-a9dd75a78dd8-7878604702.jpg",
       "artwork_url": "https://coverartarchive.org/release/189e5d0d-2edc-44fd-a2c0-a9dd75a78dd8/front-500",
       "fields": {
+        "discogs": "https://www.discogs.com/release/1002688-Various-Ultra-Mix-Drum-Bass",
         "musicbrainz": "https://musicbrainz.org/release/189e5d0d-2edc-44fd-a2c0-a9dd75a78dd8",
         "year": "1997"
       },
-      "title": "Various - Ultra Mix Drum & Bass"
+      "title": "Ultra Mix Drum & Bass",
+      "verified": {
+        "discogs": "2026-06-23"
+      }
     }
   },
   "tracks": {
     "1": {
+      "album": "net-radio",
       "anchor": "Promo1Net",
       "artist": "Net Radio",
       "artwork": null,
       "fields": {
-        "note": "Net Radio station promo — no commercial release"
+        "note": "Net Radio station promo — no commercial release",
+        "wikipedia": "https://en.wikipedia.org/wiki/NetRadio"
       },
       "master_begin_seconds": 0.0,
       "master_end_seconds": 35.299,
@@ -272,6 +368,7 @@
       "use_logo": true
     },
     "2": {
+      "album": "net-radio",
       "anchor": "Promo2Net",
       "artist": "Net Radio",
       "artwork": null,
@@ -402,6 +499,7 @@
       "use_logo": false
     },
     "9": {
+      "album": "net-radio",
       "anchor": "Promo3Net",
       "artist": "Net Radio",
       "artwork": null,
@@ -552,7 +650,8 @@
       "artwork": null,
       "fields": {
         "apple-music": "https://music.apple.com/ie/album/the-rope-a-dope/1877998672?i=1877998696",
-        "spotify": "https://open.spotify.com/track/2p6ct0x7ojZISVVsYViV0g"
+        "spotify": "https://open.spotify.com/track/2p6ct0x7ojZISVVsYViV0g",
+        "year": "1998"
       },
       "full_page_url": "https://music.apple.com/ie/album/the-rope-a-dope/1877998672?i=1877998696",
       "master_begin_seconds": 3960.022,
@@ -691,18 +790,13 @@
       "use_logo": false
     },
     "23": {
+      "album": "the-amalgamation-of-soundz",
       "anchor": "63rdThe",
       "artist": "The Amalgamation of Soundz",
-      "artwork": "track-23.jpg",
+      "artwork": null,
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music5/v4/7d/65/d2/7d65d214-b713-ec98-c8f1-bb4016852f82/dj.djfivhuf.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music5/v4/7d/65/d2/7d65d214-b713-ec98-c8f1-bb4016852f82/dj.djfivhuf.jpg/600x600bb.jpg",
-      "fields": {
-        "apple": "https://music.apple.com/ie/album/63rd-suite/5575733?i=5575727",
-        "discogs": "https://www.discogs.com/release/40027",
-        "musicbrainz": "https://musicbrainz.org/recording/d6a3fc82-b5be-4764-9430-ae24744cb3f1",
-        "spotify": "https://open.spotify.com/track/2JSjcqsbBx4uUqLCrSY5nm",
-        "year": "1997"
-      },
+      "fields": {},
       "full_page_url": "https://music.apple.com/ie/album/63rd-suite/5575733?i=5575727",
       "master_begin_seconds": 6070.578,
       "master_end_seconds": 6456.899,
@@ -715,13 +809,10 @@
         "d106-125.wav"
       ],
       "title": "63rd Suite",
-      "use_logo": false,
-      "verified": {
-        "discogs": "2026-06-21"
-      }
+      "use_logo": false
     },
     "24": {
-      "album": "various-shake-the-bones",
+      "album": "high-performance",
       "anchor": "ShoeshinerCrash",
       "artist": "Crash",
       "artwork": null,
@@ -1087,10 +1178,11 @@
         "d187-216b.wav",
         "d-14Nov10-b.au"
       ],
-      "title": "Junkyard Dog",
+      "title": "Science of Industry",
       "use_logo": false
     },
     "43": {
+      "album": "various-ultra-mix-drum-bass",
       "anchor": "WavesDave",
       "artist": "Dave Wallace",
       "artwork": null,
@@ -1115,6 +1207,7 @@
       "use_logo": false
     },
     "44": {
+      "album": "various-ultra-mix-drum-bass",
       "anchor": "RetroEZ",
       "artist": "E-Z Rollers",
       "artwork": null,
@@ -1140,6 +1233,7 @@
       "use_logo": false
     },
     "45": {
+      "album": "various-ultra-mix-drum-bass",
       "anchor": "ItsDr",
       "artist": "Dr S Gachet",
       "artwork": null,
@@ -1164,6 +1258,7 @@
       "use_logo": false
     },
     "46": {
+      "album": "various-ultra-mix-drum-bass",
       "anchor": "TheArcon",
       "artist": "Arcon 2",
       "artwork": null,
@@ -1188,6 +1283,7 @@
       "use_logo": false
     },
     "47": {
+      "album": "various-ultra-mix-drum-bass",
       "anchor": "RealismAlpha",
       "artist": "Alpha Omega",
       "artwork": null,
@@ -1211,6 +1307,7 @@
       "use_logo": false
     },
     "48": {
+      "album": "various-ultra-mix-drum-bass",
       "anchor": "HerDownpour",
       "artist": "Downpour",
       "artwork": null,
@@ -1232,6 +1329,7 @@
       "use_logo": false
     },
     "49": {
+      "album": "various-ultra-mix-drum-bass",
       "anchor": "FallingGMoney",
       "artist": "G-Money",
       "artwork": null,
@@ -1253,6 +1351,7 @@
       "use_logo": false
     },
     "50": {
+      "album": "various-ultra-mix-drum-bass",
       "anchor": "CairoDJ",
       "artist": "DJ 3D",
       "artwork": null,
@@ -1274,6 +1373,7 @@
       "use_logo": false
     },
     "51": {
+      "album": "various-ultra-mix-drum-bass",
       "anchor": "NightriderESassin",
       "artist": "E-Sassin",
       "artwork": null,
@@ -1295,6 +1395,7 @@
       "use_logo": false
     },
     "52": {
+      "album": "various-ultra-mix-drum-bass",
       "anchor": "DietBBoy",
       "artist": "B-Boy 3000",
       "artwork": null,
@@ -1333,15 +1434,14 @@
       "use_logo": false
     },
     "54": {
+      "album": "grooverider-presents-the-prototype-years",
       "anchor": "DreamsCodename",
       "artist": "Codename John",
       "artwork": null,
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
       "fields": {
-        "apple": "https://music.apple.com/ie/album/dreams-of-heaven/1884390532?i=1884390533&uo=4",
-        "musicbrainz": "https://musicbrainz.org/recording/8f036886-3d91-4768-b7c3-c5227521f1ae",
-        "spotify": "https://open.spotify.com/track/4GK0WHo63fjFd1RDNKM7W1"
+        "spotify": "https://open.spotify.com/album/6PaYSot7dNM2iiCnWNLtH2"
       },
       "full_page_url": "https://music.apple.com/ie/album/dreams-of-heaven/1884390532?i=1884390533&uo=4",
       "master_begin_seconds": 16120.923,
@@ -1357,13 +1457,13 @@
       "use_logo": false
     },
     "55": {
+      "album": "grooverider-presents-the-prototype-years",
       "anchor": "SecretsJohn",
       "artist": "John B",
       "artwork": null,
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
       "fields": {
-        "apple": "https://music.apple.com/gb/album/secrets/1884390532?i=1884390534&uo=4",
         "musicbrainz": "https://musicbrainz.org/recording/d77f795b-4019-40a9-b93d-1e4b168347b3"
       },
       "master_begin_seconds": 16487.65,
@@ -1379,15 +1479,14 @@
       "use_logo": false
     },
     "56": {
+      "album": "grooverider-presents-the-prototype-years",
       "anchor": "GreyOptical",
       "artist": "Optical",
       "artwork": null,
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
       "fields": {
-        "apple": "https://music.apple.com/ie/album/grey-odyssey/1884390532?i=1884390535&uo=4",
-        "musicbrainz": "https://musicbrainz.org/recording/fb4fe15a-7ac8-4391-b961-09108de58953",
-        "spotify": "https://open.spotify.com/track/3M2TPesh5eS02Pz4GeGVEp"
+        "musicbrainz": "https://musicbrainz.org/recording/fb4fe15a-7ac8-4391-b961-09108de58953"
       },
       "full_page_url": "https://music.apple.com/ie/album/grey-odyssey/1884390532?i=1884390535&uo=4",
       "master_begin_seconds": 17021.016,
@@ -1404,13 +1503,13 @@
       "use_logo": false
     },
     "57": {
+      "album": "grooverider-presents-the-prototype-years",
       "anchor": "MuteMatrix",
       "artist": "Matrix",
       "artwork": null,
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
       "fields": {
-        "apple": "https://music.apple.com/ie/album/mute/1884390532?i=1884390537&uo=4",
         "musicbrainz": "https://musicbrainz.org/recording/b3974378-8634-444e-beb5-d7c1ac3f7d3a"
       },
       "full_page_url": "https://music.apple.com/ie/album/mute/1884390532?i=1884390537&uo=4",
@@ -1426,6 +1525,7 @@
       "use_logo": false
     },
     "58": {
+      "album": "grooverider-presents-the-prototype-years",
       "anchor": "DeepCodename",
       "artist": "Codename John",
       "artwork": null,
@@ -1448,6 +1548,7 @@
       "use_logo": false
     },
     "59": {
+      "album": "grooverider-presents-the-prototype-years",
       "anchor": "SilverDillinja",
       "artist": "Dillinja",
       "artwork": null,
@@ -1471,16 +1572,13 @@
       "use_logo": false
     },
     "60": {
+      "album": "grooverider-presents-the-prototype-years",
       "anchor": "LocustEd",
       "artist": "Ed Rush & Fierce",
       "artwork": null,
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
-      "fields": {
-        "apple": "https://music.apple.com/ie/album/locust/1884390532?i=1884390540&uo=4",
-        "musicbrainz": "https://musicbrainz.org/recording/6ba1d2e5-75cb-4769-b1d5-39a6d21a36e1",
-        "spotify": "https://open.spotify.com/track/2GtUptzwODui9yMfJMmGdT"
-      },
+      "fields": {},
       "full_page_url": "https://music.apple.com/ie/album/locust/1884390532?i=1884390540&uo=4",
       "master_begin_seconds": 18493.708,
       "master_end_seconds": 19022.707,
@@ -1494,16 +1592,13 @@
       "use_logo": false
     },
     "61": {
+      "album": "grooverider-presents-the-prototype-years",
       "anchor": "WarnedCodename",
       "artist": "Codename John feat. Grooverider",
       "artwork": null,
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
-      "fields": {
-        "apple": "https://music.apple.com/ie/album/warned/1884390532?i=1884390541&uo=4",
-        "musicbrainz": "https://musicbrainz.org/recording/57e0a2e1-626f-41b7-bd64-e5ab600d353b",
-        "spotify": "https://open.spotify.com/track/0Wvax7062wdeSxzKzvD31f"
-      },
+      "fields": {},
       "full_page_url": "https://music.apple.com/ie/album/warned/1884390532?i=1884390541&uo=4",
       "master_begin_seconds": 19022.707,
       "master_end_seconds": 19390.923,
@@ -1517,16 +1612,13 @@
       "use_logo": false
     },
     "62": {
+      "album": "grooverider-presents-the-prototype-years",
       "anchor": "StillBoymerang",
       "artist": "Boymerang",
       "artwork": null,
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/d8/58/21/d858214a-6003-ebd1-60f5-b9288d07f5d2/0724385661051_1772x1772_300dpi.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/d8/58/21/d858214a-6003-ebd1-60f5-b9288d07f5d2/0724385661051_1772x1772_300dpi.jpg/600x600bb.jpg",
-      "fields": {
-        "apple": "https://music.apple.com/ie/album/still/696885634?i=696888469&uo=4",
-        "musicbrainz": "https://musicbrainz.org/recording/eda2a802-8c47-44e8-ae99-d19fb6dcce62",
-        "spotify": "https://open.spotify.com/track/1pcB1FnnHXBe2qvYsRafYK"
-      },
+      "fields": {},
       "full_page_url": "https://music.apple.com/ie/album/still/696885634?i=696888469&uo=4",
       "master_begin_seconds": 19390.923,
       "master_end_seconds": 19864.709,
@@ -1541,16 +1633,13 @@
       "use_logo": false
     },
     "63": {
+      "album": "grooverider-presents-the-prototype-years",
       "anchor": "CityLemon",
       "artist": "Lemon D",
       "artwork": null,
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/82/d6/ae/82d6aef2-f8a0-fda6-316a-7cea50ee66e3/196874206911.jpg/600x600bb.jpg",
-      "fields": {
-        "apple": "https://music.apple.com/us/album/city-lights/1884390532?i=1884391113&uo=4",
-        "musicbrainz": "https://musicbrainz.org/recording/e11e592e-53e4-4cb9-bbb8-eeea8bf3745b",
-        "spotify": "https://open.spotify.com/track/0hIFvmvRS6ot1VxRtM6DO7"
-      },
+      "fields": {},
       "full_page_url": "https://open.spotify.com/track/0hIFvmvRS6ot1VxRtM6DO7",
       "master_begin_seconds": 19864.709,
       "master_end_seconds": 20272.589,
@@ -1564,6 +1653,7 @@
       "use_logo": false
     },
     "64": {
+      "album": "net-radio",
       "anchor": "Promo7Net",
       "artist": "Net Radio",
       "artwork": null,
@@ -1582,7 +1672,10 @@
       "anchor": "MakeDr",
       "artist": "Dr. Know",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "discogs-single": "https://www.discogs.com/release/3331230-Dr-Know-Make-Me-Feel-One-Star",
+        "year": "1995"
+      },
       "full_page_url": "https://music.apple.com/us/album/pseudo-names-94-98/1595891447",
       "master_begin_seconds": 20306.708,
       "master_end_seconds": 20667.817,
@@ -1594,6 +1687,7 @@
       "use_logo": false
     },
     "66": {
+      "album": "free-la-funk-universal-horn",
       "anchor": "FreeJMJ",
       "artist": "JMJ & Richie",
       "artwork": null,
