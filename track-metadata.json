@@ -142,6 +142,36 @@
         "discogs": "2026-06-23"
       }
     },
+    "home-single": {
+      "artist": "Depeche Mode",
+      "artwork": "album-home-single.jpg",
+      "artwork_hires": "https://dn711100.ca.archive.org/0/items/mbid-d518504a-e922-492a-9c58-9fed37681ced/mbid-d518504a-e922-492a-9c58-9fed37681ced-10969176919.jpg",
+      "artwork_url": "https://dn711100.ca.archive.org/0/items/mbid-d518504a-e922-492a-9c58-9fed37681ced/mbid-d518504a-e922-492a-9c58-9fed37681ced-10969176919.jpg",
+      "fields": {
+        "discogs": "https://www.discogs.com/release/41369-Depeche-Mode-Home",
+        "musicbrainz": "https://musicbrainz.org/release/d518504a-e922-492a-9c58-9fed37681ced",
+        "year": "1997"
+      },
+      "title": "Home - Single",
+      "verified": {
+        "discogs": "2026-06-24"
+      }
+    },
+    "is-it-love-on-the-roof-the-flute-tune": {
+      "artist": "Hidden Agenda",
+      "artwork": "album-is-it-love-on-the-roof-the-flute-tune.webp",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music7/v4/b0/13/88/b0138861-d761-fb43-9ef5-0712478cade5/cover.jpg/1200x1200bb.webp",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music7/v4/b0/13/88/b0138861-d761-fb43-9ef5-0712478cade5/cover.jpg/632x632bb.webp",
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/on-the-roof/1001119769?i=1001119895",
+        "discogs": "https://www.discogs.com/master/18555-Hidden-Agenda-Is-It-Love-On-The-Roof-The-Flute-Tune",
+        "year": "1995"
+      },
+      "title": "Is It Love? / On The Roof / The Flute Tune",
+      "verified": {
+        "discogs": "2026-06-24"
+      }
+    },
     "jamie-myerson-the-listen-project-1998-cd": {
       "artist": "Jamie Myerson",
       "artwork": "album-jamie-myerson-the-listen-project-1998-cd.jpg",
@@ -187,6 +217,21 @@
         "year": "1996"
       },
       "title": "Stay - Single PRO-A-8554"
+    },
+    "millennium": {
+      "artist": "Makai",
+      "artwork": "album-millennium.webp",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music71/v4/7e/71/4d/7e714d12-5994-6a5e-c5f1-8a1140080f07/cover.jpg/1200x1200bb.webp",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music71/v4/7e/71/4d/7e714d12-5994-6a5e-c5f1-8a1140080f07/cover.jpg/632x632bb.webp",
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/omen-directors-cut/1166206427?i=1166206646",
+        "discogs": "https://www.discogs.com/master/138825-Makai-Millennium",
+        "year": "1998"
+      },
+      "title": "Millennium",
+      "verified": {
+        "discogs": "2026-06-24"
+      }
     },
     "net-radio": {
       "artist": "",
@@ -1906,6 +1951,7 @@
       "use_logo": false
     },
     "73": {
+      "album": "is-it-love-on-the-roof-the-flute-tune",
       "anchor": "OnHidden",
       "artist": "Hidden Agenda",
       "artwork": null,
@@ -2167,6 +2213,7 @@
       "use_logo": false
     },
     "88": {
+      "album": "millennium",
       "anchor": "OmenMakai",
       "artist": "Makai (vs. Nico)",
       "artwork": null,
@@ -2195,9 +2242,13 @@
       "use_logo": false
     },
     "90": {
+      "album": "home-single",
       "anchor": "Home",
+      "artist": "Depeche Mode",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/song/home-jedi-knights-remix-drowning-in-time/1615846604"
+      },
       "master_begin_seconds": 27356.0,
       "master_end_seconds": 27521.0,
       "source": "rough",
