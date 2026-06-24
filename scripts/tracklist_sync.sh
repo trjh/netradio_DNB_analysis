@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Cross-repo DATA sync. The files this touches are the shared data files plus TRACKLIST.md, which
-# is a pure render of the data:
+# Cross-repo DATA sync. The files this touches are the shared data files plus the derived views
+# (TRACKLIST.md / SOURCES.md), each a pure render of the data:
 #   * track-metadata.json   (analysis = canonical, player = mirror)  — 3-way synced
 #   * listen_queue.json     (player only)                            — mirrored when it changes
 #   * TRACKLIST.md          (analysis only)                          — regenerated from the synced
 #                            track-metadata.json and included in the analysis PR (render only)
+#   * SOURCES.md            (player only)                            — regenerated from the synced
+#                            track-metadata.json (+ source-inventory.json) and included in the player PR
 # It NEVER touches source/scripts and NEVER drags unrelated commits into main: every PR is cut from
 # a FRESH worktree off origin/main and contains ONLY those file(s). It never commits to main
 # directly. Symmetric — `make sync` runs from EITHER repo.
@@ -183,12 +185,16 @@ if ! $DRY; then
 fi
 
 # Land the winner on BOTH repos' origin/main (stable branches -> reused PRs).
-# Analysis is canonical AND owns TRACKLIST.md (a pure render of track-metadata.json), so its PR
-# regenerates and includes TRACKLIST.md alongside the data. The player has no TRACKLIST.md.
+# Each repo regenerates its own derived view from the synced track-metadata.json and includes it in
+# the same PR: analysis owns TRACKLIST.md (what's in the stream), the player owns SOURCES.md (what
+# I have on disk; `make sources` enriches source-inventory.json then renders SOURCES.md). The derive
+# only runs when track-metadata.json actually changed, so neither view churns a spurious PR.
 ensure_on_main "$ANALYSIS" "track-metadata.json"          "$wsrc" "sync/track-metadata" \
   "data: sync track-metadata.json + regen TRACKLIST.md" \
   "make tracklist >/dev/null" "TRACKLIST.md"; oa="$OUTCOME"
-ensure_on_main "$PLAYER"   "metadata/track-metadata.json" "$wsrc" "sync/track-metadata" "data: sync track-metadata.json"; op="$OUTCOME"
+ensure_on_main "$PLAYER"   "metadata/track-metadata.json" "$wsrc" "sync/track-metadata" \
+  "data: sync track-metadata.json + regen SOURCES.md" \
+  "make sources >/dev/null" "SOURCES.md" "metadata/source-inventory.json"; op="$OUTCOME"
 
 # Advance the marker ONLY when the winner is durably on both mains.
 if landed "$oa" && landed "$op"; then
