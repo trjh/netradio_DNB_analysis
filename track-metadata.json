@@ -197,6 +197,28 @@
       },
       "title": "Net Radio"
     },
+    "on-line": {
+      "artist": "Fokus",
+      "artwork": "album-on-line.jpg",
+      "artwork_hires": "https://coverartarchive.org/release/b8010473-c828-4eaa-96be-59a455b875d2/38115403677.jpg",
+      "artwork_url": "https://i.scdn.co/image/ab67616d00001e0251e36f828fb64ac6a11578fe",
+      "fields": {
+        "discogs": "https://www.discogs.com/master/404927-Fokus-On-Line",
+        "musicbrainz": "https://musicbrainz.org/release/b8010473-c828-4eaa-96be-59a455b875d2",
+        "spotify": "https://open.spotify.com/album/1D3sI0FnFzd6rtII1YRda9",
+        "year": "1995",
+        "youtube": "https://www.youtube.com/watch?v=Vb3Cbf2Cz6A"
+      },
+      "title": "On Line",
+      "verified": {
+        "discogs": "2026-06-24"
+      }
+    },
+    "producer-02": {
+      "artist": "",
+      "fields": {},
+      "title": "Producer 02"
+    },
     "pseudo-names-94-98-suicidelp024": {
       "artist": "Klute",
       "artwork": "album-pseudo-names-94-98-suicidelp024.jpg",
@@ -245,6 +267,21 @@
         "discogs": "2026-06-23"
       }
     },
+    "searchin-urban-style": {
+      "artist": "Dead Calm",
+      "artwork": "album-searchin-urban-style.webp",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/e7/1b/ff/e71bff86-2e3b-c0fc-2fd8-0f33a1db8b5a/dj.hhwjohom.jpg/1200x1200bb.webp",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/e7/1b/ff/e71bff86-2e3b-c0fc-2fd8-0f33a1db8b5a/dj.hhwjohom.jpg/632x632bb.webp",
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/searchin-urban-style/109001247",
+        "discogs": "https://www.discogs.com/master/111681-Dead-Calm-Searchin-Urban-Style",
+        "year": "1995"
+      },
+      "title": "Searchin' / Urban Style",
+      "verified": {
+        "discogs": "2026-06-24"
+      }
+    },
     "spaceways-trad": {
       "artist": "Spaceways",
       "artwork": "album-spaceways-trad.jpg",
@@ -290,6 +327,21 @@
       "title": "The Amalgamation of Soundz",
       "verified": {
         "discogs": "2026-06-23"
+      }
+    },
+    "the-western-tune-hypnotizing": {
+      "artist": "PFM",
+      "artwork": "album-the-western-tune-hypnotizing.jpg",
+      "artwork_hires": "https://i.discogs.com/HUDyJH-9LG3RiDTmt1r91WaNZysRpTmw0LY5ekHHv7M/rs:fit/g:sm/q:90/h:599/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE2MjQ5/MjE2LTE2MDU5NzEz/MDAtODc1Mi5qcGVn.jpeg",
+      "artwork_url": "https://dn721709.ca.archive.org/0/items/mbid-7eaaf2ec-679e-4d9e-96ef-3069daa8cfbb/mbid-7eaaf2ec-679e-4d9e-96ef-3069daa8cfbb-21608045838.jpg",
+      "fields": {
+        "discogs": "https://www.discogs.com/release/1083503-PFM-The-Western-Tune-Hypnotizing",
+        "musicbrainz": "https://musicbrainz.org/release-group/ab99a41e-b245-3ee3-b98e-c7dabfc06343",
+        "year": "1995"
+      },
+      "title": "The Western Tune / Hypnotizing",
+      "verified": {
+        "discogs": "2026-06-24"
       }
     },
     "tricky-makes-me-wanna-die-1997-cd2-cd": {
@@ -363,6 +415,21 @@
       "title": "Ultra Mix Drum & Bass",
       "verified": {
         "discogs": "2026-06-23"
+      }
+    },
+    "your-sound-tranquil": {
+      "artist": "J Majik",
+      "artwork": "album-your-sound-tranquil.webp",
+      "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/a9/52/b9/a952b9fa-d598-9302-7cc4-f1287d24dbca/INFRAMET002-Orig.jpg/1200x1200bb.webp",
+      "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/a9/52/b9/a952b9fa-d598-9302-7cc4-f1287d24dbca/INFRAMET002-Orig.jpg/632x632bb.webp",
+      "fields": {
+        "apple": "https://music.apple.com/us/album/your-sound/1496835896?i=1496835897",
+        "discogs": "https://www.discogs.com/master/268619-JMajik-Your-Sound-Tranquil",
+        "year": "1995"
+      },
+      "title": "Your Sound / Tranquil",
+      "verified": {
+        "discogs": "2026-06-24"
       }
     }
   },
@@ -1771,12 +1838,14 @@
       "use_logo": false
     },
     "69": {
+      "album": "the-western-tune-hypnotizing",
       "anchor": "HypnotisingPFM",
       "artist": "PFM",
       "artwork": null,
       "artwork_hires": "https://coverartarchive.org/release/545e7c16-c711-4f0f-aa25-2c836850a040/front-1200",
       "artwork_url": "https://coverartarchive.org/release/545e7c16-c711-4f0f-aa25-2c836850a040/front-500",
       "fields": {
+        "apple": "https://music.apple.com/ie/album/hypnotising/595861771?i=595861919",
         "musicbrainz": "https://musicbrainz.org/recording/cc1e4b47-68d4-4bdc-a29d-98d7b511d699",
         "spotify": "https://open.spotify.com/track/4mUFhBlBMF8MLlaje7qxjP"
       },
@@ -1790,6 +1859,7 @@
       "use_logo": false
     },
     "70": {
+      "album": "searchin-urban-style",
       "anchor": "UrbanDead",
       "artist": "Dead Calm",
       "artwork": null,
@@ -1804,8 +1874,9 @@
       "use_logo": false
     },
     "71": {
+      "album": "on-line",
       "anchor": "FokusOn",
-      "artist": "On Line (Original Mix)",
+      "artist": "Fokus",
       "artwork": null,
       "fields": {},
       "master_begin_seconds": 22022.0,
@@ -1814,19 +1885,17 @@
       "source_files": [
         "d356-375.wav"
       ],
-      "title": "Fokus",
+      "title": "On Line (Original Mix)",
       "use_logo": false
     },
     "72": {
+      "album": "your-sound-tranquil",
       "anchor": "YourJ",
       "artist": "J Majik",
       "artwork": null,
       "artwork_hires": "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/a9/52/b9/a952b9fa-d598-9302-7cc4-f1287d24dbca/INFRAMET002-Orig.jpg/1200x1200bb.jpg",
       "artwork_url": "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/a9/52/b9/a952b9fa-d598-9302-7cc4-f1287d24dbca/INFRAMET002-Orig.jpg/600x600bb.jpg",
-      "fields": {
-        "apple": "https://music.apple.com/us/album/your-sound/1496835896?i=1496835897&uo=4",
-        "musicbrainz": "https://musicbrainz.org/recording/a30ef6ad-9aa5-4b29-a4ea-54882d2b430c"
-      },
+      "fields": {},
       "master_begin_seconds": 22293.0,
       "master_end_seconds": 22564.0,
       "source": "rough",
