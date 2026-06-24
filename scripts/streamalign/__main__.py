@@ -36,6 +36,7 @@ from . import emit_labels as _emit
 from . import groundtruth as _gt
 from . import score as _score
 from . import skip_review as _skip_review
+from . import tail as _tail
 from . import track_mix as _track_mix
 
 
@@ -158,6 +159,34 @@ def _cmd_track_mix(args):
         print("\nwrote %s" % args.json)
 
 
+def _cmd_tail_solve(args):
+    res = _tail.solve_tail(args.labels)
+    diag = res["diagnostics"]
+    print("== Session B absolute master placements (loop-wrap anchor, d000-018=0) ==")
+    for stem in sorted(res["absolute"], key=lambda k: res["absolute"][k]):
+        d = diag[stem]
+        print("  %-12s master_start=%10.3f  edges=%d  max_resid=%.3f  %s"
+              % (stem, res["absolute"][stem], d["edges"], d["max_residual_s"] or 0.0,
+                 "CORROB" if d["corroborated"] else "single"))
+    print("\nloop-wrap anchor S*=%.3f  (spread over %d clean edges: %.3f s)"
+          % (res["s_star"], len(res["anchor_estimates"]), res["anchor_spread_s"]))
+    for e in res["anchor_estimates"]:
+        print("  %-12s -> %-11s off=%9.3f conf=%.3f  S*=%.3f"
+              % (e["a"], e["b"], e["offset_s"], e["conf"], e["s_star"]))
+    b = res["bridge"]
+    print("\ncandidate (NOT emitted): %s placed off %s -> master_start=%.3f (conf %.3f, partial overlap)"
+          % (b["b"], b["a"], b["master_start"], b["conf"]))
+    print("orphan    (NOT emitted): %s — butt-jointed both sides, no audio anchor" % res["orphan"])
+    if args.emit:
+        written = _tail.emit(res, out_dir=args.out, labels_dir=args.labels)
+        print("\nemitted %d AUTO GENERATED label file(s) to %s"
+              % (len(written), args.out or _gt.LABELS_DIR))
+        for stem in sorted(written):
+            print("  %s" % written[stem])
+    else:
+        print("\n(report only; pass --emit to write <stem>.auto.labels.tsv for the CORROB files)")
+
+
 def _cmd_skip_clips(args):
     out_dir = args.out or _default_clips_dir()
     cands = _skip_review.enumerate_candidates(args.labels, conf_min=args.conf_min)
@@ -225,6 +254,12 @@ def main(argv=None):
     pt.add_argument("--tracks", nargs="*", help="limit to these track numbers")
     pt.add_argument("--json", default=None, help="write full results JSON here")
 
+    ptail = sub.add_parser("tail-solve",
+                           help="P5: place the tail captures via the dense overlap + loop-wrap anchor")
+    ptail.add_argument("--emit", action="store_true",
+                       help="write <stem>.auto.labels.tsv for the corroborated Session-B placements")
+    ptail.add_argument("--out", default=None, help="output dir for emitted labels (default: labels/)")
+
     ps = sub.add_parser("skip-clips",
                         help="F1: detect skips over verified overlaps + render review clips")
     ps.add_argument("--out", default=None,
@@ -250,7 +285,7 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     {"groundtruth": _cmd_groundtruth, "align": _cmd_align,
-     "validate": _cmd_validate, "track-mix": _cmd_track_mix,
+     "validate": _cmd_validate, "track-mix": _cmd_track_mix, "tail-solve": _cmd_tail_solve,
      "skip-clips": _cmd_skip_clips, "skip-confirm": _cmd_skip_confirm,
      "skip-reject": _cmd_skip_reject, "skip-rejections": _cmd_skip_rejections,
      "starter": _cmd_starter}[args.cmd](args)

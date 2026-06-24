@@ -34,11 +34,10 @@ The golden rule of the file naming: **hand** = `<stem>.labels.tsv` (yours, autho
 load it yet**) → `<stem>.starter.labels.tsv` (**ready** to load; `publish` promotes it once the
 owner is published). Both seed states are throwaway and excluded from import/solve/build.
 
-> ⚠️ **Items tagged `(G5 — not yet on main)` below are not runnable on `main` yet.** The G5
-> labelling tooling — `LABELTRACK` scoping in `sort_tsv.py`, the `streamalign starter` seed
-> emitter, and `labels/publish.py` — ships with the G5 PRs (chunks A1/A2/A4 of
-> `docs/ROADMAP_stream_analysis.md`). Each is marked inline with the **manual path to use until
-> it lands**. Everything else here already works on `main`.
+> ✅ **The G5 labelling tooling is now on `main`** — `LABELTRACK` scoping in `sort_tsv.py`
+> (A1), the `streamalign starter` seed emitter (A2), `sort_tsv.py --live` (A3), and
+> `labels/publish.py` (A4) of `docs/ROADMAP_stream_analysis.md`. The manual paths below are kept
+> only as a fallback.
 
 ---
 
@@ -62,7 +61,6 @@ file** — not `track-metadata.json`. **What to do next:** fix anything it flagg
 keep labelling or run the **build** step to regenerate the JSON.
 
 **Q:** I'm putting several label tracks in one Audacity export — how do I keep them apart?
-*(G5 — not yet on main; until then, export one label track at a time.)*
 
 **A:** Give each label track a `LABELTRACK <name>` marker as its first (earliest) label.
 `sort_tsv.py` scopes every following label to `<name>` and strips the marker. `<name>` resolves
@@ -74,8 +72,6 @@ block missing its marker is an error before anything is written.
 **Q:** I just finished analysing one file and want to move on to the next. While analysing this
 file I captured some overlapping labels for where the *next* file begins — how do I pass those
 forward, so the next file's analysis starts from them instead of a blank slate?
-*(G5 — not yet on main; until then, carry the labels across by hand and rebase them with
-`sort_tsv.py --adjust <seconds>`.)*
 
 **A:** Run the **starter emitter** over the file you just finished (the one whose labels record
 where its neighbour begins, via the `file_<other>:` link):
@@ -95,7 +91,7 @@ re-runs `streamalign starter <owner> --ready` against the now-locked labels, whi
 seed as **`<other>.starter.labels.tsv`** (and removes the `.start-unprocessed` twin). So when you
 open the next capture: a `.starter.labels.tsv` is **ready** to load and confirm/nudge in Audacity;
 a `.start-unprocessed.labels.tsv` means *publish the owner first*. (This is the accelerator for
-the headline tail-contiguity hand-verification.)
+carrying labels forward across any sequential hand-verification.)
 
 **Why a separate command — why doesn't `sort_tsv.py` just emit it?** Because they're different
 jobs. `sort_tsv.py` only ever sorts/validates/scopes **one file's own** exported labels — it
@@ -230,7 +226,7 @@ then click **Reload Data** on the **File Analysis** tab (runs `GithubImport()` i
 `sheetscript/Code.js`). The **File List** complete/verified columns then update from sheet
 formulas — no script touches that tab.
 
-**Q:** Isn't there a one-command version? *(G5 — not yet on main; lands with chunk A4.)*
+**Q:** Isn't there a one-command version?
 
 **A:**
 
@@ -257,14 +253,13 @@ runs `GithubImport()`), else it prints the **Reload Data** reminder.
 | I want to… | Run | Stage | Writes |
 |---|---|---|---|
 | sort + validate a labelled capture | `sort_tsv.py <stem>.labels.txt` | notate | that `.tsv` |
-| scope multiple label tracks in one export | `LABELTRACK <name>` markers + `sort_tsv.py` *(G5)* | notate | that `.tsv` |
-| pass labels forward to seed the next capture | `streamalign starter <owner>` *(G5)* | notate | `<other>.start-unprocessed.labels.tsv` (→ `.starter` on publish) |
+| scope multiple label tracks in one export | `LABELTRACK <name>` markers + `sort_tsv.py` | notate | that `.tsv` |
+| pass labels forward to seed the next capture | `streamalign starter <owner>` | notate | `<other>.start-unprocessed.labels.tsv` (→ `.starter` on publish) |
 | diff on-disk vs live Audacity labels | `sort_tsv.py <stem>.labels.tsv --live` | notate | — (read-only) |
 | re-place captures / score the engine | `streamalign groundtruth \| validate \| align` | notate | — (read-only) |
+| place the unlabelled tail (loop-wrap anchor) | `streamalign tail-solve` (`--emit` to write labels) | notate | — (read-only; `--emit` → `<stem>.auto.labels.tsv`) |
 | resolve skips | `streamalign skip-clips \| skip-confirm \| skip-reject` | notate | clips / hand `.labels.tsv` / rejections |
 | original↔mix rate | `streamalign track-mix` | notate | — (read-only) |
 | **rebuild `track-metadata.json`** | `build_track_metadata.py` | **build** | **`track-metadata.json`** |
 | refresh missing-originals inventory | `g4_missing_sources.py` | build/sourcing | inventory |
-| publish finished labels + refresh sheet | `publish.py <stem>` *(G5)* · manual: `sort_tsv` + `git commit`/`push` + Reload Data | publish | git + sheet |
-
-*(G5)* = ships with the G5 PRs (A1/A2/A4); not on `main` yet — see the inline note for the manual path.
+| publish finished labels + refresh sheet | `publish.py <stem>` · manual: `sort_tsv` + `git commit`/`push` + Reload Data | publish | git + sheet |
