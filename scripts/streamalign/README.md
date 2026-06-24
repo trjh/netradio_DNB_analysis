@@ -126,8 +126,11 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix \
 - Edge measurement still errs on **loop/pre-roll multi-match** (the loop-wrap files
   above) and **skip-in-overlap** pairs; these are flagged by
   `placement_diagnostics`, not yet fixed.
-- The unlabelled **tail** captures do not overlap the anchored region by enough for
-  blind alignment to bridge them; placing them needs either a robust small-overlap
-  detector or confirmation that they were recorded contiguously.
+- ~~The unlabelled **tail** captures do not overlap the anchored region by enough for
+  blind alignment to bridge them.~~ **Mostly solved** — see [TAIL_SOLVE.md](./TAIL_SOLVE.md)
+  (`streamalign tail-solve`). The tail is its own dense overlap component whose end **wraps
+  onto the loop-start anchor** `d000-018`; 14 of 16 files now place with full corroboration
+  (max residual 0.000 s). Still open: `d376-395` (partial-overlap candidate, conf ~0.6) and
+  `d396-415` (a both-sides butt-jointed orphan).
 
 Per-PR build narrative and validation numbers live in the PR descriptions, not here.

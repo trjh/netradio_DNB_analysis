@@ -451,5 +451,35 @@ class SolveTests(unittest.TestCase):
             self.assertLess(abs(pos[stem] - gt[stem]) * audio.SR, 16)
 
 
+class TailSolveTests(unittest.TestCase):
+    def test_constants_are_consistent(self):
+        from streamalign import tail
+        # the orphan and bridge target are tail files, not part of Session B's solve
+        sb_nodes = {n for e in tail.SESSION_B_EDGES for n in e}
+        self.assertNotIn(tail.ORPHAN, sb_nodes)
+        self.assertIn(tail.ANCHOR_REF, sb_nodes)
+        # the clean anchor edges never use the two-offset pre-roll files
+        anchor_targets = {b for _a, b in tail.WRAP_ANCHOR_EDGES}
+        self.assertNotIn("d-25-000b", anchor_targets)
+        self.assertNotIn("d-25-005b", anchor_targets)
+
+    def test_tail_solve_corroborated(self):
+        from streamalign import tail
+        stems = {n for e in tail.SESSION_B_EDGES for n in e}
+        stems |= {b for _a, b in tail.WRAP_ANCHOR_EDGES} | set(tail.BRIDGE_EDGE)
+        if not _have_audio(*stems):
+            self.skipTest("audio/ffmpeg not available")
+        res = tail.solve_tail()
+        # all 14 Session-B files placed and cross-checked to 0 residual
+        self.assertEqual(len(res["absolute"]), 14)
+        self.assertTrue(all(d["corroborated"] for d in res["diagnostics"].values()))
+        # the 3 clean loop-wrap edges agree on one anchor
+        self.assertLess(res["anchor_spread_s"], 0.01)
+        self.assertAlmostEqual(res["s_star"], -6928.648, places=1)
+        # d512-005 sits ~869 s before the d000-018 loop anchor (master 0)
+        self.assertAlmostEqual(res["absolute"]["d512-005"], -869.061, places=1)
+        self.assertEqual(res["orphan"], "d396-415")
+
+
 if __name__ == "__main__":
     unittest.main()
