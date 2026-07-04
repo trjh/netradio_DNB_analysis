@@ -1,3 +1,9 @@
+# General repo dependencies — the `make env` / Makefile virtualenv installs these.
+# Covers the label tooling, track-metadata build, and Google Sheet backup.
+#
+# The stream-alignment engine has its OWN, separate requirements file:
+# requirements-streamalign.txt (numpy + librosa on python3.13). Use that one only
+# for the track_mix chroma/DTW feature — see its header for the venv recipe.
 pyaudacity @ git+https://github.com/bwagner/pyaudacity
 pydub
 numpy

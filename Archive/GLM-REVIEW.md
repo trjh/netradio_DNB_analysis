@@ -6,6 +6,23 @@
 
 ---
 
+## Disposition (2026-07-04)
+
+Reviewed and archived. Suggestion-by-suggestion outcome:
+
+| # | Suggestion | Outcome |
+|---|---|---|
+| 1 | Split `sort_tsv.py` into a package | Deferred — "it works and is well-tested"; low priority. |
+| 2 | `track_mix.py --dry-run-emit` | Deferred to the player-repo ROADMAP (F3 emission path). |
+| 3 | `backup_sheet.py` xlsx fragility | Won't-fix — acceptable for a personal project, noted. |
+| 4 | Archive `sheetscript/*draft.js` | **Done** — moved to `Archive/sheetscript-drafts/`. |
+| 5 | Document the two requirements files | **Done** — added a header comment to `requirements.txt`. |
+| 6 | `track-metadata.json` schema validation | Deferred — revisit if the file grows materially. |
+| 7 | Add CI (`pytest` on push) | **Blocked** — `test_build_track_metadata.LiveTailTests::test_tail_present_and_tagged` fails on `main` today (build yields 90 tracks, test expects ≥91). Wire CI only after that drift is resolved, so it doesn't land red. |
+| 8 | `make` target to refresh `data/sheet/` CSVs | Deferred — needs Google creds; the manual `backup_sheet.py` path is documented. |
+
+---
+
 ## Overview
 
 This is the public analysis repo for a 1998 netradio.com Drum & Bass ISDN stream. It reverse-engineers where each capture file sits on a master timeline, identifies tracks, aligns originals to the mix, and sources missing audio. The repo is mature, well-documented, and has a clear data-authority model.
