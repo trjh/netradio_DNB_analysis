@@ -1818,7 +1818,8 @@
       "artwork": null,
       "fields": {
         "discogs-single": "https://www.discogs.com/release/3331230-Dr-Know-Make-Me-Feel-One-Star",
-        "year": "1995"
+        "year": "1995",
+        "apple": "https://music.apple.com/ie/album/make-me-feel-ft-dr-know/1595891447?i=1595891462"
       },
       "full_page_url": "https://music.apple.com/us/album/pseudo-names-94-98/1595891447",
       "master_begin_seconds": 20306.708,
@@ -1908,7 +1909,9 @@
       "anchor": "UrbanDead",
       "artist": "Dead Calm",
       "artwork": null,
-      "fields": {},
+      "fields": {
+        "apple": "https://music.apple.com/ie/album/urban-style/109001247?i=109001139"
+      },
       "master_begin_seconds": 21703.0,
       "master_end_seconds": 22022.0,
       "source": "rough",
