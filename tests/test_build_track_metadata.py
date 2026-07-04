@@ -272,11 +272,22 @@ class LiveTailTests(unittest.TestCase):
     def test_tail_present_and_tagged(self):
         self.assertGreaterEqual(len(self.tr), 91)
         self.assertEqual(self.tr["66"]["source"], "precise")
-        self.assertEqual(self.tr["69"]["source"], "rough")
-        self.assertEqual(self.tr["69"]["title"], "Hypnotising")
-        self.assertEqual(self.tr["69"]["artist"], "PFM")
-        self.assertEqual(self.tr["67"]["kind"], "mystery")
-        self.assertNotIn("kind", self.tr["69"])  # an identified rough track isn't a mystery
+        # The tail is now precisely labelled through 69 (Wave Forms, Mystery
+        # Track 4, Hypnotising); 70+ are still the rough first-pass fold.
+        self.assertEqual(self.tr["70"]["source"], "rough")
+        self.assertEqual(self.tr["70"]["title"], "Urban Style (Original Mix)")
+        self.assertEqual(self.tr["70"]["artist"], "Dead Calm")
+        # A Mystery Track placed on the PRECISE timeline but not yet named keeps
+        # its number + segment and is tagged mystery. Regression guard: it used
+        # to vanish (parse_label_track_id_text dropped title-only rows), leaving
+        # a numbering gap at 68 and a hole in the timeline.
+        self.assertEqual(self.tr["68"]["source"], "precise")
+        self.assertEqual(self.tr["68"]["kind"], "mystery")
+        # A still-rough Mystery Track is likewise tagged.
+        self.assertEqual(self.tr["74"]["kind"], "mystery")
+        # An identified track — precise (69) or rough (70) — isn't a mystery.
+        self.assertNotIn("kind", self.tr["69"])
+        self.assertNotIn("kind", self.tr["70"])
 
     def test_boundary_stitched_and_last_track_open(self):
         # The last precise track now ends where the first rough track begins, and
@@ -294,7 +305,7 @@ class LiveTailTests(unittest.TestCase):
                 self.assertLessEqual(end, ts[i + 1]["master_begin_seconds"] + 1e-6)
 
     def test_rough_tracks_have_no_master_seconds_alias(self):
-        self.assertNotIn("master_seconds", self.tr["69"])
+        self.assertNotIn("master_seconds", self.tr["70"])
 
     def test_every_track_has_a_unique_anchor(self):
         anchors = [t.get("anchor") for t in self.tr.values()]
@@ -304,7 +315,7 @@ class LiveTailTests(unittest.TestCase):
         self.assertEqual(self.tr["69"]["anchor"], "HypnotisingPFM")
 
     def test_rough_tracks_map_to_their_primary_capture_file(self):
-        self.assertEqual(self.tr["67"]["source_files"], ["d336-355.wav"])
+        self.assertEqual(self.tr["70"]["source_files"], ["d356-375.wav"])
         self.assertEqual(self.tr["91"]["source_files"], ["d456-470.wav"])
 
     def test_curated_metadata_transfers_by_anchor_across_renumber(self):

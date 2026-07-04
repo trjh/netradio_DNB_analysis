@@ -142,11 +142,19 @@ def parse_label_track_id_text(text):
         return None
     number = int(match.group(1))
     body = match.group(2).strip()
-    if " - " not in body:
+    if " - " in body:
+        artist, title = body.split(" - ", 1)
+    elif MYSTERY_RE.match(body):
+        # A Mystery Track placed on the precise timeline but not yet named (no
+        # "Artist - Title"). Keep it as a title-only record so it still gets a
+        # track number + segment, instead of vanishing and leaving a numbering
+        # gap. A non-mystery body with no " - " (e.g. a `note X: startNNN:`
+        # forward-reference) is not a track here, so it's still dropped.
+        artist, title = None, body
+    else:
         return None
-    artist, title = body.split(" - ", 1)
     title = re.sub(r"\.(?:mp3|wav|au)$", "", title.strip(), flags=re.I)
-    return number, artist.strip(), title.strip()
+    return number, (artist.strip() if artist is not None else None), title.strip()
 
 
 def label_stem(path):
@@ -497,7 +505,8 @@ def main():
         lab = ids[number]
         records.append({"number": number, "g_title": lab["track_name"], "g_artist": lab["track_artist"],
                         "master_begin": lab["master_begin_seconds"], "label_end": lab.get("master_end_seconds"),
-                        "source": "precise", "source_files": lab["source_files"], "kind": None})
+                        "source": "precise", "source_files": lab["source_files"],
+                        "kind": "mystery" if MYSTERY_RE.match(lab["track_name"] or "") else None})
     # First-pass tail: rows the second-pass labels don't cover yet (tracks ~67-91 +
     # Mystery Tracks). Each gets its "try this first" primary capture file.
     frontier = max((max(r.get("master_begin_seconds") or 0.0, r.get("master_end_seconds") or 0.0)

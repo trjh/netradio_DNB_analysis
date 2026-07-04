@@ -65,3 +65,4 @@ clips_out/
 
 # pre-sync safety backups written by scripts/tracklist_sync.sh before overwriting a working copy
 *.presync-bak
+.worktree
