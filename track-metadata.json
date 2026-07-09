@@ -1306,7 +1306,7 @@
     },
     "42": {
       "album": "various-ultra-mix-drum-bass",
-      "anchor": "JunkyardJustin",
+      "anchor": "ScienceJustin",
       "artist": "Justin Tewn & Hunter A.D.",
       "artwork": null,
       "fields": {
@@ -1791,7 +1791,8 @@
       "source_files": [
         "d316-335.wav",
         "d-14Nov10-h.au",
-        "d328-342.wav"
+        "d328-342.wav",
+        "d336-355.wav"
       ],
       "title": "City Lights",
       "use_logo": false
@@ -1806,7 +1807,8 @@
       "master_end_seconds": 20306.708,
       "source": "precise",
       "source_files": [
-        "d328-342.wav"
+        "d328-342.wav",
+        "d336-355.wav"
       ],
       "title": "Promo7 Club Groove",
       "use_logo": false
@@ -1817,16 +1819,17 @@
       "artist": "Dr. Know",
       "artwork": null,
       "fields": {
+        "apple": "https://music.apple.com/ie/album/make-me-feel-ft-dr-know/1595891447?i=1595891462",
         "discogs-single": "https://www.discogs.com/release/3331230-Dr-Know-Make-Me-Feel-One-Star",
-        "year": "1995",
-        "apple": "https://music.apple.com/ie/album/make-me-feel-ft-dr-know/1595891447?i=1595891462"
+        "year": "1995"
       },
       "full_page_url": "https://music.apple.com/us/album/pseudo-names-94-98/1595891447",
       "master_begin_seconds": 20306.708,
       "master_end_seconds": 20667.817,
       "source": "precise",
       "source_files": [
-        "d328-342.wav"
+        "d328-342.wav",
+        "d336-355.wav"
       ],
       "title": "Make Me Feel",
       "use_logo": false
@@ -1845,24 +1848,24 @@
       },
       "full_page_url": "https://music.apple.com/ie/album/free-la-funk-pfm-remix/109005996?i=109005705&uo=4",
       "master_begin_seconds": 20667.817,
-      "master_end_seconds": 21008.0,
+      "master_end_seconds": 21011.484,
       "source": "precise",
       "source_files": [
-        "d328-342.wav"
+        "d328-342.wav",
+        "d336-355.wav"
       ],
       "title": "Free La Funk (PFM Remix)",
       "use_logo": false
     },
     "67": {
       "album": "drift-to-the-centre",
-      "anchor": "Mystery",
+      "anchor": "WaveAquarius",
       "artist": "Aquarius",
       "artwork": null,
       "fields": {},
-      "kind": "mystery",
-      "master_begin_seconds": 21008.0,
-      "master_end_seconds": 21192.0,
-      "source": "rough",
+      "master_begin_seconds": 21011.484,
+      "master_end_seconds": 21193.59,
+      "source": "precise",
       "source_files": [
         "d336-355.wav"
       ],
@@ -1870,15 +1873,15 @@
       "use_logo": false
     },
     "68": {
-      "anchor": "MysteryTrack",
+      "anchor": "Mystery4",
       "artwork": null,
       "fields": {},
       "kind": "mystery",
-      "master_begin_seconds": 21192.0,
-      "master_end_seconds": 21413.0,
-      "source": "rough",
+      "master_begin_seconds": 21193.59,
+      "master_end_seconds": 21454.239,
+      "source": "precise",
       "source_files": [
-        "d356-375.wav"
+        "d336-355.wav"
       ],
       "title": "Mystery Track 4 ?? Hey Man You Want A Tune song",
       "use_logo": false
@@ -1895,11 +1898,11 @@
         "musicbrainz": "https://musicbrainz.org/recording/cc1e4b47-68d4-4bdc-a29d-98d7b511d699",
         "spotify": "https://open.spotify.com/track/4mUFhBlBMF8MLlaje7qxjP"
       },
-      "master_begin_seconds": 21413.0,
+      "master_begin_seconds": 21454.239,
       "master_end_seconds": 21703.0,
-      "source": "rough",
+      "source": "precise",
       "source_files": [
-        "d356-375.wav"
+        "d336-355.wav"
       ],
       "title": "Hypnotising",
       "use_logo": false
@@ -1974,7 +1977,7 @@
       "use_logo": false
     },
     "74": {
-      "anchor": "MysteryTrack5",
+      "anchor": "Mystery5",
       "artwork": null,
       "fields": {},
       "kind": "mystery",
@@ -2007,7 +2010,7 @@
       "use_logo": false
     },
     "76": {
-      "anchor": "MysteryTrack6",
+      "anchor": "Mystery6",
       "artwork": null,
       "fields": {},
       "kind": "mystery",
@@ -2156,7 +2159,7 @@
       "use_logo": false
     },
     "84": {
-      "anchor": "MysteryTrack7",
+      "anchor": "Mystery7",
       "artwork": null,
       "fields": {},
       "kind": "mystery",
@@ -2170,7 +2173,7 @@
       "use_logo": false
     },
     "85": {
-      "anchor": "MysteryTrack8",
+      "anchor": "Mystery8",
       "artwork": null,
       "fields": {},
       "kind": "mystery",
@@ -2184,7 +2187,7 @@
       "use_logo": false
     },
     "86": {
-      "anchor": "MysteryTrack9",
+      "anchor": "Mystery9",
       "artwork": null,
       "fields": {},
       "kind": "mystery",
@@ -2231,7 +2234,7 @@
       "use_logo": false
     },
     "89": {
-      "anchor": "MysteryTrack10",
+      "anchor": "Mystery10",
       "artwork": null,
       "fields": {},
       "kind": "mystery",
@@ -2262,7 +2265,7 @@
       "use_logo": false
     },
     "91": {
-      "anchor": "MysteryTrack11",
+      "anchor": "Mystery11",
       "artwork": null,
       "fields": {},
       "kind": "mystery",
