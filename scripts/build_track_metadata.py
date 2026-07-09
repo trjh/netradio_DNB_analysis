@@ -335,6 +335,20 @@ def anchor_id(title, artist, used):
     the last resort. `used` is the set of ids already taken (mutated). The id is a
     function of the LABEL/rough title+artist only, so it is stable across regenerates
     and lets curated metadata follow a track whose number/timestamp later changes."""
+    # Mystery Tracks all share the title "Mystery Track N" with no artist, so the
+    # generic first-word logic gives them position-dependent anchors ("Mystery",
+    # "MysteryTrack", "MysteryTrack<n>", ...) assigned in track-number order. When
+    # the mystery set shifts (one gets identified, or a new mystery is placed) every
+    # remaining mystery's anchor slides, mis-matching curated fields on reseed. Key
+    # them on their own "Mystery Track N" number instead — stable and unique per
+    # mystery, independent of the others.
+    mystery = re.match(r"\s*Mystery Track\s+(\d+)", title or "", re.I)
+    if mystery:
+        anchor, base, n = "Mystery" + mystery.group(1), "Mystery" + mystery.group(1), 2
+        while anchor in used:
+            anchor, n = "%s_%d" % (base, n), n + 1
+        used.add(anchor)
+        return anchor
     title_words = [w for w in (_anchor_word(x) for x in (title or "").split()) if w]
     artist_words = [w for w in (_anchor_word(x) for x in (artist or "").split()) if w]
     parts = ([title_words[0]] if title_words else []) + ([artist_words[0]] if artist_words else [])

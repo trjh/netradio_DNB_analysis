@@ -228,7 +228,19 @@ class AnchorIdTests(unittest.TestCase):
         self.assertEqual(b.anchor_id("A", "B", used), "AB2")       # identical -> numeric suffix
 
     def test_missing_artist_uses_title_only(self):
-        self.assertEqual(b.anchor_id("Mystery Track 5", None, set()), "Mystery")
+        self.assertEqual(b.anchor_id("Sea of Tears", None, set()), "Sea")
+
+    def test_mystery_track_anchors_on_its_number(self):
+        # "Mystery Track N" titles all share the same first words, so they get a
+        # stable per-mystery anchor keyed on N (not a position-dependent
+        # "Mystery"/"MysteryTrack" that slides when the mystery set changes).
+        self.assertEqual(b.anchor_id("Mystery Track 5", None, set()), "Mystery5")
+        self.assertEqual(b.anchor_id("Mystery Track 4 ?? Hey Man", None, set()), "Mystery4")
+        self.assertEqual(b.anchor_id("Mystery Track 6 (drumline change)", None, set()), "Mystery6")
+        # Distinct from each other; collisions on the same N get a suffix.
+        used = set()
+        self.assertEqual(b.anchor_id("Mystery Track 7", None, used), "Mystery7")
+        self.assertEqual(b.anchor_id("Mystery Track 7", None, used), "Mystery7_2")
 
     def test_strips_punctuation_and_capitalises(self):
         self.assertEqual(b.anchor_id("don't stop", "a.b. crew", set()), "DontAb")
