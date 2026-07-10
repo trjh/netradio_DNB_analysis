@@ -114,6 +114,60 @@ The whole loop is tracked on the spreadsheet's **File List** tab, which carries 
     file transitions and overlapping captures. *(Automated, formula-preserving spreadsheet
     backup is still a major TODO.)*
 
+### Aligning an original to the mix (by ear + by eye)
+
+Steps 5–6 say to overlay the original and drop paired sync points; this is the hand
+technique for actually *finding* the seat. Note up front: the mix and the original are
+rarely at exactly the same clock rate, so a point that seats perfectly at one end will
+drift by the other — that drift is captured by the **A/B anchor pair**, not fought.
+
+**Pick the cue.**
+
+- Anchor on a sharp **transient**, not a sustained sound: a consonant plosive (t/k/p/b)
+  or word onset, a snare/rim, a vinyl click, a one-shot FX. The lyric or phrase you
+  remember only tells you *which* transient to seat on.
+- Prefer an **aperiodic** cue (a vocal, an intro, a one-off hit). The break loops, so a
+  purely rhythmic match can be a whole bar out; a non-repeating event pins the *absolute*
+  position.
+- For vocals, switch the track to **Spectrogram** — consonants/sibilants show as clean
+  vertical energy bursts that line up by eye where the waveform is an ambiguous blob.
+
+**Hear the seat** (beyond mix-in-L / original-in-R):
+
+- Hard-pan the mix left and the original right on headphones. Off by a hair you hear a
+  **flam/echo** leaning to one ear; as you close in it collapses to a single centered hit
+  and flams the *other* way if you overshoot. The point where the flam vanishes is good to
+  a few samples.
+- Sharper still — a **phase null**: `Effect ▸ Invert` the original and listen to the sum.
+  The content the two share (bass, break) audibly thins into a null right at the seat, and
+  a *deepening cancellation* is easier to hear than a tightening echo. It won't null to
+  silence (the mix has other layers). Un-invert when done.
+
+**See the seat.** At sample zoom Audacity draws individual sample **dots**. Match the
+*timing* of peaks and zero-crossings, **not** their heights — the mix copy is EQ'd and
+compressed differently, so amplitudes won't agree. Coarse-align on the phrase → zoom to
+the transient → zoom to samples.
+
+**Nudge precisely.**
+
+- **Sync-Lock Tracks** (Tracks menu) moves the original's audio and its `origNNN` label
+  track as a unit. Turn **Snap off** or every edit quantizes. Set the **Selection Toolbar**
+  time format to **samples** so offsets read exactly.
+- Move by dragging with Time-Shift (Audacity 3.1+: grab the top of the clip; older: `F5`
+  for the Time-Shift Tool) zoomed to samples — one screen pixel is then a *fraction* of a
+  sample, so the drag is genuinely fine, just mouse-driven.
+- Audacity has no numeric "nudge clip by N samples." For an exact amount, edit the **head
+  of the original only**: `Generate ▸ Silence` (typed duration) pushes it later, or select
+  `0`→`N` at the head and delete to pull it earlier. Caveat: if the mix shares the
+  Sync-Lock group it ripples too — drop Sync-Lock for that one edit, or keep only the
+  original + its labels in the group.
+
+**Capture two anchors, not one.** Seat a cue near the start (`track sync: A` on the mix,
+`origNNN sync: A` on the original) and another near the end (`… B`). If the intro seats
+perfectly but the outro is a few ms off, that's the clock-rate difference — the A/B pair is
+exactly what lets the downstream speed calc `(trackB − trackA) / (origB − origA)` solve it
+(steps 6–7), instead of you chasing a moving target by hand.
+
 ### One-command publish (`labels/publish.py`)
 
 Steps 9–11 (sort → push → refresh) collapse into one **hard-gated** command:
