@@ -72,3 +72,10 @@ clips_out/
 # pre-sync safety backups written by scripts/tracklist_sync.sh before overwriting a working copy
 *.presync-bak
 .worktree
+
+# Chroma signature cache. This is the point of the harvester -- the SIGNATURE outlives the audio
+# (~55KB vs ~8MB) -- but it grows to gigabytes over a pool of any size, and it is regenerable.
+# Keep it, never commit it.
+.chroma-cache/
+# Harvester runtime state (progress, matches, pause flag). Machine-local.
+.harvest/

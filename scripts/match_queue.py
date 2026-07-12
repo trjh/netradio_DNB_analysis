@@ -145,17 +145,33 @@ def main():
         if i % 20 == 0:
             print("# ... %d/%d" % (i, len(todo)), file=out)
 
+    from streamalign import chroma_match as _cm
     print("\n# RESULTS  (a TRUE match scores ~0.034; the non-match floor is ~0.10)", file=out)
     for name, _ in queries:
-        hits = sorted(results[name])[:5]
+        ranked = sorted(results[name])
         print("\n%s:" % name, file=out)
-        for v, f, title, shift in hits:
-            flag = "   <== MATCH" if v <= 0.050 else ("   <-- worth an ear" if v < 0.07 else "")
-            key = ""
-            if shift:
-                from streamalign import chroma_match as _cm
-                key = "  [%s]" % _cm.describe_shift(shift)
+        if not ranked:
+            print("   (nothing scored)", file=out)
+            continue
+        best = ranked[0][0]
+        runner = ranked[1][0] if len(ranked) > 1 else 1.0
+        # A match must be BOTH absolutely good AND decisively ahead of the runner-up. The second
+        # half is not optional: a SHORT query drives every cost down, so five candidates tie near
+        # the threshold and all five look like matches. That is not five identifications, it is
+        # zero -- a winner that cannot beat its rivals has not identified anything.
+        decisive = best <= 0.050 and best <= 0.60 * runner
+        for v, f, title, shift in ranked[:5]:
+            key = ("  [%s]" % _cm.describe_shift(shift)) if shift else ""
+            flag = ""
+            if decisive and v == best:
+                flag = "   <== MATCH"
+            elif v < 0.07:
+                flag = "   <-- worth an ear"
             print("   %.4f  %-44s %s%s%s" % (v, f[:44], title[:26], key, flag), file=out)
+        if best <= 0.050 and not decisive:
+            print("   ^^ NOT a match: the top %d are within %.4f of each other. A short query "
+                  "drives all costs down;" % (min(5, len(ranked)), runner - best), file=out)
+            print("      a winner that cannot beat its rivals has identified nothing.", file=out)
     print("\n# done", file=out)
 
 
