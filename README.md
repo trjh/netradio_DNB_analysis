@@ -36,141 +36,28 @@ help in summarizing and cross-referencing the information.
 * [scripts](./scripts) -- misc. helper scripts mostly oriented around Audacity 2.1.x metadata files
 * [STREAM_PROVENANCE.md](./STREAM_PROVENANCE.md) -- how the capture files came to exist (RealAudio loop -> `/dev/audio` dump -> hex -> wav/au), why they overlap and contain skips, and what "master time" actually is
 * [scripts/streamalign/](./scripts/streamalign) -- the Stream Alignment Engine; see its [README](./scripts/streamalign/README.md) (status) and [WALKTHROUGH](./scripts/streamalign/WALKTHROUGH.md) (how the functions compose)
+* [PROCESS.md](./PROCESS.md) -- **how the analysis is actually done**: the per-recording loop (manual + engine), the by-ear technique for seating an original against the mix, and what the engine can/cannot do
 * [HOWTO.md](./HOWTO.md) -- howto / FAQ: **which tool to run, when, and why** (notate → build → serve → publish)
 
-## Process (the old, manual + scripted Audacity workflow)
+## Process — how the analysis is actually done
 
-This is the established workflow as actually practised: a manual labelling pass in
-Audacity, scripted cleanup, and a GitHub → Google Sheet import. It is built around a
-single **master timeline** for the whole netradio DNB stream. (A newer, automated
-stream-alignment engine lives under `scripts/streamalign/`; it will be documented
-here separately later.)
+**Moved to [PROCESS.md](./PROCESS.md).** That is now the single home for the per-recording
+loop (pick → place → hint → certify skips → label → export → publish), the by-ear technique
+for seating an original against the mix, and an honest account of what the engine can and
+cannot do for you.
 
-The whole loop is tracked on the spreadsheet's **File List** tab, which carries a
-**complete** and a **verified** status per capture file:
+It is built around one **master timeline** for the whole stream, tracked per capture on the
+spreadsheet's **File List** tab via two statuses that come straight from the labels:
+**complete** (`file end: … COMPLETE`) and **verified** (`verified <other>` on a
+`file [start] sync:` line — the record of how the captures connect).
 
-- **complete** — you listened to and labelled the file all the way to its end. In the
-  labels this is the `file end: FILE.wav … COMPLETE` marker.
-- **verified** — the file's position/offset was cross-checked against an overlapping
-  capture. In the labels this is the `verified OTHERFILE` tag on a `file [start] sync:`
-  line. *This tag is the record of how the source files connect to each other.*
-
-### Steps
-
-1. **Pick the next file.** Use the **File List** tab's complete/verified columns (plus
-   [tracklist-2017.txt](./tracklist-2017.txt) and any remainder notes) to choose the next
-   capture to analyze.
-2. **Open the capture in Audacity.**
-    - e.g. jaz_links/d336-355.wav
-3. **Carry data forward**
-    - load time-adjusted labels track (see below for how it was created)
-    - possibly others
-4. **Overlay adjacent captures.** Load overlapping stream captures, find sync points, and
-   label file starts, file ends, **verified** syncs, skips, and spans of sync.
-5. **Overlay originals where known.** Add the original track/source recording when
-   available; label `origNNN start/end/note` points.
-6. **Label paired sync points.** Add stream-vs-original pairs — `track sync: A`/`B` and
-   `origNNN sync: A`/`B`. The **A** and **B** points are the ones used for the speed calc.
-7. **Speed/slow values are computed downstream.** [sheetscript/Code.js](./sheetscript/Code.js)
-   computes the sheet's speed value once it has all four points:
-   ```javascript
-   (trackB - trackA) / (origB - origA)
-   ```
-   [scripts/alignfinder.py](./scripts/alignfinder.py) can also help find alignment points and
-   prints diagnostic speed comparisons.
-8. **Export labels from Audacity.** Select the label track → **File ▸ Export ▸ Export
-   Labels** (older Audacity: **File ▸ Export Other ▸ Export Labels**; bound to `⇧⌘;`). This
-   writes `<stem>.labels.txt` into [labels](./labels) — a plain `start⇥end⇥label` file.
-9. **Convert + sort + sanity-check with `sort_tsv.py`.** Hand it the exported `.txt`;
-   [labels/sort_tsv.py](./labels/sort_tsv.py) **renames `<stem>.labels.txt` → `<stem>.labels.tsv`**
-   (via `shutil.move`, leaving a `.bak`), then sorts (`file start` rows first, then by
-   timestamp, then by label), splits `file_OTHER:` secondary-file entries onto their own
-   files, validates the [label grammar](#label-grammar), and flags any sync line missing a
-   `verified` tag or any `file end:` missing `COMPLETE`. There is **no separate txt→tsv
-   tool — this script is it.**
-   ```bash
-   cd labels
-   python3 sort_tsv.py d019-040.labels.txt --test   # dry run: just report grammar/notices
-   python3 sort_tsv.py d019-040.labels.txt          # rename .txt→.tsv, sort, write back
-   python3 sort_tsv.py d019-040.labels.tsv --live    # diff sorted .tsv vs labels live in Audacity
-   python3 sort_tsv.py d019-040.labels.tsv --adjust  # rebase timestamps to first "file start"
-   ```
-10. **Push the label file to GitHub.** Commit/push the new or updated `<stem>.labels.tsv`
-    to the repo the sheet reads from: **`trjh/netradio_DNB_analysis`** (hard-coded in
-    `Code.js`), *not* a local working copy.
-11. **Click "Reload Data" on the File Analysis tab.** That button runs `GithubImport()` in
-    [sheetscript/Code.js](./sheetscript/Code.js): it lists `…/repos/trjh/netradio_DNB_analysis/contents/labels`,
-    downloads every `*.tsv`, parses each (`ParseTSV`), computes normalized rows + speed
-    values, and writes them into the active **File Analysis** sheet from row 2. It reads its
-    GitHub token from the **`GITHUB_PAT` script property** (see [Spreadsheet import setup](#spreadsheet-import-setup-github-token)).
-12. **File List status updates from File Analysis via spreadsheet formulas.** No script
-    touches the File List tab — its **complete**/**verified** columns are sheet **formulas**
-    that scan the File Analysis rows per `.wav` for a `file end … COMPLETE` row and a
-    `file … verified …` row. Because this logic lives only in the sheet, the spreadsheet
-    backup must capture formulas, not just values.
-13. **Back up the spreadsheet & validate downstream.** Keep dated exports (the local CSV
-    `Netradio DNB ISDN Analysis - Tracklist - preskipfix.csv` feeds the player and other
-    tools). Run timeline/player smoke tests after label or sheet changes, especially around
-    file transitions and overlapping captures. *(Automated, formula-preserving spreadsheet
-    backup is still a major TODO.)*
-
-### Aligning an original to the mix (by ear + by eye)
-
-Steps 5–6 say to overlay the original and drop paired sync points; this is the hand
-technique for actually *finding* the seat. Note up front: the mix and the original are
-rarely at exactly the same clock rate, so a point that seats perfectly at one end will
-drift by the other — that drift is captured by the **A/B anchor pair**, not fought.
-
-**Pick the cue.**
-
-- Anchor on a sharp **transient**, not a sustained sound: a consonant plosive (t/k/p/b)
-  or word onset, a snare/rim, a vinyl click, a one-shot FX. The lyric or phrase you
-  remember only tells you *which* transient to seat on.
-- Prefer an **aperiodic** cue (a vocal, an intro, a one-off hit). The break loops, so a
-  purely rhythmic match can be a whole bar out; a non-repeating event pins the *absolute*
-  position.
-- For vocals, switch the track to **Spectrogram** — consonants/sibilants show as clean
-  vertical energy bursts that line up by eye where the waveform is an ambiguous blob.
-
-**Hear the seat** (beyond mix-in-L / original-in-R):
-
-- Hard-pan the mix left and the original right on headphones. Off by a hair you hear a
-  **flam/echo** leaning to one ear; as you close in it collapses to a single centered hit
-  and flams the *other* way if you overshoot. The point where the flam vanishes is good to
-  a few samples.
-- Sharper still — a **phase null**: `Effect ▸ Invert` the original and listen to the sum.
-  The content the two share (bass, break) audibly thins into a null right at the seat, and
-  a *deepening cancellation* is easier to hear than a tightening echo. It won't null to
-  silence (the mix has other layers). Un-invert when done.
-
-**See the seat.** At sample zoom Audacity draws individual sample **dots**. Match the
-*timing* of peaks and zero-crossings, **not** their heights — the mix copy is EQ'd and
-compressed differently, so amplitudes won't agree. Coarse-align on the phrase → zoom to
-the transient → zoom to samples.
-
-**Nudge precisely.**
-
-- **Sync-Lock Tracks** (Tracks menu) moves the original's audio and its `origNNN` label
-  track as a unit. Turn **Snap off** or every edit quantizes. Set the **Selection Toolbar**
-  time format to **samples** so offsets read exactly.
-- Move by dragging with Time-Shift (Audacity 3.1+: grab the top of the clip; older: `F5`
-  for the Time-Shift Tool) zoomed to samples — one screen pixel is then a *fraction* of a
-  sample, so the drag is genuinely fine, just mouse-driven.
-- Audacity has no numeric "nudge clip by N samples." For an exact amount, edit the **head
-  of the original only**: `Generate ▸ Silence` (typed duration) pushes it later, or select
-  `0`→`N` at the head and delete to pull it earlier. Caveat: if the mix shares the
-  Sync-Lock group it ripples too — drop Sync-Lock for that one edit, or keep only the
-  original + its labels in the group.
-
-**Capture two anchors, not one.** Seat a cue near the start (`track sync: A` on the mix,
-`origNNN sync: A` on the original) and another near the end (`… B`). If the intro seats
-perfectly but the outro is a few ms off, that's the clock-rate difference — the A/B pair is
-exactly what lets the downstream speed calc `(trackB − trackA) / (origB − origA)` solve it
-(steps 6–7), instead of you chasing a moving target by hand.
+The reference material the process depends on stays here: the **[label grammar](#label-grammar)**
+below, and the publish/import setup that follows.
 
 ### One-command publish (`labels/publish.py`)
 
-Steps 9–11 (sort → push → refresh) collapse into one **hard-gated** command:
+The last steps of the loop (sort → push → refresh; see [PROCESS.md](./PROCESS.md#11-publish))
+collapse into one **hard-gated** command:
 
 ```bash
 python3 labels/publish.py d019-040          # validate → sort → commit → push → refresh
