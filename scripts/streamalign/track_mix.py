@@ -164,6 +164,119 @@ def is_reliable(confidence, norm_cost, slope):
                 and norm_cost <= _MAX_NORM_COST)
 
 
+# A DJ pitches a record by a few percent, not by tens of percent. An anchor pair implying a
+# rate outside this band has not found the record -- it has matched noise -- and the absurd
+# rate is how it confesses. Measured: the two tracks whose anchors were wrong implied rates of
+# 0.30 and 0.10; every correct one landed within 2% of 1.0.
+RATE_PLAUSIBLE = (0.85, 1.15)
+
+
+def implied_rate(anchors):
+    """The mix/original rate implied by an anchor pair, or None if they are too close.
+
+    `(mixB - mixA) / (origB - origA)` -- the same quantity the sheet computes from the hand
+    A/B points. Its VALUE is the cheapest available check on whether the anchors are real.
+    """
+    if len(anchors) < 2:
+        return None
+    ordered = sorted(anchors, key=lambda a: a["orig_s"])
+    a, b = ordered[0], ordered[-1]
+    span = b["orig_s"] - a["orig_s"]
+    if abs(span) < 5.0:                    # too close together to divide by
+        return None
+    return (b["mix_s"] - a["mix_s"]) / span
+
+
+def solo_anchors(orig, capture, window_start_s, window_end_s, sr=_audio.SR, hop=2048,
+                 top=3, min_run_s=4.0, solo_percentile=75.0, smooth_s=3.0):
+    """Moments where the original plays ALONE in the mix -> ready-made sync-anchor pairs.
+
+    This is the right question; `locate_original` was the wrong one. A track's start and end in
+    a DJ mix are subjective -- records are blended, so there is no frame at which one "begins".
+    But the passages where a record plays essentially SOLO are objective, and they are exactly
+    what an A/B anchor needs: an instant identifiable in both the mix and the source.
+
+    Needs a PRIOR (`window_start_s`/`window_end_s`: where this original is believed to play in
+    the capture -- from `tracklist2017`, or from the labeller). Bounding the search is the whole
+    trick: blind over 20 minutes of a repeating broadcast the answer is ambiguous, and that
+    ambiguity is precisely what defeated `locate_original`.
+
+    Method: subsequence-DTW the original's chroma against the capture window -- DTW, not a fixed
+    lag, because the DJ beatmatches, so the record plays at the mix's speed and not its own --
+    then walk the warp path scoring each aligned frame pair by cosine similarity. Where the
+    record plays alone the mix chroma IS the record's chroma and similarity is high; where a
+    second record is layered over it the chroma is a superposition and similarity falls.
+    Contiguous high-similarity runs are therefore the solo passages.
+
+    Returns up to `top` anchors, best first: [{mix_s, orig_s, score, run_s}]. `mix_s` is in the
+    capture's LOCAL time, `orig_s` the matching instant inside the original -- i.e. a complete
+    `track sync:` / `origNNN sync:` PAIR. Seat one early and one late (A and B) and the
+    downstream speed calc solves the rate.
+    """
+    import librosa  # lazy: only the librosa-backed tools need it (.venv)
+    lo = max(0, int(window_start_s * sr))
+    hi = min(len(capture), int(window_end_s * sr))
+    if hi - lo < min_run_s * sr or len(orig) < min_run_s * sr:
+        return []
+    window = np.asarray(capture[lo:hi], dtype="float32")
+
+    co = librosa.feature.chroma_cqt(y=np.asarray(orig, dtype="float32"),
+                                    sr=sr, hop_length=hop) + 1e-6
+    cw = librosa.feature.chroma_cqt(y=window, sr=sr, hop_length=hop) + 1e-6
+    co = librosa.util.normalize(co, norm=2, axis=0)
+    cw = librosa.util.normalize(cw, norm=2, axis=0)
+    if co.shape[1] < 8 or cw.shape[1] < 8:
+        return []
+
+    try:                      # X = the original (query), Y = the capture window (database)
+        _dist, wp = librosa.sequence.dtw(X=co, Y=cw, subseq=True, metric="cosine")
+    except Exception:                                              # pragma: no cover
+        return []
+    wp = wp[::-1]                                                  # forwards in time
+
+    sims = np.array([float(np.dot(co[:, i], cw[:, j])) for i, j in wp])
+    if sims.size == 0:
+        return []
+
+    # SMOOTH before segmenting. The per-frame similarity is spiky, so the frames above any
+    # threshold are scattered singletons and no contiguous "passage" ever forms -- the search
+    # returns nothing at all. A short moving average turns that into the blocky signal the
+    # segmentation below assumes. This was the difference between 0 anchors and working.
+    span = max(1, int(round(smooth_s * sr / hop)))
+    smooth = np.convolve(sims, np.ones(span) / span, mode="same")
+
+    # Threshold by PERCENTILE, never by an absolute value or a mean+sd rule. Cosine similarity
+    # between L2-normalised 12-bin chroma SATURATES: on a real match the median sits ~0.997
+    # with a ~0.02 spread, so "median + 0.5 sd" evaluates ABOVE 1.0 and selects nothing, while
+    # any fixed cutoff is all-or-nothing depending on the track. What is stable is the RANKING:
+    # the best-matching frames of this alignment are where the record is least contaminated by
+    # whatever is layered over it.
+    floor = float(np.percentile(smooth, solo_percentile))
+    min_frames = max(2, int(round(min_run_s * sr / hop)))
+
+    runs, start = [], None
+    for k in range(len(smooth) + 1):
+        good = k < len(smooth) and smooth[k] >= floor
+        if good and start is None:
+            start = k
+        elif not good and start is not None:
+            if k - start >= min_frames:
+                runs.append((start, k))
+            start = None
+
+    anchors = []
+    for a, b in runs:
+        peak = a + int(np.argmax(smooth[a:b]))                     # the most solo instant
+        i, j = wp[peak]
+        anchors.append({"mix_s": (lo + j * hop) / float(sr),       # capture LOCAL time
+                        "orig_s": i * hop / float(sr),             # instant in the original
+                        "score": float(smooth[peak]),
+                        "run_s": (b - a) * hop / float(sr)})
+    # Prefer long, confident runs: a 30s solo passage beats a 4s coincidence.
+    anchors.sort(key=lambda a: -(a["score"] * min(a["run_s"], 30.0)))
+    return anchors[:top]
+
+
 def locate_original(orig, capture, sr=_audio.SR, hop=2048, min_seconds=20.0):
     """WHERE does an original appear inside a capture? -> {at_s, confidence, margin} or None.
 

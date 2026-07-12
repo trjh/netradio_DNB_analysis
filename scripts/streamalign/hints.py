@@ -289,10 +289,73 @@ def build_hints(stem, labels_dir=None, audio_dir=None, decim=8):
                 "join was: %s -- so that is most likely still playing at local 0.0 here."
                 % (owner, last_t)))
 
-    # --- original-track spans ----------------------------------------------------------
+    # --- the 1998/2017 notes ------------------------------------------------------------
+    rows.extend(_tracklist_rows(stem, duration, master, diag, audio_dir))
+
+    # --- original-track spans (not offered -- see below) ---------------------------------
     rows.extend(_orig_span_rows(stem, diag))
 
     return rows, diag
+
+
+def _tracklist_rows(stem, duration, master, diag, audio_dir=None):
+    """Hints from `tracklist-2017.txt` -- the oldest evidence, and often the ONLY evidence.
+
+    For a capture with no overlapping neighbour these notes are worth more than the whole
+    alignment engine: they say which tracks play, roughly where, whether the file follows its
+    predecessor directly, and which track carries over the join. Everything here is a HINT --
+    hand-typed in 1998/2017 and approximate -- so it is offered for confirmation, never as an
+    anchor.
+    """
+    from . import tracklist2017 as _tl
+    note = _tl.for_stem(stem, audio_dir=audio_dir)
+    if not note:
+        return []
+    rows = []
+    diag["tracklist"] = True
+
+    if note.get("transition_from"):
+        rows.append(_hint(0.0, 0.0,
+                          "the 1998/2017 notes say this file is a DIRECT TRANSITION from %s "
+                          "(no overlap, so nothing to correlate -- its position rests on that "
+                          "file's link, not on measurement)." % note["transition_from"]))
+    if note.get("continuation"):
+        rows.append(_hint(0.0, 0.0,
+                          "the 1998/2017 notes say this file opens mid-track, continuing: %s"
+                          % note["continuation"]))
+
+    # Cross-check the anchor against the notes -- a THIRD independent source.
+    ms = note.get("master_start_s")
+    if ms is not None and master is not None:
+        delta = master - ms
+        if abs(delta) > 2.5:
+            rows.append(_question(
+                0.0, 0.0,
+                "the 1998/2017 notes put this file's start at master %.3f, but the hand labels "
+                "place it at %.3f -- a %+.3fs disagreement. Across every other placed capture "
+                "those notes agree with the labels to within ~1-2s, so a gap this size is an "
+                "outlier and worth resolving. Which is right?" % (ms, master, delta)))
+            diag["questions"] += 1
+
+    for track in note.get("tracks", []):
+        local = track["local_s"]
+        if local < 0 or local > duration + 5:
+            continue
+        rows.append(_hint(local, local,
+                          "the 1998/2017 notes put a track start here: %s  -- confirm by ear, "
+                          "then label it `startNNN: ID: <Artist> - <Title>`" % track["name"]))
+        for cue in track.get("cues", []):
+            if "sync" in cue["text"].lower():
+                rows.append(_hint(local, local,
+                                  "...and mark a sync point INSIDE that original at its %s "
+                                  "(%s) -- the 1998/2017 notes flagged it as a sync point."
+                                  % (_hms(cue["at_s"]), cue["text"])))
+    diag["tracklist_tracks"] = len(note.get("tracks", []))
+    return rows
+
+
+def _hms(seconds):
+    return "%d:%05.2f" % (int(seconds // 60), seconds % 60)
 
 
 def _orig_span_rows(stem, diag):
