@@ -190,6 +190,30 @@ PYTHONPATH=scripts python3 -m streamalign starter <this-stem>
 For an unidentified span: AcoustID-fingerprint it, or match it against your originals by ear.
 Add `ID: <Artist> - <Title>` to the label. An unnamed but placed track is `Mystery Track N`.
 
+**The Mystery Tracks** have a tool, which fingerprints the mix where the record plays *alone*:
+
+```bash
+set -a && . ./.env_vars && set +a      # needs ACOUSTID_DEV_API_KEY
+PYTHONPATH=scripts .env/bin/python scripts/identify_mystery.py --track 68
+PYTHONPATH=scripts .env/bin/python scripts/identify_mystery.py --dry-run   # no network
+```
+
+It samples the **middle** of each mystery track's span, skipping ~20% at each end: a DJ blends
+a record *in* and *out*, so the middle is where it plays by itself, and a fingerprint of a
+blended passage is worthless. It takes several excerpts, so one bad one doesn't sink the track.
+
+> **Status: it works, and it finds nothing — and those are not the same thing.** The key is
+> accepted and the fingerprints are sound, but AcoustID returns **zero results** for this
+> material, *including for the clean originals whose names we already know*. The likeliest
+> reason is that AcoustID's crowd-sourced database simply doesn't cover obscure 1998 vinyl D&B.
+> **But that is not yet proven:** there is no known-good positive control on this machine to
+> confirm the lookup can match *anything*. Before trusting a "no identification" from this tool,
+> run it against a mainstream commercial recording you know is in MusicBrainz. If that matches,
+> a null result here is real evidence; if it doesn't, the tool is lying to you.
+
+It **only ever reads** from AcoustID. Submitting fingerprints back is an irreversible public act
+and is deliberately not automated.
+
 ### 9. Align the originals
 
 **Don't chase the track's start and end** — in a DJ mix records are *blended*, so there is no
