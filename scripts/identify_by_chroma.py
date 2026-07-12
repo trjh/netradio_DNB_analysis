@@ -140,12 +140,11 @@ def main(argv=None):
     if args.all_mystery:
         if not sources:
             sys.exit("--all-mystery needs NETRADIO_SOURCES_DIR")
-        seen = set()
-        for name in sorted(os.listdir(sources)):
-            stem = os.path.splitext(name)[0]
-            if name.lower().startswith("mystery") and stem not in seen:
-                seen.add(stem)
-                queries.append(os.path.join(sources, name))
+        # From track-metadata.json, not a filename glob -- sources/ still holds clips of
+        # mysteries that have since been solved, and re-querying those is worse than useless.
+        from streamalign import mystery as _mystery
+        for entry in _mystery.searchable(sources):
+            queries.append(entry["clip"])
     if not queries:
         sys.exit("nothing to identify: pass --query or --all-mystery")
 

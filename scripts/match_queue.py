@@ -31,8 +31,13 @@ CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUDIO_EXTS = (".m4a", ".opus", ".mp3", ".webm", ".flac", ".wav", ".ogg", ".wv", ".aac")
 
 
-def chroma_of(path):
-    """Cached chroma signature. The cache key is content-addressed (size+mtime+name)."""
+def chroma_of(path, min_seconds=45.0):
+    """Cached chroma signature. The cache key is content-addressed (size+mtime+name).
+
+    `min_seconds` guards CANDIDATES (a 10s clip is not a record). It must NOT be applied to a
+    QUERY: Mystery Track 7 is only 23s of audio, and silently dropping it meant the one mystery
+    most in need of help was quietly excluded from its own search.
+    """
     st = os.stat(path)
     key = hashlib.sha1(("%s|%d|%d" % (os.path.basename(path), st.st_size,
                                       int(st.st_mtime))).encode()).hexdigest()[:20]
@@ -44,7 +49,7 @@ def chroma_of(path):
         y = _audio.load_audio(path)
     except Exception:
         return None
-    if len(y) < 45 * _audio.SR:
+    if len(y) < min_seconds * _audio.SR:
         return None
     c = librosa.feature.chroma_cqt(y=np.asarray(y, dtype="float32"),
                                    sr=_audio.SR, hop_length=HOP) + 1e-6
@@ -108,15 +113,18 @@ def main():
             todo.append((f, item))
     print("# %d of them are UNLISTENED -> checking those\n" % len(todo), file=out)
 
+    # The query list comes from track-metadata.json, NEVER from a filename glob: sources/ still
+    # holds clips of mysteries that have since been SOLVED (2 and 3), and querying those wastes
+    # the run and invites a spurious "match" against an answered question.
+    from streamalign import mystery as _mystery
     queries = []
-    for n in sorted(os.listdir(src or ".")):
-        if n.lower().startswith("mystery") and n.lower().endswith((".wav", ".mp3")):
-            stem = os.path.splitext(n)[0]
-            if stem not in [q[0] for q in queries]:
-                c = chroma_of(os.path.join(src, n))
-                if c is not None:
-                    queries.append((stem, c[:, :int(120 * _audio.SR / HOP)]))
-    print("# queries: %s\n" % ", ".join(q[0] for q in queries), file=out)
+    for entry in _mystery.searchable(src):
+        c = chroma_of(entry["clip"], min_seconds=15.0)   # queries may be short (MT7 is 23s)
+        if c is not None:
+            queries.append(("Mystery Track %d" % entry["number"],
+                            c[:, :int(120 * _audio.SR / HOP)]))
+    print("# queries (UNSOLVED only, per track-metadata.json): %s\n"
+          % ", ".join(q[0] for q in queries), file=out)
 
     results = {name: [] for name, _ in queries}
     for i, (path, item) in enumerate(todo, 1):

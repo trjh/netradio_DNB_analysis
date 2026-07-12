@@ -22,8 +22,17 @@ someone who was there.
 
 | Track | Where |
 |---|---|
-| Mystery Track 3 | <https://www.youtube.com/watch?v=jKEt_2jLzYo> *(since identified: Aquarius — Wave Forms)* |
-| Mystery Tracks 4 & 5 | <https://soundcloud.com/trjh/sets/track-id-requested> |
+| Mystery Track 3 | <https://www.youtube.com/watch?v=jKEt_2jLzYo> — **SOLVED**: Aquarius — *Wave Forms* |
+| Mystery Tracks 4 & 5 | <https://soundcloud.com/trjh/sets/track-id-requested> — **MT5 SOLVED**: Jacob's Optical Stairway — *Solar Feelings* (J Majik remix). MT4 still open (the same replier had not heard it either). |
+
+**Asking works.** Two of the three published mysteries have been named by strangers, from
+[one Reddit thread](https://www.reddit.com/r/AtmosphericDnB/comments/16n4u0m/). That is a better
+hit rate than every machine method in this document combined — which is why publishing is §1.
+
+> **Newly solved ⇒ new work.** A named track still needs its **original acquired** (see
+> `PROCESS.md` step 9): without the record we cannot seat sync anchors, recover the mix/original
+> rate, or verify the placement. **MT5 (track 74) now needs its original** — it is a candidate for
+> the harvester, and the fastest possible win for it.
 
 ### Ready to publish
 
@@ -31,10 +40,31 @@ Prepared, loudness-normalised, in `~/Downloads/Netradio/mystery-uploads/`:
 
 | Track | Length | Note |
 |---|---|---|
-| Mystery Track 2 | 331 s | |
-| Mystery Track 6 | 310 s | "drumline change" |
+| Mystery Track 6 | 310 s | "drumline change" — **video built**: `Unknown Track 6.mp4` |
 | Mystery Track 7 | 23 s | **short** — thin for an ID, but a hook is a hook |
 | Mystery Track 10 | 213 s | freshly cut from `d465-484` |
+
+*(Mystery Track 2 was prepared in error and withdrawn — it is already solved. Its clip still sits
+in `sources/`, which is exactly the trap §1b describes: **the filename is not the truth**.)*
+
+**The video is built locally** — no website:
+
+```bash
+bash scripts/mkvideo.sh "$NETRADIO_SOURCES_DIR/Mystery Track 6.wav" 6
+```
+
+It reproduces the format of the Mystery Track 3 upload from ffmpeg primitives: a generated
+starfield, blue log-scale frequency bars, the netradio logo, and the title block. The bars are
+the right visual for a track-ID post — the shape of the bassline and the drum pattern are
+themselves a clue someone may recognise.
+
+**Link to the exact position in the mix.** Every track number in
+[`TRACKLIST.md`](./TRACKLIST.md) is now an anchor, so a post can point straight at it:
+
+    https://github.com/trjh/netradio_DNB_analysis/blob/main/TRACKLIST.md#t74
+
+That gives the reader the tracks either side of it — the DJ's neighbours, which are a strong hint
+at label and scene.
 
 **Not preparable yet:** Mystery Tracks **8** and **9** (their capture audio isn't on this box),
 and **11** (no master span in `track-metadata.json` — it needs labelling before it can be cut).
@@ -64,6 +94,54 @@ Give them the things that narrow it, because they are the things you actually kn
 - **Any lyric or vocal hook** you can hear (the 1998/2017 notes already record several).
 - **A direct link to the audio** — not an attachment. That's what the uploads above are for.
 - That it's from a **continuous DJ mix**, so the intro may be buried under the previous record.
+
+---
+
+## 1b. When you extract a NEW mystery clip — what to run
+
+Say you've just cut Mystery Track 8 out of its capture. Two things make it searchable, and
+**neither is optional**:
+
+**1. Save the clip with the exact name `Mystery Track <N>.wav`** into the originals dir
+(`$NETRADIO_SOURCES_DIR`). The number in the filename is how the tools find it.
+
+**2. Make sure `track-metadata.json` still calls it a mystery** — its `title` must contain
+`Mystery Track <N>`. **This is the authority, not the filename.** A track whose title has been
+changed to a real artist/title is *solved*, and the tools will (correctly) stop searching for it.
+
+Then:
+
+```bash
+set -a && . ./.env_vars && set +a
+
+# what does the engine now consider unsolved-and-searchable?
+PYTHONPATH=scripts .env/bin/python -c \
+  "from streamalign import mystery; print([e['number'] for e in mystery.searchable()])"
+
+# 1. search the originals you already have
+PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --all-mystery
+
+# 2. search the listen queue's downloaded, UNLISTENED tracks (slow — runs for hours)
+PYTHONPATH=scripts .venv/bin/python scripts/match_queue.py --out /tmp/queue-match.txt
+
+# 3. build the video to post
+bash scripts/mkvideo.sh "$NETRADIO_SOURCES_DIR/Mystery Track 8.wav" 8
+```
+
+No list to edit, nowhere to register it: **both searches derive their queries from
+`track-metadata.json` + the clips on disk**, so a new clip is picked up automatically and a
+solved one is dropped automatically.
+
+> **Why this is spelled out.** The tools used to pick their queries by globbing
+> `sources/Mystery Track *` — and that directory still holds clips of tracks that have *since
+> been identified*. A long-running match job spent ~40% of its work re-answering solved
+> questions (Mystery Tracks 2 and 3), and a spurious hit against a solved track would have read
+> as a real lead. **The filename is not the truth; `track-metadata.json` is.** That is now
+> enforced in one place (`streamalign/mystery.py`) so it cannot drift back.
+>
+> A related trap, also fixed: signatures were skipped for anything under 45 s — which silently
+> excluded **Mystery Track 7** (23 s) from its own search. A short *query* is fine; the minimum
+> only ever applied to *candidates*.
 
 ---
 
