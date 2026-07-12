@@ -70,10 +70,10 @@ class TestEveryRowIsMarkedAndScored(unittest.TestCase):
 
 
 class TestOverlapDetection(unittest.TestCase):
-    """Butt-jointed captures share no audio. Correlating them returns noise, so they must
+    """Exactly-joined captures share no audio. Correlating them returns noise, so they must
     not be offered as neighbours -- this is exactly d336-355 -> d356-375."""
 
-    def test_butt_jointed_neighbour_is_not_an_overlap(self):
+    def test_exactly_joined_neighbour_is_not_an_overlap(self):
         starts = {"a": 0.0, "b": 1200.0}     # b begins exactly where a ends
 
         class _FakeAudio:

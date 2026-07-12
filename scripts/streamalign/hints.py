@@ -31,7 +31,7 @@ shape (with a trailing ``?``) so they read naturally next to the real thing.
 What it can and cannot know
 ---------------------------
 The engine's evidence is cross-correlation against **overlapping** audio. Where a capture
-butt-joints its neighbours (they follow one another directly, sharing no audio -- e.g.
+exactly joins its neighbours (they follow one another directly, sharing no audio -- e.g.
 ``d356-375``), there is nothing to correlate: no sync point and no skip detection are
 possible, and the anchor can only be *carried forward* from the neighbour's hand link.
 Rather than emit an empty file, this says so, in a question.
@@ -122,7 +122,7 @@ def overlapping_neighbours(stem, starts, audio_dir=None, min_overlap_s=MIN_OVERL
 
 def _carry_forward_anchor(stem, labels_dir):
     """(owner, link_local_t, owner_duration) for the hand `file_<stem>:` link that anchors
-    `stem`, or None. This is how a butt-jointed capture gets its master start: a neighbour's
+    `stem`, or None. This is how an exactly-joined capture gets its master start: a neighbour's
     hand label says "the next file starts here".
     """
     from . import emit_labels as _emit
@@ -273,7 +273,7 @@ def build_hints(stem, labels_dir=None, audio_dir=None, decim=8):
             pass
 
     # --- what was playing at the join (carry-forward content) --------------------------
-    # A butt-jointed file inherits whatever the owner had mid-flight at the join, so the
+    # An exactly-joined file inherits whatever the owner had mid-flight at the join, so the
     # most useful thing we can say about local 0.0 is "this track was already playing".
     # Match the GRAMMAR (`start067:`, `orig067 start:`), never a substring: a plain
     # `note: ...starting here?` is prose, not a track start.
@@ -296,28 +296,39 @@ def build_hints(stem, labels_dir=None, audio_dir=None, decim=8):
 
 
 def _orig_span_rows(stem, diag):
-    """origNNN start/end spans from track-mix, or a question explaining why not.
+    """origNNN spans are NOT offered. Deliberately. Here is why.
 
-    This is the one hint that does NOT need an overlapping capture -- it correlates the
-    *original* recordings against the mix -- so it is the most valuable hint for a
-    butt-jointed file. It needs librosa (chroma/DTW) and the originals on disk; when either
-    is missing we say so rather than emitting nothing.
+    The appeal is obvious: locating an original inside the mix needs no overlapping capture,
+    so it is the one hint that would work on an exactly-joined file like d356-375. The
+    machinery exists (`track_mix.locate_original`). It is not trustworthy enough to hint from.
+
+    Measured against the 8 tracks whose position is known from `track-metadata.json` (and whose
+    capture is picked the way the trusted `align_track` picks it), the search lands within 5s
+    of the truth **2 times out of 8** -- and, worse, its single most confident answer (track 2,
+    margin 0.69, the highest in the set) is wrong by *25 minutes*. There is therefore no
+    confidence or margin threshold that separates its right answers from its wrong ones, so it
+    cannot be gated into safety.
+
+    Two things defeat it, and neither is a tuning problem:
+      * the DJ beatmatches, so the record plays at a rate the mix chose -- a fixed-lag
+        correlation drifts out of alignment within a minute (subsequence DTW, which warps,
+        scored no better here);
+      * the broadcast repeats material, so the same record genuinely occurs in several places
+        and "the" answer is not unique.
+
+    `locate_original` stays in the tree because the maths is now right (see its docstring: the
+    non-negative-chroma pedestal is removed, so a wrong answer at least *reports* itself as
+    low-confidence) and it is the obvious starting point for solving this properly. But a wrong
+    origNNN span is worse than no origNNN span: it would send the labeller to the wrong minute
+    of a 20-minute file with a number next to it implying it had been checked. So: silence, and
+    an honest note.
     """
-    missing = []
-    try:
-        import librosa  # noqa: F401
-    except ImportError:
-        missing.append("librosa is not installed (`pip install librosa`)")
-    sources = os.path.join(_gt.REPO_ROOT, "sources")
-    if not os.path.isdir(sources):
-        missing.append("the originals are not reachable (`sources/` does not resolve -- "
-                       "is the media volume mounted?)")
-    if missing:
-        diag["questions"] += 1
-        diag["orig_blocked"] = missing
-        return [_question(
-            0.0, 0.0,
-            "no origNNN spans: %s. This is the hint that does not need an overlapping "
-            "capture, so it is the one most worth unblocking for a file like this."
-            % "; and ".join(missing))]
-    return []                                                      # pragma: no cover
+    diag["orig_offered"] = False
+    return [_hint(
+        0.0, 0.0,
+        "no origNNN spans offered: the engine CAN search for an original inside a capture, but "
+        "on this material it is right about 2 times in 8, and its most confident answer in "
+        "testing was wrong by 25 minutes -- the DJ beatmatches (so the record's speed is not "
+        "its own) and the broadcast repeats material (so the answer is not unique). Locating "
+        "the originals is still a by-ear job. See track_mix.locate_original if you want to "
+        "attack it.")]
