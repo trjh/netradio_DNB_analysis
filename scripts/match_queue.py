@@ -70,7 +70,7 @@ def cost(q, c):
     from streamalign import chroma_match as _cm
     if c is None or c.shape[1] < q.shape[1]:
         return None, None
-    return _cm.match(q, c)
+    return _cm.match(q, c)[:2]
 
 
 def main():

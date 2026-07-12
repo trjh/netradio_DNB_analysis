@@ -249,8 +249,10 @@ records would be worth having.
             print("  %d  %s" % (f["year"], f["title"]), file=out)
             total += 1
         print("", file=out)
-    print("# %d candidate release(s). These are what to look for audio of --\n"
-          "# the matcher can only find what is in the pool." % total, file=out)
+    print("# %d candidate release(s). These are the records worth ACQUIRING -- buy, borrow, or\n"
+          "# find on Discogs. A lead that later scores is a lead to obtain the record, not to build\n"
+          "# a library from. (seed_leads.py will search streams of these to FINGERPRINT them cheaply;\n"
+          "# it retains signatures, never audio.)" % total, file=out)
 
 
 if __name__ == "__main__":

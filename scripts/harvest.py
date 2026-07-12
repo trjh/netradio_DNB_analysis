@@ -5,7 +5,7 @@
     PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --run          # work the queue
     PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --status
 
-This runs for WEEKS. It is built to be a good citizen, and to survive being one.
+This runs for WEEKS. It is built to keep its load on other people's servers as low as possible.
 
 The idea
 --------
@@ -14,21 +14,26 @@ disk. So **keep the signature, not the audio**: a chroma signature is a 12xN flo
 ~55KB against ~8MB for the track. A 100,000-track pool is ~5GB of signatures, and the audio
 never has to touch the disk at all -- it is streamed, hashed to chroma, and dropped.
 
-Except when it matters: **a near-match is KEPT**. If a candidate scores anywhere near a Mystery
-Track we hold on to the audio, because that is the whole point and a re-download is exactly the
-sort of request that gets you blocked.
+Except a brief excerpt of a near-miss. If a candidate scores near a Mystery Track we keep the
+matched ~30-second window -- and only that window -- so a human can listen and confirm or reject
+it. Cut from the audio already in memory, so nothing is fetched twice. It is not a copy of the
+record; it is a magnifying glass over the moment the matcher flagged, swept after 30 days.
 
-Being a good citizen (and not getting blocked)
-----------------------------------------------
-* **Rotate hosts between tracks.** The strongest defence, and Tim's idea: no single site ever
-  sees a burst, because consecutive fetches go to different places.
-* **Per-host token buckets**, so YouTube being busy never makes us hammer SoundCloud.
-* **Jittered delays, never fixed.** A metronome is the most bot-like thing there is.
-* **Sessions**: work 4-5h, then idle 40-120 min. Humans browse in bursts.
-* **Exponential backoff** on 429/403, and a HARD STOP on repeated 403 -- that is the site
-  telling us to go away, and we listen.
-* **Each track is fetched once, ever.** The signature cache guarantees it. That is the single
-  biggest politeness win available, and it is free.
+Load discipline
+---------------
+The point of all of this is to put as little load as possible on the servers we read from. Each
+control below is justified by load, not by hiding -- if a control only made sense as a way to
+avoid being noticed, it would not be here.
+
+* **Spread load across hosts.** Consecutive fetches go to different sites, so no single host
+  carries a run of back-to-back requests.
+* **Per-host rate limits**, so a slow response from one host never concentrates load on another.
+* **Randomised gaps** between requests to a host, so we never send a synchronised train of them.
+* **Bounded sessions**: work a few hours, then idle, so sustained load stays low over a day.
+* **Exponential backoff** on 429/403, and a HARD STOP after repeated 403 -- that is the host
+  telling us to stop, and we stop.
+* **Each track is fetched once, ever.** The signature cache guarantees it -- the single biggest
+  load reduction available, and free.
 
 Pause/resume and progress live in `.harvest/` so the player's dashboard can drive them.
 """
@@ -63,32 +68,30 @@ KEEP = os.path.join(os.path.expanduser("~"), "media", "netradio-candidates")
 HOP = 2048
 QUERY_S = 120.0
 
-# KEEPING AUDIO: a bounded LEADERBOARD, not a threshold.
+# RETAINING EXCERPTS FOR AURAL CHECK: a bounded leaderboard of SHORT EXCERPTS, not a library.
 #
-# The calibration (docs/CALIBRATION.md) is unambiguous: the true-match and non-match populations
-# OVERLAP (true up to 0.0971, non-match down to 0.0376, non-match MEDIAN 0.0949). So no cost gate
-# works. Set it low enough to exclude non-matches and it throws away real ones; set it high enough
-# to catch every real one (0.12) and it keeps essentially EVERYTHING -- which is what happened:
-# 90 files kept out of 73 tracks analysed, defeating the entire point of not storing audio.
+# We never keep a full track. What is retained is a ~30-second excerpt around the matched instant
+# (see write_excerpt) -- enough to recognise a record by ear, far too short to be a copy of it --
+# and only for the best few candidates per mystery, and only for KEEP_TTL_DAYS.
 #
-# I drew exactly the wrong conclusion from my own data. The calibration said "cost alone cannot
-# separate these; rank is the signal" and I then set a cost-only gate.
-#
-# So: keep the best KEEP_TOP candidates PER MYSTERY, evicting the worst when a better one lands.
-# Storage is bounded and predictable (7 mysteries x 12 x ~8MB ~ 700MB, once, not per week), the
-# best candidates are always on disk to listen to, and it cannot be wrong about a threshold
-# because it does not use one.
+# A bounded leaderboard, not a threshold, because the calibration (docs/CALIBRATION.md) is
+# unambiguous: the true-match and non-match populations OVERLAP (true up to 0.0971, non-match down
+# to 0.0376, median 0.0949). No cost gate works -- low excludes real matches, high keeps
+# everything. So: the best KEEP_TOP excerpts PER MYSTERY, evicting the worst when a better one
+# lands. Bounded, predictable, and it cannot be wrong about a threshold because it does not use
+# one.
 KEEP_TOP = 12
-KEEP_CEILING = 0.130      # never keep something worse than the worst plausible true match
+KEEP_CEILING = 0.130      # never retain an excerpt worse than the worst plausible true match
+KEEP_TTL_DAYS = 30        # a lead not listened to in a month is not a lead -- swept
 # A reported MATCH still needs cost AND margin. The populations OVERLAP (true match up to 0.0971,
 # non-match down to 0.0376), so no cost alone can separate them: RANK is the reliable signal, and
 # the margin test is what actually carries the gate. 40 of 41 tracks rank #1 against their own
 # original, so the margin is real.
 MATCH_COST = 0.050
 
-# --- politeness ------------------------------------------------------------------------------
-# Work for hours, then rest for a while. No quiet hours (Tim's call) -- the rotation and the
-# jitter are what keep this civil, not the clock.
+# --- load discipline -------------------------------------------------------------------------
+# Work for hours, then rest, so sustained load over a day stays low. No quiet hours (Tim's call);
+# it is the spread across hosts and the randomised gaps that keep the load low, not the clock.
 SESSION_S = (4 * 3600, 5 * 3600)
 IDLE_S = (40 * 60, 120 * 60)
 # Per-host: the MEAN gap between fetches to THAT host. Actual gaps are jittered 0.5x-2.0x, so a
@@ -140,11 +143,13 @@ def sig_path(url):
     return os.path.join(CACHE, "u" + hashlib.sha1(url.encode()).hexdigest()[:20] + ".npy")
 
 
-def stream_chroma(url, keep_to=None):
-    """Stream the audio, reduce it to a chroma signature, and DROP it -- unless `keep_to`.
+def stream_chroma(url):
+    """Stream the audio, reduce it to a chroma signature -> (chroma, samples, error).
 
-    The audio never lands on disk: yt-dlp writes to stdout, ffmpeg decodes to 16kHz mono WAV on
-    stdout, and we read it into numpy. That is what makes a pool of any size affordable here.
+    The full audio is NEVER written to disk. It is streamed (yt-dlp -> ffmpeg -> numpy), reduced
+    to chroma, cached as a signature, and the decoded samples are returned IN MEMORY so the caller
+    can cut a short excerpt from them without fetching again. When the caller is done with them
+    they are dropped. `samples` is the whole track only for as long as one function call.
     """
     import librosa
     yt = subprocess.Popen(["yt-dlp", "-q", "--no-warnings", "--no-playlist",
@@ -159,22 +164,70 @@ def stream_chroma(url, keep_to=None):
     yt.wait()
 
     if yt.returncode != 0 or not raw:
-        return None, yt_err.strip().split("\n")[-1][:160] if yt_err else "no audio"
+        return None, None, yt_err.strip().split("\n")[-1][:160] if yt_err else "no audio"
     y = np.frombuffer(raw, dtype="float32")
     if len(y) < 45 * _audio.SR:
-        return None, "too short (%.0fs)" % (len(y) / _audio.SR)
+        return None, None, "too short (%.0fs)" % (len(y) / _audio.SR)
 
     c = librosa.feature.chroma_cqt(y=np.asarray(y, dtype="float32"),
                                    sr=_audio.SR, hop_length=HOP) + 1e-6
     c = librosa.util.normalize(c, norm=2, axis=0)
     os.makedirs(CACHE, exist_ok=True)
     np.save(sig_path(url), c.astype("float16"))
+    return c, y, None
 
-    if keep_to:                       # a near match: keep the audio, we will want to hear it
-        os.makedirs(os.path.dirname(keep_to), exist_ok=True)
-        import soundfile as sf
-        sf.write(keep_to, y, _audio.SR)
-    return c, None
+
+# A short excerpt AROUND the matched instant is all we retain -- long enough to recognise the
+# record by ear, far too short to be a copy of it. This is not a library; it is a magnifying
+# glass held over the exact moment the matcher flagged, so a human can confirm or reject it.
+EXCERPT_S = 30.0
+
+
+def write_excerpt(samples, at_s, path):
+    """Write ~EXCERPT_S seconds of `samples` centred on the matched instant. In memory in, file
+    out -- no second fetch. A brief excerpt for aural verification, swept after KEEP_TTL_DAYS."""
+    import soundfile as sf
+    lo = max(0, int((at_s - EXCERPT_S / 2) * _audio.SR))
+    hi = min(len(samples), lo + int(EXCERPT_S * _audio.SR))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    sf.write(path, np.asarray(samples[lo:hi], dtype="float32"), _audio.SR)
+    _write_provenance()
+
+
+def _write_provenance():
+    """State, in plain words, what the kept files are -- so nobody, including a future me, ever
+    mistakes this directory for a music library."""
+    note = os.path.join(KEEP, "PROVENANCE.txt")
+    if os.path.exists(note):
+        return
+    os.makedirs(KEEP, exist_ok=True)
+    with open(note, "w", encoding="utf-8") as fh:
+        fh.write(
+            "These are SHORT EXCERPTS (~%ds), retained TEMPORARILY so a human can listen and "
+            "confirm or reject a track-identification hypothesis.\n\n"
+            "This is not a music library. Full tracks are never kept -- the harvester streams "
+            "audio, reduces it to a chroma signature, and drops it. Only the matched ~%d-second "
+            "window of a near-miss is written here, and it is swept after %d days.\n\n"
+            "If an excerpt confirms a record, ACQUIRE THE RECORD (buy it, or rip your own copy). "
+            "Do not promote an excerpt into a source file.\n"
+            % (int(EXCERPT_S), int(EXCERPT_S), KEEP_TTL_DAYS))
+
+
+def sweep_excerpts():
+    """Delete kept excerpts older than KEEP_TTL_DAYS. A lead you haven't listened to in a month
+    is not a lead, and holding it any longer serves no purpose."""
+    if not os.path.isdir(KEEP):
+        return
+    cutoff = time.time() - KEEP_TTL_DAYS * 86400
+    for name in os.listdir(KEEP):
+        if not name.endswith(".wav"):
+            continue
+        path = os.path.join(KEEP, name)
+        try:
+            if os.path.getmtime(path) < cutoff:
+                os.unlink(path)
+        except OSError:
+            pass
 
 
 # --- the queue ---------------------------------------------------------------------------------
@@ -252,6 +305,7 @@ def run(args):
     print("# work %s, idle %s, rotating hosts, jittered. Ctrl-C is safe (state is on disk)."
           % ("4-5h", "40-120m"))
 
+    sweep_excerpts()                    # drop anything past its TTL before we start
     session_end = time.time() + random.uniform(*SESSION_S)
     while True:
         if os.path.exists(PAUSE):
@@ -295,13 +349,17 @@ def run(args):
         state["current"] = url
         _save(STATE, state)
 
+        # `samples` is the decoded audio, held IN MEMORY only for this iteration, so an excerpt
+        # can be cut without a second fetch. It is dropped at the end of the loop. From the cache
+        # there is no audio (only the signature), so a cached candidate cannot yield an excerpt --
+        # which is fine: we only ever excerpt something we are already streaming.
+        samples = None
         cached = os.path.exists(sig_path(url))
         if cached:
-            c = np.load(sig_path(url)).astype("float32")
-            err = None
+            c, err = np.load(sig_path(url)).astype("float32"), None
             state["skipped_cached"] += 1
         else:
-            c, err = stream_chroma(url)
+            c, samples, err = stream_chroma(url)
 
         # --- host pacing: jittered, so the cadence is never even ---
         gap = HOST_GAP_S.get(host, HOST_GAP_S["_default"]) * random.uniform(0.5, 2.0)
@@ -333,7 +391,7 @@ def run(args):
 
         state["analyzed"] += 1
         for num, qc in qs:
-            cost, shift = _cm.match(qc, c)
+            cost, shift, at = _cm.match(qc, c)
             if cost is None or cost > KEEP_CEILING:
                 continue
             board = [m for m in state["matches"] if m["mystery"] == num]
@@ -341,13 +399,16 @@ def run(args):
             if len(board) >= KEEP_TOP and cost >= board[-1]["cost"]:
                 continue                       # not good enough to displace anyone
 
-            keep_to = os.path.join(KEEP, "MT%d-%.4f-%s.wav"
+            excerpt = os.path.join(KEEP, "MT%d-%.4f-%s.wav"
                                    % (num, cost, hashlib.sha1(url.encode()).hexdigest()[:8]))
-            if not os.path.exists(keep_to):
-                stream_chroma(url, keep_to=keep_to)
+            if not os.path.exists(excerpt):
+                if samples is None:            # cached signature, no audio in hand -> can't excerpt
+                    continue
+                write_excerpt(samples, at or 0, excerpt)      # from memory; NO second fetch
                 state["kept"] += 1
             hit = {"at": _now(), "mystery": num, "cost": round(cost, 4),
-                   "semitones": shift, "url": url, "audio": keep_to,
+                   "semitones": shift, "at_s": round(at or 0, 1), "url": url,
+                   "url": url, "audio": excerpt,
                    "verdict": "MATCH" if cost <= MATCH_COST else "near"}
             state["matches"].append(hit)
 
@@ -361,8 +422,10 @@ def run(args):
                     state["kept"] -= 1
                 except OSError:
                     pass
-            print("  %s  MT%d  cost %.4f  %s  %s"
-                  % (hit["verdict"], num, cost, _cm.describe_shift(shift), url))
+            print("  %s  MT%d  cost %.4f  %s  at %s  %s"
+                  % (hit["verdict"], num, cost, _cm.describe_shift(shift),
+                     _cm.describe_at(at), url))
+        samples = None                          # drop the decoded audio; it never persists
         state["updated"] = _now()
         _save(STATE, state)
 

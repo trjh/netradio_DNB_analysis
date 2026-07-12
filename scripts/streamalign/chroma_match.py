@@ -50,28 +50,44 @@ def transposition_order(query, candidate):
     return [k for _s, k in scores]
 
 
-def match(query, candidate, tries=DEFAULT_TRIES):
-    """Best (cost, semitones) of finding `query` inside `candidate`, over transpositions.
+# Frames -> seconds: chroma hop 2048 at 16 kHz -> 0.128 s per frame.
+_HOP, _SR = 2048, 16000
 
-    `semitones` is how far the QUERY had to be rotated to meet the candidate. A non-zero value
-    is a fact worth surfacing, not an implementation detail: it means the two recordings are in
-    different keys, so one of them has been pitched -- which tells you something real about the
-    copy you are holding.
+
+def match(query, candidate, tries=DEFAULT_TRIES):
+    """Best (cost, semitones, at_seconds) of finding `query` inside `candidate`.
+
+    `semitones` is how far the QUERY had to be rotated to meet the candidate -- non-zero means one
+    copy is pitched, which is a fact about the copy, not an implementation detail.
+
+    `at_seconds` is WHERE in the candidate the match begins. Subsequence DTW has always known this
+    (the warp path's first frame is the offset); returning it turns "the record is in this
+    90-minute set somewhere" into a timestamp you can scrub to -- and tells the harvester which
+    30 seconds to keep as an excerpt.
     """
     import librosa
     query = np.asarray(query)
     candidate = np.asarray(candidate)
     if candidate.shape[1] < query.shape[1]:
-        return None, None
+        return None, None, None
 
-    best_cost, best_shift = None, None
+    best_cost, best_shift, best_at = None, None, None
     for k in transposition_order(query, candidate)[:max(1, tries)]:
         rolled = np.roll(query, k, axis=0)
         d, wp = librosa.sequence.dtw(X=rolled, Y=candidate, subseq=True, metric="cosine")
         cost = float(d[-1, wp[0][1]]) / len(wp)
         if best_cost is None or cost < best_cost:
             best_cost, best_shift = cost, k
-    return best_cost, best_shift
+            best_at = int(wp[-1][1]) * _HOP / float(_SR)   # wp runs backwards; last row = start
+    return best_cost, best_shift, best_at
+
+
+def describe_at(seconds):
+    """`2831.4` -> `47:11`."""
+    if seconds is None:
+        return "?"
+    s = int(round(seconds))
+    return "%d:%02d" % (s // 60, s % 60)
 
 
 def describe_shift(semitones):

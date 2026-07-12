@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
-"""Turn the Discogs leads into harvester candidates: find audio for each, queue it.
+"""Test the Discogs leads cheaply: queue each for SIGNATURE extraction, not acquisition.
 
     PYTHONPATH=scripts .venv/bin/python scripts/seed_leads.py --leads docs/DISCOGS_LEADS.md
     PYTHONPATH=scripts .venv/bin/python scripts/seed_leads.py --dry-run
+
+This is NOT an acquisition path. `DISCOGS_LEADS.md` is a want-list of records worth having; this
+queues a stream of each so the harvester can compute its chroma **signature** and test the
+hypothesis "is this the mystery?" without obtaining the record. The harvester keeps signatures,
+not a library (and only a brief excerpt of anything that scores, for aural check). A lead that
+scores is a lead to **buy the record** -- via the private player, or Discogs, or Bandcamp -- not
+to promote a stream rip into a source file.
 
 `discogs_leads.py` says WHICH records to look for -- the 138 releases on the labels this DJ
 actually played. This finds audio for them and puts it in the harvester's queue. The harvester

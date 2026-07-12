@@ -173,12 +173,12 @@ candidates.**
   it would not be a mystery).
 - **YouTube archive channels** of the era — e.g.
   <https://www.youtube.com/@back2theoldskoolera999>. This is why the player's listen queue wants
-  **channel/playlist subscriptions**: they are a candidate *firehose*.
+  **channel/playlist subscriptions**: they are a candidate *stream*.
 - **Discogs**, by label and year: the identified tracks reveal which labels this DJ was playing.
 
 ---
 
-## 3. Gathering signatures without downloading the internet
+## 3. Signatures, not a library: why this scales
 
 This box has ~40 GB free and the pool we want is far larger. **So don't keep the audio — keep the
 signature.**
@@ -195,8 +195,9 @@ yt-dlp -o - <url> | ffmpeg -i - -ac 1 -ar 16000 -f wav - | chroma → .npy → d
 float16). Extending it to *stream* rather than read a local file is a small change, and it is the
 only way this scales.
 
-**Be a good citizen.** Rate-limit, back off, respect `robots.txt`, and never bulk-download a
-platform just because you can. The signature cache means each track is fetched **once, ever** —
+**Be a good citizen.** Rate-limit, back off hard on any refusal, and stop when told to. We do
+**not** crawl -- every URL is one a human or a catalogue lookup put in the queue deliberately, and
+the signature cache means each track is looked at once, ever. The signature cache means each track is fetched **once, ever** —
 that is the point of keeping it.
 
 ---
@@ -258,8 +259,8 @@ ear as Jacob's Optical Stairway — *Solar Feelings* (J Majik mix); the matcher 
 | **+0** (what the matcher did) | 0.0689 — *"no match"* | 0.0848 |
 | **−1 semitone** | **0.0498 — match** | 0.1137 |
 
-Uploads are pitch-nudged routinely (to dodge Content ID, or a turntable ran fast), so **any
-candidate sourced from YouTube is likely transposed.** A search that doesn't try all twelve
+Uploads are frequently pitched a semitone or two -- deliberately, or because a turntable ran
+fast -- so **any candidate taken from a stream is likely transposed.** A search that doesn't try all twelve
 rotations will silently miss real matches — and a false negative is the worst failure a search
 can have, because *it looks exactly like a clean negative.*
 

@@ -172,7 +172,7 @@ What I'd like to accomplish
 * [ ] Determine complete tracklist
 * [ ] Build playlist of tracks from the stream (as much as possible) on YouTube, Apple Music, and Soundcloud
 * [ ] Compile definitive recording of stream, perhaps in five 1-2 hour chunks
-* [ ] Publish recording on YouTube and Soundcloud -- it's not very high quality (16kHz, originally [RealAudio](https://en.wikipedia.org/wiki/RealAudio)) so I doubt I'll be chased for copyright claims, and maybe the original DJ will appear to tell us more about the mix.
+* [ ] Publish identification excerpts on YouTube and Soundcloud to ask the community what the unidentified records are; maybe the original DJ will appear to tell us more about the mix.
 
 It's also slightly tempting to think about remaking the mix with better quality original sources, but that's probably a step too far.
 

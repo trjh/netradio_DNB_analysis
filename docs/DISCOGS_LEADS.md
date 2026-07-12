@@ -182,5 +182,6 @@ records would be worth having.
   1999  Dom & Roland - Killa Bullet / Dumbo
   1999  Dom + Roland* - Parasite
 
-# 138 candidate release(s). These are what to look for audio of --
-# the matcher can only find what is in the pool.
+# 138 candidate release(s). These are the records worth ACQUIRING -- buy, borrow, or find on
+# Discogs. seed_leads.py searches streams of these to FINGERPRINT them; it retains signatures,
+# never audio.

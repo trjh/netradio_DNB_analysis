@@ -231,7 +231,7 @@ separate them; what identifies a record is that it beats the field, not that it 
 
         scored = []
         for num, cand in pool.items():
-            cost, shift = _cm.match(q, cand)
+            cost, shift, _at = _cm.match(q, cand)
             if cost is not None:
                 scored.append((cost, num, shift))
         scored.sort()
