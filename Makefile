@@ -3,6 +3,16 @@ ifeq (, $(PYTHON))
     $(error "PYTHON=$(PYTHON) not found in $(PATH)")
 endif
 
+# librosa -> numba -> llvmlite, which has no Python 3.14 wheels. The alignment venv is
+# therefore pinned to 3.13, independently of whatever `python3` happens to be.
+PYTHON313=$(shell command -v python3.13)
+
+# Machine-specific paths (NETRADIO_SOURCES_DIR, ...). Gitignored, since this repo is PUBLIC.
+# Written as `VAR=value` so it is both make-includable and shell-sourceable. Optional: the
+# leading `-` means "don't fail if it isn't there".
+-include .env_vars
+export NETRADIO_SOURCES_DIR
+
 #########################################
 ##### DEVELOPMENT ENVIRONMENT SETUP #####
 #########################################
@@ -27,6 +37,41 @@ dep: pip
 
 pip:
 	.env/bin/pip install --upgrade pip
+
+#########################################
+#####   ALIGNMENT ENGINE VENV (.venv) ###
+#########################################
+# The core engine (groundtruth/align/skips/solve) needs only numpy + ffmpeg and runs under
+# the general `.env` venv. But the original-track <-> mix alignment (track_mix's chroma+DTW,
+# and the origNNN spans in `streamalign hints`) needs librosa, whose numba/llvmlite chain has
+# no Python 3.14 wheels. So librosa lives in a SEPARATE, 3.13-pinned venv: `.venv`.
+#
+# Two venvs, deliberately: `.env` tracks whatever python3 is current; `.venv` stays on 3.13
+# for as long as numba needs it. Run the librosa-backed tools with .venv/bin/python.
+
+align-env:            ## create .venv (python3.13) + install the alignment engine deps (librosa)
+ifeq (, $(PYTHON313))
+	$(error "python3.13 not found — librosa's numba/llvmlite have no 3.14 wheels. brew install python@3.13")
+endif
+	rm -rf .venv
+	$(PYTHON313) -m venv .venv
+	.venv/bin/pip install --upgrade pip
+	.venv/bin/pip install -r requirements-streamalign.txt
+	@echo
+	@echo "alignment venv ready. Run the librosa-backed tools with .venv/bin/python, e.g.:"
+	@echo "  PYTHONPATH=scripts .venv/bin/python -m streamalign hints d356-375"
+
+align-check:          ## verify the alignment venv can do the librosa-backed work
+	@.venv/bin/python -c "import librosa, numpy; print('librosa', librosa.__version__, '/ numpy', numpy.__version__)" \
+	  || { echo "alignment venv missing/incomplete — run: make align-env"; exit 1; }
+	@test -n "$(NETRADIO_SOURCES_DIR)" \
+	  || { echo "NETRADIO_SOURCES_DIR unset — set it in .env_vars (see .env_vars.example)"; exit 1; }
+	@test -d "$(NETRADIO_SOURCES_DIR)" \
+	  && echo "originals OK: $(NETRADIO_SOURCES_DIR)" \
+	  || { echo "NETRADIO_SOURCES_DIR does not resolve: $(NETRADIO_SOURCES_DIR)"; exit 1; }
+
+test:                 ## run the test suite
+	.env/bin/python -m pytest tests/ -q
 
 #########################################
 #####          TRACKLIST            #####
