@@ -171,7 +171,16 @@ def enumerate_channel(url, limit=None):
     return [u.strip() for u in out.stdout.split("\n") if u.strip().startswith("http")]
 
 
+# Tim's own channel publishes the Mystery Track clips themselves. A harvester that "finds" one
+# there has found nothing -- it has rediscovered its own question, and would report a triumphant
+# 0.00 match. Never queue it.
+EXCLUDE_CHANNELS = ("UCuYTatE2k5dOV8J8Bi3rK0g",)   # Tim Hunter
+
+
 def add_to_queue(urls, source):
+    if any(c in (source or "") for c in EXCLUDE_CHANNELS):
+        print("refusing to queue %s -- it publishes the mystery clips themselves" % source)
+        return 0
     q = _load(QUEUE, {"pending": [], "done": []})
     seen = set(q["pending"]) | set(q["done"])
     fresh = [u for u in urls if u not in seen]
