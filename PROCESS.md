@@ -67,22 +67,56 @@ neighbour** too, if there is one.
 
 ### 2. Ask the engine what it thinks (hints)
 
+> **This is a script, not an AI session.** You run it yourself, once per capture, and it is
+> deterministic — same inputs, same hints. Nothing in this loop needs an LLM. (One was used to
+> *write* the engine; none is needed to *run* it.)
+
 Before labelling, get the engine's opinion as a **separate label track** you can accept,
 ignore, or argue with:
 
 ```bash
-PYTHONPATH=scripts python3 -m streamalign hints <stem>
+make align-env        # ONCE per machine: the librosa venv + NETRADIO_SOURCES_DIR (see below)
+
+set -a && . ./.env_vars && set +a
+PYTHONPATH=scripts .venv/bin/python -m streamalign hints <stem>
 # -> labels/<stem>.hints.tsv    Audacity: File ▸ Import ▸ Labels
 ```
 
-It proposes a `file start sync:` and `file end:`, the measured offset to each overlapping
-neighbour, skip candidates — and, wherever it cannot corroborate something, an explicit
-`note QUESTION:` explaining *why*. Every row carries its confidence spelled out
-(`confidence 9.8/10`) and is marked `HINT`.
+You get, in one file:
+
+- a proposed **`file start sync:`** and **`file end:`**;
+- the **measured offset to each overlapping neighbour** (and skip candidates found by walking
+  that overlap) — or, if the file is *exactly joined* and there is no overlap, a question
+  saying so plainly rather than a guess;
+- **what the [1998/2017 notes](./tracklist-2017.txt) say plays here** — each track's start, in
+  this file's local time, by name;
+- **sync-anchor candidates**: instants where one original plays *alone* in the mix, giving both
+  the moment in the mix **and** the matching moment inside the record — a ready-made
+  `track sync: A` / `origNNN sync: A` pair (see step 9);
+- and a **`note QUESTION:`** wherever it cannot corroborate something, explaining *why*.
+
+Every row carries its confidence spelled out (`confidence 9.8/10`) and is marked `HINT`.
 
 **Hints never touch your labels.** They are written to `<stem>.hints.tsv`, which is not a
 `.labels.tsv` and is invisible to the solve, the build and the sheet. They only ever *add*:
 import the track, copy across what you accept, delete the rest.
+
+**Plain `python3` works too**, but without the librosa venv you get everything *except* the
+sync anchors (they need chroma). `make align-check` tells you whether you're set up for them.
+
+#### Where the hints come from — and so, when they get better
+
+The engine has exactly three sources, and knowing which is which tells you how far to trust a
+row:
+
+| Source | Gives you | Trust |
+|---|---|---|
+| **The audio** (cross-correlation vs an *overlapping* capture) | offsets, skips | **measured** — the strongest thing here |
+| **Your own hand labels** (the previous file's `file_<next>:` link, its last open track) | the anchor, what's still playing at local 0.0 | only as good as that label |
+| **The 1998/2017 notes** | which tracks play, roughly where; the prior that makes the anchor search possible | hand-typed, approximate — always confirm |
+
+So: **the hints for file N+1 get better once you finish file N**, because two of those three
+sources are *your own work*. That's the loop — no re-analysis needed, just re-run the script.
 
 ### 3. Place the file
 
@@ -155,6 +189,44 @@ PYTHONPATH=scripts python3 -m streamalign starter <this-stem>
 
 For an unidentified span: AcoustID-fingerprint it, or match it against your originals by ear.
 Add `ID: <Artist> - <Title>` to the label. An unnamed but placed track is `Mystery Track N`.
+
+**The Mystery Tracks.** Identification by AcoustID **does not work on this material, and
+cannot** — see [`Archive/LESSON_acoustid_stream.md`](./Archive/LESSON_acoustid_stream.md). The
+same record taken from the 1998 broadcast has a bitwise fingerprint similarity of **0.511** to
+its own clean original, and 0.50 is random noise: the ISDN/RealAudio compression and the DJ's EQ
+destroy exactly the detail a fingerprint keys on. (Measured with controls — the *clean* file of
+that record matches at 0.99, and 65 of 89 originals are in AcoustID. The database is fine; the
+stream audio is not.)
+
+**Chroma, however, survives what fingerprints do not** — which is why the alignment engine works
+at all. So identification is a *matching* problem, not a *lookup* problem:
+
+```bash
+PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --all-mystery
+PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --pool ~/dnb-candidates
+```
+
+Validated: given 90 s of the **stream** where Dead Calm's *Urban Style* plays, matched against
+78 originals, the true record ranks **#1 (cost 0.0337)** with the runner-up at **0.1017**. The
+gate refuses anything that isn't both absolutely good and decisively ahead, because a bland file
+that matches everything is matching nothing.
+
+> **The catch is the whole game: it can only find what is IN THE POOL.** The Mystery Tracks are
+> by definition records nobody recognised, so they are not among the known originals — run it
+> today and every one scores at the non-match floor. **The remaining work is not matching, it is
+> ACQUIRING CANDIDATES**: era-appropriate 1997/98 D&B, the labels and artists this DJ was
+> playing, leads from `tracklist-2017.txt`. Point `--pool` at them and the matcher will tell you,
+> reliably, whether the mystery is among them.
+
+And **verify the originals themselves** — a mislabelled source poisons every alignment and ID
+downstream. This one *does* use AcoustID, because clean files fingerprint fine:
+
+```bash
+PYTHONPATH=scripts .env/bin/python scripts/acoustid_check.py --mismatch
+```
+
+It caught two on its first run: `013-DJ Addiction - Senses.mp3` is really Blame's *J-Walkin'*
+(the same record as `021`), and `022-Castillo - Junkle I.flac` is by *Callisto*.
 
 ### 9. Align the originals
 
@@ -298,3 +370,47 @@ Worth knowing, so you don't wait for help that isn't coming:
 | `<stem>.auto.labels.tsv` | the engine (`tail-solve --emit`) | regenerable; consumed by solve/build |
 | `<stem>.starter.labels.tsv` | `streamalign starter` | seed only; excluded from import/solve/build |
 | `<stem>.hints.tsv` | `streamalign hints` | **suggestions + questions**; invisible to everything, yours to accept or delete |
+
+---
+
+## Addendum — does the record's speed *drift* while it plays?
+
+Short answer: **no. The rate is constant within a track, and different for every track.**
+
+This matters because the whole A/B anchor scheme assumes it. If the record's speed wandered
+while it played, two anchors and a straight line between them would be a fiction, and you would
+have to chase the rate continuously.
+
+**Measured, not assumed.** The chroma/DTW warp path *is* instantaneous mix-time vs
+original-time, so if the rate drifted the path would visibly curve. Fitting a straight line to
+it, across seven tracks that have originals on disk:
+
+| track | R² (linear fit) | residual | rate | curvature |
+|---|---|---|---|---|
+| 7 | 1.00000 | 0.06 s | 0.9961 | 0.0001 |
+| 11 | 1.00000 | 0.05 s | 1.0022 | 0.0016 |
+| 12 | 1.00000 | 0.08 s | 1.0008 | 0.0009 |
+| 16 | 1.00000 | 0.06 s | 1.0113 | 0.0002 |
+| 13 | 0.99999 | 0.36 s | 1.0030 | 0.0003 |
+| 10 | 0.99994 | 1.13 s | 1.0075 | 0.0150 |
+| **6** | 0.99942 | 0.41 s | 1.0123 | **0.1247** |
+
+Six of the seven are dead straight — a residual of 50–360 ms across an entire track, and
+essentially zero curvature. That is a **pitch fader set once and left alone**, which is exactly
+what beatmatching a record into a mix requires.
+
+But the rates *differ between* tracks (0.9961 … 1.0123). The DJ picks a pitch **per record**.
+
+**Consequences:**
+
+- **Two anchors per track is the right model, not an approximation.** Seat A early and B late,
+  let `(trackB − trackA) / (origB − origA)` do the rest. Chasing a per-moment rate would be
+  chasing noise.
+- **A rate belongs to a track, never to a file.** Do not carry one across a track boundary.
+- **Every measured rate sits within ~1.3% of 1.0.** So a pair implying anything far from unity
+  has not found the record — which is why the engine gates its own candidates on exactly that
+  (see `RATE_PLAUSIBLE`).
+
+**The one caveat:** track 6 shows real curvature (0.12) *and* the weakest fit of the set. That
+is either a DJ riding the fader, or — more likely — a poor alignment. One outlier with the
+worst R² is not evidence of drift. If it matters, listen to it.

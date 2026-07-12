@@ -36,6 +36,8 @@ help in summarizing and cross-referencing the information.
 * [scripts](./scripts) -- misc. helper scripts mostly oriented around Audacity 2.1.x metadata files
 * [STREAM_PROVENANCE.md](./STREAM_PROVENANCE.md) -- how the capture files came to exist (RealAudio loop -> `/dev/audio` dump -> hex -> wav/au), why they overlap and contain skips, and what "master time" actually is
 * [scripts/streamalign/](./scripts/streamalign) -- the Stream Alignment Engine; see its [README](./scripts/streamalign/README.md) (status) and [WALKTHROUGH](./scripts/streamalign/WALKTHROUGH.md) (how the functions compose)
+* [docs/SCRIPTS.md](./docs/SCRIPTS.md) -- **every script**: purpose, when to run it, which python it needs
+* [FINDING_MYSTERY_TRACKS.md](./FINDING_MYSTERY_TRACKS.md) -- **identifying the unnamed tracks**: where to publish the excerpts and ask (Dogs on Acid, r/AtmosphericDnB, Discogs, tuneID), the chroma-matching method that works offline, and every dead end already tried
 * [PROCESS.md](./PROCESS.md) -- **how the analysis is actually done**: the per-recording loop (manual + engine), the by-ear technique for seating an original against the mix, and what the engine can/cannot do
 * [HOWTO.md](./HOWTO.md) -- howto / FAQ: **which tool to run, when, and why** (notate → build → serve → publish)
 
@@ -170,7 +172,7 @@ What I'd like to accomplish
 * [ ] Determine complete tracklist
 * [ ] Build playlist of tracks from the stream (as much as possible) on YouTube, Apple Music, and Soundcloud
 * [ ] Compile definitive recording of stream, perhaps in five 1-2 hour chunks
-* [ ] Publish recording on YouTube and Soundcloud -- it's not very high quality (16kHz, originally [RealAudio](https://en.wikipedia.org/wiki/RealAudio)) so I doubt I'll be chased for copyright claims, and maybe the original DJ will appear to tell us more about the mix.
+* [ ] Publish identification excerpts on YouTube and Soundcloud to ask the community what the unidentified records are; maybe the original DJ will appear to tell us more about the mix.
 
 It's also slightly tempting to think about remaking the mix with better quality original sources, but that's probably a step too far.
 

@@ -1620,7 +1620,9 @@
         "d-14Nov10-f.au"
       ],
       "title": "Secrets",
-      "use_logo": false
+      "use_logo": false,
+      "id_verified": true,
+      "id_note": "Verified by chroma against the original: 0.0040 (a true match runs 0.004-0.03 on a clean extract). Note it also scores 0.031 against every Remember the Roller remix -- far below the 0.095 non-match median, so there is a real harmonic relationship between the two records (shared break or sample). It is NOT Remember the Roller; John B wins by 8x. Tim's ear picked up something real."
     },
     "56": {
       "album": "grooverider-presents-the-prototype-years",
@@ -1980,15 +1982,20 @@
       "anchor": "Mystery5",
       "artwork": null,
       "fields": {},
-      "kind": "mystery",
       "master_begin_seconds": 22847.0,
       "master_end_seconds": 23117.0,
       "source": "rough",
       "source_files": [
         "d376-395.wav"
       ],
-      "title": "Mystery Track 5",
-      "use_logo": false
+      "title": "Solar Feelings (J Majik Remix)",
+      "use_logo": false,
+      "artist": "Jacob's Optical Stairway",
+      "id_source": "r/AtmosphericDnB track-ID thread (2026-07); confirmed by ear + chroma",
+      "discogs_url": "https://www.discogs.com/master/20458-Jacobs-Optical-Stairway-Solar-Feelings",
+      "youtube_url": "https://youtu.be/HhvbwFebyCM",
+      "id_verified": true,
+      "id_note": "Human ID, since CONFIRMED by audio. The chroma matcher initially said no (cost 0.069, non-match) -- it was wrong, and the way it was wrong was worth fixing: chroma is invariant to timbre but NOT to pitch, and this copy sits a semitone away from the mix, which rotates all twelve chroma bins. Transposed by -1 semitone it scores 0.0498 against a control of 0.1137 -- a match. Matchers are now transposition-aware (streamalign/chroma_match.py). The record on air is pitched relative to the YouTube upload."
     },
     "75": {
       "anchor": "SeaGoldie",

@@ -148,11 +148,21 @@ def row(track, albums):
         year = album_year(alb)
         cell += "<br>_%s_" % (("%s — %s" % (name, year)) if year else name)
 
-    return "| %s | %s | %s |" % (fmt_time(track.get("master_begin_seconds")), cover, cell)
+    # The "#" cell carries an anchor so a track can be DEEP-LINKED from anywhere -- e.g. a
+    # track-ID post can point at the exact position in the mix:
+    #   .../blob/main/TRACKLIST.md#t74
+    # That is the whole reason the track number is surfaced at all: on its own it means nothing
+    # to a reader, but it is the only stable handle this table has.
+    num = track.get("number") or track.get("track") or ""
+    anchor = ('<a id="t%s"></a>**%s**' % (num, num)) if num else ""
+    return "| %s | %s | %s | %s |" % (
+        anchor, fmt_time(track.get("master_begin_seconds")), cover, cell)
 
 
 def render(meta):
     tracks, albums = meta["tracks"], meta.get("albums", {})
+    for key, entry in tracks.items():          # the dict key IS the track number
+        entry.setdefault("number", key)
     ordered = sorted(tracks.values(),
                      key=lambda t: t.get("master_begin_seconds") if
                      t.get("master_begin_seconds") is not None else 1e18)
@@ -165,13 +175,15 @@ def render(meta):
         "> The identified tracks of the mix, in master-timeline order. Auto-generated from "
         "`track-metadata.json` by `scripts/render_tracklist.py` — do not edit by hand. "
         "Each track shows a listen link (Apple Music / Spotify / YouTube) and reference links "
-        "(Discogs / MusicBrainz). Cover art + links are album-first (a track inherits its album's).",
+        "(Discogs / MusicBrainz). Cover art + links are album-first (a track inherits its album's). "
+          "**Each track number is a link target** — `TRACKLIST.md#t74` jumps straight to track 74, "
+          "so a track-ID post can point at the exact position in the mix.",
         "",
         "**%d tracks** · %d with cover art · %d with a listen link · generated %s"
         % (len(ordered), arted, listenable, now),
         "",
-        "| Time | Cover | Track |",
-        "|------|-------|-------|",
+        "| # | Time | Cover | Track |",
+        "|---|------|-------|-------|",
     ]
     lines += [row(t, albums) for t in ordered]
     lines.append("")

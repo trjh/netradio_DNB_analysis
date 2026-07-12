@@ -292,6 +292,9 @@ def build_hints(stem, labels_dir=None, audio_dir=None, decim=8):
     # --- the 1998/2017 notes ------------------------------------------------------------
     rows.extend(_tracklist_rows(stem, duration, master, diag, audio_dir))
 
+    # --- sync anchors: where a single original plays alone --------------------------------
+    rows.extend(_anchor_rows(stem, duration, diag, audio_dir))
+
     # --- original-track spans (not offered -- see below) ---------------------------------
     rows.extend(_orig_span_rows(stem, diag))
 
@@ -356,6 +359,182 @@ def _tracklist_rows(stem, duration, master, diag, audio_dir=None):
 
 def _hms(seconds):
     return "%d:%05.2f" % (int(seconds // 60), seconds % 60)
+
+
+_WORD = re.compile(r"[a-z0-9]+")
+
+
+def _tokens(text):
+    """Comparable word set. Drops the noise words that differ between the two sources."""
+    stop = {"the", "a", "an", "original", "mix", "remix", "feat", "ft", "vs", "and"}
+    return {w for w in _WORD.findall((text or "").lower()) if w not in stop} - {""}
+
+
+def resolve_track_number(name, master_s, tracks_meta, tolerance_s=90.0):
+    """Which track number is the 1998/2017 notes' `name` at `master_s`? -> int or None.
+
+    Two independent keys, and BOTH must agree:
+
+      * **master time** -- `track-metadata.json` carries each track's `master_begin_seconds`,
+        and the notes carry their own master time. On the tracks checked these agree to within
+        a second or two (two of them exactly), so proximity alone almost settles it.
+      * **the name** -- as a check, because proximity alone would happily pick the neighbour of
+        a track that is merely missing.
+
+    The name check is order-agnostic on purpose: the notes are hand-typed and inconsistent --
+    "Hypnotising / PFM" is Title / Artist, while "Fokus / On Line (Original Mix)" is
+    Artist / Title. Comparing word SETS against artist+title together sidesteps the ambiguity
+    instead of guessing a rule that the data does not actually follow.
+
+    Returns None rather than a guess when the two keys disagree: a wrong track number would
+    point the anchor search at the wrong record, and a confident anchor on the wrong record is
+    exactly the failure this whole feature is trying not to repeat.
+    """
+    want = _tokens(name)
+    best, best_score = None, 0.0
+    for num, entry in (tracks_meta or {}).items():
+        if not str(num).isdigit():
+            continue
+        begin = entry.get("master_begin_seconds")
+        if begin is None or abs(begin - master_s) > tolerance_s:
+            continue
+        have = _tokens(entry.get("artist")) | _tokens(entry.get("title"))
+        if not want or not have:
+            continue
+        overlap = len(want & have) / float(len(want))
+        if overlap > best_score:
+            best, best_score = int(num), overlap
+    # Half the notes' words must appear in the metadata's artist+title. "Mystery Track 4"
+    # matches its metadata twin; a mere neighbour in time does not.
+    return best if best_score >= 0.5 else None
+
+
+def _anchor_rows(stem, duration, diag, audio_dir=None):
+    """Candidate sync anchors: instants where one original plays ALONE in the mix.
+
+    This is what the labeller actually needs, and it is deliberately NOT a track start/end: in
+    a DJ mix records are blended, so there is no frame at which one "begins" and picking one is
+    subjective. A solo instant is objective, and it is what an A/B anchor is made of.
+
+    Each candidate names BOTH times -- the moment in the mix and the matching moment inside the
+    original -- so it can be written straight down as a `track sync:` / `origNNN sync:` pair.
+
+    The search is bounded by the 1998/2017 notes (which say roughly where each track sits).
+    That bound is the whole trick: blind, the search is ambiguous and wrong more often than
+    right (see Archive/LESSON_locate_original.md).
+    """
+    from . import tracklist2017 as _tl
+    note = _tl.for_stem(stem, audio_dir=audio_dir)
+    if not note or not note.get("tracks"):
+        return []
+
+    missing = []
+    try:
+        import librosa  # noqa: F401
+    except ImportError:
+        missing.append("librosa is not installed (run `make align-env`)")
+    sources = os.environ.get("NETRADIO_SOURCES_DIR")
+    if not sources or not os.path.isdir(sources):
+        missing.append("the originals are not reachable (set NETRADIO_SOURCES_DIR in .env_vars)")
+    if missing:
+        diag["anchors_blocked"] = missing
+        return [_hint(0.0, 0.0,
+                      "no sync-anchor candidates: %s. With those in place the engine can "
+                      "propose the instants where each original plays ALONE in the mix -- the "
+                      "A/B anchor points -- for the tracks the 1998/2017 notes place here."
+                      % "; and ".join(missing))]
+
+    from . import track_mix as _tm
+    meta = _load_track_metadata()
+    capture = _audio.load_audio(stem, audio_dir=audio_dir)
+
+    entries = sorted(note["tracks"], key=lambda t: t["local_s"])
+    rows = []
+    for index, track in enumerate(entries):
+        num = resolve_track_number(track["name"], track["master_s"], meta)
+        if num is None:
+            rows.append(_question(
+                track["local_s"], track["local_s"],
+                "could not match '%s' to a track number in track-metadata.json, so no anchor "
+                "search was run for it. Which track is it?" % track["name"]))
+            diag["questions"] += 1
+            continue
+        orig_path = _tm.find_original(num, sources)
+        if not orig_path:
+            rows.append(_hint(
+                track["local_s"], track["local_s"],
+                "no original on disk for track %03d (%s), so no anchor search. If you have the "
+                "record, drop it in the originals dir as `%03d-...` and re-run."
+                % (num, track["name"], num)))
+            continue
+
+        # Bound the search: from this track's start to the next one's (plus a little slack),
+        # clamped to the file. This is the prior that makes the search work at all.
+        window_start = max(0.0, track["local_s"] - 15.0)
+        window_end = (entries[index + 1]["local_s"] + 15.0
+                      if index + 1 < len(entries) else duration)
+        window_end = min(duration, window_end)
+
+        orig = _audio.load_audio(orig_path, audio_dir=audio_dir)
+        anchors = _tm.solo_anchors(orig, capture, window_start, window_end, top=3)
+        if not anchors:
+            rows.append(_question(
+                track["local_s"], track["local_s"],
+                "searched %s-%s for a solo passage of track %03d (%s) and found none clear "
+                "enough to offer. Is it really playing here?"
+                % (_hms(window_start), _hms(window_end), num, track["name"])))
+            diag["questions"] += 1
+            continue
+
+        # The free sanity check: a DJ pitches a record a few percent, not tens of percent. An
+        # anchor pair implying a rate far from 1.0 has matched noise, and says so by its own
+        # absurdity. This is a constraint INDEPENDENT of the machinery that produced the
+        # answer -- unlike a confidence score, which cannot catch a confidently wrong match.
+        rate = _tm.implied_rate(anchors)
+        lo, hi = _tm.RATE_PLAUSIBLE
+        if rate is not None and not (lo <= rate <= hi):
+            rows.append(_question(
+                track["local_s"], track["local_s"],
+                "found candidate anchors for track %03d (%s) but they imply a mix/original "
+                "rate of %.2f -- a DJ pitches a record by a few percent, not by that, so these "
+                "have matched noise rather than the record. DISCARDED; find them by ear."
+                % (num, track["name"], rate)))
+            diag["questions"] += 1
+            diag["anchors_gated"] = diag.get("anchors_gated", 0) + 1
+            continue
+
+        # A is the EARLY anchor and B the late one -- that ordering is not cosmetic: the speed
+        # calc is (trackB - trackA) / (origB - origA), so swapping them inverts the sense of
+        # the rate. `solo_anchors` returns them best-scoring first, so sort by time here.
+        pair = sorted(anchors[:2], key=lambda a: a["mix_s"])
+        for letter, anchor in zip("AB", pair):
+            rows.append(_hint(
+                anchor["mix_s"], anchor["mix_s"],
+                "SYNC ANCHOR %s for track %03d (%s): this instant in the mix is %s inside the "
+                "original (%.0fs solo passage, %s). Label `track sync: %s` here and "
+                "`orig%03d sync: %s` at %s in the original."
+                % (letter, num, track["name"], _hms(anchor["orig_s"]), anchor["run_s"],
+                   _conf(anchor["score"]), letter, num, letter, _hms(anchor["orig_s"]))))
+        diag["anchors"] = diag.get("anchors", 0) + min(2, len(anchors))
+        if rate is not None and len(anchors) >= 2:
+            rows.append(_hint(
+                anchors[0]["mix_s"], anchors[0]["mix_s"],
+                "...those two anchors imply a mix/original rate of %.4f (the sheet's "
+                "`(trackB-trackA)/(origB-origA)`). Plausible for a DJ pitch; confirm by ear."
+                % rate))
+    return rows
+
+
+def _load_track_metadata(path=None):
+    """The tracks dict from track-metadata.json, or {}."""
+    import json
+    path = path or os.path.join(_gt.REPO_ROOT, "track-metadata.json")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    return data.get("tracks", data)
 
 
 def _orig_span_rows(stem, diag):

@@ -295,8 +295,12 @@ class LiveTailTests(unittest.TestCase):
         # a numbering gap at 68 and a hole in the timeline.
         self.assertEqual(self.tr["68"]["source"], "precise")
         self.assertEqual(self.tr["68"]["kind"], "mystery")
-        # A still-rough Mystery Track is likewise tagged.
-        self.assertEqual(self.tr["74"]["kind"], "mystery")
+        # A still-rough Mystery Track is likewise tagged. (76 = Mystery Track 6.)
+        # This used to assert track 74, which WAS Mystery Track 5 -- until it was identified
+        # (Jacob's Optical Stairway, "Solar Feelings", J Majik mix) from the r/AtmosphericDnB
+        # thread. Pinning a specific track as "forever unnamed" is a hostage to fortune: solve
+        # it and the test breaks for the best possible reason.
+        self.assertEqual(self.tr["76"]["kind"], "mystery")
         # An identified track — precise (69) or rough (70) — isn't a mystery.
         self.assertNotIn("kind", self.tr["69"])
         self.assertNotIn("kind", self.tr["70"])
