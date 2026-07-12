@@ -3,8 +3,12 @@
 > **What this is:** a plain-language, question→answer reference for *when to run each tool*
 > in this repo, so the pipeline order is reproducible and nothing sits unused. It consolidates
 > the player repo's `ROADMAP.md` §7 "Tool run-triggers (F4)" into the analysis repo, next to
-> the code. For *how* a tool works internally, see its own `--help`, the
-> [README](./README.md) (Process + Label grammar), and `scripts/streamalign/`
+> the code.
+> **For the process itself** — the per-recording loop, the by-ear technique, and what the
+> engine can and cannot do — see **[PROCESS.md](./PROCESS.md)**. This doc answers *"which tool
+> now?"*; that one answers *"how is this done?"*.
+> For *how* a tool works internally, see its own `--help`, the
+> [label grammar](./README.md#label-grammar), and `scripts/streamalign/`
 > [README](./scripts/streamalign/README.md) / [WALKTHROUGH](./scripts/streamalign/WALKTHROUGH.md).
 
 ## The pipeline in one breath
