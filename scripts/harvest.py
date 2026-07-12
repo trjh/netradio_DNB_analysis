@@ -276,8 +276,8 @@ def queries():
 def pick_next(pending, state):
     """Next URL, ROTATING hosts so no single site ever sees a burst.
 
-    This is the core politeness move: consecutive fetches go to DIFFERENT hosts, so even a fast
-    run looks, from any one site's perspective, like an occasional visitor.
+    This is the core load-spreading move: consecutive fetches go to DIFFERENT hosts, so no single
+    host ever carries a run of back-to-back requests, even during a fast stretch.
     """
     now = time.time()
     last = state.get("hosts", {})
@@ -408,7 +408,7 @@ def run(args):
                 state["kept"] += 1
             hit = {"at": _now(), "mystery": num, "cost": round(cost, 4),
                    "semitones": shift, "at_s": round(at or 0, 1), "url": url,
-                   "url": url, "audio": excerpt,
+                   "audio": excerpt,
                    "verdict": "MATCH" if cost <= MATCH_COST else "near"}
             state["matches"].append(hit)
 

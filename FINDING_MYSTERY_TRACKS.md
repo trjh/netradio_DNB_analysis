@@ -197,7 +197,7 @@ only way this scales.
 
 **Be a good citizen.** Rate-limit, back off hard on any refusal, and stop when told to. We do
 **not** crawl -- every URL is one a human or a catalogue lookup put in the queue deliberately, and
-the signature cache means each track is looked at once, ever. The signature cache means each track is fetched **once, ever** —
+the signature cache means each track is fetched **once, ever** —
 that is the point of keeping it.
 
 ---
