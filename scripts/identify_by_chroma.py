@@ -71,17 +71,17 @@ def chroma(samples, sr=None):
 
 
 def cost(query_chroma, cand_chroma):
-    """Mean per-frame subsequence-DTW cost of finding the query inside the candidate.
+    """Best subsequence-DTW cost over TRANSPOSITIONS -> (cost, semitones).
 
-    Subsequence DTW, because the query is an excerpt of the record, not the whole of it -- and
-    DTW rather than a fixed lag because the DJ beatmatches, so the record plays at the mix's
-    speed and drifts out of any rigid alignment within a minute.
+    Subsequence DTW because the query is an excerpt, and DTW rather than a fixed lag because the
+    DJ beatmatches. And over transpositions because chroma is invariant to timbre but NOT to
+    pitch: a semitone shift rotates all twelve bins, and a pitched copy then reads as unrelated.
+    Mystery Track 5 was missed exactly that way -- see streamalign/chroma_match.py.
     """
-    import librosa
+    from streamalign import chroma_match as _cm
     if cand_chroma.shape[1] < query_chroma.shape[1]:
-        return None
-    d, wp = librosa.sequence.dtw(X=query_chroma, Y=cand_chroma, subseq=True, metric="cosine")
-    return float(d[-1, wp[0][1]]) / len(wp)
+        return None, None
+    return _cm.match(query_chroma, cand_chroma)
 
 
 def load_pool(pool_dir, exclude_mystery=True):
@@ -106,9 +106,9 @@ def identify(query_path, pool, top=5):
     q = chroma(samples)
     scored = []
     for name, c in pool:
-        value = cost(q, c)
+        value, shift = cost(q, c)
         if value is not None:
-            scored.append((value, name))
+            scored.append((value, name, shift))
     scored.sort()
     if not scored:
         return None, []
@@ -116,7 +116,8 @@ def identify(query_path, pool, top=5):
     runner = scored[1][0] if len(scored) > 1 else 1.0
     verdict = None
     if best[0] <= MAX_COST and best[0] <= MAX_RATIO * runner:
-        verdict = {"name": best[1], "cost": best[0], "runner_up": runner}
+        verdict = {"name": best[1], "cost": best[0], "runner_up": runner,
+                   "shift": best[2]}
     return verdict, scored[:top]
 
 
@@ -162,16 +163,18 @@ def main(argv=None):
         verdict, ranking = identify(path, pool)
         print("  %s" % os.path.basename(path))
         if verdict:
+            from streamalign import chroma_match as _cm
             print("    ==> MATCH: %s" % verdict["name"])
-            print("        cost %.4f vs next-best %.4f -- confirm by ear before believing it."
-                  % (verdict["cost"], verdict["runner_up"]))
+            print("        cost %.4f vs next-best %.4f  [%s] -- confirm by ear."
+                  % (verdict["cost"], verdict["runner_up"],
+                     _cm.describe_shift(verdict.get("shift"))))
         else:
             print("    ==> no match in this pool.")
             if ranking:
                 print("        (nearest was %.4f -- a true match scores ~0.034; the non-match "
                       "floor is ~0.10)" % ranking[0][0])
         if args.show_all or not verdict:
-            for value, name in ranking:
+            for value, name, _shift in ranking:
                 print("        %.4f  %s" % (value, name[:56]))
         print()
 

@@ -243,7 +243,35 @@ collection. (Run anyway as a control — every mystery scored at the non-match f
 There isn't one. AcoustID's 89M fingerprints are open and downloadable, but they are *Chromaprint
 hashes* — the thing we've proven useless here. **The signature pool has to be ours.**
 
-### ✓ Chroma + subsequence-DTW against a candidate pool
+### ⚠️ Chroma matching MUST search transpositions — or it reports false negatives
+
+**Chroma is invariant to timbre, not to pitch.** Shift a recording by a semitone and all twelve
+chroma bins **rotate**, so a naive matcher compares C major against C♯ major, sees nothing in
+common, and returns a confident **no match**.
+
+This is not theoretical. **Mystery Track 5 was missed exactly this way.** Tim identified it by
+ear as Jacob's Optical Stairway — *Solar Feelings* (J Majik mix); the matcher scored it 0.069
+(non-match) and I nearly wrote the ID off. The record was there all along, one semitone away:
+
+| transposition | vs the record | vs a control |
+|---|---|---|
+| **+0** (what the matcher did) | 0.0689 — *"no match"* | 0.0848 |
+| **−1 semitone** | **0.0498 — match** | 0.1137 |
+
+Uploads are pitch-nudged routinely (to dodge Content ID, or a turntable ran fast), so **any
+candidate sourced from YouTube is likely transposed.** A search that doesn't try all twelve
+rotations will silently miss real matches — and a false negative is the worst failure a search
+can have, because *it looks exactly like a clean negative.*
+
+Fixed in `streamalign/chroma_match.py`, which all matchers now use. It stays fast via the
+**Optimal Transposition Index** — the mean chroma vector encodes the key, so ranking the twelve
+rotations costs a 12×12 dot product and only the best few pay for a DTW.
+
+**The lesson, which is bigger than this bug:** the human ear beat the machine, and the machine
+was *confidently* wrong. When a person who was there says yes and the tool says no, **suspect
+the tool.**
+
+### ✓ Chroma + subsequence-DTW against a candidate pool (transposition-aware)
 
 Works (see §2). Bounded only by what's in the pool.
 

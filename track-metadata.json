@@ -1990,11 +1990,11 @@
       "title": "Solar Feelings (J Majik Remix)",
       "use_logo": false,
       "artist": "Jacob's Optical Stairway",
-      "id_source": "r/AtmosphericDnB track-ID thread (2026-07) -- human ID, not yet verified by audio",
+      "id_source": "r/AtmosphericDnB track-ID thread (2026-07); confirmed by ear + chroma",
       "discogs_url": "https://www.discogs.com/master/20458-Jacobs-Optical-Stairway-Solar-Feelings",
       "youtube_url": "https://youtu.be/HhvbwFebyCM",
-      "id_verified": false,
-      "id_note": "Human ID from the Reddit thread. AUDIO DOES NOT YET CONFIRM IT: chroma-DTW of the mix against the YouTube J Majik remix (HhvbwFebyCM, 377s) scores 0.069-0.138 depending on the window, where a true match scores ~0.034 and an unrelated record ~0.09. It IS the best of the four Solar Feelings versions found (the others score 0.11-0.12), but the match degrades AWAY from the blended edges, which is the opposite of a real alignment. Most likely the mix plays a different pressing/edit than that upload. The original still needs acquiring."
+      "id_verified": true,
+      "id_note": "Human ID, since CONFIRMED by audio. The chroma matcher initially said no (cost 0.069, non-match) -- it was wrong, and the way it was wrong was worth fixing: chroma is invariant to timbre but NOT to pitch, and this copy sits a semitone away from the mix, which rotates all twelve chroma bins. Transposed by -1 semitone it scores 0.0498 against a control of 0.1137 -- a match. Matchers are now transposition-aware (streamalign/chroma_match.py). The record on air is pitched relative to the YouTube upload."
     },
     "75": {
       "anchor": "SeaGoldie",

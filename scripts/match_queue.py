@@ -60,11 +60,17 @@ def chroma_of(path, min_seconds=45.0):
 
 
 def cost(q, c):
-    import librosa
+    """Best cost over TRANSPOSITIONS -> (cost, semitones).
+
+    Chroma is invariant to timbre, NOT to pitch: a semitone shift rotates all twelve bins, so a
+    naive comparison holds C major against C# and calls a true match noise. That is exactly how
+    Mystery Track 5 was missed (see streamalign/chroma_match.py). Uploads get pitch-nudged
+    routinely, so this is the common case, not an edge case.
+    """
+    from streamalign import chroma_match as _cm
     if c is None or c.shape[1] < q.shape[1]:
-        return None
-    d, wp = librosa.sequence.dtw(X=q, Y=c, subseq=True, metric="cosine")
-    return float(d[-1, wp[0][1]]) / len(wp)
+        return None, None
+    return _cm.match(q, c)
 
 
 def main():
@@ -132,10 +138,10 @@ def main():
         if c is None:
             continue
         for name, q in queries:
-            v = cost(q, c)
+            v, shift = cost(q, c)
             if v is not None:
                 results[name].append((v, os.path.basename(path),
-                                      (item or {}).get("title") or ""))
+                                      (item or {}).get("title") or "", shift))
         if i % 20 == 0:
             print("# ... %d/%d" % (i, len(todo)), file=out)
 
@@ -143,9 +149,13 @@ def main():
     for name, _ in queries:
         hits = sorted(results[name])[:5]
         print("\n%s:" % name, file=out)
-        for v, f, title in hits:
+        for v, f, title, shift in hits:
             flag = "   <== MATCH" if v <= 0.050 else ("   <-- worth an ear" if v < 0.07 else "")
-            print("   %.4f  %-48s %s%s" % (v, f[:48], title[:30], flag), file=out)
+            key = ""
+            if shift:
+                from streamalign import chroma_match as _cm
+                key = "  [%s]" % _cm.describe_shift(shift)
+            print("   %.4f  %-44s %s%s%s" % (v, f[:44], title[:26], key, flag), file=out)
     print("\n# done", file=out)
 
 
