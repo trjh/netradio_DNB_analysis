@@ -332,3 +332,47 @@ Worth knowing, so you don't wait for help that isn't coming:
 | `<stem>.auto.labels.tsv` | the engine (`tail-solve --emit`) | regenerable; consumed by solve/build |
 | `<stem>.starter.labels.tsv` | `streamalign starter` | seed only; excluded from import/solve/build |
 | `<stem>.hints.tsv` | `streamalign hints` | **suggestions + questions**; invisible to everything, yours to accept or delete |
+
+---
+
+## Addendum — does the record's speed *drift* while it plays?
+
+Short answer: **no. The rate is constant within a track, and different for every track.**
+
+This matters because the whole A/B anchor scheme assumes it. If the record's speed wandered
+while it played, two anchors and a straight line between them would be a fiction, and you would
+have to chase the rate continuously.
+
+**Measured, not assumed.** The chroma/DTW warp path *is* instantaneous mix-time vs
+original-time, so if the rate drifted the path would visibly curve. Fitting a straight line to
+it, across seven tracks that have originals on disk:
+
+| track | R² (linear fit) | residual | rate | curvature |
+|---|---|---|---|---|
+| 7 | 1.00000 | 0.06 s | 0.9961 | 0.0001 |
+| 11 | 1.00000 | 0.05 s | 1.0022 | 0.0016 |
+| 12 | 1.00000 | 0.08 s | 1.0008 | 0.0009 |
+| 16 | 1.00000 | 0.06 s | 1.0113 | 0.0002 |
+| 13 | 0.99999 | 0.36 s | 1.0030 | 0.0003 |
+| 10 | 0.99994 | 1.13 s | 1.0075 | 0.0150 |
+| **6** | 0.99942 | 0.41 s | 1.0123 | **0.1247** |
+
+Six of the seven are dead straight — a residual of 50–360 ms across an entire track, and
+essentially zero curvature. That is a **pitch fader set once and left alone**, which is exactly
+what beatmatching a record into a mix requires.
+
+But the rates *differ between* tracks (0.9961 … 1.0123). The DJ picks a pitch **per record**.
+
+**Consequences:**
+
+- **Two anchors per track is the right model, not an approximation.** Seat A early and B late,
+  let `(trackB − trackA) / (origB − origA)` do the rest. Chasing a per-moment rate would be
+  chasing noise.
+- **A rate belongs to a track, never to a file.** Do not carry one across a track boundary.
+- **Every measured rate sits within ~1.3% of 1.0.** So a pair implying anything far from unity
+  has not found the record — which is why the engine gates its own candidates on exactly that
+  (see `RATE_PLAUSIBLE`).
+
+**The one caveat:** track 6 shows real curvature (0.12) *and* the weakest fit of the set. That
+is either a DJ riding the fader, or — more likely — a poor alignment. One outlier with the
+worst R² is not evidence of drift. If it matters, listen to it.
