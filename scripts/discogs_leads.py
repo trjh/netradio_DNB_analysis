@@ -21,6 +21,7 @@ Rate-limited to Discogs' unauthenticated allowance (~25/min); we sit well under 
 
 import argparse
 import json
+import re
 import os
 import sys
 import time
@@ -86,36 +87,40 @@ def resolve_by_name(artist, title):
     return None, []
 
 
+_DISCOGS = re.compile(r"discogs\.com/(release|master)/(\d+)")
+
+
 def known_releases():
-    """The Discogs releases we already know this DJ played -- from track-metadata.json."""
+    """Every Discogs release/master referenced anywhere in track-metadata.json.
+
+    It is NOT just the tracks: 31 of the 41 Discogs links in that file live under `albums`, and
+    most are /master/ URLs rather than /release/. Reading only `tracks`, and only `/release/`,
+    found FIVE of them -- which is how the first pass reported "3 identified tracks carry a
+    Discogs id" and quietly under-sampled this DJ's taste by an order of magnitude. Walk the whole
+    document and take both kinds.
+    """
     meta = json.load(open(os.path.join(_gt.REPO_ROOT, "track-metadata.json"), encoding="utf-8"))
-    tracks = meta.get("tracks", meta)
-    out = []
-    for num, e in tracks.items():
-        if not str(num).isdigit():
+    out, seen = [], set()
+    for kind, rid in _DISCOGS.findall(json.dumps(meta)):
+        key = (kind, int(rid))
+        if key in seen:
             continue
-        for key in ("discogs_url", "full_page_url"):
-            u = e.get(key) or ""
-            if "discogs.com" in u and "/release/" in u:
-                rid = u.split("/release/")[1].split("-")[0].split("/")[0]
-                if rid.isdigit():
-                    out.append((int(num), int(rid)))
-                    break
-        else:
-            f = (e.get("fields") or {}).get("discogs") or ""
-            if "/release/" in f:
-                rid = f.split("/release/")[1].split("-")[0].split("/")[0]
-                if rid.isdigit():
-                    out.append((int(num), int(rid)))
+        seen.add(key)
+        out.append(key)
     return out
 
 
 def labels_of(releases):
     """{label: count} across the releases we know he played -- his taste, as data."""
     labels = Counter()
-    for num, rid in releases:
-        d = get("/releases/%d" % rid)
+    for kind, rid in releases:
+        d = get("/%ss/%d" % (kind, rid))     # /releases/N or /masters/N
         time.sleep(GAP_S)
+        if kind == "master" and not d.get("_error"):
+            main = d.get("main_release")
+            if main:
+                d = get("/releases/%d" % main)
+                time.sleep(GAP_S)
         if d.get("_error"):
             continue
         for lab in d.get("labels") or []:
@@ -188,7 +193,7 @@ def main():
     print("# %d identified track(s) carry a Discogs release id; resolving the rest by name"
           % len(rel), file=sys.stderr)
     labels = labels_of(rel) + labels_by_name()
-    seen = {rid for _n, rid in rel}
+    seen = {rid for _k, rid in rel}
 
     labels = Counter({k: v for k, v in labels.items() if is_label(k)})
     print("\n# The labels this DJ actually reached for (by count):")
