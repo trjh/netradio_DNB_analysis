@@ -190,29 +190,43 @@ PYTHONPATH=scripts python3 -m streamalign starter <this-stem>
 For an unidentified span: AcoustID-fingerprint it, or match it against your originals by ear.
 Add `ID: <Artist> - <Title>` to the label. An unnamed but placed track is `Mystery Track N`.
 
-**The Mystery Tracks** have a tool, which fingerprints the mix where the record plays *alone*:
+**The Mystery Tracks.** Identification by AcoustID **does not work on this material, and
+cannot** — see [`Archive/LESSON_acoustid_stream.md`](./Archive/LESSON_acoustid_stream.md). The
+same record taken from the 1998 broadcast has a bitwise fingerprint similarity of **0.511** to
+its own clean original, and 0.50 is random noise: the ISDN/RealAudio compression and the DJ's EQ
+destroy exactly the detail a fingerprint keys on. (Measured with controls — the *clean* file of
+that record matches at 0.99, and 65 of 89 originals are in AcoustID. The database is fine; the
+stream audio is not.)
+
+**Chroma, however, survives what fingerprints do not** — which is why the alignment engine works
+at all. So identification is a *matching* problem, not a *lookup* problem:
 
 ```bash
-set -a && . ./.env_vars && set +a      # needs ACOUSTID_DEV_API_KEY
-PYTHONPATH=scripts .env/bin/python scripts/identify_mystery.py --track 68
-PYTHONPATH=scripts .env/bin/python scripts/identify_mystery.py --dry-run   # no network
+PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --all-mystery
+PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --pool ~/dnb-candidates
 ```
 
-It samples the **middle** of each mystery track's span, skipping ~20% at each end: a DJ blends
-a record *in* and *out*, so the middle is where it plays by itself, and a fingerprint of a
-blended passage is worthless. It takes several excerpts, so one bad one doesn't sink the track.
+Validated: given 90 s of the **stream** where Dead Calm's *Urban Style* plays, matched against
+78 originals, the true record ranks **#1 (cost 0.0337)** with the runner-up at **0.1017**. The
+gate refuses anything that isn't both absolutely good and decisively ahead, because a bland file
+that matches everything is matching nothing.
 
-> **Status: it works, and it finds nothing — and those are not the same thing.** The key is
-> accepted and the fingerprints are sound, but AcoustID returns **zero results** for this
-> material, *including for the clean originals whose names we already know*. The likeliest
-> reason is that AcoustID's crowd-sourced database simply doesn't cover obscure 1998 vinyl D&B.
-> **But that is not yet proven:** there is no known-good positive control on this machine to
-> confirm the lookup can match *anything*. Before trusting a "no identification" from this tool,
-> run it against a mainstream commercial recording you know is in MusicBrainz. If that matches,
-> a null result here is real evidence; if it doesn't, the tool is lying to you.
+> **The catch is the whole game: it can only find what is IN THE POOL.** The Mystery Tracks are
+> by definition records nobody recognised, so they are not among the known originals — run it
+> today and every one scores at the non-match floor. **The remaining work is not matching, it is
+> ACQUIRING CANDIDATES**: era-appropriate 1997/98 D&B, the labels and artists this DJ was
+> playing, leads from `tracklist-2017.txt`. Point `--pool` at them and the matcher will tell you,
+> reliably, whether the mystery is among them.
 
-It **only ever reads** from AcoustID. Submitting fingerprints back is an irreversible public act
-and is deliberately not automated.
+And **verify the originals themselves** — a mislabelled source poisons every alignment and ID
+downstream. This one *does* use AcoustID, because clean files fingerprint fine:
+
+```bash
+PYTHONPATH=scripts .env/bin/python scripts/acoustid_check.py --mismatch
+```
+
+It caught two on its first run: `013-DJ Addiction - Senses.mp3` is really Blame's *J-Walkin'*
+(the same record as `021`), and `022-Castillo - Junkle I.flac` is by *Callisto*.
 
 ### 9. Align the originals
 
