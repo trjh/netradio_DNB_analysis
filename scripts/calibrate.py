@@ -50,6 +50,11 @@ from streamalign import tracklist2017 as _tl     # noqa: E402
 
 HOP = 2048
 QUERY_S = 90.0
+# Where inside the track's extract to sample. NOT the start: that is where the DJ is still
+# blending the previous record in, so the first minute is often two records at once. Measured:
+# Urban Style scored 0.0337 from a solo window and 0.0846 from a master_begin window -- same
+# track, same original, same matcher. The window WAS the bug.
+EDGE_SKIP = 0.25
 
 
 def chroma(y):
@@ -125,9 +130,20 @@ def main():
                 if ms <= mb and me <= ms + _audio.duration_seconds(stem):
                     cap = (stem, ms)
                     break
-        if cap:
-            cases.append({"num": int(num), "orig": orig, "cap": cap[0], "cstart": cap[1],
-                          "mb": mb, "me": me,
+        # a clean extract, if extract_tracks.py has made one
+        ex = None
+        exdir = os.path.expanduser(os.environ.get("NETRADIO_TRACKS_DIR",
+                                                  "~/media/netradio-tracks"))
+        if os.path.isdir(exdir):
+            for f in os.listdir(exdir):
+                if f.startswith("%03d - " % int(num)):
+                    ex = os.path.join(exdir, f)
+                    break
+        if cap or ex:
+            cases.append({"num": int(num), "orig": orig,
+                          "cap": cap[0] if cap else None,
+                          "cstart": cap[1] if cap else 0,
+                          "extract": ex, "mb": mb, "me": me,
                           "name": "%s - %s" % (entry.get("artist") or "?",
                                                entry.get("title") or "?")})
     cases.sort(key=lambda c: c["num"])
@@ -149,11 +165,22 @@ def main():
 
     tp, tn, misses = [], [], []
     for c in cases:
-        capa = _audio.load_audio(c["cap"])
-        lo = c["mb"] - c["cstart"]
-        mix = capa[int(lo * _audio.SR):int((lo + QUERY_S) * _audio.SR)]
-        if len(mix) < 30 * _audio.SR:
+        # Prefer the clean extract (extract_tracks.py) over a window carved out of a capture: it
+        # is already reassembled across capture boundaries where the track straddles one.
+        y = None
+        if c.get("extract"):
+            y = _audio.load_audio(c["extract"])
+        else:
+            capa = _audio.load_audio(c["cap"])
+            lo = c["mb"] - c["cstart"]
+            y = capa[int(lo * _audio.SR):int((c["me"] - c["cstart"]) * _audio.SR)]
+        if len(y) < 45 * _audio.SR:
             continue
+        # Sample from the MIDDLE. The edges are the blend.
+        lo_i = int(len(y) * EDGE_SKIP)
+        mix = y[lo_i:lo_i + int(QUERY_S * _audio.SR)]
+        if len(mix) < 30 * _audio.SR:
+            mix = y[:int(QUERY_S * _audio.SR)]
         q = chroma(mix)
 
         scored = []

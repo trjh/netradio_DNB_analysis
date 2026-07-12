@@ -63,10 +63,17 @@ KEEP = os.path.join(os.path.expanduser("~"), "media", "netradio-candidates")
 HOP = 2048
 QUERY_S = 120.0
 
-# A candidate is KEPT (audio and all) at or under this. Deliberately looser than the MATCH gate
-# (0.050): the cost of keeping a 8MB file that turns out to be nothing is trivial, and the cost
-# of having thrown away the answer is not.
-KEEP_COST = 0.075
+# A candidate is KEPT (audio and all) at or under this. CALIBRATED, not guessed: over 41 tracks
+# where we hold both the mix and the original (docs/CALIBRATION.md), a TRUE match scores between
+# 0.0042 and 0.0971. The old KEEP gate of 0.075 sat BELOW that worst true match -- it would have
+# thrown away the audio for a genuine find and left a cost in the log with nothing to listen to.
+# 0.12 keeps every true match in the measured set, with room, and the cost of keeping a few 8MB
+# files that turn out to be nothing is trivial next to that.
+KEEP_COST = 0.120
+# A reported MATCH still needs cost AND margin. The populations OVERLAP (true match up to 0.0971,
+# non-match down to 0.0376), so no cost alone can separate them: RANK is the reliable signal, and
+# the margin test is what actually carries the gate. 40 of 41 tracks rank #1 against their own
+# original, so the margin is real.
 MATCH_COST = 0.050
 
 # --- politeness ------------------------------------------------------------------------------
