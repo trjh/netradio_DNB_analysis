@@ -142,3 +142,62 @@ class TestCarryForwardMatchesGrammarNotSubstrings(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTrackNumberResolution(unittest.TestCase):
+    """The 1998/2017 notes name tracks; the anchor search needs NNN. Both keys must agree."""
+
+    META = {
+        "69": {"artist": "PFM", "title": "Hypnotising", "master_begin_seconds": 21454.2},
+        "70": {"artist": "Dead Calm", "title": "Urban Style (Original Mix)",
+               "master_begin_seconds": 21703.0},
+        "71": {"artist": "Fokus", "title": "On Line (Original Mix)",
+               "master_begin_seconds": 22022.0},
+    }
+
+    def test_it_handles_both_hand_typed_name_orders(self):
+        # The notes are inconsistent: "Hypnotising / PFM" is Title/Artist, while
+        # "Fokus / On Line (Original Mix)" is Artist/Title. Comparing word SETS sidesteps a
+        # rule the data does not actually follow.
+        self.assertEqual(hints.resolve_track_number("Hypnotising / PFM", 21413.0, self.META), 69)
+        self.assertEqual(
+            hints.resolve_track_number("Fokus / On Line (Original Mix)", 22022.0, self.META), 71)
+        self.assertEqual(
+            hints.resolve_track_number("Urban Style (Original Mix) / Dead Calm", 21703.0,
+                                       self.META), 70)
+
+    def test_time_alone_does_not_decide(self):
+        # A track sitting at the right master time but with an unrelated name must NOT match:
+        # proximity alone would happily pick the neighbour of a track that is merely absent,
+        # and a wrong number points the anchor search at the wrong record.
+        self.assertIsNone(
+            hints.resolve_track_number("Something Else Entirely", 21703.0, self.META))
+
+    def test_name_alone_does_not_decide(self):
+        # Right name, but hours away from where the metadata puts it -> not this track.
+        self.assertIsNone(
+            hints.resolve_track_number("Hypnotising / PFM", 900.0, self.META))
+
+
+class TestAnchorPairOrdering(unittest.TestCase):
+    """A is the EARLY anchor, B the late one. Not cosmetic: the sheet computes
+    (trackB - trackA) / (origB - origA), so swapping them inverts the rate."""
+
+    def test_implied_rate_is_orientation_stable(self):
+        from streamalign import track_mix as tm
+        early = {"mix_s": 100.0, "orig_s": 10.0}
+        late = {"mix_s": 200.0, "orig_s": 110.0}
+        self.assertAlmostEqual(tm.implied_rate([early, late]), 1.0, places=6)
+        self.assertAlmostEqual(tm.implied_rate([late, early]), 1.0, places=6)
+
+    def test_anchors_too_close_together_give_no_rate(self):
+        from streamalign import track_mix as tm
+        self.assertIsNone(tm.implied_rate([{"mix_s": 10.0, "orig_s": 1.0},
+                                           {"mix_s": 12.0, "orig_s": 3.0}]))
+
+    def test_a_dj_does_not_pitch_a_record_by_seventy_percent(self):
+        from streamalign import track_mix as tm
+        lo, hi = tm.RATE_PLAUSIBLE
+        self.assertTrue(lo <= 0.99 <= hi)      # a real pitch
+        self.assertFalse(lo <= 0.30 <= hi)     # matched noise -- both real failures looked
+        self.assertFalse(lo <= 0.10 <= hi)     # exactly like this
