@@ -45,7 +45,20 @@ avoid.)
 **subscriptions** in the player feeding a different queue entirely. Four moving parts for one
 idea. Folding the queues together (gap 1) collapses most of this.
 
-### 4. `mkvideo.sh` renders at 30 fps
+### 4. MT5's identification lives ONLY as a manual override
+
+Labels are supposed to own Title/Artist. But `d376-395` has no hand labels yet, and
+`build_track_metadata.py` reads `*.labels.tsv` only — **not** `labels/remainder.tsv`, which is
+where track 74's `startNNN: ID:` row lives.
+
+So the Jacob's Optical Stairway ID exists **only** in `track-metadata.json`, surviving rebuilds
+solely because `--seed` carries manual overrides forward. **A rebuild without `--seed` silently
+loses it.**
+
+**Should be:** the ID lands in a real label row when `d376-395` is labelled. Until then it is one
+careless rebuild away from being lost, and the same is true of any other ID recorded this way.
+
+### 5. `mkvideo.sh` renders at 30 fps
 
 The reference upload is 60. Visually identical for a bar spectrum, and it halves the encode
 (~9 min for a 5-minute track). `FPS=60` if it ever matters.
