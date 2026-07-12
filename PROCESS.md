@@ -158,16 +158,31 @@ Add `ID: <Artist> - <Title>` to the label. An unnamed but placed track is `Myste
 
 ### 9. Align the originals
 
-This is a **by-ear** job — see the technique below. The engine can *grade* an alignment you
-have already made, but it cannot reliably *find* one (see [limits](#what-the-engine-cannot-do)):
+**Don't chase the track's start and end** — in a DJ mix records are *blended*, so there is no
+frame at which one "begins", and picking one is subjective. What you actually need is the
+opposite: moments where the record plays **alone**, which are objective and are exactly what
+an A/B anchor is made of.
+
+The engine will propose those (`solo_anchors`, surfaced through `streamalign hints`, and
+bounded by the [2017 notes](./tracklist-2017.txt)). Each candidate gives **both** times — an
+instant in the mix *and* the matching instant in the original — i.e. a ready-made
+`track sync:` / `origNNN sync:` pair. Seat one early (`A`) and one late (`B`); confirm both by
+ear using the technique below.
+
+Then grade the result:
 
 ```bash
+make align-env      # once: the librosa venv (python3.13) + NETRADIO_SOURCES_DIR in .env_vars
+make align-check
 .venv/bin/python -m streamalign track-mix --meta track-metadata.json --sources <originals-dir>
 ```
 
-It recovers the mix/original rate + offset per track (chroma + DTW) and reports whether the
-result is reliable enough to trust. Needs the librosa venv — `make align-env`, then
-`make align-check`.
+`track-mix` recovers the mix/original rate + offset per track (chroma + DTW) and reports
+whether it is reliable enough to trust.
+
+> **Sanity check that costs nothing:** a DJ pitches a record by a *few percent*. If your two
+> anchors imply a rate far from 1.0, they are not both on the record — the engine gates its own
+> candidates on exactly this, and it is how it catches its own bad matches.
 
 ### 10. Build + validate
 
@@ -256,13 +271,19 @@ Worth knowing, so you don't wait for help that isn't coming:
 - **No overlap, no measurement.** Cross-correlation is the engine's only evidence. On an
   exactly-joined file it cannot propose a sync point or detect a skip *at all* — it will say
   so in a question rather than pretend.
-- **It cannot find an original inside the mix.** `locate_original` exists and is wrong more
-  often than right on this material (measured: 2 hits in 8, and its *most confident* answer
-  was wrong by 25 minutes). The DJ beatmatches, so a fixed-lag correlation drifts; and the
-  broadcast repeats material, so the answer isn't even unique. It is deliberately **not**
-  offered as a hint — a wrong span would send you to the wrong minute of a 20-minute file with
-  a number beside it implying it had been checked. Finding originals stays a by-ear job;
-  `track-mix` only **grades** a seat you have already found.
+- **It cannot search for an original *blind*.** Given a whole capture and no idea where a
+  record sits, `locate_original` is wrong more often than right here (measured: 2 hits in 8,
+  and its *most confident* answer was wrong by 25 minutes). Two reasons, neither fixable by
+  tuning: the DJ beatmatches, so a fixed-lag correlation drifts out of alignment within a
+  minute; and the broadcast repeats material, so the answer isn't even unique. It is
+  deliberately **not** offered as a hint. See
+  [`Archive/LESSON_locate_original.md`](./Archive/LESSON_locate_original.md).
+  **With a prior it works** — see `solo_anchors` above. Bounding the search is the whole
+  difference.
+- **It cannot tell you where a track starts or ends.** Nor can anyone: in a DJ mix records are
+  *blended*, so there is no frame at which one "begins". Start/end is a judgement call and
+  stays yours. What the engine can offer instead is the moments where a record plays **alone**
+  — which is what an anchor actually needs.
 - **It does not decide.** Everything in the notating steps produces labels, clips, scores or
   questions **for you to review**. Only `build_track_metadata.py` writes the authoritative
   JSON.
