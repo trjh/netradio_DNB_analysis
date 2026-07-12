@@ -67,6 +67,25 @@ def _cmd_starter(args):
     print("# %d starter file(s) (seed-only; excluded from import/solve/build)" % len(written))
 
 
+def _cmd_hints(args):
+    from . import hints as _hints
+    rows, diag = _hints.build_hints(args.stem, labels_dir=args.labels, decim=args.decim)
+    if args.dry_run:
+        for a, b, text in sorted(rows, key=lambda r: (r[0], r[1])):
+            print("%10.3f %10.3f  %s" % (a, b, text))
+    else:
+        out_dir = args.out or (args.labels or _gt.LABELS_DIR)
+        os.makedirs(out_dir, exist_ok=True)
+        path = _hints.write_hints(
+            rows, os.path.join(out_dir, _audio.stem_of(args.stem) + ".hints.tsv"))
+        print("wrote %s" % path)
+        print("Import it in Audacity: File > Import > Labels -- it lands as its OWN track, "
+              "beside your labels. Nothing you have is touched.")
+    n_q = diag["questions"]
+    print("# %d row(s): %d question(s) for you, %d overlapping neighbour(s), %d skip candidate(s)"
+          % (len(rows), n_q, len(diag["neighbours"]), diag["skips"]))
+
+
 def _cmd_align(args):
     r = _align.align_pair(args.a, args.b, decim=args.decim)
     print("%s -> %s" % (r["a"], r["b"]))
@@ -283,12 +302,20 @@ def main(argv=None):
     pst.add_argument("owner", help="owner capture stem whose file_<other>: links seed neighbours")
     pst.add_argument("--out", default=None, help="output dir (default: labels dir)")
 
+    ph = sub.add_parser("hints",
+                        help="emit <stem>.hints.tsv: suggested sync/start/end/skips + questions "
+                             "to import alongside your hand labels (never overwrites them)")
+    ph.add_argument("stem", help="capture stem to hint, e.g. d356-375")
+    ph.add_argument("--out", default=None, help="output dir (default: labels dir)")
+    ph.add_argument("--dry-run", action="store_true",
+                    help="print the hint rows instead of writing the file")
+
     args = parser.parse_args(argv)
     {"groundtruth": _cmd_groundtruth, "align": _cmd_align,
      "validate": _cmd_validate, "track-mix": _cmd_track_mix, "tail-solve": _cmd_tail_solve,
      "skip-clips": _cmd_skip_clips, "skip-confirm": _cmd_skip_confirm,
      "skip-reject": _cmd_skip_reject, "skip-rejections": _cmd_skip_rejections,
-     "starter": _cmd_starter}[args.cmd](args)
+     "starter": _cmd_starter, "hints": _cmd_hints}[args.cmd](args)
 
 
 if __name__ == "__main__":
