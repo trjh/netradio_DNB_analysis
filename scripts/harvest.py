@@ -63,13 +63,23 @@ KEEP = os.path.join(os.path.expanduser("~"), "media", "netradio-candidates")
 HOP = 2048
 QUERY_S = 120.0
 
-# A candidate is KEPT (audio and all) at or under this. CALIBRATED, not guessed: over 41 tracks
-# where we hold both the mix and the original (docs/CALIBRATION.md), a TRUE match scores between
-# 0.0042 and 0.0971. The old KEEP gate of 0.075 sat BELOW that worst true match -- it would have
-# thrown away the audio for a genuine find and left a cost in the log with nothing to listen to.
-# 0.12 keeps every true match in the measured set, with room, and the cost of keeping a few 8MB
-# files that turn out to be nothing is trivial next to that.
-KEEP_COST = 0.120
+# KEEPING AUDIO: a bounded LEADERBOARD, not a threshold.
+#
+# The calibration (docs/CALIBRATION.md) is unambiguous: the true-match and non-match populations
+# OVERLAP (true up to 0.0971, non-match down to 0.0376, non-match MEDIAN 0.0949). So no cost gate
+# works. Set it low enough to exclude non-matches and it throws away real ones; set it high enough
+# to catch every real one (0.12) and it keeps essentially EVERYTHING -- which is what happened:
+# 90 files kept out of 73 tracks analysed, defeating the entire point of not storing audio.
+#
+# I drew exactly the wrong conclusion from my own data. The calibration said "cost alone cannot
+# separate these; rank is the signal" and I then set a cost-only gate.
+#
+# So: keep the best KEEP_TOP candidates PER MYSTERY, evicting the worst when a better one lands.
+# Storage is bounded and predictable (7 mysteries x 12 x ~8MB ~ 700MB, once, not per week), the
+# best candidates are always on disk to listen to, and it cannot be wrong about a threshold
+# because it does not use one.
+KEEP_TOP = 12
+KEEP_CEILING = 0.130      # never keep something worse than the worst plausible true match
 # A reported MATCH still needs cost AND margin. The populations OVERLAP (true match up to 0.0971,
 # non-match down to 0.0376), so no cost alone can separate them: RANK is the reliable signal, and
 # the margin test is what actually carries the gate. 40 of 41 tracks rank #1 against their own
@@ -324,10 +334,13 @@ def run(args):
         state["analyzed"] += 1
         for num, qc in qs:
             cost, shift = _cm.match(qc, c)
-            if cost is None or cost > KEEP_COST:
+            if cost is None or cost > KEEP_CEILING:
                 continue
-            # near enough to matter: KEEP the audio. A re-download is exactly the request that
-            # gets you blocked, and the disk cost of a false keep is nothing.
+            board = [m for m in state["matches"] if m["mystery"] == num]
+            board.sort(key=lambda m: m["cost"])
+            if len(board) >= KEEP_TOP and cost >= board[-1]["cost"]:
+                continue                       # not good enough to displace anyone
+
             keep_to = os.path.join(KEEP, "MT%d-%.4f-%s.wav"
                                    % (num, cost, hashlib.sha1(url.encode()).hexdigest()[:8]))
             if not os.path.exists(keep_to):
@@ -337,6 +350,17 @@ def run(args):
                    "semitones": shift, "url": url, "audio": keep_to,
                    "verdict": "MATCH" if cost <= MATCH_COST else "near"}
             state["matches"].append(hit)
+
+            # evict the worst if the board is now over-full -- bounded storage, best kept
+            board = sorted([m for m in state["matches"] if m["mystery"] == num],
+                           key=lambda m: m["cost"])
+            for dead in board[KEEP_TOP:]:
+                state["matches"].remove(dead)
+                try:
+                    os.unlink(dead["audio"])
+                    state["kept"] -= 1
+                except OSError:
+                    pass
             print("  %s  MT%d  cost %.4f  %s  %s"
                   % (hit["verdict"], num, cost, _cm.describe_shift(shift), url))
         state["updated"] = _now()
