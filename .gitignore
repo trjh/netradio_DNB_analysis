@@ -41,6 +41,12 @@ sheetscript/logs
 .env
 
 # Local/private files — not committed
+# NOTE: this repo is PUBLIC. Anything listed here is world-readable the moment it is committed,
+# so keep local paths, working notes and machine-specific config out of it.
+# AGENT.md -- the agent/contributor guide. Carries local paths, machine-specific symlinks and
+# working hypotheses, so it stays out of this public repo. It is versioned in the PRIVATE
+# player repo instead (netradio_DNB_player, under docs/).
+AGENT.md
 .claude/
 .env_vars
 Archive/
