@@ -36,6 +36,7 @@ help in summarizing and cross-referencing the information.
 * [scripts](./scripts) -- misc. helper scripts mostly oriented around Audacity 2.1.x metadata files
 * [STREAM_PROVENANCE.md](./STREAM_PROVENANCE.md) -- how the capture files came to exist (RealAudio loop -> `/dev/audio` dump -> hex -> wav/au), why they overlap and contain skips, and what "master time" actually is
 * [scripts/streamalign/](./scripts/streamalign) -- the Stream Alignment Engine; see its [README](./scripts/streamalign/README.md) (status) and [WALKTHROUGH](./scripts/streamalign/WALKTHROUGH.md) (how the functions compose)
+* [FINDING_MYSTERY_TRACKS.md](./FINDING_MYSTERY_TRACKS.md) -- **identifying the unnamed tracks**: where to publish the excerpts and ask (Dogs on Acid, r/AtmosphericDnB, Discogs, tuneID), the chroma-matching method that works offline, and every dead end already tried
 * [PROCESS.md](./PROCESS.md) -- **how the analysis is actually done**: the per-recording loop (manual + engine), the by-ear technique for seating an original against the mix, and what the engine can/cannot do
 * [HOWTO.md](./HOWTO.md) -- howto / FAQ: **which tool to run, when, and why** (notate → build → serve → publish)
 
