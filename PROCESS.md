@@ -67,22 +67,56 @@ neighbour** too, if there is one.
 
 ### 2. Ask the engine what it thinks (hints)
 
+> **This is a script, not an AI session.** You run it yourself, once per capture, and it is
+> deterministic — same inputs, same hints. Nothing in this loop needs an LLM. (One was used to
+> *write* the engine; none is needed to *run* it.)
+
 Before labelling, get the engine's opinion as a **separate label track** you can accept,
 ignore, or argue with:
 
 ```bash
-PYTHONPATH=scripts python3 -m streamalign hints <stem>
+make align-env        # ONCE per machine: the librosa venv + NETRADIO_SOURCES_DIR (see below)
+
+set -a && . ./.env_vars && set +a
+PYTHONPATH=scripts .venv/bin/python -m streamalign hints <stem>
 # -> labels/<stem>.hints.tsv    Audacity: File ▸ Import ▸ Labels
 ```
 
-It proposes a `file start sync:` and `file end:`, the measured offset to each overlapping
-neighbour, skip candidates — and, wherever it cannot corroborate something, an explicit
-`note QUESTION:` explaining *why*. Every row carries its confidence spelled out
-(`confidence 9.8/10`) and is marked `HINT`.
+You get, in one file:
+
+- a proposed **`file start sync:`** and **`file end:`**;
+- the **measured offset to each overlapping neighbour** (and skip candidates found by walking
+  that overlap) — or, if the file is *exactly joined* and there is no overlap, a question
+  saying so plainly rather than a guess;
+- **what the [1998/2017 notes](./tracklist-2017.txt) say plays here** — each track's start, in
+  this file's local time, by name;
+- **sync-anchor candidates**: instants where one original plays *alone* in the mix, giving both
+  the moment in the mix **and** the matching moment inside the record — a ready-made
+  `track sync: A` / `origNNN sync: A` pair (see step 9);
+- and a **`note QUESTION:`** wherever it cannot corroborate something, explaining *why*.
+
+Every row carries its confidence spelled out (`confidence 9.8/10`) and is marked `HINT`.
 
 **Hints never touch your labels.** They are written to `<stem>.hints.tsv`, which is not a
 `.labels.tsv` and is invisible to the solve, the build and the sheet. They only ever *add*:
 import the track, copy across what you accept, delete the rest.
+
+**Plain `python3` works too**, but without the librosa venv you get everything *except* the
+sync anchors (they need chroma). `make align-check` tells you whether you're set up for them.
+
+#### Where the hints come from — and so, when they get better
+
+The engine has exactly three sources, and knowing which is which tells you how far to trust a
+row:
+
+| Source | Gives you | Trust |
+|---|---|---|
+| **The audio** (cross-correlation vs an *overlapping* capture) | offsets, skips | **measured** — the strongest thing here |
+| **Your own hand labels** (the previous file's `file_<next>:` link, its last open track) | the anchor, what's still playing at local 0.0 | only as good as that label |
+| **The 1998/2017 notes** | which tracks play, roughly where; the prior that makes the anchor search possible | hand-typed, approximate — always confirm |
+
+So: **the hints for file N+1 get better once you finish file N**, because two of those three
+sources are *your own work*. That's the loop — no re-analysis needed, just re-run the script.
 
 ### 3. Place the file
 
