@@ -8,7 +8,7 @@
 > engine can and cannot do — see **[PROCESS.md](./PROCESS.md)**. This doc answers *"which tool
 > now?"*; that one answers *"how is this done?"*.
 > For *how* a tool works internally, see its own `--help`, the
-> [label grammar](./README.md#label-grammar), and `scripts/streamalign/`
+> [label grammar](./PROCESS.md#label-grammar), and `scripts/streamalign/`
 > [README](./scripts/streamalign/README.md) / [WALKTHROUGH](./scripts/streamalign/WALKTHROUGH.md).
 
 ## The pipeline in one breath

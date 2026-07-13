@@ -2,8 +2,9 @@
 
 > **What this is:** the single home for *how the analysis is actually done* — the manual
 > Audacity pass, the by-ear technique that makes it work, and exactly where the engine helps.
-> **Fits in:** [README](./README.md) (what this repo is, and the [label grammar](./README.md#label-grammar))
-> · [HOWTO](./HOWTO.md) (which tool to run right now) · [`scripts/streamalign/`](./scripts/streamalign/) (the engine).
+> **Fits in:** [README](./README.md) (what this repo is) · [HOWTO](./HOWTO.md) (which tool to run
+> right now) · [`scripts/streamalign/`](./scripts/streamalign/) (the engine).
+> **Contains:** the per-recording loop, and the full **[label grammar](#label-grammar)** the loop writes.
 
 The manual process is the backbone and is **not** being replaced. The engine's job is to do
 the measuring, the arithmetic and the cross-checking — the things a human is slow and
@@ -152,7 +153,7 @@ to find by ear.
 ### 5. Hand-label in Audacity
 
 With the master start and the skips known, lay the label track (full spec: the
-[label grammar](./README.md#label-grammar)):
+[label grammar](#label-grammar)):
 
 - `file start sync: <stem>.wav <master_start> verified <neighbour>` at local **0.0**
 - `startNNN: ID: <Artist> - <Title>` at each track boundary
@@ -359,6 +360,69 @@ Worth knowing, so you don't wait for help that isn't coming:
 - **It does not decide.** Everything in the notating steps produces labels, clips, scores or
   questions **for you to review**. Only `build_track_metadata.py` writes the authoritative
   JSON.
+
+## Label grammar
+
+Each Audacity label is `start_time ⇥ end_time ⇥ text`. `sort_tsv.py` and `Code.js` parse the
+`text` with the same small set of patterns. Timestamps are **local** to the file; adding the
+file's `file start sync` offset yields **master time**.
+
+**Label-track scoping (`LABELTRACK`)**
+
+- `LABELTRACK <name>` — the first (earliest) label of an Audacity label track *names* that
+       track, so one export can carry several tracks unambiguously. `sort_tsv.py` reads it before
+       sorting and scopes every following label to `<name>` until the next `LABELTRACK`; the marker
+       itself is **stripped** from the emitted `.tsv`. `<name>` resolves three ways:
+       the **primary stem** (`== <stem>`) → labels pass through verbatim; **another capture stem**
+       (e.g. `d356-375`) → re-homed onto that file via `file_<name>:` (the secondary mechanism);
+       **anything else** (e.g. `orig069`) → prefix-expanded (`sync: 0` → `orig069 sync: 0`;
+       free text → `orig069 note: <text>`). A file that uses `LABELTRACK` is **validated**: every
+       label-track block (the file start, and each backwards-timestamp boundary) must carry a marker,
+       or `sort_tsv.py` fails before writing. Legacy exports with no `LABELTRACK` markers are sorted
+       unchanged. Use `--stem <name>` to set the primary when reading from stdin.
+
+**File-level markers (the connection backbone)**
+
+- `file start: FILE.wav` — *physical* file start / pre-roll marker. **Not** authoritative;
+       must never override a sync marker.
+- `file start sync: FILE.wav OFFSET [verified OTHERFILE]` — **authoritative master anchor.**
+       `OFFSET` is added to every local timestamp to get master time. e.g.
+       `file start sync: d336-355.wav 19637.763068 verified d328-342`.
+- `file sync: FILE.wav OFFSET verified OTHERFILE` — a sync tying this file to another; often
+       authoritative for local offset 0.
+- `file end: FILE.wav … COMPLETE` (or `COMPLETED`) — file endpoint; **drives "complete."**
+- `verified OTHERFILE` / `verified by OTHERFILE [double-checked]` / `MARK verified by …` /
+       `NOT VERIFIED` — **the connection record:** which overlapping capture confirmed this file's
+       position. **Drives "verified."**
+- `file_OTHER: <label>` — **secondary-file re-homing:** places `<label>` onto a *different*
+       wav's track (used where one file's labels also document where a neighbour starts/ends).
+
+**Track identity**
+
+- `startNNN: ID: Artist - Title` — **track start** (`NNN` = track number). Title is split on
+       ` - ` into artist / name.
+- `ID: Artist - Title` (no `start`) — a track **ID** without starting a new track.
+
+**Sync points (mix ↔ original; drive the speed calc)**
+
+- `track sync: X …` / `trackNNN sync: X …` — mix-side alignment point.
+- `origNNN sync: X …` — original-side alignment point.
+- `X` is a single token: **`A` and `B` are the paired anchors** used for speed
+       `(trackB−trackA)/(origB−origA)`; numeric `0,1,2,…` are rough/secondary syncs.
+
+**Original-track spans**
+
+- `origNNN start: …` / `origNNN end: …` / `origNNN note: …` — where the original starts/ends/notes.
+- Shorthand `NNNs…` / `NNNe…` (3 digits + `s`/`e`) — compact orig start/end (e.g. `069s0`,
+       `065e10`, `067eB`).
+
+**Generic notes & skips**
+
+- `mix start|end|note: …`, `note[ TAG]: …` — mix markers and free/tagged notes.
+- Skips are notes: `note: SKIP back 2.279s (multiple files)`, `file note: SKIP ahead 1.248s` —
+       they mark stream discontinuities in the RealAudio capture (see [STREAM_PROVENANCE.md](./STREAM_PROVENANCE.md)).
+
+---
 
 ---
 

@@ -53,8 +53,9 @@ spreadsheet's **File List** tab via two statuses that come straight from the lab
 **complete** (`file end: … COMPLETE`) and **verified** (`verified <other>` on a
 `file [start] sync:` line — the record of how the captures connect).
 
-The reference material the process depends on stays here: the **[label grammar](#label-grammar)**
-below, and the publish/import setup that follows.
+The **[label grammar](./PROCESS.md#label-grammar)** — the full spec of every label tag — moved
+there too, so the loop and the grammar it writes live in one document. What stays here is the
+publish/import setup that follows.
 
 ### One-command publish (`labels/publish.py`)
 
@@ -103,67 +104,6 @@ required to read labels — but without it the GitHub API is rate-limited to ~60
 
 Storing the token as a script property (rather than in a `SECRETS` tab) keeps it out of the
 spreadsheet entirely, so the sheet can be shared without exposing the credential.
-
-## Label grammar
-
-Each Audacity label is `start_time ⇥ end_time ⇥ text`. `sort_tsv.py` and `Code.js` parse the
-`text` with the same small set of patterns. Timestamps are **local** to the file; adding the
-file's `file start sync` offset yields **master time**.
-
-**Label-track scoping (`LABELTRACK`)**
-
-- `LABELTRACK <name>` — the first (earliest) label of an Audacity label track *names* that
-  track, so one export can carry several tracks unambiguously. `sort_tsv.py` reads it before
-  sorting and scopes every following label to `<name>` until the next `LABELTRACK`; the marker
-  itself is **stripped** from the emitted `.tsv`. `<name>` resolves three ways:
-  the **primary stem** (`== <stem>`) → labels pass through verbatim; **another capture stem**
-  (e.g. `d356-375`) → re-homed onto that file via `file_<name>:` (the secondary mechanism);
-  **anything else** (e.g. `orig069`) → prefix-expanded (`sync: 0` → `orig069 sync: 0`;
-  free text → `orig069 note: <text>`). A file that uses `LABELTRACK` is **validated**: every
-  label-track block (the file start, and each backwards-timestamp boundary) must carry a marker,
-  or `sort_tsv.py` fails before writing. Legacy exports with no `LABELTRACK` markers are sorted
-  unchanged. Use `--stem <name>` to set the primary when reading from stdin.
-
-**File-level markers (the connection backbone)**
-
-- `file start: FILE.wav` — *physical* file start / pre-roll marker. **Not** authoritative;
-  must never override a sync marker.
-- `file start sync: FILE.wav OFFSET [verified OTHERFILE]` — **authoritative master anchor.**
-  `OFFSET` is added to every local timestamp to get master time. e.g.
-  `file start sync: d336-355.wav 19637.763068 verified d328-342`.
-- `file sync: FILE.wav OFFSET verified OTHERFILE` — a sync tying this file to another; often
-  authoritative for local offset 0.
-- `file end: FILE.wav … COMPLETE` (or `COMPLETED`) — file endpoint; **drives "complete."**
-- `verified OTHERFILE` / `verified by OTHERFILE [double-checked]` / `MARK verified by …` /
-  `NOT VERIFIED` — **the connection record:** which overlapping capture confirmed this file's
-  position. **Drives "verified."**
-- `file_OTHER: <label>` — **secondary-file re-homing:** places `<label>` onto a *different*
-  wav's track (used where one file's labels also document where a neighbour starts/ends).
-
-**Track identity**
-
-- `startNNN: ID: Artist - Title` — **track start** (`NNN` = track number). Title is split on
-  ` - ` into artist / name.
-- `ID: Artist - Title` (no `start`) — a track **ID** without starting a new track.
-
-**Sync points (mix ↔ original; drive the speed calc)**
-
-- `track sync: X …` / `trackNNN sync: X …` — mix-side alignment point.
-- `origNNN sync: X …` — original-side alignment point.
-- `X` is a single token: **`A` and `B` are the paired anchors** used for speed
-  `(trackB−trackA)/(origB−origA)`; numeric `0,1,2,…` are rough/secondary syncs.
-
-**Original-track spans**
-
-- `origNNN start: …` / `origNNN end: …` / `origNNN note: …` — where the original starts/ends/notes.
-- Shorthand `NNNs…` / `NNNe…` (3 digits + `s`/`e`) — compact orig start/end (e.g. `069s0`,
-  `065e10`, `067eB`).
-
-**Generic notes & skips**
-
-- `mix start|end|note: …`, `note[ TAG]: …` — mix markers and free/tagged notes.
-- Skips are notes: `note: SKIP back 2.279s (multiple files)`, `file note: SKIP ahead 1.248s` —
-  they mark stream discontinuities in the RealAudio capture (see [STREAM_PROVENANCE.md](./STREAM_PROVENANCE.md)).
 
 ## TODO
 
