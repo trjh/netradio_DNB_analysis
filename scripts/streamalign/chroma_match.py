@@ -50,28 +50,48 @@ def transposition_order(query, candidate):
     return [k for _s, k in scores]
 
 
+# Frames -> seconds. The chroma hop is 2048 at 16kHz, so a frame is 0.128s.
+HOP = 2048
+SR = 16000
+
+
 def match(query, candidate, tries=DEFAULT_TRIES):
-    """Best (cost, semitones) of finding `query` inside `candidate`, over transpositions.
+    """Best (cost, semitones, at_seconds) of finding `query` inside `candidate`.
 
     `semitones` is how far the QUERY had to be rotated to meet the candidate. A non-zero value
-    is a fact worth surfacing, not an implementation detail: it means the two recordings are in
-    different keys, so one of them has been pitched -- which tells you something real about the
-    copy you are holding.
+    is a fact worth surfacing, not an implementation detail: the two recordings are in different
+    keys, so one has been pitched -- which tells you something real about the copy you hold.
+
+    `at_seconds` is WHERE in the candidate the match begins. Subsequence DTW has always known
+    this -- the warp path's first frame is the offset -- and not returning it was a waste: a
+    candidate can be a 90-minute DJ set, and "the record is in there somewhere" is a much poorer
+    answer than "it starts at 47:12". You can go and listen to the right minute.
     """
     import librosa
     query = np.asarray(query)
     candidate = np.asarray(candidate)
     if candidate.shape[1] < query.shape[1]:
-        return None, None
+        return None, None, None
 
-    best_cost, best_shift = None, None
+    best_cost, best_shift, best_at = None, None, None
     for k in transposition_order(query, candidate)[:max(1, tries)]:
         rolled = np.roll(query, k, axis=0)
         d, wp = librosa.sequence.dtw(X=rolled, Y=candidate, subseq=True, metric="cosine")
         cost = float(d[-1, wp[0][1]]) / len(wp)
         if best_cost is None or cost < best_cost:
+            # wp runs backwards; its LAST row is the start of the matched region.
+            start_frame = int(wp[-1][1])
             best_cost, best_shift = cost, k
-    return best_cost, best_shift
+            best_at = start_frame * HOP / float(SR)
+    return best_cost, best_shift, best_at
+
+
+def describe_at(seconds):
+    """`2831.4` -> `47:11`. A timestamp you can scrub to."""
+    if seconds is None:
+        return ""
+    s = int(round(seconds))
+    return "%d:%02d" % (s // 60, s % 60)
 
 
 def describe_shift(semitones):

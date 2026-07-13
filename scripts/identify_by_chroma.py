@@ -80,8 +80,9 @@ def cost(query_chroma, cand_chroma):
     """
     from streamalign import chroma_match as _cm
     if cand_chroma.shape[1] < query_chroma.shape[1]:
-        return None, None
-    return _cm.match(query_chroma, cand_chroma)
+        return None, None, None
+    cost, shift, at = _cm.match(query_chroma, cand_chroma)
+    return cost, shift, at
 
 
 def load_pool(pool_dir, exclude_mystery=True):

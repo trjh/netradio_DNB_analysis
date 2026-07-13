@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Harvest chroma signatures from the internet, slowly, and match them against the Mysteries.
+"""Harvest chroma signatures from the listen queue, slowly, and match them against the Mysteries.
 
     PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --seed-channel https://www.youtube.com/@back2theoldskoolera999
     PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --run          # work the queue
@@ -30,6 +30,24 @@ Being a good citizen (and not getting blocked)
 * **Each track is fetched once, ever.** The signature cache guarantees it. That is the single
   biggest politeness win available, and it is free.
 
+ONE QUEUE
+---------
+The candidate list IS the player's listen queue. There is no second queue: anything you add --
+by hand, or via a channel subscription -- is a candidate, and anything you have already HEARD is
+skipped (if you had heard it and it were the mystery, it would not be a mystery).
+
+Long DJ mixes are processed too, deliberately. A 1997 record is as likely to surface inside a
+90-minute set as on its own, and subsequence-DTW tells us WHERE in the set it matches -- so a hit
+is a timestamp to go and listen to, not "it is in there somewhere".
+
+WHO WRITES WHAT
+---------------
+Two writers on one JSON file is how you lose the file. So:
+
+  * the PLAYER owns the listen queue (heard, favourite, discarded). The harvester only READS it.
+  * the HARVESTER owns `.harvest/` (signatures, results, leaderboard). The player only READS it,
+    except for the pause flag.
+
 Pause/resume and progress live in `.harvest/` so the player's dashboard can drive them.
 """
 
@@ -55,7 +73,11 @@ from streamalign import mystery as _mystery          # noqa: E402
 HOME = _gt.REPO_ROOT
 STATE_DIR = os.path.join(HOME, ".harvest")
 STATE = os.path.join(STATE_DIR, "state.json")
-QUEUE = os.path.join(STATE_DIR, "queue.json")
+QUEUE = os.path.join(STATE_DIR, "queue.json")          # legacy seed list; still honoured
+RESULTS = os.path.join(STATE_DIR, "results.json")     # {url: {...}} -- what we have analysed
+LISTEN_QUEUE = os.environ.get(
+    "NETRADIO_LISTEN_QUEUE",
+    os.path.expanduser("~/Downloads/Netradio/player/metadata/listen_queue.json"))
 PAUSE = os.path.join(STATE_DIR, "PAUSED")
 CACHE = os.path.join(HOME, ".chroma-cache")
 KEEP = os.path.join(os.path.expanduser("~"), "media", "netradio-candidates")
@@ -126,6 +148,44 @@ def host_of(url):
         if known != "_default" and known in h:
             return known
     return h or "_default"
+
+
+def listen_queue():
+    """The player's listen queue, read-only. This is the candidate list.
+
+    Skips anything HEARD (if he had heard it and it were the mystery, it would not be a mystery)
+    and anything DISCARDED ("I don't recognise this as being in the mix" -- a human ruling, and
+    the engine has no business overriding it or asking again).
+    """
+    data = _load(LISTEN_QUEUE, {})
+    items = data.get("items", data if isinstance(data, list) else [])
+    out = []
+    for it in items:
+        url = it.get("url") or it.get("canonical")
+        if not url or not url.startswith("http"):
+            continue
+        if it.get("listened") or it.get("heard") or it.get("discarded"):
+            continue
+        out.append({"url": url, "id": it.get("id"), "title": it.get("title") or ""})
+    return out
+
+
+def candidates():
+    """Everything still to analyse: the listen queue, plus any legacy seeded URLs."""
+    done = set(_load(RESULTS, {}).keys())
+    out, seen = [], set()
+    for it in listen_queue():
+        if it["url"] in done or it["url"] in seen:
+            continue
+        seen.add(it["url"])
+        out.append(it)
+    legacy = _load(QUEUE, {"pending": []}).get("pending") or []
+    for url in legacy:
+        if url in done or url in seen:
+            continue
+        seen.add(url)
+        out.append({"url": url, "id": None, "title": ""})
+    return out
 
 
 def blank_state():
@@ -221,21 +281,20 @@ def queries():
 
 
 def pick_next(pending, state):
-    """Next URL, ROTATING hosts so no single site ever sees a burst.
+    """Next candidate, ROTATING hosts so no single site ever sees a burst.
 
-    This is the core politeness move: consecutive fetches go to DIFFERENT hosts, so even a fast
-    run looks, from any one site's perspective, like an occasional visitor.
+    The core politeness move: consecutive fetches go to DIFFERENT hosts, so even a busy run looks,
+    from any one site's point of view, like an occasional visitor.
     """
     now = time.time()
     last = state.get("hosts", {})
     best, best_key = None, None
-    for i, url in enumerate(pending):
-        h = host_of(url)
+    for i, item in enumerate(pending):
+        h = host_of(item["url"])
         info = last.get(h, {})
         if info.get("blocked"):
             continue
         ready_at = info.get("next_ok", 0)
-        # prefer the host we have left alone longest, and never one that isn't ready
         key = (ready_at > now, ready_at)
         if best_key is None or key < best_key:
             best, best_key = i, key
@@ -244,30 +303,32 @@ def pick_next(pending, state):
 
 def run(args):
     state = _load(STATE, blank_state())
+    results = _load(RESULTS, {})
     qs = queries()
     if not qs:
         print("no unsolved mysteries with clips -- nothing to search for")
         return
-    print("# searching for Mystery Tracks %s" % ", ".join(str(n) for n, _ in qs))
-    print("# work %s, idle %s, rotating hosts, jittered. Ctrl-C is safe (state is on disk)."
-          % ("4-5h", "40-120m"))
+    print("# hunting Mystery Tracks %s" % ", ".join(str(n) for n, _ in qs))
+    print("# candidates: the listen queue (heard and discarded items are skipped)")
+    print("# work 4-5h, idle 40-120m, rotating hosts, jittered. Ctrl-C is safe; state is on disk.")
 
     session_end = time.time() + random.uniform(*SESSION_S)
     while True:
         if os.path.exists(PAUSE):
             state["session"] = {"phase": "paused", "until": 0}
             _save(STATE, state)
-            time.sleep(20)
+            time.sleep(15)
             continue
 
-        q = _load(QUEUE, {"pending": [], "done": []})
-        if not q["pending"]:
+        pending = candidates()
+        if not pending:
             state["session"] = {"phase": "queue empty", "until": 0}
             _save(STATE, state)
-            print("queue empty -- add more with --seed-channel")
-            return
+            print("nothing left to analyse -- add to the listen queue (manually or by subscription)")
+            time.sleep(300)          # a subscription poll may bring more; do not exit
+            continue
 
-        if time.time() > session_end:                 # rest
+        if time.time() > session_end:
             nap = random.uniform(*IDLE_S)
             state["session"] = {"phase": "idle", "until": time.time() + nap}
             _save(STATE, state)
@@ -276,11 +337,12 @@ def run(args):
             session_end = time.time() + random.uniform(*SESSION_S)
             continue
 
-        idx = pick_next(q["pending"], state)
+        idx = pick_next(pending, state)
         if idx is None:
             time.sleep(60)
             continue
-        url = q["pending"][idx]
+        item = pending[idx]
+        url = item["url"]
         host = host_of(url)
         hinfo = state.setdefault("hosts", {}).setdefault(host, {})
 
@@ -292,25 +354,22 @@ def run(args):
             continue
 
         state["session"] = {"phase": "working", "until": session_end}
-        state["current"] = url
+        state["current"] = item.get("title") or url
         _save(STATE, state)
 
-        cached = os.path.exists(sig_path(url))
-        if cached:
-            c = np.load(sig_path(url)).astype("float32")
-            err = None
+        if os.path.exists(sig_path(url)):
+            c, err = np.load(sig_path(url)).astype("float32"), None
             state["skipped_cached"] += 1
         else:
             c, err = stream_chroma(url)
 
-        # --- host pacing: jittered, so the cadence is never even ---
         gap = HOST_GAP_S.get(host, HOST_GAP_S["_default"]) * random.uniform(0.5, 2.0)
         if err and ("403" in err or "429" in err or "blocked" in err.lower()):
             hinfo["strikes"] = hinfo.get("strikes", 0) + 1
             back = min(BACKOFF_START_S * (2 ** (hinfo["strikes"] - 1)), BACKOFF_MAX_S)
             hinfo["next_ok"] = time.time() + back
             if hinfo["strikes"] >= BLOCK_AFTER:
-                hinfo["blocked"] = True               # it told us to go away. we listen.
+                hinfo["blocked"] = True          # it told us to go away. we listen.
                 state["issues"].append({"at": _now(), "host": host,
                                         "issue": "blocked after %d refusals -- backing off for "
                                                  "good" % hinfo["strikes"]})
@@ -320,38 +379,51 @@ def run(args):
         hinfo["strikes"] = 0
         hinfo["next_ok"] = time.time() + gap
 
-        q["pending"].pop(idx)
-        q["done"].append(url)
-        _save(QUEUE, q)
-
         if c is None:
             state["errors"] += 1
             state["issues"] = (state["issues"] + [{"at": _now(), "url": url,
                                                    "issue": err or "no signature"}])[-50:]
+            results[url] = {"at": _now(), "error": err or "no signature"}
+            _save(RESULTS, results)
             _save(STATE, state)
             continue
 
+        # A record can hide inside a 90-minute DJ set, so long candidates are analysed too --
+        # subsequence-DTW says WHERE it matches, which turns "somewhere in there" into a
+        # timestamp you can scrub to.
+        scores = []
         state["analyzed"] += 1
         for num, qc in qs:
-            cost, shift = _cm.match(qc, c)
-            if cost is None or cost > KEEP_CEILING:
+            cost, shift, at = _cm.match(qc, c)
+            if cost is None:
                 continue
-            board = [m for m in state["matches"] if m["mystery"] == num]
-            board.sort(key=lambda m: m["cost"])
+            scores.append({"mystery": num, "cost": round(cost, 4), "semitones": shift,
+                           "at_s": round(at or 0, 1)})
+        results[url] = {"at": _now(), "id": item.get("id"), "title": item.get("title"),
+                        "scores": scores,
+                        "duration_s": round(c.shape[1] * HOP / float(_audio.SR))}
+        _save(RESULTS, results)
+
+        for sc in scores:
+            num, cost = sc["mystery"], sc["cost"]
+            if cost > KEEP_CEILING:
+                continue
+            board = sorted([m for m in state["matches"] if m["mystery"] == num],
+                           key=lambda m: m["cost"])
             if len(board) >= KEEP_TOP and cost >= board[-1]["cost"]:
-                continue                       # not good enough to displace anyone
+                continue
 
             keep_to = os.path.join(KEEP, "MT%d-%.4f-%s.wav"
                                    % (num, cost, hashlib.sha1(url.encode()).hexdigest()[:8]))
             if not os.path.exists(keep_to):
                 stream_chroma(url, keep_to=keep_to)
                 state["kept"] += 1
-            hit = {"at": _now(), "mystery": num, "cost": round(cost, 4),
-                   "semitones": shift, "url": url, "audio": keep_to,
+            hit = {"at": _now(), "mystery": num, "cost": cost, "semitones": sc["semitones"],
+                   "at_s": sc["at_s"], "url": url, "title": item.get("title") or "",
+                   "id": item.get("id"), "audio": keep_to,
                    "verdict": "MATCH" if cost <= MATCH_COST else "near"}
             state["matches"].append(hit)
 
-            # evict the worst if the board is now over-full -- bounded storage, best kept
             board = sorted([m for m in state["matches"] if m["mystery"] == num],
                            key=lambda m: m["cost"])
             for dead in board[KEEP_TOP:]:
@@ -361,8 +433,9 @@ def run(args):
                     state["kept"] -= 1
                 except OSError:
                     pass
-            print("  %s  MT%d  cost %.4f  %s  %s"
-                  % (hit["verdict"], num, cost, _cm.describe_shift(shift), url))
+            print("  %s  MT%d  cost %.4f  %s  at %s  %s"
+                  % (hit["verdict"], num, cost, _cm.describe_shift(sc["semitones"]),
+                     _cm.describe_at(sc["at_s"]), (item.get("title") or url)[:48]))
         state["updated"] = _now()
         _save(STATE, state)
 

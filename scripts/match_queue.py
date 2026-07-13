@@ -69,8 +69,9 @@ def cost(q, c):
     """
     from streamalign import chroma_match as _cm
     if c is None or c.shape[1] < q.shape[1]:
-        return None, None
-    return _cm.match(q, c)
+        return None, None, None
+    cost, shift, at = _cm.match(q, c)
+    return cost, shift, at
 
 
 def main():
