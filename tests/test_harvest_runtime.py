@@ -287,3 +287,50 @@ class ANewMysteryMustSeeTheWholeCorpus(unittest.TestCase):
     def test_not_a_match_retires_an_entry(self):
         """The player writes the flag; the harvester must honour it."""
         self.assertIn("not_a_match", harvest.RULED_ON)
+
+
+@unittest.skipIf(harvest is None, "needs the librosa venv")
+class ABetterClipMustNotInheritTheOldOnesVerdicts(unittest.TestCase):
+    """Tim: "when I get the chance to add a new one, I don't want any false negatives from the 23s
+    version."
+
+    He was right to worry. `state["scored"]` was keyed on the mystery NUMBER, so a re-cut MT7 clip
+    would have inherited every pairing made against the 23-second one: the harvester would think it
+    had already asked, and never re-score a single signature against the better question. Silent,
+    and exactly the false negatives he named.
+
+    So the key carries a FINGERPRINT OF THE CLIP'S CONTENTS. Change the clip, and every pairing
+    against the old one is void.
+    """
+
+    def _q(self, num, fp):
+        return [(num, None, "%d:%s" % (num, fp))]
+
+    def test_re_cutting_the_clip_voids_every_old_pairing(self):
+        state = {"matches": [], "scored": {"7:oldclip123": [harvest._sig_key(u)
+                                                            for u in ("u1", "u2", "u3")]}}
+        q = {"done": ["u1", "u2", "u3"], "pending": []}
+        with unittest.mock.patch("os.path.exists", return_value=True):
+            pairs = harvest.unscored_pairs(state, q, set(), self._q(7, "NEWclip456"))
+        self.assertEqual(sorted(p[3] for p in pairs), ["u1", "u2", "u3"],
+                         "a new clip must ask the WHOLE corpus again")
+
+    def test_the_same_clip_is_not_re_scored(self):
+        state = {"matches": [], "scored": {"7:same": [harvest._sig_key("u1")]}}
+        q = {"done": ["u1"], "pending": []}
+        with unittest.mock.patch("os.path.exists", return_value=True):
+            self.assertEqual(harvest.unscored_pairs(state, q, set(), self._q(7, "same")), [])
+
+    def test_forget_drops_the_leads_and_the_pairings(self):
+        state = {"matches": [{"mystery": 7, "url": "a"}, {"mystery": 7, "url": "b"},
+                             {"mystery": 4, "url": "keep"}],
+                 "scored": {"7:x": ["s1"], "4:y": ["s2"]}}
+        leads, pairs = harvest.forget(state, 7)
+        self.assertEqual((leads, pairs), (2, 1))
+        self.assertEqual([m["mystery"] for m in state["matches"]], [4])   # MT4 untouched
+        self.assertEqual(list(state["scored"]), ["4:y"])
+
+    def test_a_clip_too_short_to_distinguish_records_is_refused(self):
+        """MT7's 23s clip produced five 'confident' false positives within 0.0007 of each other."""
+        self.assertEqual(harvest.MIN_QUERY_S, 60.0)
+        self.assertLess(23, harvest.MIN_QUERY_S)

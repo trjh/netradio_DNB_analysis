@@ -84,6 +84,7 @@ PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --status
 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --run          # runs for weeks
 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --pause        # / --resume
 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --purge-audio  # throw every retained excerpt away
+PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --forget 7     # drop MT7's leads + pairings
 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --rescan       # score every cached signature
                                                                       # against every mystery it has
                                                                       # not met yet (no network)
@@ -104,6 +105,20 @@ fetched after it, and weeks of accumulated corpus were silently never tested aga
 The rescan also fills in **where** each old match hit (`at_s`), which is why `/harvest` can cue a
 lead to the moment it matched even for leads found before that field existed. The position was
 never lost — it is recomputable from the signature we already hold.
+
+**A clip too short to distinguish records is refused** (`MIN_QUERY_S`, 60s). MT7's clip is **23
+seconds**, and it produced five *confident* false positives all within **0.0007** of each other: a
+short query drives every cost down until the matcher can no longer tell records apart, and a
+degenerate ranking looks exactly like a real one. Better to search for nothing than for everything.
+The mystery re-enters the search **by itself** once a longer clip is cut.
+
+**A re-cut clip asks the whole corpus again.** `state["scored"]` is keyed on the mystery number
+**plus a fingerprint of the clip's contents** — so a better clip voids every pairing made against
+the old one, and every cached signature is scored against the new question. Keyed on the number
+alone, a better MT7 clip would have silently inherited the 23-second clip's verdicts and never
+actually been asked. Use `--forget N` to drop the stale *leads* as well: the pairings go by
+themselves, but the leads are the part that misleads a human into ruling on evidence gathered with
+a broken instrument.
 
 **A ruled-out record stays ruled out.** `not a match` at `/harvest` is deliberately **global**: it
 means "not any Mystery Track", including the ones whose clips do not exist yet. So a rescan skips

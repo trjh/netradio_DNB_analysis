@@ -71,6 +71,12 @@ KEEP = os.path.join(os.path.expanduser("~"), "media", "netradio-candidates")
 
 HOP = 2048
 QUERY_S = 120.0
+# The shortest clip we will search WITH. MT7's is 23 seconds, and it produced five confident false
+# positives all within 0.0007 of each other: a short query drives every cost down until the matcher
+# can no longer tell records apart, and a degenerate ranking looks exactly like a real one. Better
+# to search for nothing than to search for everything. A mystery below this floor leaves the query
+# set and comes back by itself once a longer clip is cut.
+MIN_QUERY_S = 60.0
 
 # RETAINING EXCERPTS FOR AURAL CHECK: a bounded leaderboard of SHORT EXCERPTS, not a library.
 #
@@ -310,21 +316,21 @@ def unscored_pairs(state, q, retired, qs, limit=None):
     """
     scored = state.setdefault("scored", {})
     out = []
-    for num, qc in qs:
-        seen = set(scored.get(str(num), []))
+    for num, qc, qkey in qs:
+        seen = set(scored.get(qkey, []))
         for url in q.get("done") or []:
             if url in retired:
                 continue
             key = _sig_key(url)
             if key in seen or not os.path.exists(sig_path(url)):
                 continue
-            out.append((num, qc, url, key))
+            out.append((num, qc, qkey, url, key))
             if limit and len(out) >= limit:
                 return out
     return out
 
 
-def score_cached(state, num, qc, url, key):
+def score_cached(state, num, qc, qkey, url, key):
     """Score one cached signature against one mystery. No network, ~0.06s. Returns a hit or None.
 
     Updates an existing row rather than duplicating it -- which is also how the missing `at_s`
@@ -337,7 +343,7 @@ def score_cached(state, num, qc, url, key):
     except (OSError, ValueError):
         return None
     cost, shift, at = _cm.match(qc, c)
-    state.setdefault("scored", {}).setdefault(str(num), []).append(key)
+    state.setdefault("scored", {}).setdefault(qkey, []).append(key)
 
     if cost is None or cost > KEEP_CEILING:
         return None
@@ -355,11 +361,31 @@ def score_cached(state, num, qc, url, key):
     return hit
 
 
+def forget(state, num):
+    """Drop everything we have learned about one mystery: its leads, and its scored pairings.
+
+    For when the QUESTION was bad, not the answers. MT7's clip is 23 seconds; every lead it
+    produced is suspect, and leaving them on the board invites a human to rule on evidence gathered
+    with a broken instrument. Clearing the scored pairings means the next clip starts from a clean
+    slate against the whole corpus.
+
+    (Re-cutting the clip alone would also force a full re-score -- `scored` is keyed on the clip's
+    fingerprint -- but the stale LEADS would survive, and they are the part that misleads you.)
+    """
+    before = len(state.get("matches") or [])
+    state["matches"] = [m for m in (state.get("matches") or []) if m.get("mystery") != num]
+    scored = state.setdefault("scored", {})
+    dropped_keys = [k for k in scored if k.split(":", 1)[0] == str(num)]
+    for k in dropped_keys:
+        del scored[k]
+    return before - len(state["matches"]), len(dropped_keys)
+
+
 def rescan(state, q, retired, qs, limit=None, verbose=True):
     """Work through the unscored pairs. Returns how many were scored."""
     pairs = unscored_pairs(state, q, retired, qs, limit=limit)
-    for num, qc, url, key in pairs:
-        hit = score_cached(state, num, qc, url, key)
+    for num, qc, qkey, url, key in pairs:
+        hit = score_cached(state, num, qc, qkey, url, key)
         if hit and verbose:
             a = int(hit.get("at_s") or 0)
             print("  %s  MT%d  cost %.4f  at %d:%02d  %s  (from cache -- no fetch)"
@@ -587,15 +613,61 @@ def sync_listen_queue(q):
 
 # --- the run ------------------------------------------------------------------------------------
 
-def queries():
-    """The unsolved mysteries, as chroma. From track-metadata.json -- never from filenames."""
+def clip_fingerprint(path):
+    """A short hash of the clip's CONTENTS. Changes the moment the clip is re-cut."""
+    h = hashlib.sha1()
+    try:
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+    except OSError:
+        return "missing"
+    return h.hexdigest()[:12]
+
+
+def queries(state=None):
+    """The unsolved mysteries, as chroma. From track-metadata.json -- never from filenames.
+
+    Returns (mystery_number, chroma, query_key) triples. The QUERY KEY is the mystery number plus a
+    fingerprint of the clip's contents, and it is what `state["scored"]` is keyed on -- so a clip
+    that is RE-CUT invalidates every pairing made against the old one, and every cached signature is
+    scored again automatically. Keying on the number alone would have meant a better MT7 clip
+    inherited the old clip's verdicts and was never actually asked: exactly the false negatives Tim
+    was worried about.
+
+    A clip shorter than MIN_QUERY_S is REFUSED, and this is why: MT7's clip is 23 seconds, and it
+    produced five confident false positives all within 0.0007 of each other. A short query drives
+    every cost down until the matcher cannot tell anything apart -- the ranking goes degenerate, and
+    a degenerate match looks exactly like a real one. Better to search for nothing than to search
+    for everything. The mystery comes back into the query set by itself once a longer clip is cut.
+    """
     import librosa
-    out = []
+    out, skipped = [], []
     for e in _mystery.searchable():
+        secs = _audio.duration(e["clip"]) if hasattr(_audio, "duration") else None
+        if secs is None:
+            y_full = _audio.load_audio(e["clip"])
+            secs = len(y_full) / float(_audio.SR)
+        if secs < MIN_QUERY_S:
+            skipped.append({"mystery": e["number"], "clip_s": round(secs),
+                            "why": "the clip is %ds, below the %ds floor -- a query that short "
+                                   "drives every cost down and the matcher stops being able to "
+                                   "tell records apart (MT7's 23s clip produced five 'confident' "
+                                   "false positives within 0.0007 of each other). Cut a longer one "
+                                   "and it re-enters the search by itself."
+                                   % (round(secs), MIN_QUERY_S)})
+            continue
         y = _audio.load_audio(e["clip"])[:int(QUERY_S * _audio.SR)]
         c = librosa.feature.chroma_cqt(y=np.asarray(y, dtype="float32"),
                                        sr=_audio.SR, hop_length=HOP) + 1e-6
-        out.append((e["number"], librosa.util.normalize(c, norm=2, axis=0)))
+        qkey = "%d:%s" % (e["number"], clip_fingerprint(e["clip"]))
+        out.append((e["number"], librosa.util.normalize(c, norm=2, axis=0), qkey))
+
+    if state is not None:                     # so /harvest can say what it is NOT asking, and why
+        state["searching"] = [n for n, _, _ in out]
+        state["skipped_queries"] = skipped
+    for s in skipped:
+        print("# NOT searching MT%d -- %s" % (s["mystery"], s["why"]))
     return out
 
 
@@ -623,11 +695,11 @@ def pick_next(pending, state):
 
 def run(args):
     state = _load(STATE, blank_state())
-    qs = queries()
+    qs = queries(state)
     if not qs:
-        print("no unsolved mysteries with clips -- nothing to search for")
+        print("no unsolved mysteries with a usable clip -- nothing to search for")
         return
-    print("# searching for Mystery Tracks %s" % ", ".join(str(n) for n, _ in qs))
+    print("# searching for Mystery Tracks %s" % ", ".join(str(n) for n, _, _ in qs))
     print("# work %s, idle %s, rotating hosts, jittered. Ctrl-C is safe (state is on disk)."
           % ("4-5h", "40-120m"))
 
@@ -808,7 +880,7 @@ def run(args):
             continue
 
         state["analyzed"] += 1
-        for num, qc in qs:
+        for num, qc, _qkey in qs:
             cost, shift, at = _cm.match(qc, c)
             if cost is None or cost > KEEP_CEILING:
                 continue
@@ -852,6 +924,10 @@ def main():
     ap.add_argument("--purge-audio", action="store_true",
                     help="delete every retained excerpt. The LEADS survive (url, cost, mystery, "
                          "key, at) -- only the audio goes. Review them by embed at /harvest.")
+    ap.add_argument("--forget", type=int, metavar="N",
+                    help="drop every lead for Mystery Track N, and every scored pairing against it. "
+                         "For when the QUESTION was bad -- a clip too short to distinguish records "
+                         "with. The next clip then starts clean against the whole corpus.")
     ap.add_argument("--rescan", action="store_true",
                     help="score every cached signature against every mystery it has not met yet, "
                          "in one go. No network. The running harvester does this by itself, a "
@@ -863,6 +939,15 @@ def main():
     if args.purge_audio:
         print(purge_audio())
         return
+    if args.forget:
+        state = _load(STATE, blank_state())
+        leads, pairs = forget(state, args.forget)
+        _save(STATE, state)
+        print("# forgot MT%d: dropped %d lead(s) and %d scored pairing(s)."
+              % (args.forget, leads, pairs))
+        print("# Cut a better clip and it re-enters the search by itself, against every cached "
+              "signature.")
+        return
     if args.rescan:
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})
@@ -870,7 +955,7 @@ def main():
         _, retired = listen_queue_split()
         todo = len(unscored_pairs(state, q, retired, qs))
         print("# rescanning %d (signature, mystery) pair(s) against MT%s -- no network, ~%.0f min"
-              % (todo, "/MT".join(str(n) for n, _ in qs), todo * 0.06 / 60))
+              % (todo, "/MT".join(str(n) for n, _, _ in qs), todo * 0.06 / 60))
         n = rescan(state, q, retired, qs)
         state["rescan_pending"] = 0
         _save(STATE, state)
