@@ -123,5 +123,54 @@ class TheBotWall(unittest.TestCase):
         self.assertEqual(harvest.cookie_args(), ["--cookies", fh.name])
 
 
+@unittest.skipIf(harvest is None, "needs the librosa venv")
+class EvictingAPurgedLead(unittest.TestCase):
+    """The second crash-on-every-start bug, and the same shape as the first.
+
+    `--purge-audio` pops "audio" from every match -- by design: a lead is a URL, not a copy of a
+    record. But the eviction path still did `os.unlink(dead["audio"])`, catching only OSError. So
+    the first match good enough to displace anyone raised KeyError and killed the harvester. Every
+    board was already full (12 of 12, for each of MT4/6/7), so it died on essentially its first
+    piece of real work, every start -- and the watchdog dutifully restarted it into the same wall.
+
+    A unit test does not catch this; nothing exercised the branch. So the branch is exercised here.
+    """
+
+    def _state(self, n, with_audio=False):
+        return {"matches": [{"mystery": 4, "cost": 0.01 * i, "url": "u%d" % i,
+                             **({"audio": "/nonexistent/%d.wav" % i} if with_audio else {})}
+                            for i in range(n)],
+                "kept": n if with_audio else 0}
+
+    def test_a_full_board_of_purged_leads_evicts_without_raising(self):
+        """The production state exactly: every row lacks "audio"."""
+        state = self._state(harvest.KEEP_TOP + 1)
+        harvest.evict_overfull(state, 4)                  # used to raise KeyError: 'audio'
+        self.assertEqual(len(state["matches"]), harvest.KEEP_TOP)
+
+    def test_the_worst_lead_is_the_one_dropped(self):
+        state = self._state(harvest.KEEP_TOP + 1)
+        harvest.evict_overfull(state, 4)
+        costs = [m["cost"] for m in state["matches"]]
+        self.assertEqual(max(costs), 0.01 * (harvest.KEEP_TOP - 1))   # the priciest row is gone
+
+    def test_a_missing_file_does_not_raise_either(self):
+        """The OSError case still has to work -- the file may already be gone."""
+        state = self._state(harvest.KEEP_TOP + 1, with_audio=True)
+        harvest.evict_overfull(state, 4)
+        self.assertEqual(len(state["matches"]), harvest.KEEP_TOP)
+
+    def test_an_underfull_board_is_left_alone(self):
+        state = self._state(3)
+        harvest.evict_overfull(state, 4)
+        self.assertEqual(len(state["matches"]), 3)
+
+    def test_other_mysteries_are_untouched(self):
+        state = self._state(harvest.KEEP_TOP + 1)
+        state["matches"].append({"mystery": 7, "cost": 0.99, "url": "keep-me"})
+        harvest.evict_overfull(state, 4)
+        self.assertIn("keep-me", [m["url"] for m in state["matches"]])
+
+
 if __name__ == "__main__":
     unittest.main()

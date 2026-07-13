@@ -86,8 +86,14 @@ test:                 ## run the test suite
 tracklist:            ## resolve artwork into track-metadata.json + render TRACKLIST.md (network)
 	$(PYTHON) scripts/render_tracklist.py
 
-sync:                 ## cross-repo tracklist sync (3-way, PR-based). Needs NETRADIO_PLAYER_REPO. ARGS=--dry-run
+# Both of these need NETRADIO_PLAYER_REPO, which is already in .env_vars alongside every other
+# machine path -- but make does not read .env_vars, so they failed with "set NETRADIO_PLAYER_REPO"
+# even though it was set. Source it here. (`set -a` exports; the `-` before `.` is not needed since
+# .env_vars is required for these targets anyway, but a missing file must not be a syntax error.)
+sync:                 ## cross-repo tracklist sync (3-way, PR-based). Reads NETRADIO_PLAYER_REPO from .env_vars. ARGS=--dry-run
+	set -a; [ -f .env_vars ] && . ./.env_vars; set +a; \
 	NETRADIO_ANALYSIS_REPO=$(CURDIR) bash scripts/tracklist_sync.sh $(ARGS)
 
 tracklist-check:      ## report whether the analysis<->player track-metadata.json copies match
+	set -a; [ -f .env_vars ] && . ./.env_vars; set +a; \
 	NETRADIO_ANALYSIS_REPO=$(CURDIR) bash scripts/check_tracklist_sync.sh

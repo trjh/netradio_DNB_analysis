@@ -282,6 +282,32 @@ def purge_audio():
         n, freed / 1e9, len(state.get("matches") or []))
 
 
+def evict_overfull(state, num):
+    """Trim mystery `num`'s board back to KEEP_TOP, keeping the best (lowest cost).
+
+    A row's "audio" key is OPTIONAL, and its absence is the normal case: `purge_audio()` above pops
+    it from every match, and a lead is a URL -- not a copy of a record. So an evicted row with no
+    file is evicted quietly, and only a row that still points at one decrements `kept`.
+
+    This must never raise. It runs on the hot path of every hit, and it used to do
+    `os.unlink(dead["audio"])` catching only OSError -- so once the audio was purged, the first
+    match in any full board raised KeyError and killed the harvester. Every board was already at
+    KEEP_TOP, so that was every start, forever, and the watchdog restarted it into the same wall.
+    """
+    board = sorted([m for m in state["matches"] if m["mystery"] == num],
+                   key=lambda m: m["cost"])
+    for dead in board[KEEP_TOP:]:
+        state["matches"].remove(dead)
+        path = dead.get("audio")
+        if not path:
+            continue
+        try:
+            os.unlink(path)
+            state["kept"] -= 1
+        except OSError:
+            pass
+
+
 def _write_provenance():
     """State, in plain words, what the kept files are -- so nobody, including a future me, ever
     mistakes this directory for a music library."""
@@ -647,16 +673,7 @@ def run(args):
                    "verdict": "MATCH" if cost <= MATCH_COST else "near"}
             state["matches"].append(hit)
 
-            # evict the worst if the board is now over-full -- bounded storage, best kept
-            board = sorted([m for m in state["matches"] if m["mystery"] == num],
-                           key=lambda m: m["cost"])
-            for dead in board[KEEP_TOP:]:
-                state["matches"].remove(dead)
-                try:
-                    os.unlink(dead["audio"])
-                    state["kept"] -= 1
-                except OSError:
-                    pass
+            evict_overfull(state, num)
             print("  %s  MT%d  cost %.4f  %s  at %s  %s"
                   % (hit["verdict"], num, cost, _cm.describe_shift(shift),
                      _cm.describe_at(at), url))

@@ -53,6 +53,7 @@ set -a && . ./.env_vars && set +a
 |---|---|---|
 | `scripts/extract_tracks.py` | cut every well-defined track **out of the mix**, reassembling across captures. Refuses anything it cannot place precisely. | once; **re-run whenever a capture gains precise timing or a track's span changes** |
 | `scripts/calibrate.py` | score every known mix track against every known original → `docs/CALIBRATION.md` | **whenever the matcher changes.** It is the regression test for the whole matching stack |
+| `scripts/selftest.py` | the **canary**: re-identify a track we already know and demand cost, rank **and** margin — offline (small pool) and live (real stream) | continuously, by the harvester. Surfaced at `/harvest`. See [below](#the-canary-does-the-matcher-still-work) |
 
 `calibrate.py` is not a one-off. It is how we know that the true-match and non-match populations
 **overlap** — and therefore that *rank*, not cost, is the reliable signal. Any change to
@@ -80,14 +81,28 @@ own original, the change is wrong.
 ```bash
 set -a && . ./.env_vars && set +a
 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --status
-PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --run       # runs for weeks
-PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --pause     # / --resume
+PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --run          # runs for weeks
+PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --pause        # / --resume
+PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --purge-audio  # throw every retained excerpt away
 ```
 
-**What it does.** Takes a queue of candidate URLs. For each: streams the audio (never to disk),
-reduces it to a **chroma signature** (12×N float16, ~55 KB against ~8 MB), throws the audio away,
-and scores the signature against every unsolved Mystery Track. Keeps the **best 12 per mystery**
-on disk to listen to, evicting the worst when a better one lands.
+**What it does.** Takes its candidates from the player's **listen queue** (skipping anything
+already heard, discarded, ignored or duplicate) and keeps its own working queue in `.harvest/`.
+For each candidate: streams the audio (never to disk), reduces it to a **chroma signature** (12×N
+float16, ~55 KB against ~8 MB), throws the audio away, and scores the signature against every
+unsolved Mystery Track — **but only the mysteries it holds a clip of** (see
+[PROCESS §8b](../PROCESS.md#8b-giving-the-harvester-a-new-or-better-mystery-track-clip)).
+
+**It proposes; you dispose.** It never marks a mystery solved. It keeps the best **leads** (best 12
+per mystery, evicting the worst when a better one lands) and you rule on them at **`/harvest`** —
+see [PROCESS: *Ruling on what the harvester finds*](../PROCESS.md#ruling-on-what-the-harvester-finds-harvest).
+
+**A lead is a URL, not audio.** `--purge-audio` threw away the retained excerpts, and nothing is
+hoarded now: what survives is the url, the cost, the mystery, the key, and *where* in the candidate
+it matched. `/harvest` reviews each candidate by **embed at its source**. This is both the better
+review and the only defensible copyright posture — the retained audio had grown to 2.2 GB and
+included a 108-minute DJ mix kept whole, which broke the one claim the posture rested on. There is
+now a hard cap in `write_excerpt`, and a test that feeds it that mix and demands 30 seconds back.
 
 **Why signatures.** The matcher can only find what's in the pool, and the pool we want is far
 bigger than this disk. 100,000 tracks is ~5 GB of signatures and 0 GB of audio.
@@ -97,7 +112,32 @@ buckets, jittered delays (never a fixed cadence), 4–5 h sessions then 40–120
 exponential backoff on 429/403, and a hard stop after 5 refusals from one host. Every track is
 fetched **once, ever** — the signature cache guarantees it.
 
-**Watch it** at **`/harvest`** on the player. Pause/resume from there.
+**The bot wall.** *"Sign in to confirm you're not a bot"* carries no 403 and no 429, so it slips
+past the backoff logic entirely. The harvester **halts** on it instead of failing forever. Feed it
+a cookie — see [PROCESS: *The harvester, and the bot wall*](../PROCESS.md#the-harvester-and-the-bot-wall).
+On macOS, prefer a `cookies.txt` file or `firefox`; `chrome` raises a **Keychain prompt per
+process**, so a restarting harvester will ask for your password endlessly.
 
-**Known gaps** — see [`TASKLIST.md`](../TASKLIST.md): nothing starts it automatically, and it
-keeps its own queue instead of using the listen queue.
+**Watch it** at **`/harvest`** on the player: pause/resume, the self-test, the mysteries it is
+*not* searching for, and the ruling buttons. The player **supervises** it — it adopts a
+hand-started harvester rather than spawning a second, and a watchdog revives it if it dies.
+`scripts/run_player.sh status` in the player repo reports it too.
+
+### The canary: does the matcher still WORK?
+
+`scripts/selftest.py`.
+
+| Mode | What it proves |
+|---|---|
+| **offline** | Re-identifies a track we already know (Jamie Myerson, *Sky Blue*) out of a small pool. The matcher still **works** — not merely that the process is alive. |
+| **live** | The same, end to end, against a real stream fetched from the internet. |
+
+Both demand **cost, rank *and* a margin**. Requiring only "cost in range, rank 1" is not enough: a
+degenerate matcher scores everything identically, ties sort by track number, and the subject — the
+lowest-numbered case — ranks first. The canary then vouches for a completely broken matcher. *A tie
+is not a win.*
+
+The live check **refuses to establish a canary** if the stream it finds is not the record (it scores
+the candidate against our own copy first). A canary that cries wolf gets ignored, which is worse
+than no canary — so it retries rather than enshrining a wrong upload. `/harvest` reports **PASS**,
+**FAIL** and **not checked** as three distinct states: *a skip is not a pass.*

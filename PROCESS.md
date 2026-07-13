@@ -229,6 +229,48 @@ PYTHONPATH=scripts .env/bin/python scripts/acoustid_check.py --mismatch
 It caught two on its first run: `013-DJ Addiction - Senses.mp3` is really Blame's *J-Walkin'*
 (the same record as `021`), and `022-Castillo - Junkle I.flac` is by *Callisto*.
 
+#### 8b. Giving the harvester a new (or better) Mystery Track clip
+
+The harvester can only search for a mystery **it holds a clip of**. A mystery with no clip is not
+in the query set at all — the search can run for a month and never find it, *because it is not
+looking*. This is the single most consequential thing you can do for the search, and it is one
+file copy.
+
+**The whole procedure:**
+
+```bash
+cp "my-extract.wav" "$NETRADIO_SOURCES_DIR/Mystery Track 8.wav"
+```
+
+That is it. Nothing to run, nothing to register.
+
+**The filename is the interface.** `streamalign/mystery.py` matches, case-insensitively:
+
+       Mystery Track <N>.<wav|mp3|flac|m4a>
+
+- `<N>` is **any number of digits** — `Mystery Track 11.wav` works exactly like `Mystery Track 8.wav`.
+- `.wav` **wins** over a lossy re-encode of the same clip, so you can leave both in place.
+- The number is the **mystery's** number (4, 6, 7, 8…), *not* the master track number (68, 76, 84…).
+
+**A clip does not make a mystery, and a filename never did.** A track is a mystery if, and only if,
+its **title in `track-metadata.json`** still says `Mystery Track N`. Identify it upstream and it
+leaves the search the moment the metadata is rebuilt — *even though its clip is still sitting in
+`sources/`*. That is deliberate: the tools used to glob `sources/Mystery Track *` and spent **~40%
+of their work re-answering questions that were already solved**, and a spurious hit against a
+solved track reads exactly like a real lead. Mystery Track 5's clip is still on disk today, and it
+is correctly no longer searched for.
+
+**When does a running harvester pick it up?** On its **next start** — the query set is built once,
+in `run()`. So drop the file in and restart it from `/harvest` (**off**, then **on**). It resumes
+where it left off: the queue, the `done` list and every chroma signature are on disk, so nothing is
+re-fetched or re-analysed. `/harvest` lists what it is searching for, and names the mysteries it
+**cannot** search for and why.
+
+**Make it a full-length extract, not a snippet.** A short query drives *every* cost down until
+unrelated records tie for first. Mystery Track 7's clip is **23 seconds** and it produced five
+confident false positives, all within 0.0007 of each other. Prefer the whole span the record plays
+for. This is the same lesson as the canary's margin check — winning by nothing is not winning.
+
 ### 9. Align the originals
 
 **Don't chase the track's start and end** — in a DJ mix records are *blended*, so there is no
@@ -260,12 +302,35 @@ whether it is reliable enough to trust.
 ### 10. Build + validate
 
 ```bash
-python3 scripts/build_track_metadata.py                  # labels → track-metadata.json
-PYTHONPATH=scripts python3 -m streamalign validate       # engine vs hand: error table
+python3 scripts/build_track_metadata.py --seed track-metadata.json   # labels + remainder.tsv → JSON
+PYTHONPATH=scripts python3 -m streamalign validate                   # engine vs hand: error table
 ```
 
 `build_track_metadata.py` is the **only** writer of `track-metadata.json`. Nothing in the
-notating steps above writes it.
+notating steps above writes it. It reads the hand labels **and** `labels/remainder.tsv` (the
+first-pass tail, tracks ~67–91), so this is also how a change to `remainder.tsv` or
+`tracklist-2017.txt` reaches the JSON.
+
+**`--seed` is not optional in practice.** Curated fields — artwork, links, and any manual
+title/artist — reach the output *only* through the seed. Without it they are dropped, and the drop
+is silent: a rebuild that destroys an identification looks exactly like a rebuild that worked.
+
+So it now **refuses**:
+
+       REFUSING TO WRITE -- this rebuild would DESTROY 2 identification(s):
+         track 74: artist  "Jacob's Optical Stairway" -> ''
+         track 90: artist  'Depeche Mode' -> ''
+
+The guard is one-directional: *adding* a title, or filling in a missing artist, is waved straight
+through — it only ever objects to going backwards. `--allow-identification-loss` overrides it, if
+you genuinely mean to.
+
+Then mirror it to the player, which keeps a copy for its own tracklist:
+
+```bash
+make sync            # 3-way, PR-based; reads NETRADIO_PLAYER_REPO from .env_vars
+make tracklist-check # report whether the two copies agree
+```
 
 ### 11. Publish
 
@@ -336,6 +401,140 @@ computed downstream in [`sheetscript/Code.js`](./sheetscript/Code.js), instead o
 a moving target by hand.
 
 ---
+
+## The harvester, and the bot wall
+
+The harvester (`harvest.py`) streams candidate records, reduces each to a chroma signature, throws
+the audio away, and scores the signature against every unsolved mystery. It runs for weeks. You
+watch it, and rule on what it finds, at **`/harvest`** in the player.
+
+**YouTube now refuses anonymous downloads**, with:
+
+       ERROR: [youtube] <id>: Sign in to confirm you're not a bot.
+       Use --cookies-from-browser or --cookies for the authentication.
+
+Note what that error is **not**: it carries no `403` and no `429`, so it slipped straight past the
+host-backoff logic, and the harvester ground through the queue failing identically on every item
+while the dashboard reported a cheerful yellow *"waiting on youtube.com"*. It now **halts** on it.
+Waiting does not fix this; only a signed-in session does.
+
+**Give it a session.** Set **one** of these in `.env_vars` (gitignored — it never reaches the
+public remote), then start the harvester again:
+
+       NETRADIO_YTDLP_COOKIES_FROM_BROWSER=chrome     # brave | chrome | chromium | edge | firefox
+                                                      # | opera | safari | vivaldi | whale
+       NETRADIO_YTDLP_COOKIES=/path/to/cookies.txt    # a Netscape-format cookies.txt export
+
+The value is passed straight to `yt-dlp` as `--cookies-from-browser <value>` (or `--cookies
+<path>`), so **anything yt-dlp accepts works** — including a profile, e.g.
+`chrome:Profile 2`. Both are **off by default**: the harvester never touches a browser profile, or
+reads a credential, unless explicitly told to.
+
+**Do not use `chrome` on macOS.** yt-dlp reads Chrome's cookie DB off disk and decrypts it with a
+key held in the **login Keychain** — so macOS raises
+
+       "security" wants to use your confidential information stored in
+       "Chrome Safe Storage" in your keychain.
+
+**once per yt-dlp process, not once ever.** Entering your password authorises *that* process and
+nothing more; the next fetch is a new process and asks again. A harvester that restarts — say,
+because it is crash-looping — will ask you forever, and no number of correct passwords will stop
+it. (This is exactly what happened on 2026-07-13: four password prompts, and the real fault was a
+`KeyError` restart loop underneath.) Clicking **Always Allow** would persist the grant, but the
+prompt is easy to mistake for a failure, and on a headless box there is nobody to click it.
+
+Prefer, in order:
+
+1. **A `cookies.txt` file** (`NETRADIO_YTDLP_COOKIES`) — a plain file read. No Keychain, no
+   prompt, works headless, survives browser updates. See below.
+2. **`firefox`** (`NETRADIO_YTDLP_COOKIES_FROM_BROWSER=firefox`) — Firefox keeps cookies in an
+   unencrypted `cookies.sqlite`, so it needs no Keychain and never prompts.
+3. Chromium-based browsers (`chrome`, `brave`, `edge`, …) — only if you have no other option.
+
+Either way: **the cookie is your logged-in YouTube session — treat it as a credential.** That is
+why it lives in `.env_vars` and not in the repo, and why the harvester will not go looking for one
+on its own. Close the browser before reading its profile, or the read can fail on a locked DB.
+
+### Exporting a `cookies.txt`
+
+Use a **private/incognito window**, and **close it without logging out** — YouTube rotates the
+session when you log out, which invalidates the cookie you just exported.
+
+1. Open a private window and log in to YouTube.
+2. Export with a Netscape-format extension — *Get cookies.txt LOCALLY* (Chrome/Brave/Edge) or
+   *cookies.txt* (Firefox). Both write the `# Netscape HTTP Cookie File` format yt-dlp wants.
+3. Save it **outside the repo** — this is a credential and the repo is public. Lock it down:
+
+       mkdir -p ~/.config/netradio && chmod 700 ~/.config/netradio
+       mv ~/Downloads/youtube.com_cookies.txt ~/.config/netradio/youtube-cookies.txt
+       chmod 600 ~/.config/netradio/youtube-cookies.txt
+
+4. Point `.env_vars` at it, then restart the harvester from `/harvest`:
+
+       NETRADIO_YTDLP_COOKIES=/Users/<you>/.config/netradio/youtube-cookies.txt
+
+5. Close the private window (do **not** log out).
+
+If the harvester halts again with cookies already configured, the **session expired** — re-export.
+`/harvest` says which of the two situations you are in, and so does `scripts/run_player.sh status`
+in the player repo.
+
+## Ruling on what the harvester finds (`/harvest`)
+
+The harvester **proposes**; you **dispose**. It never marks a mystery solved on its own — a cost is
+a distance, the true-match and non-match populations overlap, and the matcher has already been
+caught vouching for itself (see *A tie is not a win*, below). So every candidate ends in a **human
+ruling**, and the review loop is the point of the whole thing.
+
+**Where the leads live.** Nothing is kept as audio. `--purge-audio` threw away the retained
+excerpts and the harvester no longer hoards them: what survives is the **lead** — the URL, the
+cost, which mystery it matched, the key it matched in, and *where in the candidate* it matched.
+`/harvest` plays the candidate from an **embed at its source**, which is both a better review (it
+is the record, not our copy of it) and the only defensible copyright posture.
+
+**Reading a candidate.** Three numbers, in order of how much they should move you:
+
+| | |
+|---|---|
+| **Rank + margin** | The one that matters. A true match should beat the field, not tie it. |
+| **Cost** | A true match runs **0.004–0.03**; an unrelated record sits near **0.095**. The populations **overlap** — a cost alone is not a verdict. |
+| **Key** | The transposition it matched in. All twelve are tried, so a match in an odd key is not suspicious by itself. |
+
+See [`docs/CALIBRATION.md`](./docs/CALIBRATION.md) for where those numbers come from.
+
+**Be suspicious of a tight cluster.** MT7 produced *five* confident false positives all within
+0.0007 of each other. When everything scores the same, nothing has been distinguished — that is a
+degenerate match, not five near-misses. The usual cause is a **short query**: MT7's clip is 23
+seconds, and a short query drives every cost down. Fix the clip (§8b), don't rule on the noise.
+
+**The three rulings.** Each is one click on `/harvest`, and each is recorded against the lead:
+
+- **match** — this is it. Favourites the candidate and marks it heard in the listen queue. Then do
+  the real work: fill in the identification (§8), and give the mystery a **name** so it leaves the
+  query set. A mystery that is solved but still named `Mystery Track N` keeps getting searched for.
+- **near** — related but not the record. A shared break, a sample, a remix of the same tune. Worth
+  keeping as a lead; it is often the thread that leads to the right record.
+- **no** — not it. Dismissed, and it will not come back.
+
+The rulings are **durable** and shared with the listen queue: the queue page shows a **chroma-sig
+badge** on anything the harvester has analysed, and `/harvest` shows the queue's flags on each
+candidate. Two views, one queue — so a track you have already heard and discarded is not offered
+back to you as a discovery.
+
+**What it is NOT searching for.** `/harvest` names the mysteries with **no clip**, because that is
+invisible otherwise: a mystery with no clip is not "searched for and not found", it is *not in the
+query set at all*, and the harvester can run for a month without ever looking for it. If a mystery
+is listed there, the fix is §8b — one file copy.
+
+**The self-test, in three states.** `/harvest` reports **PASS**, **FAIL**, and **not checked** as
+three distinct things, and never lets the third look like the first — *a skip is not a pass*.
+
+- **offline** — re-identifies a track we already know (Jamie Myerson, *Sky Blue*) out of a small
+  pool. Proves the matcher still *works*, not merely that the process is alive.
+- **live** — the same, end to end, against a real stream fetched from the internet. It refuses to
+  establish a canary if the stream it finds is **not the record** (it checks the candidate against
+  our own copy first). A canary that cries wolf gets ignored, which is worse than no canary — so
+  it retries rather than enshrining a wrong upload. If it never settles, hand it a known-good URL.
 
 ## What the engine cannot do
 
