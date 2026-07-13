@@ -15,6 +15,7 @@ added alongside: the excerpt hard cap, and the bot-wall halt.
 """
 
 import os
+import unittest.mock
 import subprocess
 import sys
 import tempfile
@@ -242,3 +243,47 @@ class OurOwnUploadsAreNeverAnalysed(unittest.TestCase):
             with self.subTest(title=title):
                 item = {"title": title, "origin": "subscription:Back 2 The Old Skool Era"}
                 self.assertFalse(harvest._is_own_clip(item))
+
+
+@unittest.skipIf(harvest is None, "needs the librosa venv")
+class ANewMysteryMustSeeTheWholeCorpus(unittest.TestCase):
+    """The harvester only ever walked `pending`. Once a URL reached `done` it was never looked at
+    again -- so a mystery whose clip arrives LATER was scored only against candidates fetched after
+    it. Every signature gathered before that point (the entire corpus, ~900 of them, built over
+    weeks) would silently never be tested against MT8-MT11.
+
+    Tim assumed the opposite, reasonably: "when they come, I assume they'll be searched against all
+    current chroma signatures." The code did not honour that. Now it does, and it REMEMBERS which
+    (signature, mystery) pairs it has already scored, so the work is done exactly once.
+    """
+
+    def _state(self):
+        return {"matches": [], "kept": 0, "scored": {}}
+
+    def test_it_knows_what_it_has_already_scored(self):
+        state, q = self._state(), {"done": ["u1", "u2"], "pending": []}
+        state["scored"]["4"] = [harvest._sig_key("u1")]
+        with unittest.mock.patch("os.path.exists", return_value=True):
+            pairs = harvest.unscored_pairs(state, q, set(), [(4, None)])
+        self.assertEqual([p[2] for p in pairs], ["u2"])      # u1 already met MT4; only u2 is left
+
+    def test_a_brand_new_mystery_re_scores_the_ENTIRE_cache(self):
+        """The MT8 case: its clip lands, and every signature we already hold must meet it."""
+        state, q = self._state(), {"done": ["u1", "u2", "u3"], "pending": []}
+        state["scored"]["4"] = [harvest._sig_key(u) for u in ("u1", "u2", "u3")]   # MT4 is done
+        with unittest.mock.patch("os.path.exists", return_value=True):
+            pairs = harvest.unscored_pairs(state, q, set(), [(4, None), (8, None)])
+        self.assertEqual(sorted(p[2] for p in pairs), ["u1", "u2", "u3"])          # all, for MT8
+        self.assertTrue(all(p[0] == 8 for p in pairs))                             # and only MT8
+
+    def test_a_ruled_out_record_is_never_offered_again_not_even_for_a_new_mystery(self):
+        """'not a match' means not a match for ANYTHING we are waiting for. Without this, the day
+        MT8 lands, every record Tim already rejected comes straight back at him."""
+        state, q = self._state(), {"done": ["keep", "rejected"], "pending": []}
+        with unittest.mock.patch("os.path.exists", return_value=True):
+            pairs = harvest.unscored_pairs(state, q, {"rejected"}, [(8, None)])
+        self.assertEqual([p[2] for p in pairs], ["keep"])
+
+    def test_not_a_match_retires_an_entry(self):
+        """The player writes the flag; the harvester must honour it."""
+        self.assertIn("not_a_match", harvest.RULED_ON)
