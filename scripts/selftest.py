@@ -216,9 +216,21 @@ def establish_canary(fetch, subject=None):
         return {"ok": False, "why": "no calibration cases to build a canary from"}
     subject = subject or cs[0]
 
-    url = _search(subject["name"])
+    # A HAND-PICKED URL, when the search keeps finding the wrong upload.
+    #
+    # `_search()` takes YouTube's first hit for the track name, and for the current subject
+    # (track 3, Jamie Myerson - Sky Blue) that hit is not the record: it scores 0.0867 against our
+    # own copy, so the guard below refuses it and no canary is ever established. Correct behaviour
+    # -- a canary that cries wolf is worse than none -- but it leaves the live check permanently
+    # "not checked", and there was no way to break the deadlock by hand.
+    #
+    # Set NETRADIO_CANARY_URL to a stream you know IS the record. It is still validated against our
+    # own copy, exactly like a searched one: a hand-picked URL is a hint, never an override.
+    url = os.environ.get("NETRADIO_CANARY_URL", "").strip() or _search(subject["name"])
     if not url:
-        return {"ok": False, "why": "found no stream for %r" % subject["name"]}
+        return {"ok": False, "why": "found no stream for %r -- set NETRADIO_CANARY_URL to a "
+                                    "stream of it, and it will be validated before use"
+                                    % subject["name"]}
 
     c_fetched, _samples, err = fetch(url)
     if err or c_fetched is None:
