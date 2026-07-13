@@ -174,3 +174,36 @@ class EvictingAPurgedLead(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipIf(harvest is None, "needs the librosa venv")
+class OurOwnUploadsAreNeverAnalysed(unittest.TestCase):
+    """A harvester that "finds" one of Tim's own uploads has rediscovered its own question and
+    would report a triumphant ~0.00.
+
+    The guard used to match ONLY the title `Mystery Track N`, justified by "listen-queue entries
+    carry no channel or uploader field, only a title". That was false -- they carry `origin` -- and
+    it cost us: NINE of his uploads sat in the PENDING queue, uncaught, because they are titled
+    "ID #1", "ID #2" and "Wave Forms [in the mix, low quality]". None contains the word "mystery".
+    The last is an excerpt of the mix itself.
+    """
+
+    def test_the_nine_real_titles_that_slipped_through(self):
+        for title in ("ID #1", "ID #2", "Wave Forms [in the mix, low quality]",
+                      "Bunny!", "Canadian geese in Strandhill", "Crepe Suzette Supremo"):
+            with self.subTest(title=title):
+                item = {"title": title, "origin": "subscription:  Tim Hunter"}
+                self.assertTrue(harvest._is_own_clip(item), "%r must be refused" % title)
+
+    def test_the_title_net_still_catches_a_clip_with_no_origin(self):
+        """Belt and braces: an entry that never carried an origin is still caught by its title."""
+        self.assertTrue(harvest._is_own_clip({"title": "Mystery Track 8", "origin": ""}))
+        self.assertTrue(harvest._is_own_clip({"title": "Netradio Mystery 3"}))
+
+    def test_a_real_record_is_still_analysed(self):
+        """The guard must not be so broad that it refuses the corpus we are searching. Real records
+        really are called things like this."""
+        for title in ("No Mystery", "Mystery Blend", "Big Bud - Tahoe"):
+            with self.subTest(title=title):
+                item = {"title": title, "origin": "subscription:Back 2 The Old Skool Era"}
+                self.assertFalse(harvest._is_own_clip(item))
