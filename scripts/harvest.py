@@ -46,6 +46,8 @@ import random
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -360,17 +362,51 @@ def enumerate_channel(url, limit=None):
 # 0.00 match. Never queue it.
 EXCLUDE_CHANNELS = ("UCuYTatE2k5dOV8J8Bi3rK0g",)   # Tim Hunter
 
+# The player, which is the SINGLE WRITER of the listen queue.
+PLAYER_URL = os.environ.get("NETRADIO_PLAYER_URL", "http://127.0.0.1:8765")
+
 
 def add_to_queue(urls, source):
+    """Queue candidates by handing them to the PLAYER, not by writing our own queue.
+
+    This used to append straight into `.harvest/queue.json`, and that was the bug. It gave the
+    harvester a second, private door that the listen queue knew nothing about: 400 candidates got
+    in that way, invisible at /queue, untagged, and impossible to remove when a channel turned out
+    to be feeding us noise. Tim found it by adding a video by hand and getting no duplicate warning
+    for a record we had already analysed.
+
+    So there is now ONE door. Everything enters through the listen queue, tagged with where it came
+    from, and `sync_listen_queue()` folds it back into our working queue on the next pass. We only
+    ever READ that file -- the player owns it, and two writers on one JSON file is how you lose the
+    file -- so we ask the player over HTTP and let it do the write.
+
+    A dead player is a hard failure, not a silent fallback to the private queue: falling back is
+    precisely how the candidates went dark in the first place.
+    """
     if any(c in (source or "") for c in EXCLUDE_CHANNELS):
         print("refusing to queue %s -- it publishes the mystery clips themselves" % source)
         return 0
-    q = _load(QUEUE, {"pending": [], "done": []})
-    seen = set(q["pending"]) | set(q["done"])
-    fresh = [u for u in urls if u not in seen]
-    q["pending"].extend(fresh)
-    _save(QUEUE, q)
-    return len(fresh)
+
+    origin = "seed-channel:%s" % (source or "unknown")
+    added = 0
+    for url in dict.fromkeys(urls):
+        body = json.dumps({"url": url, "origin": origin}).encode()
+        req = urllib.request.Request(PLAYER_URL.rstrip("/") + "/api/queue/add", data=body,
+                                     headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                for res in (json.loads(r.read()) or {}).get("results") or []:
+                    if res.get("status") == "new":
+                        added += 1
+                    elif res.get("status") == "refused":
+                        print("  refused: %s -- %s" % (url, res.get("why")))
+        except urllib.error.URLError as e:
+            raise SystemExit(
+                "cannot reach the player at %s (%s).\n"
+                "Candidates are queued THROUGH the player now -- it owns the listen queue and is\n"
+                "its only writer. Start it (scripts/run_player.sh start), or set NETRADIO_PLAYER_URL."
+                % (PLAYER_URL, e))
+    return added
 
 
 # --- the listen queue: one queue, two stores -----------------------------------------------------
@@ -392,14 +428,26 @@ LISTEN_QUEUE = os.environ.get("NETRADIO_LISTEN_QUEUE", "")
 RULED_ON = ("listened", "discarded", "ignored", "duplicate")
 
 
-def _is_own_clip(item):
-    """Tim's own uploads of the mystery clips are titled `Mystery Track N`. A harvester that
-    "finds" one has rediscovered its own question and would report a triumphant 0.00.
+# Tim's own channel, as it appears in a listen-queue entry's `origin`.
+OWN_ORIGINS = ("tim hunter", "trjh", "UCuYTatE2k5dOV8J8Bi3rK0g")
 
-    The channel-level guard (EXCLUDE_CHANNELS) cannot help here: listen-queue entries carry no
-    channel or uploader field, only a title. So match the title his uploads actually use -- and
-    narrowly, because real records are called things like "No Mystery" and "Mystery Blend".
+
+def _is_own_clip(item):
+    """Ours? Then never analyse it: we would rediscover our own question and report ~0.00.
+
+    This used to match ONLY the title `Mystery Track N`, and justified that by claiming
+    "listen-queue entries carry no channel or uploader field, only a title." That was false --
+    they carry `origin`, which names the subscription that produced them -- and the cost of the
+    mistake was real: NINE of his uploads sat in the pending queue, uncaught, because they are
+    titled "ID #1", "ID #2" and "Wave Forms [in the mix, low quality]". Not one of them contains
+    the word "mystery". The last is an excerpt of the mix itself.
+
+    So check WHO uploaded it first, and keep the title check only as a second net -- narrowly,
+    because real records are called things like "No Mystery" and "Mystery Blend".
     """
+    origin = (item.get("origin") or "").strip().lower()
+    if any(o.lower() in origin for o in OWN_ORIGINS):
+        return True
     title = (item.get("title") or "").strip().lower()
     return title.startswith("mystery track") or title.startswith("netradio mystery")
 
