@@ -498,11 +498,52 @@ def save(data, path):
         handle.write("\n")
 
 
+def identification_losses(out_path, new_tracks):
+    """What would this rebuild DESTROY? -> [(number, field, had, now), ...]
+
+    Compares against the file we are about to overwrite. Three ways an identification dies, all of
+    them silent today:
+
+      * a named record goes back to being a Mystery ("Solar Feelings" -> "Mystery Track 5");
+      * a known artist becomes nothing (the artist folded into the title, which is what a seedless
+        rebuild does to track 74 right now);
+      * a title or artist we hold is simply dropped.
+
+    Deliberately one-directional: a rebuild that ADDS a title, or fills in a missing artist, is not
+    a loss and is waved straight through. We only ever object to going backwards.
+    """
+    try:
+        with open(out_path, "r", encoding="utf-8") as fh:
+            had_tracks = (json.load(fh) or {}).get("tracks") or {}
+    except (OSError, ValueError):
+        return []                       # nothing to lose: first build, or an unreadable file
+
+    losses = []
+    for num, old in had_tracks.items():
+        new = new_tracks.get(num) or new_tracks.get(str(num))
+        if not isinstance(old, dict) or not isinstance(new, dict):
+            continue
+        for field in ("title", "artist"):
+            had = (old.get(field) or "").strip()
+            now = (new.get(field) or "").strip()
+            if not had or had == now:
+                continue
+            # a solved record must never quietly become a mystery again
+            if field == "title" and MYSTERY_RE.match(now) and not MYSTERY_RE.match(had):
+                losses.append((num, field, had, now))
+            elif not now:               # we knew it, and now we don't
+                losses.append((num, field, had, now))
+    return losses
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", help="JSON to carry curated fields forward from")
     parser.add_argument("--out", default=str(OUT_PATH))
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--allow-identification-loss", action="store_true",
+                        help="permit a rebuild that DESTROYS an existing title/artist (it will "
+                             "refuse by default -- see identification_losses)")
     args = parser.parse_args()
 
     data = {"schema": SCHEMA, "tracks": {}}
@@ -622,6 +663,30 @@ def main():
         print("  KEPT override track %s %s=%r (label %r)" % (n, f, have, gen))
     for c in conflicts:
         print("  CONFLICT track %s: %s vs %s (%s)" % (c["track_number"], c["kept"], c["also"], c["file"]))
+
+    # THE IDENTIFICATION GUARD. An identification is the most expensive thing in this project --
+    # months of listening, or a stranger on a forum who happened to be there in 1998 -- and it is
+    # the easiest thing to lose, because losing it looks exactly like a successful rebuild.
+    #
+    # Mystery Track 5 is the live example. Its answer reaches the output through `--seed`; run this
+    # without one and track 74 comes back as "Jacob's Optical Stairway - Solar Feelings (J Majik
+    # Remix)" with artist=None -- the artist folded into the title, silently. Re-run
+    # `remainderlist.pl` and it reverts to "Mystery Track 5" outright, because the source line in
+    # tracklist-2017.txt still says that. Neither failure prints a word today.
+    #
+    # So: refuse. A rebuild is allowed to ADD identifications; it is never allowed to take one
+    # away without someone saying so out loud.
+    losses = identification_losses(args.out, tracks)
+    if losses and not args.allow_identification_loss:
+        print("\nREFUSING TO WRITE -- this rebuild would DESTROY %d identification(s):"
+              % len(losses))
+        for num, field, had, now in losses:
+            print("  track %s: %s  %r -> %r" % (num, field, had, now))
+        print("\nAn identification is the most expensive thing here and the easiest to lose "
+              "silently.\nYou almost certainly want:")
+        print("    --seed %s" % args.out)
+        print("If you really do mean to drop them, say so: --allow-identification-loss")
+        return 1
 
     if args.dry_run:
         print("dry-run: nothing written")
