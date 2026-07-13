@@ -29,22 +29,57 @@ except Exception:                       # librosa/numba absent -> not this test'
     harvest = None
 
 
-class NoUndefinedNames(unittest.TestCase):
-    """A NameError in a rarely-taken branch is invisible to a test suite and fatal in production."""
+# The Audacity-era tools. `pipeclient.py` still calls `raw_input`, so it has not run since Python 2;
+# SCRIPTS.md already files all three under "Retired". They are full of undefined names and always
+# were. Naming them here is the honest way to lint everything else: an exclusion you can see beats
+# a check narrowed until it passes.
+RETIRED = ("alignfinder.py", "pipeclient.py", "splitexport.py")
 
-    def test_pyflakes_is_clean_on_the_harvester(self):
+
+def _live_scripts():
+    """Every script we still run — the whole of scripts/ and streamalign/, minus the retired ones."""
+    out = []
+    for root in (SCRIPTS, os.path.join(SCRIPTS, "streamalign")):
+        for name in sorted(os.listdir(root)):
+            if name.endswith(".py") and name not in RETIRED:
+                out.append(os.path.join(root, name))
+    return out
+
+
+class NoUndefinedNames(unittest.TestCase):
+    """A NameError in a rarely-taken branch is invisible to a test suite and fatal in production.
+
+    This check used to cover exactly two files, `harvest.py` and `selftest.py`, hardcoded. That was
+    enough to catch the missing `import urllib` I wrote on 2026-07-13 -- but only because I happened
+    to be editing one of the two. Every other script in this repo was unguarded. So: lint them all.
+
+    It also used to `skipTest` when pyflakes was absent, which is the failure mode this repo has a
+    name for -- *a skip is not a pass*. A missing linter is now a FAILURE, because a green suite
+    that silently checked nothing is worse than a red one that tells you why.
+    """
+
+    def test_pyflakes_is_available_at_all(self):
         try:
             import pyflakes  # noqa: F401
         except ImportError:
-            self.skipTest("pyflakes not installed")
-        for script in ("harvest.py", "selftest.py"):
-            with self.subTest(script=script):
-                r = subprocess.run([sys.executable, "-m", "pyflakes",
-                                    os.path.join(SCRIPTS, script)],
-                                   capture_output=True, text=True)
-                # undefined names are the fatal class; unused imports are noise we tolerate
-                fatal = [l for l in r.stdout.splitlines() if "undefined name" in l]
-                self.assertEqual(fatal, [], "\n".join(fatal))
+            self.fail("pyflakes is not installed, so the undefined-name guard checked NOTHING. "
+                      "A skip is not a pass. Install it:  .venv/bin/pip install pyflakes")
+
+    def test_no_undefined_names_in_any_live_script(self):
+        try:
+            import pyflakes  # noqa: F401
+        except ImportError:
+            self.fail("pyflakes is not installed -- see test_pyflakes_is_available_at_all")
+
+        scripts = _live_scripts()
+        self.assertGreater(len(scripts), 10, "we should be linting the whole repo, not a handful")
+
+        r = subprocess.run([sys.executable, "-m", "pyflakes"] + scripts,
+                           capture_output=True, text=True)
+        # undefined names are the fatal class; unused imports are noise we tolerate
+        fatal = [l for l in r.stdout.splitlines() if "undefined name" in l]
+        self.assertEqual(fatal, [], "undefined names — each one is a NameError waiting to happen:\n"
+                                    + "\n".join(fatal))
 
     @unittest.skipIf(harvest is None, "needs the librosa venv")
     def test_run_can_reach_its_dependencies(self):
