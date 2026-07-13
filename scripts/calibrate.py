@@ -85,23 +85,13 @@ def positions():
     return starts
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", default="-")
-    ap.add_argument("--limit", type=int, default=None)
-    args = ap.parse_args()
+def build_cases(tracks, starts, src):
+    """Every track where we hold BOTH the mix and the original.
 
-    src = os.environ.get("NETRADIO_SOURCES_DIR")
-    if not src or not os.path.isdir(src):
-        sys.exit("NETRADIO_SOURCES_DIR is unset (see .env_vars.example)")
-    out = sys.stdout if args.out == "-" else open(args.out, "w", buffering=1)
-
-    meta = json.load(open(os.path.join(_gt.REPO_ROOT, "track-metadata.json")))
-    tracks = meta.get("tracks", meta)
-    starts = positions()
-
-    # --- who can we actually test? we need BOTH the mix and the original -------------------
+    Shared with `selftest.py`, deliberately: the self-test must exercise the SAME capture-selection
+    path this calibration does. A second, parallel copy of this logic would drift, and the thing it
+    would drift away from is the very code the self-test is supposed to be vouching for.
+    """
     cases = []
     for num, entry in tracks.items():
         if not str(num).isdigit():
@@ -147,6 +137,49 @@ def main():
                           "name": "%s - %s" % (entry.get("artist") or "?",
                                                entry.get("title") or "?")})
     cases.sort(key=lambda c: c["num"])
+    return cases
+
+
+def mix_query(case):
+    """The 90 s window of the MIX that gets scored against the originals.
+
+    Sampled from the MIDDLE, never the start: at the start the DJ is still blending the previous
+    record in, so the first minute is often two records at once. That window WAS the bug once --
+    Urban Style scored 0.0337 from a solo window and 0.0846 from a master_begin one, same track,
+    same original, same matcher. Shared with `selftest.py` for the same reason as `build_cases`.
+    """
+    if case.get("extract"):
+        y = _audio.load_audio(case["extract"])
+    else:
+        capa = _audio.load_audio(case["cap"])
+        lo = case["mb"] - case["cstart"]
+        y = capa[int(lo * _audio.SR):int((case["me"] - case["cstart"]) * _audio.SR)]
+    if len(y) < 45 * _audio.SR:
+        return None
+    lo_i = int(len(y) * EDGE_SKIP)
+    mix = y[lo_i:lo_i + int(QUERY_S * _audio.SR)]
+    if len(mix) < 30 * _audio.SR:
+        mix = y[:int(QUERY_S * _audio.SR)]
+    return mix
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--out", default="-")
+    ap.add_argument("--limit", type=int, default=None)
+    args = ap.parse_args()
+
+    src = os.environ.get("NETRADIO_SOURCES_DIR")
+    if not src or not os.path.isdir(src):
+        sys.exit("NETRADIO_SOURCES_DIR is unset (see .env_vars.example)")
+    out = sys.stdout if args.out == "-" else open(args.out, "w", buffering=1)
+
+    meta = json.load(open(os.path.join(_gt.REPO_ROOT, "track-metadata.json")))
+    tracks = meta.get("tracks", meta)
+    starts = positions()
+
+    cases = build_cases(tracks, starts, src)
     if args.limit:
         cases = cases[:args.limit]
 
@@ -213,20 +246,9 @@ separate them; what identifies a record is that it beats the field, not that it 
     for c in cases:
         # Prefer the clean extract (extract_tracks.py) over a window carved out of a capture: it
         # is already reassembled across capture boundaries where the track straddles one.
-        y = None
-        if c.get("extract"):
-            y = _audio.load_audio(c["extract"])
-        else:
-            capa = _audio.load_audio(c["cap"])
-            lo = c["mb"] - c["cstart"]
-            y = capa[int(lo * _audio.SR):int((c["me"] - c["cstart"]) * _audio.SR)]
-        if len(y) < 45 * _audio.SR:
+        mix = mix_query(c)
+        if mix is None:
             continue
-        # Sample from the MIDDLE. The edges are the blend.
-        lo_i = int(len(y) * EDGE_SKIP)
-        mix = y[lo_i:lo_i + int(QUERY_S * _audio.SR)]
-        if len(mix) < 30 * _audio.SR:
-            mix = y[:int(QUERY_S * _audio.SR)]
         q = chroma(mix)
 
         scored = []

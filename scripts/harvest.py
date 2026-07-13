@@ -259,6 +259,80 @@ def add_to_queue(urls, source):
     return len(fresh)
 
 
+# --- the listen queue: one queue, two stores -----------------------------------------------------
+#
+# The player owns `listen_queue.json`; we only ever READ it. Two writers on one JSON file is how
+# you lose the file, so the harvester keeps its own working queue in `.harvest/queue.json` and
+# merely SYNCS from the player's -- new unheard entries flow in, and anything a human has since
+# ruled on flows out of pending. Subscriptions therefore feed the search automatically, which was
+# the whole point: before this, subscriptions fed one queue and the harvester worked from another.
+#
+# Nothing here writes to the player's file. If the env var is unset (a harvester run by hand,
+# without the player) this whole path is simply inert.
+
+LISTEN_QUEUE = os.environ.get("NETRADIO_LISTEN_QUEUE", "")
+
+# A human ruling means "I have heard this, and it is not the record" -- so there is nothing left
+# for the matcher to find in it. `duplicate` is the same audio as another entry, `ignored` was
+# rejected outright. All four retire an entry from the search.
+RULED_ON = ("listened", "discarded", "ignored", "duplicate")
+
+
+def _is_own_clip(item):
+    """Tim's own uploads of the mystery clips are titled `Mystery Track N`. A harvester that
+    "finds" one has rediscovered its own question and would report a triumphant 0.00.
+
+    The channel-level guard (EXCLUDE_CHANNELS) cannot help here: listen-queue entries carry no
+    channel or uploader field, only a title. So match the title his uploads actually use -- and
+    narrowly, because real records are called things like "No Mystery" and "Mystery Blend".
+    """
+    title = (item.get("title") or "").strip().lower()
+    return title.startswith("mystery track") or title.startswith("netradio mystery")
+
+
+def listen_queue_split():
+    """(candidates, retired) from the player's listen queue. Read-only; never raises."""
+    if not LISTEN_QUEUE or not os.path.exists(LISTEN_QUEUE):
+        return [], set()
+    try:
+        with open(LISTEN_QUEUE, "r", encoding="utf-8") as fh:
+            items = (json.load(fh) or {}).get("items") or []
+    except (OSError, ValueError):
+        return [], set()                 # the player may be mid-write; try again next pass
+
+    candidates, retired = [], set()
+    for it in items:
+        url = (it.get("url") or "").strip()
+        if not url.startswith("http"):
+            continue
+        if any(it.get(f) for f in RULED_ON) or _is_own_clip(it):
+            retired.add(url)
+        else:
+            candidates.append(url)
+    return candidates, retired
+
+
+def sync_listen_queue(q):
+    """Fold the player's queue into ours. Returns (added, dropped); mutates `q` in place.
+
+    Length is deliberately NOT a filter: a record can hide inside an hour-long DJ mix, and the
+    match reports WHERE it hit (`at`), so a long mix is a feature, not a cost.
+    """
+    candidates, retired = listen_queue_split()
+    if not candidates and not retired:
+        return 0, 0
+
+    seen = set(q["pending"]) | set(q["done"])
+    fresh = [u for u in candidates if u not in seen]
+    q["pending"].extend(fresh)
+
+    # Drop anything a human ruled on while it sat in our pending list. Not from `done` -- that is
+    # our record of work completed, and re-adding a URL later must not re-analyse it.
+    before = len(q["pending"])
+    q["pending"] = [u for u in q["pending"] if u not in retired]
+    return len(fresh), before - len(q["pending"])
+
+
 # --- the run ------------------------------------------------------------------------------------
 
 def queries():
@@ -306,8 +380,39 @@ def run(args):
           % ("4-5h", "40-120m"))
 
     sweep_excerpts()                    # drop anything past its TTL before we start
+
+    # THE CANARY. A broken harvester and a pool without the answer look identical from here: zero
+    # matches, for weeks. So before searching for something we have never found, prove we can still
+    # find something we HAVE -- re-run one solved calibration case from local files.
+    st = selftest.offline()
+    if st.get("ok"):
+        print("# self-test PASS -- %s: cost %.4f, rank %d, beat the field by %.4f"
+              % (st["name"], st["cost"], st["rank"], st["margin"]))
+    elif st.get("ok") is False:
+        print("!! SELF-TEST FAILED -- %s" % st.get("why"))
+        print("!! The matcher cannot find a record we KNOW it holds. Every 'no match' it reports")
+        print("!! from here is meaningless. Fix this before trusting another day of searching.")
+        state.setdefault("issues", []).append(
+            {"at": _now(), "issue": "self-test failed: %s" % st.get("why")})
+        _save(STATE, state)
+    else:
+        print("# self-test skipped -- %s" % st.get("why"))
+
     session_end = time.time() + random.uniform(*SESSION_S)
     while True:
+        # The live canary, about once a day: the streaming path (yt-dlp -> ffmpeg -> chroma) is
+        # exactly what the offline test does NOT exercise, and it is the part with moving parts.
+        if selftest.due_for_live():
+            lv = selftest.live(stream_chroma, qs)
+            if lv.get("ok"):
+                print("# live canary PASS -- fetched %s fresh and matched it at %.4f"
+                      % (lv["name"], lv["cost"]))
+            elif lv.get("ok") is False:
+                print("!! LIVE CANARY FAILED -- %s" % lv.get("why"))
+                state.setdefault("issues", []).append(
+                    {"at": _now(), "issue": "live canary failed: %s" % lv.get("why")})
+                _save(STATE, state)
+
         if os.path.exists(PAUSE):
             state["session"] = {"phase": "paused", "until": 0}
             _save(STATE, state)
@@ -315,10 +420,17 @@ def run(args):
             continue
 
         q = _load(QUEUE, {"pending": [], "done": []})
+        # Re-read the player's queue every pass: a subscription that fired an hour ago should feed
+        # this search without a restart, and a candidate ruled on at /harvest should leave it.
+        added, dropped = sync_listen_queue(q)
+        if added or dropped:
+            _save(QUEUE, q)
+            print("listen queue: +%d new, -%d ruled on" % (added, dropped))
+
         if not q["pending"]:
             state["session"] = {"phase": "queue empty", "until": 0}
             _save(STATE, state)
-            print("queue empty -- add more with --seed-channel")
+            print("queue empty -- add more with --seed-channel, or add to the listen queue")
             return
 
         if time.time() > session_end:                 # rest
