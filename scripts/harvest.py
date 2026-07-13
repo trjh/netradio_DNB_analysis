@@ -380,8 +380,39 @@ def run(args):
           % ("4-5h", "40-120m"))
 
     sweep_excerpts()                    # drop anything past its TTL before we start
+
+    # THE CANARY. A broken harvester and a pool without the answer look identical from here: zero
+    # matches, for weeks. So before searching for something we have never found, prove we can still
+    # find something we HAVE -- re-run one solved calibration case from local files.
+    st = selftest.offline()
+    if st.get("ok"):
+        print("# self-test PASS -- %s: cost %.4f, rank %d, beat the field by %.4f"
+              % (st["name"], st["cost"], st["rank"], st["margin"]))
+    elif st.get("ok") is False:
+        print("!! SELF-TEST FAILED -- %s" % st.get("why"))
+        print("!! The matcher cannot find a record we KNOW it holds. Every 'no match' it reports")
+        print("!! from here is meaningless. Fix this before trusting another day of searching.")
+        state.setdefault("issues", []).append(
+            {"at": _now(), "issue": "self-test failed: %s" % st.get("why")})
+        _save(STATE, state)
+    else:
+        print("# self-test skipped -- %s" % st.get("why"))
+
     session_end = time.time() + random.uniform(*SESSION_S)
     while True:
+        # The live canary, about once a day: the streaming path (yt-dlp -> ffmpeg -> chroma) is
+        # exactly what the offline test does NOT exercise, and it is the part with moving parts.
+        if selftest.due_for_live():
+            lv = selftest.live(stream_chroma, qs)
+            if lv.get("ok"):
+                print("# live canary PASS -- fetched %s fresh and matched it at %.4f"
+                      % (lv["name"], lv["cost"]))
+            elif lv.get("ok") is False:
+                print("!! LIVE CANARY FAILED -- %s" % lv.get("why"))
+                state.setdefault("issues", []).append(
+                    {"at": _now(), "issue": "live canary failed: %s" % lv.get("why")})
+                _save(STATE, state)
+
         if os.path.exists(PAUSE):
             state["session"] = {"phase": "paused", "until": 0}
             _save(STATE, state)
