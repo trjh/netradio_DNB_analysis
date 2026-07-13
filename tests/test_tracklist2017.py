@@ -37,9 +37,21 @@ class TestParse(unittest.TestCase):
         self.assertAlmostEqual(self.data["d356-375"]["master_start_s"], 21074.552, places=2)
 
     def test_it_reads_the_exact_join_and_the_carried_track(self):
+        """What is asserted here is the STRUCTURE — that the exact join is read, and that the
+        track playing across it is carried forward — not the track's name.
+
+        The name is data, and data moves: this used to assert "Mystery Track 3", and went red the
+        moment that mystery was solved (it is Aquarius — "Waveforms"). A test that has to be
+        edited every time the project succeeds is a test that will be edited carelessly. So assert
+        that a continuation was read at all, and pin the identity separately and explicitly, where
+        a future identification will read as an intentional update rather than a broken test.
+        """
         entry = self.data["d356-375"]
         self.assertEqual(entry["transition_from"], "d336-355")
-        self.assertIn("Mystery Track 3", entry["continuation"])
+        self.assertTrue((entry["continuation"] or "").strip(),
+                        "the track carried across the exact join was not read")
+        # Currently Aquarius — "Waveforms" (was Mystery Track 3 until it was identified, 2026-07-13).
+        self.assertIn("Waveforms", entry["continuation"])
 
     def test_track_starts_are_in_the_captures_local_time(self):
         tracks = self.data["d356-375"]["tracks"]
