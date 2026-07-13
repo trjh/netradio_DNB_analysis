@@ -736,16 +736,17 @@ min	-----------
 	13:09.512 .. bassline stop/change [end of last song?]
 	13:34.101 .. Free La Funk bassline starts
 
-350:08	18:53.762 :: Mystery Track 3 (Aquarius - Wave Forms)
-		  :: ?? Coo-ooo-ooh-ooh yeah song
-		     no hits
+350:08	18:53.762 :: Waveforms / Aquarius
+		  :: / Drift To The Centre / Waveforms (1995, Looking Good Records)
+		     https://www.discogs.com/release/1080953-Aquarius-Drift-To-The-Centre-Waveforms
 		     https://www.reddit.com/r/AtmosphericDnB/comments/16n4u0m/comment/k1cvlzm/?utm_source=share&utm_medium=web2x&context=3
+		     was: Mystery Track 3 (see appendix)
 351:14.552  20:00.000 -- END
 
 	dnb356-375
 	----------
 	(direct transition from d336-355)
-	(continuation of Mystery Track 3)
+	(continuation of Waveforms)
 351:14.552  00:00.000 -- START
 353:12	01:57.839 :: Mystery Track 4
 		  :: ?? Hey Man You Want A Tune song
@@ -815,9 +816,12 @@ min	-----------
 			6:13.504 last beat
 	05:28.189 .. end of Your Sound
 	09:32.453 .. last OTR beat
-380:47	09:32.453 :: Mystery Track 5 (j majik remix of solar feelings by Jacobs optical stairway)
-			"space inside of me"
+380:47	09:32.453 :: Solar Feelings (J. Majik Mix) / Jacob's Optical Stairway
+                  :: / Solar Feelings (1996)
+		     "space inside of me"
 		     https://www.reddit.com/r/AtmosphericDnB/comments/16n4u0m/comment/k1geg8x/?utm_source=share&utm_medium=web2x&context=3
+		     https://www.discogs.com/master/20458-Jacobs-Optical-Stairway-Solar-Feelings
+		     was: Mystery Track 5 (see appendix)
 385:17	14:03.150 :: Sea of Tears / Goldie
 		     https://www.youtube.com/watch?v=BY37izMpcsc
 		     14:51.190 guitar enters	[in sync 0:48.334]
@@ -1350,3 +1354,35 @@ The tracks around it (by minutes into the stream)
 404: The Flute Tune / Hidden Agenda
 
 #Downtempo #unknown "#Track ID" #netradio
+
+Mystery Track 3 and 5:
+    found via
+    https://www.reddit.com/r/AtmosphericDnB/s/YJceo94rkq
+
+    r/AtmosphericDnB
+    trjh
+
+    Track ID, anyone?
+    I have a few of these, so let me know if they're wanted or unwanted. Back
+    in 1998, one of the few net radio sites was netradio.com. They had a Drum
+    and Bass channel -- music I'd never heard but instantly loved. I
+    obsessively copied the nine hour loop, and still listen to it. I've been
+    working on identifying the playlist for the last few years. This is one of
+    the tracks I can't identify.
+
+    Youtube Link [https://www.youtube.com/watch?v=jKEt_2jLzYo]
+
+    Replies:
+    hhcvf
+    •
+    3y ago
+    This is wave forms by Aquarius
+
+    ...
+
+    hhcvf
+    •
+    3y ago
+    Unknown track #5 is the j majik remix of solar feelings by Jacobs optical
+    stairway. As for #4 I know I have not heard that one before so I can't
+    help there.
