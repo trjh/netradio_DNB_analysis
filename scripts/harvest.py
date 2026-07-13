@@ -57,6 +57,8 @@ from streamalign import chroma_match as _cm          # noqa: E402
 from streamalign import groundtruth as _gt           # noqa: E402
 from streamalign import mystery as _mystery          # noqa: E402
 
+import selftest                                      # noqa: E402  (the canary; see run())
+
 HOME = _gt.REPO_ROOT
 STATE_DIR = os.path.join(HOME, ".harvest")
 STATE = os.path.join(STATE_DIR, "state.json")
@@ -143,6 +145,43 @@ def sig_path(url):
     return os.path.join(CACHE, "u" + hashlib.sha1(url.encode()).hexdigest()[:20] + ".npy")
 
 
+# --- YouTube wants to know you are a person -------------------------------------------------------
+#
+# YouTube now challenges anonymous downloads: "Sign in to confirm you're not a bot." Note what that
+# error is NOT -- it has no 403, no 429, nothing the host-backoff logic looks for. So it sailed
+# straight past the backoff and the harvester kept asking, over and over, filling the issue list and
+# analysing nothing. A wall you cannot see is worse than one you can.
+#
+# Two ways to answer it, both OFF by default (the harvester must never touch a browser profile, or
+# read a credential, unless explicitly told to):
+#
+#   NETRADIO_YTDLP_COOKIES=/path/to/cookies.txt    -- a cookies.txt export (Netscape format)
+#   NETRADIO_YTDLP_COOKIES_FROM_BROWSER=chrome     -- or firefox / safari / brave / edge
+#
+# The cookie IS a credential: it is your logged-in YouTube session. Keep the file out of the repo
+# (it is gitignored) and off the public remote.
+
+def cookie_args():
+    jar = os.environ.get("NETRADIO_YTDLP_COOKIES", "").strip()
+    if jar and os.path.isfile(jar):
+        return ["--cookies", jar]
+    browser = os.environ.get("NETRADIO_YTDLP_COOKIES_FROM_BROWSER", "").strip()
+    if browser:
+        return ["--cookies-from-browser", browser]
+    return []
+
+
+# The errors that mean "you are not getting anything else out of me until you authenticate". These
+# do not improve with waiting, so backing off is the wrong move: it just fails more slowly.
+BOT_WALL = ("sign in to confirm", "confirm you're not a bot", "confirm you are not a bot",
+            "use --cookies", "login required", "private video", "age-restricted")
+
+
+def is_bot_wall(err):
+    e = (err or "").lower()
+    return any(p in e for p in BOT_WALL)
+
+
 def stream_chroma(url):
     """Stream the audio, reduce it to a chroma signature -> (chroma, samples, error).
 
@@ -152,8 +191,8 @@ def stream_chroma(url):
     they are dropped. `samples` is the whole track only for as long as one function call.
     """
     import librosa
-    yt = subprocess.Popen(["yt-dlp", "-q", "--no-warnings", "--no-playlist",
-                           "-f", "bestaudio", "-o", "-", url],
+    yt = subprocess.Popen(["yt-dlp", "-q", "--no-warnings", "--no-playlist"] + cookie_args()
+                          + ["-f", "bestaudio", "-o", "-", url],
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     ff = subprocess.Popen(["ffmpeg", "-v", "error", "-i", "pipe:0",
                            "-ac", "1", "-ar", str(_audio.SR), "-f", "f32le", "pipe:1"],
@@ -189,9 +228,58 @@ def write_excerpt(samples, at_s, path):
     import soundfile as sf
     lo = max(0, int((at_s - EXCERPT_S / 2) * _audio.SR))
     hi = min(len(samples), lo + int(EXCERPT_S * _audio.SR))
+    clip = np.asarray(samples[lo:hi], dtype="float32")
+
+    # THE HARD CAP. Everything about this project's copyright posture rests on one claim: what we
+    # retain is an excerpt, "far too short to be a copy". That claim must be enforced by the code,
+    # not merely intended by it -- because it has already failed once. 2.1 GB of FULL-LENGTH audio
+    # was found in the candidates directory (one file was a 108-minute DJ mix, retained whole),
+    # written by a harvester whose in-memory code did not match what is in git. The slice above is
+    # correct today; this is here so that a slice that is ever wrong again cannot reach the disk.
+    cap = int(EXCERPT_S * _audio.SR)
+    if len(clip) > cap:
+        clip = clip[:cap]
+    if len(clip) == 0:
+        return                                   # nothing to hear; do not leave an empty file
+
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    sf.write(path, np.asarray(samples[lo:hi], dtype="float32"), _audio.SR)
+    sf.write(path, clip, _audio.SR)
     _write_provenance()
+
+
+def purge_audio():
+    """Throw away every retained excerpt. The LEADS survive.
+
+    Retained audio turned out to be the weakest part of this design. It is the only thing here that
+    is a copy of someone's record, it is the thing that went wrong (full-length mixes were retained
+    instead of excerpts), and it is not actually needed: a lead is a URL, and a URL can be listened
+    to at the source. So the audio goes, and `/harvest` plays the candidate from an embed instead.
+
+    What survives is everything that took work to compute -- the url, the cost, the mystery it
+    matched, the key it matched in, and WHERE in the candidate it matched. Nothing is re-fetched and
+    nothing is re-analysed; the chroma signatures (which are not audio) are untouched, so no
+    candidate will ever be downloaded twice.
+    """
+    freed = n = 0
+    if os.path.isdir(KEEP):
+        for name in os.listdir(KEEP):
+            if not name.lower().endswith((".wav", ".mp3", ".flac", ".m4a")):
+                continue                      # leave PROVENANCE.txt alone
+            path = os.path.join(KEEP, name)
+            try:
+                freed += os.path.getsize(path)
+                os.unlink(path)
+                n += 1
+            except OSError:
+                pass
+
+    state = _load(STATE, blank_state())
+    for m in state.get("matches") or []:
+        m.pop("audio", None)                  # the lead stays; the copy does not
+    state["kept"] = 0
+    _save(STATE, state)
+    return "purged %d retained files (%.1f GB). %d leads kept -- review them by embed at /harvest." % (
+        n, freed / 1e9, len(state.get("matches") or []))
 
 
 def _write_provenance():
@@ -379,6 +467,13 @@ def run(args):
     print("# work %s, idle %s, rotating hosts, jittered. Ctrl-C is safe (state is on disk)."
           % ("4-5h", "40-120m"))
 
+    # A halt is a message to the human, not a permanent state: starting again IS the human saying
+    # "I dealt with it". Clear it, and say whether they actually did the thing that was asked.
+    if state.pop("halted", None):
+        print("# clearing a previous halt -- cookies are %s"
+              % ("CONFIGURED" if cookie_args() else "STILL NOT SET (this will halt again)"))
+        _save(STATE, state)
+
     sweep_excerpts()                    # drop anything past its TTL before we start
 
     # THE CANARY. A broken harvester and a pool without the answer look identical from here: zero
@@ -473,6 +568,34 @@ def run(args):
         else:
             c, samples, err = stream_chroma(url)
 
+        # --- the bot wall: STOP, do not grind ---
+        #
+        # "Sign in to confirm you're not a bot" does not get better by waiting, and it is not the
+        # candidate's fault -- every subsequent fetch from this host will fail the same way. Grinding
+        # on produces a wall of identical errors, burns the queue, and analyses nothing. So halt,
+        # say plainly what is wrong and how to fix it, and let the human decide.
+        if is_bot_wall(err):
+            state["halted"] = {
+                "at": _now(), "host": host, "error": (err or "")[:200],
+                "reason": "%s is refusing anonymous downloads -- it wants a signed-in session" % host,
+                "fix": "Give the harvester your YouTube cookies, then start it again:\n"
+                       "  NETRADIO_YTDLP_COOKIES_FROM_BROWSER=chrome   (or firefox/safari/brave/edge)\n"
+                       "or export a cookies.txt and set:\n"
+                       "  NETRADIO_YTDLP_COOKIES=/path/to/cookies.txt\n"
+                       "Put it in the analysis repo's .env_vars. The cookie is your logged-in "
+                       "session -- keep it out of git.",
+                "using_cookies": bool(cookie_args()),
+            }
+            state["session"] = {"phase": "halted", "until": 0}
+            state["issues"] = (state["issues"] + [{"at": _now(), "host": host,
+                                                   "issue": "HALTED: %s wants a signed-in session "
+                                                            "(see the banner)" % host}])[-50:]
+            state["errors"] += 1
+            _save(STATE, state)
+            print("!! HALTED -- %s" % state["halted"]["reason"])
+            print(state["halted"]["fix"])
+            return
+
         # --- host pacing: jittered, so the cadence is never even ---
         gap = HOST_GAP_S.get(host, HOST_GAP_S["_default"]) * random.uniform(0.5, 2.0)
         if err and ("403" in err or "429" in err or "blocked" in err.lower()):
@@ -552,9 +675,15 @@ def main():
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--pause", action="store_true")
     ap.add_argument("--resume", action="store_true")
+    ap.add_argument("--purge-audio", action="store_true",
+                    help="delete every retained excerpt. The LEADS survive (url, cost, mystery, "
+                         "key, at) -- only the audio goes. Review them by embed at /harvest.")
     args = ap.parse_args()
 
     os.makedirs(STATE_DIR, exist_ok=True)
+    if args.purge_audio:
+        print(purge_audio())
+        return
     if args.pause:
         open(PAUSE, "w").close()
         print("paused (the runner will notice within ~20s)")
