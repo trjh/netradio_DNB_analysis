@@ -7,10 +7,13 @@ import sys
 import argparse
 import contextlib
 import json
+import subprocess
 import time
 
-# `scripts/` sits beside `labels/`; used to reach streamalign for starter seeding.
-SCRIPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
+# `labels/` and `scripts/` both sit under the repo root; used to reach streamalign (starter
+# seeding + next_stem) and to source `.env_vars` for the engine steps.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCRIPTS_DIR = os.path.join(REPO_ROOT, "scripts")
 
 # Initialize lists to store lines to be sorted and unrecognized lines
 sort_lines = []         # stores entries of the form (timestamp1, timestamp2, label, line number)
@@ -550,13 +553,9 @@ def emit_starters(path):
         return
     owner = _stem(path)
     labels_dir = os.path.dirname(os.path.abspath(path)) or "."
-    # emit_starter reads `<stem>.labels.tsv`, and so does the rest of the pipeline
-    # (groundtruth.is_pipeline_label_file). A file sorted to a bare `<stem>.tsv` is invisible
-    # to all of it -- say so rather than seeding nothing in silence.
+    # emit_starter reads `<owner>.labels.tsv`. If the sort wrote a bare `<owner>.tsv` there is
+    # no such file to read -- skip quietly; check_output_name() has already flagged the naming.
     if not os.path.exists(os.path.join(labels_dir, owner + ".labels.tsv")):
-        sys.stderr.write(
-            "NOTE: not seeding starters. The pipeline reads `%s.labels.tsv`, but this sorted to"
-            " `%s.tsv` -- name the Audacity export `%s.labels.txt`.\n" % (owner, owner, owner))
         return
     sys.path.insert(0, SCRIPTS_DIR)
     try:
@@ -566,6 +565,104 @@ def emit_starters(path):
         return
     for other, out in sorted(emit_labels.emit_starter(owner, labels_dir=labels_dir).items()):
         sys.stderr.write(f"Seeded {os.path.basename(out)} for {other}\n")
+
+
+# Warn when the written file won't be seen downstream. The pipeline
+# (groundtruth.is_pipeline_label_file) and the sheet (Code.js) both key on `<stem>.labels.tsv`
+# (or `.auto.labels.tsv`); a file sorted to a bare `<stem>.tsv` is written fine but invisible to
+# solve, build, publish AND the sheet. Flag it at write time, every time -- not only when there
+# were neighbours to seed (the old check lived inside emit_starters and missed the no-neighbour
+# case, which is exactly when a lone mis-named export slips through).
+def check_output_name(path):
+    if not path:
+        return  # stdout
+    name = os.path.basename(path)
+    if name.endswith(".labels.tsv") or name.endswith(".auto.labels.tsv"):
+        return
+    stem = _stem(path)
+    sys.stderr.write(
+        "NOTE: wrote `%s`, but the pipeline and the sheet read `%s.labels.tsv`.\n"
+        "      This file is invisible to solve / build / publish / the sheet -- rename the\n"
+        "      Audacity export `%s.labels.txt` so the sort produces `%s.labels.tsv`.\n"
+        % (name, stem, stem, stem))
+
+
+def load_env_vars(path=None):
+    """Fold the repo-root `.env_vars` into os.environ so the engine steps see e.g.
+    NETRADIO_SOURCES_DIR (the Makefile sources it; a bare `python3 sort_tsv.py` did not).
+
+    `.env_vars` is `VAR=value`, `#` comments, no quotes/`export` (per `.env_vars.example`).
+    Real environment variables win -- setdefault, never clobber. A missing file is fine.
+    """
+    path = path or os.path.join(REPO_ROOT, ".env_vars")
+    try:
+        with open(path) as handle:
+            for line in handle:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                os.environ.setdefault(key.strip(), val.strip())
+    except OSError:
+        pass
+
+
+def engine_python():
+    """The interpreter that can run the librosa-backed engine (hints/align): the 3.13 `.venv`
+    if built, else None. sort_tsv itself is stdlib and runs under whatever launched it, but
+    librosa has no 3.14 wheels -- so the engine step needs `.venv`. None => tell the user."""
+    venv = os.path.join(REPO_ROOT, ".venv", "bin", "python")
+    return venv if os.path.exists(venv) else None
+
+
+def prep_next(path, force=False, override=None):
+    """After a successful sort, prep the next capture: resolve it and run `streamalign hints`.
+
+    `override` (--nextfile STEM) wins; else `graph.next_stem` guesses from the links/notes and
+    reports why. On a TTY, ask first (hints is slow -- full-capture cross-correlation). Off a
+    TTY (publish, a pipe, CI) NEVER block: print the command and return. That non-interactive
+    guard is what stops publish.py -- which runs sort_tsv as a subprocess with no terminal --
+    from hanging forever on the prompt.
+    """
+    owner = _stem(path)
+    labels_dir = os.path.dirname(os.path.abspath(path)) or "."
+    if override:
+        nxt, why = _stem(override), "you asked (--nextfile %s)" % override
+    else:
+        sys.path.insert(0, SCRIPTS_DIR)
+        try:
+            from streamalign import graph
+        except ImportError as exc:
+            sys.stderr.write(f"NOTE: can't guess the next file ({exc}); pass --nextfile STEM\n")
+            return
+        nxt, why = graph.next_stem(owner, labels_dir=labels_dir)
+    if not nxt:
+        sys.stderr.write(f"NOTE: {why}\n")
+        return
+
+    py = engine_python()
+    shown = ".venv/bin/python" if py else "python3"
+    cmd = f"PYTHONPATH=scripts {shown} -m streamalign hints {nxt}"
+    sys.stderr.write(f"\nNext file looks like {nxt}  [{why}].\n")
+
+    if not force:
+        if not sys.stdin.isatty():
+            sys.stderr.write(f"NOTE: not a terminal -- skipping next-file prep. To prep it:\n  {cmd}\n")
+            return
+        try:
+            answer = input(f"Prep {nxt} now? runs `{cmd}` [Y/n] ").strip().lower()
+        except EOFError:
+            return
+        if answer not in ("", "y", "yes"):
+            sys.stderr.write(f"Skipped. To prep it later:\n  {cmd}\n")
+            return
+
+    if not py:
+        sys.stderr.write(f"NOTE: the 3.13 .venv isn't built (run `make align-env`). When ready:\n  {cmd}\n")
+        return
+    sys.stderr.write(f"Running: {cmd}\n")
+    subprocess.run([py, "-m", "streamalign", "hints", nxt],
+                   cwd=REPO_ROOT, env={**os.environ, "PYTHONPATH": "scripts"})
 
 
 # Summarise the free-text labels that were auto-noted, so they can be eyeballed without
@@ -590,6 +687,9 @@ def main():
     parser.add_argument('--live',   action='store_true', help='Read labels from currently loaded file(s) in Audacity, but do not write')
     parser.add_argument('--stem',   help='Primary file stem for LABELTRACK scoping (defaults to the input filename; needed for stdin)')
     parser.add_argument('--no-starter', action='store_true', help='Do not seed <other>.starter.labels.tsv for the neighbours this file links')
+    parser.add_argument('--next', action='store_true', help='Prep the next file without prompting (run `streamalign hints` on it)')
+    parser.add_argument('--nextfile', metavar='STEM', help='Prep this specific next file, overriding the guess')
+    parser.add_argument('--no-next', action='store_true', help='Do not prep the next file at all')
     parser.add_argument('--debug',  action='store_true', help='Print debug information')
 
     # Parse the command-line arguments
@@ -639,9 +739,18 @@ def main():
             for entry in write_lines:
                 output.write("{:.6f}\t{:.6f}\t{}\n".format(*entry))
 
+        # flag a mis-named output the pipeline/sheet won't see (every time, not just when seeding)
+        check_output_name(filename)
+
         # the sort recorded the `file_<other>:` links; seed the neighbours from them now
         if not args.no_starter:
             emit_starters(filename)
+
+        # one command, not two: prep the next file (resolve it, run `streamalign hints`).
+        # Guarded by TTY inside prep_next so a non-interactive caller (publish) can't hang.
+        if not args.no_next:
+            load_env_vars()
+            prep_next(filename, force=(args.next or bool(args.nextfile)), override=args.nextfile)
 
     # If we're in live mode, compare our entries to the ones written -- they
     # have 3 fewer significant digits, so we don't want to write them
