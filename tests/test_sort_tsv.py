@@ -123,6 +123,23 @@ class KeywordShapeTests(unittest.TestCase):
             self.assertTrue(sort_tsv.is_keyword_shaped(label), label)
             self.assertFalse(sort_tsv.parses(label), label)
 
+    def test_the_argument_after_the_colon_is_optional(self):
+        # `orig070 start: A` anchors the start to sync point A; a bare `orig070 start:` just
+        # says the original begins here -- the timestamp is the data, there is no sync point
+        # to name. The rule used to demand an argument (`:\s+(.*)`) and rejected the latter.
+        for label in ("orig070 start:", "orig069 end:", "orig071 start:", "orig069 note:"):
+            self.assertTrue(sort_tsv.parses(label), label)
+        for label in ("orig070 start: A", "orig069 note: rs1"):
+            self.assertTrue(sort_tsv.parses(label), label)
+        # the colon itself is still required
+        self.assertFalse(sort_tsv.parses("orig070 start"))
+
+    def test_a_bare_start_is_emitted_untouched_in_its_own_track(self):
+        self.assertEqual(sort_tsv.scope_label("070.labels", "d356-375", "orig070 start:"),
+                         "orig070 start:")
+        self.assertEqual(sort_tsv.keyword_errors, [])
+        self.assertEqual(sort_tsv.auto_notes, [])
+
     def test_free_text_auto_notes_silently(self):
         self.assertEqual(sort_tsv.expand_label("orig070", "close next sync"),
                          "orig070 note: close next sync")

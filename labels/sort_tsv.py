@@ -31,7 +31,10 @@ keyword_patterns = [
     r"(start(\d+):\s*)?ID(\d+)?:\s*(.+)",
     r"file (start )?sync: (.+):? ([0-9.]+)",
     r"((track)(\d+)?|(orig)(\d+))\s+sync:\s+(.)(.*)",
-    r"orig(\d+)\s+(start|end|note):\s+(.*)",
+    # The argument is OPTIONAL: `orig070 start: A` anchors the start to sync point A, while a
+    # bare `orig070 start:` just says the original begins here -- the timestamp is the data, and
+    # there is no sync point to name. `\s+(.*)` demanded an argument and rejected the latter.
+    r"orig(\d+)\s+(start|end|note):\s*(.*)",
     r"(file|mix) (start|end|note): (.*)",
     r"note(\s\S+?)?: (.*)",
     r"(\d{3})[se](.+)",

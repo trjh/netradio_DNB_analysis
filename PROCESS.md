@@ -643,9 +643,11 @@ primary track.
 **Original-track spans**
 
 - `origNNN start: …` / `origNNN end: …` / `origNNN note: …` — where the original starts/ends/notes.
-       **The colon is required**, and it takes the sync point it refers to: `orig070 start: A`, not
-       a bare `orig070 start`. (A bare one is keyword-shaped and errors — see *Free text vs. a
-       mistyped keyword* above.)
+       **The colon is required**; the argument after it is **optional**. `orig070 start: A` anchors
+       the start to sync point `A`; a bare **`orig070 start:`** simply says the original begins
+       here — the timestamp is the data and there is no sync point to name. What does *not* parse
+       is dropping the colon (`orig070 start`) or misplacing it (`orig069: start`) — both are
+       keyword-shaped and error out, see *Free text vs. a mistyped keyword* above.
 - Shorthand `NNNs…` / `NNNe…` (3 digits + `s`/`e`) — compact orig start/end (e.g. `069s0`,
        `065e10`, `067eB`). Note the digits come **first**: `071e1`, never `s71e1`.
 
