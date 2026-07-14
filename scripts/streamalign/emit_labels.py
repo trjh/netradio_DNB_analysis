@@ -177,8 +177,18 @@ def emit_starter(owner_stem, labels_dir=None, out_dir=None):
             if a < link_t - 1e-9:
                 continue  # before the neighbour begins -> not its label
             lm = _LINK_RE.match(text)
-            if lm and _audio.stem_of(lm.group(1)) == other:
-                continue  # the originating link row -> replaced by the anchor above
+            if lm:
+                if _audio.stem_of(lm.group(1)) != other:
+                    continue  # homed onto a DIFFERENT neighbour -> not this one's seed
+                inner = lm.group(2).strip()
+                if "start sync" in inner.lower():
+                    continue  # the originating link row -> replaced by the anchor above
+                # Any OTHER `file_<other>:` row is a label the labeller wrote about this
+                # neighbour while working in the owner (a whole `LABELTRACK <other>` track of
+                # them, typically). It IS the seed. Carry it, prefix stripped -- on the
+                # neighbour's own timeline it needs no re-homing. Skipping every prefixed row
+                # (the old rule) threw away exactly the labels the starter exists to carry.
+                text = inner
             out_rows.append((a - link_t, b - link_t, text + STARTER_SUFFIX))
         out_rows.sort(key=lambda r: (r[0], r[1]))
         path = os.path.join(out_dir, other + ".starter.labels.tsv")

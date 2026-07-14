@@ -74,6 +74,31 @@ class EmitStarterTests(unittest.TestCase):
         self.assertFalse(any("before the link" in t for t in texts))
         self.assertFalse(any(t.startswith("file_d356-375:") for t in texts))
 
+    def test_a_neighbours_own_label_track_is_the_seed(self):
+        # The labeller writes a whole `LABELTRACK <other>` track of labels ABOUT the neighbour
+        # while working in the owner; sort_tsv homes them as `file_<other>:` rows. Those rows
+        # ARE the seed. The old rule skipped every prefixed row -- keeping only the link -- and
+        # so threw away exactly the labels the starter exists to carry.
+        rows = list(OWNER_ROWS) + [
+            (1250.0, 1250.0, "file_%s: note: your-sound knocks" % OTHER),
+            (1300.0, 1300.0, "file_%s: 071eA" % OTHER),
+            (1400.0, 1400.0, "file_d999-000: note: a different neighbour"),
+        ]
+        write_labels(os.path.join(self.dir, OWNER + ".labels.tsv"), rows)
+        written = emit_labels.emit_starter(OWNER, labels_dir=self.dir)
+        out = self._read(written[OTHER])
+        texts = [r[2] for r in out]
+        starts = {r[2]: r[0] for r in out}
+        # carried, shifted onto the neighbour's timeline, and the prefix stripped
+        self.assertIn("note: your-sound knocks STARTER", texts)
+        self.assertEqual(starts["note: your-sound knocks STARTER"], "50.000000")
+        self.assertIn("071eA STARTER", texts)
+        # the link row itself is still replaced by the derived anchor, not duplicated
+        self.assertEqual(sum("start sync" in t for t in texts), 1)
+        # and a row homed onto a DIFFERENT neighbour is not this one's seed
+        self.assertFalse(any("a different neighbour" in t for t in texts))
+        self.assertFalse(any(t.startswith("file_") for t in texts))
+
     def test_no_links_returns_empty(self):
         write_labels(os.path.join(self.dir, "d000-018.labels.tsv"),
                      [(0.0, 0.0, "file start sync: d000-018.wav 0.000000 verified x")])
