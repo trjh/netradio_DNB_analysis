@@ -262,18 +262,19 @@ class ANewMysteryMustSeeTheWholeCorpus(unittest.TestCase):
 
     def test_it_knows_what_it_has_already_scored(self):
         state, q = self._state(), {"done": ["u1", "u2"], "pending": []}
-        state["scored"]["4"] = [harvest._sig_key("u1")]
+        state["scored"]["4:fp"] = [harvest._sig_key("u1")]
         with unittest.mock.patch("os.path.exists", return_value=True):
-            pairs = harvest.unscored_pairs(state, q, set(), [(4, None)])
-        self.assertEqual([p[2] for p in pairs], ["u2"])      # u1 already met MT4; only u2 is left
+            pairs = harvest.unscored_pairs(state, q, set(), [(4, None, "4:fp")])
+        self.assertEqual([p[3] for p in pairs], ["u2"])      # u1 already met MT4; only u2 is left
 
     def test_a_brand_new_mystery_re_scores_the_ENTIRE_cache(self):
         """The MT8 case: its clip lands, and every signature we already hold must meet it."""
         state, q = self._state(), {"done": ["u1", "u2", "u3"], "pending": []}
-        state["scored"]["4"] = [harvest._sig_key(u) for u in ("u1", "u2", "u3")]   # MT4 is done
+        state["scored"]["4:fp"] = [harvest._sig_key(u) for u in ("u1", "u2", "u3")]   # MT4 is done
         with unittest.mock.patch("os.path.exists", return_value=True):
-            pairs = harvest.unscored_pairs(state, q, set(), [(4, None), (8, None)])
-        self.assertEqual(sorted(p[2] for p in pairs), ["u1", "u2", "u3"])          # all, for MT8
+            pairs = harvest.unscored_pairs(state, q, set(),
+                                           [(4, None, "4:fp"), (8, None, "8:fp")])
+        self.assertEqual(sorted(p[3] for p in pairs), ["u1", "u2", "u3"])          # all, for MT8
         self.assertTrue(all(p[0] == 8 for p in pairs))                             # and only MT8
 
     def test_a_ruled_out_record_is_never_offered_again_not_even_for_a_new_mystery(self):
@@ -281,8 +282,8 @@ class ANewMysteryMustSeeTheWholeCorpus(unittest.TestCase):
         MT8 lands, every record Tim already rejected comes straight back at him."""
         state, q = self._state(), {"done": ["keep", "rejected"], "pending": []}
         with unittest.mock.patch("os.path.exists", return_value=True):
-            pairs = harvest.unscored_pairs(state, q, {"rejected"}, [(8, None)])
-        self.assertEqual([p[2] for p in pairs], ["keep"])
+            pairs = harvest.unscored_pairs(state, q, {"rejected"}, [(8, None, "8:fp")])
+        self.assertEqual([p[3] for p in pairs], ["keep"])
 
     def test_not_a_match_retires_an_entry(self):
         """The player writes the flag; the harvester must honour it."""
@@ -334,3 +335,50 @@ class ABetterClipMustNotInheritTheOldOnesVerdicts(unittest.TestCase):
         """MT7's 23s clip produced five 'confident' false positives within 0.0007 of each other."""
         self.assertEqual(harvest.MIN_QUERY_S, 60.0)
         self.assertLess(23, harvest.MIN_QUERY_S)
+
+
+@unittest.skipIf(harvest is None, "needs the librosa venv")
+class TheLiveCanaryMustNotCrashTheHarvester(unittest.TestCase):
+    """The third crash-on-a-rarely-taken-branch, caught before it fired.
+
+    `queries()` grew a third field (a query key fingerprinting the clip). `selftest`'s rival loop
+    still said `for num, q in ...` -- two names, three values -- so the next daily canary would have
+    raised ValueError and killed the harvester, ~15 hours after merge.
+
+    NOTHING caught it. Not the suite: no test drove `live()`, and a first attempt at one was
+    WORTHLESS -- a fake fetch makes live() return long before the loop, so the test passed against
+    the broken code. Not pyflakes either: an unpack arity error is not an undefined name, so the
+    lint guard added for exactly this family is blind to it.
+
+    Same shape as the KeyError before it. A branch no test exercises is a branch that fails in
+    production -- so the branch is now a function (`best_rival_cost`), and the function is tested
+    against the REAL shape `queries()` returns.
+    """
+
+    def test_it_survives_the_real_shape_queries_returns(self):
+        import selftest
+        import numpy as np
+        chroma = np.ones((12, 40), dtype="float32")
+        triples = [(4, chroma, "4:abc123"), (6, chroma, "6:def456")]   # what queries() yields TODAY
+        try:
+            cost, n = selftest.best_rival_cost(triples, chroma)
+        except ValueError as e:
+            self.fail("cannot walk the query list: %s" % e)            # the exact bug
+        self.assertIsInstance(cost, float)
+        self.assertEqual(n, 2)
+
+    def test_the_two_field_contract_still_works(self):
+        """Its stated contract is (number, chroma). Extra fields are the caller's business."""
+        import selftest
+        import numpy as np
+        chroma = np.ones((12, 40), dtype="float32")
+        cost, n = selftest.best_rival_cost([(4, chroma)], chroma)
+        self.assertIsInstance(cost, float)
+        self.assertEqual(n, 1)
+
+    def test_no_mysteries_is_not_a_free_pass(self):
+        """With nothing to beat, the canary must not be handed a win by default."""
+        import selftest
+        import numpy as np
+        cost, n = selftest.best_rival_cost([], np.ones((12, 40), dtype="float32"))
+        self.assertEqual((cost, n), (1.0, 0))   # no rival = nothing beaten, not a free pass

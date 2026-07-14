@@ -250,6 +250,36 @@ def establish_canary(fetch, subject=None):
     return {"ok": True, **canary}
 
 
+def best_rival_cost(mystery_queries, c_fetched):
+    """Best (lowest) cost any MYSTERY query scores against the fetched canary.
+
+    The canary's own mix must beat every mystery on this same candidate. Cost alone would let a
+    degenerate matcher -- one that scores everything low -- sail straight through; the margin over
+    the best rival is what actually carries the gate.
+
+    Lifted out of live() because it was UNREACHABLE without a network fetch, and that is precisely
+    how it broke. `queries()` grew a third field (a query key fingerprinting the clip) and the loop
+    here still said `for num, q in ...` -- two names, three values -- so the next daily canary would
+    have raised ValueError and killed the harvester. Nothing caught it: no test drove live() (a
+    fake fetch returns an error and live() returns long before this point), and pyflakes is blind to
+    an unpack arity error. Same shape as the KeyError that killed it before: a branch no test
+    exercises is a branch that fails in production. So the branch is now a function, and the
+    function is tested.
+
+    Takes the first two fields POSITIONALLY: the contract is "(mystery number, chroma), and I do
+    not care what else you carry".
+
+    Returns (best_cost, how_many_scored). The COUNT matters: with no rival, there is nothing to
+    beat, and the margin gate must not hand the canary a win by default.
+    """
+    rivals = []
+    for entry in (mystery_queries or []):
+        rc, _s, _a = _cm.match(entry[1], c_fetched)
+        if rc is not None:
+            rivals.append(float(rc))
+    return (min(rivals) if rivals else 1.0), len(rivals)
+
+
 def live(fetch, mystery_queries=None):
     """Fetch the canary FRESH off the internet and require the real query path to flag it.
 
@@ -286,22 +316,17 @@ def live(fetch, mystery_queries=None):
 
     # RANK: the canary's own mix must beat the mystery queries on this same candidate. Cost alone
     # would let a degenerate matcher -- one that scores everything low -- sail through.
-    rivals = []
-    for num, q in (mystery_queries or []):
-        rc, _s, _a = _cm.match(q, c_fetched)
-        if rc is not None:
-            rivals.append(float(rc))
-    best_rival = min(rivals) if rivals else 1.0
+    best_rival, n_rivals = best_rival_cost(mystery_queries, c_fetched)
 
     # Same three gates as offline: in range, first, and by a real margin. `rivals` are the mystery
     # queries scored against this same candidate -- if the canary's own mix cannot beat them
     # comfortably on a record we KNOW is the answer, nothing the harvester reports means anything.
     ok = (cost is not None and cost <= TRUE_MATCH_MAX
-          and (not rivals or best_rival - cost >= MIN_MARGIN))
+          and (not n_rivals or best_rival - cost >= MIN_MARGIN))
     return record({"kind": "live", "ok": bool(ok), "when": _now(), "url": canary["url"],
                    "track": canary["track"], "name": canary["name"],
                    "cost": None if cost is None else round(float(cost), 4),
-                   "rival": round(best_rival, 4) if rivals else None,
+                   "rival": round(best_rival, 4) if n_rivals else None,
                    "semitones": shift, "at_s": None if at is None else round(float(at), 1),
                    "took_s": round(time.time() - t0, 1),
                    "why": None if ok else

@@ -734,7 +734,10 @@ def run(args):
         # The live canary, about once a day: the streaming path (yt-dlp -> ffmpeg -> chroma) is
         # exactly what the offline test does NOT exercise, and it is the part with moving parts.
         if selftest.due_for_live():
-            lv = selftest.live(stream_chroma, qs)
+            # Pass (number, chroma) PAIRS -- selftest's contract. `qs` carries a third field (the
+            # query key, which fingerprints the clip) that is ours alone, and leaking it across the
+            # boundary is what broke this: selftest unpacked two and got three.
+            lv = selftest.live(stream_chroma, [(n, qc) for n, qc, _ in qs])
             if lv.get("ok"):
                 print("# live canary PASS -- fetched %s fresh and matched it at %.4f"
                       % (lv["name"], lv["cost"]))
