@@ -488,6 +488,7 @@ def assemble_write_lines(do_adjustment):
     # it is handed, so a secondary's own labels can name a *further* file and add a key. Walking
     # the dict directly raised "dictionary changed size during iteration" the moment that
     # happened; draining a queue processes the new file instead of dying on it.
+    spans = []          # (begin, end, stem) of each secondary's rows within write_lines
     done = set()
     while True:
         pending = [sf for sf in secondfiles if sf not in done]
@@ -500,11 +501,24 @@ def assemble_write_lines(do_adjustment):
             for entry in secondfiles[sf]:
                 process_entry(entry)
             sort_lines.sort(key=tracksort)
+            begin = len(write_lines)
             write_lines.extend(sort_lines)
+            spans.append((begin, len(write_lines), sf))
             sort_lines = []
     secondaryfile = None
     if do_adjustment:
         write_lines = list(map(adjust_line, write_lines))
+    # Re-attach the `file_<stem>:` prefix process_entry() peeled off to bucket the row.
+    # Peeling it and writing the bare inner label was DESTRUCTIVE: `streamalign starter`
+    # reads exactly these rows back out of the committed `.labels.tsv` (emit_labels._LINK_RE,
+    # `^file_([^:]+):`) to seed the neighbour's starter file. So a sort over a file carrying a
+    # neighbour's label track silently ate the link the starter emitter depends on -- and left
+    # the neighbour's labels behind as anonymous rows at ITS timestamps, belonging to no file.
+    # Re-attaching makes the round-trip idempotent and keeps the link. After adjust_line(), so
+    # its anchored `file (start )?sync:` match still sees the bare label.
+    for begin, end, sf in spans:
+        for entry in write_lines[begin:end]:
+            entry[2] = "file_%s: %s" % (sf, entry[2])
     return write_lines
 
 

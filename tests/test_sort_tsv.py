@@ -217,10 +217,28 @@ class EndToEndTests(unittest.TestCase):
         texts, secondfiles, missing = run(MULTITRACK, PRIMARY)
         self.assertIn("d356-375", secondfiles)
         self.assertEqual(len(secondfiles["d356-375"]), 2)
-        # the re-homed labels are emitted (with the file_ prefix peeled back off by the
-        # existing secondary mechanism)
-        self.assertIn("file end: d356-375.wav COMPLETE", texts)
-        self.assertIn("file start sync: d356-375.wav 1203.135 verified by 067", texts)
+        # the re-homed labels keep their `file_<stem>:` prefix on the way out -- see
+        # test_the_starter_link_survives_a_sort
+        self.assertIn("file_d356-375: file end: d356-375.wav COMPLETE", texts)
+        self.assertIn("file_d356-375: file start sync: d356-375.wav 1203.135 verified by 067",
+                      texts)
+
+    def test_the_starter_link_survives_a_sort(self):
+        # `streamalign starter` reads `file_<other>:` rows back out of the committed
+        # .labels.tsv (emit_labels._LINK_RE) to seed the neighbour's starter file. sort_tsv
+        # used to PEEL that prefix on write, so sorting a file that carried a neighbour's
+        # label track destroyed the link -- and dumped the neighbour's labels into this
+        # file's .tsv as anonymous rows at the neighbour's timestamps. Sorting must be
+        # idempotent for these rows.
+        link = "file_d356-375: file start sync: d356-375.wav 1203.135 verified by 067"
+        first, _sf, _m = run([line(0.000, "LABELTRACK d336-355"),
+                              line(0.000, "file start sync: d336-355.wav 0.0 verified"),
+                              line(1203.135, link)], PRIMARY)
+        self.assertIn(link, first)
+        # and again over its own output -- still there, unchanged
+        second, _sf, _m = run([line(0.000, "file start sync: d336-355.wav 0.0 verified"),
+                               line(1203.135, link)], PRIMARY)
+        self.assertIn(link, second)
 
 
 class ValidationTests(unittest.TestCase):
@@ -259,7 +277,7 @@ class ValidationTests(unittest.TestCase):
         texts, secondfiles, missing = run(crasher, "d356-375")   # used to raise RuntimeError
         self.assertEqual(missing, 0)
         self.assertEqual(list(secondfiles), ["d376-395"])        # one bucket, not two
-        self.assertIn("file start sync: d376-395.wav 0.0 verified", texts)
+        self.assertIn("file_d376-395: file start sync: d376-395.wav 0.0 verified", texts)
 
     def test_adjust_rewrites_secondary_entries(self):
         # secondary entries were tuples; adjust_line() assigns into the entry in place, so
@@ -275,7 +293,8 @@ class ValidationTests(unittest.TestCase):
             sort_tsv.process_line(text)
         write_lines = sort_tsv.assemble_write_lines(do_adjustment=True)
         starts = {entry[2]: entry[0] for entry in write_lines}
-        self.assertEqual(starts["track sync: A"], 1190.0)        # 1200 - the 10.0 file start
+        # timestamps shift by the 10.0 file start; the row keeps its file_ prefix
+        self.assertEqual(starts["file_d376-395: track sync: A"], 1190.0)
 
     def test_legacy_no_markers_processes_unchanged(self):
         legacy = [
