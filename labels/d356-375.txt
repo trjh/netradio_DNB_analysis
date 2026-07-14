@@ -1,0 +1,206 @@
+0.000000	0.000000	LABELTRACK 070.labels
+614.101375	614.101375	orig070 start:
+637.476566	637.476566	orig070 note: "to create..."
+637.477122	637.477122	orig070 sync: A
+754.728647	754.728647	orig070 sync: 1
+851.223208	851.223208	orig070 sync: 2
+947.739940	947.739940	orig070 sync: B
+994.919909	995.805170	orig070 sync: 3 vocalization from Dead Calm
+1019.165686	1022.684068	orig070 note: "to create a whole form of urban styole music" - not in mix
+0.000000	0.000000	LABELTRACK 069-dig.labels
+313.110774	313.110774	orig069 note: light percussion starts
+316.211426	317.806047	orig069 note: first twinkles
+336.804127	336.806531	orig069 sync: 0
+348.436882	348.436882	orig069 note: rs1
+354.047379	355.716748	orig069 sync: 1 first "Hypnotising"
+383.229808	383.229808	orig069 note: drums start
+383.252939	383.258817	orig069 sync: A
+383.258248	383.258559	orig069 note: sync with vinyl
+488.899456	488.904490	orig069 sync: 3
+546.424864	546.426882	orig069 sync: 4
+563.874524	565.494116	orig069 note: "hypnotising" - not in mix
+564.618832	564.645680	orig069 note: rough sync
+565.566971	565.566971	orig069 note: stopped sync work here on digital, switched to sync with vinyl
+0.000000	0.000000	LABELTRACK 067.labels
+2.233811	2.237939	orig067 sync: B (2) end of 336-355
+8.187805	8.198334	orig067 sync: 3
+91.391514	91.397713	orig067 sync: 4
+114.599610	114.615122	orig067 sync: 5 end
+117.676641	216.237125	orig067 note: this range not used in mix
+216.237125	216.237125	orig067 end: 5
+0.000000	0.000000	LABELTRACK d376-395.labels
+1200.000000	1200.000000	file_d376-395.wav: file start sync: d376-395.wav MARK verified 071-Fokus - On Line
+1206.052701	1206.052701	second your-sound knocks
+1216.078808	1216.078808	Your Sound (changeover to YS drumline)
+1262.804417	1264.676014	"Your Sound"
+1285.044819	1286.062132	last chords of Urban Style Music
+1307.596646	1307.596646	071eA
+1307.900729	1307.900729	071e1
+1308.063458	1308.063458	071sB
+1308.257896	1308.257896	071e2
+1476.472599	1476.472599	transition starts - OTR piano audible
+1486.606801	1486.606801	On the Roof (otr volume increases)
+1510.310477	1510.310477	horns/synth of OTR starts
+1525.053592	1525.053592	end of Your Sound
+1580.824696	1580.824696	last beat before drum break
+1628.315791	1628.315791	dreamy bit starts
+1664.661646	1664.661646	last significant beat before break
+1690.060551	1691.168207	"in a restroom"
+1695.667069	1696.778123	"in a restroom"
+1744.290834	1744.290834	transition start
+1755.016333	1755.016333	"be-eee"
+1769.318078	1769.318078	Mystery Track 5 (last OTR beat)
+2039.720737	2039.725000	align1 SoT file: before skip
+2040.015340	2040.015340	Sea of Tears
+2040.067282	2040.082803	window
+2088.054769	2088.054769	guitar enters
+2088.056073	2088.058213	peaks
+2109.468909	2109.468909	SKIP?
+2115.052329	2115.065032	align2
+2163.094743	2163.094743	drums enter
+2322.866584	2322.866584	start overlap
+2330.624227	2330.624227	drumline change
+2360.578322	2360.578322	end of SOT drumline
+2378.573570	2378.573570	last "tears"
+2387.462146	2388.324588	"what are you doing here"
+2388.382899	2388.382899	end Sea of Tears
+0.000000	0.000000	LABELTRACK 069.vinyl
+295.915556	295.915556	orig069 start:
+342.686098	342.688502	orig069 sync: 0
+342.712303	342.721342	orig069 note: local lowest peak - start of phrase?
+354.635917	354.635917	orig069 note: rs1 start oh phrase
+359.988587	361.657956	orig069 sync: 1 "Hypnotising"
+388.816062	388.821939	orig069 sync: A
+388.816901	388.817212	orig069 note: sync A with digital
+400.635423	400.635423	orig069 note: mark
+493.044913	493.049947	orig069 sync: 3
+524.645965	524.645965	orig069 note: vinyl
+549.795975	549.797993	orig069 sync: 4
+621.550326	621.557267	orig069 sync: 5
+662.593939	662.595757	orig069 sync: B
+689.502494	689.502494	orig069 end:
+0.000000	0.000000	LABELTRACK d356-375.labels
+0.000000	0.000000	file start sync: d356-375.wav 21078.306068 verified by 067 Wave Forms
+0.000000	115.283612	ID: Aquarius - Wave Forms
+0.000000	0.000000	LABELTRACK d356-375.labels
+4.749847	4.760376	track sync: 3
+73.125000	73.125000	start overlap
+78.344825	80.843678	note: chords from 068 start
+89.987354	89.987354	end drumline
+90.564549	93.321131	note: distorted voice from 068
+90.634305	90.640505	track sync: 4
+114.599610	114.615122	track sync: 5 end
+115.283612	375.933075	start068: ID: Mystery Track 4
+116.245019	117.334765	note: end of 067 in mix
+138.244984	138.244984	shazam unknown
+165.005140	168.192713	drum starts
+197.740691	203.507859	~"Hey man, you want a tune? Yeah I got a tune for ya"
+203.802771	206.403160	drums in earnest
+212.611312	212.611312	067eB
+212.799167	212.799167	067e3
+216.237125	216.237125	orig067 end: 5
+280.426882	280.426882	note: dig-069s0
+280.610079	280.610079	069s0
+281.003594	281.003594	note: dig-069s1
+281.127562	281.127562	069s1
+282.559830	282.559830	note: dig-orig069 start: A
+283.061893	283.061893	orig069 start: A
+288.258991	288.258991	note: dig-069s3
+289.850397	289.850397	note: dig-orig069 start: 4+rough sync
+290.178719	290.178719	069s3
+295.915556	295.915556	069sB
+318.081171	319.348200	note: first strains of Hypnotising
+324.038762	324.038762	note: transition volume step up
+327.363521	327.363521	note: Hypnotising start of phrase
+327.380612	327.383016	track069 sync: 0 first audible start of phrase 
+327.381876	327.382506	note: core
+335.981673	335.981673	note: horn
+339.450363	339.450363	note: Hypnotising start of phrase - rs1
+345.200588	346.869957	track069 sync: 1 "Hypnotising"
+369.969299	372.169105	last xylophone notes of Mystery 4
+375.933075	629.237551	start069: ID: P.F.M. - Hypnotising
+375.962374	375.968251	track sync: A (2) drums
+375.965312	375.965685	note: peak
+450.309975	456.105179	transition - organ?
+487.308050	487.313084	track sync: 3 - note mix inverted from orig?
+487.310632	487.311067	note: peak
+546.092800	546.094819	track sync: 4 - inverted
+563.874524	565.494116	note: *no* "hypnotising"
+564.618832	564.645680	note: rough sync
+581.637789	585.010488	note: "Music's hypnotising..."
+611.425167	611.426885	audiofile align point for sync2
+612.475982	612.475995	audiofile align point for sync1
+612.603000	612.603000	melody stops, drums remain
+613.815542	613.815542	070s3
+614.326854	614.326854	070sB
+615.222729	615.222729	070s2
+616.135000	616.135000	070s1
+617.082917	617.082917	orig070 start: A
+620.185405	620.192347	track sync: 5
+620.941901	620.941901	transition starts
+623.495891	623.495891	Urban Style chords
+626.087921	626.087921	Urban Style Music (louder chord starts)
+629.237551	1019.003563	start070: ID: Dead Calm - Urban Style
+635.350887	635.350887	last chord before words
+640.706707	643.877011	"to create a whole form of urban style music"
+640.744499	640.744499	track sync: A
+662.593939	662.595757	track sync: B - start of vinyl fade-out
+662.594568	662.594739	peak
+678.485480	678.485480	note: 30s longer version on Radical Beauty CD?
+678.485480	678.485480	note: 069 only starts to fade here, despite having faded on vinyl 15s ago
+688.137585	688.137585	069e5
+688.255805	691.412456	note: "Musics Hypnotising" despite vinyl audio being gone now
+689.502494	689.502494	069eB
+756.124454	756.124454	urban.style.music (sync1)
+756.806504	757.264978	note: sync area style
+757.048117	757.048117	track sync: 1
+850.233012	850.233012	sync2.1-spectro
+850.237640	850.237640	transition: peak of last cymbal hit before swooning synth (sync2)
+852.630381	852.630381	track sync: 2
+900.983612	900.983612	drum transition
+912.983146	912.983146	071sA
+913.287229	913.287229	071s1
+913.449958	913.449958	071sB
+913.644396	913.644396	071s2
+948.251253	948.251253	track sync: B
+948.795770	948.795770	On Line (transition/beat change)?
+954.189398	955.808231	vocals: oh-ohh (rough sync with 1st)
+971.810694	971.810694	big shift, ah-aah
+994.919909	995.805170	track sync: 3 vocalization still from Dead Calm
+997.972011	1015.584883	final drum change
+1015.620643	1015.620643	end of U.S.M. drums
+1019.003563	1019.003563	start071: ID: Fokus - On Line
+1021.643435	1027.669358	break: wah-oh-ah-ooh...
+1030.776832	1030.836224	sync area
+1030.804749	1030.804749	track sync: A
+1071.985542	1071.985542	070e3
+1072.496854	1072.496854	070eB
+1073.392729	1073.392729	070e2
+1074.305000	1074.305000	070e1
+1075.252917	1075.252917	orig070 end: A
+1107.373440	1107.373440	big zero sync
+1107.378347	1107.378347	track sync: 1 middle peak sync
+1148.595937	1148.595937	track sync: B
+1175.449318	1175.449318	quietly fade in Your Sound
+1193.204369	1193.204369	first your-sound knock
+1198.995501	1198.995501	track sync: 2 pre-EOF
+1200.000000	1200.000000	file end: d356-375.wav COMPLETE
+1307.596646	1307.596646	071eA
+1307.900729	1307.900729	071e1
+1308.063458	1308.063458	071sB
+1308.257896	1308.257896	071e2
+2379.172876	2379.172876	last Tears
+2388.103402	2388.103402	"what are you doing here?"
+0.000000	0.000000	LABELTRACK 071.labels
+913.045958	913.045958	orig071 start:
+927.662427	930.413850	orig071 note: first bew-wew-wew
+937.482161	939.284817	orig071 note: first bomp-bomp bass chords
+949.175709	951.346013	orig071 note: vocal ah-ah
+955.069922	956.688753	orig071 note: vocal oh-ohh (rough sync with 1st)
+961.023432	961.023432	orig071 note: drum starts
+1031.466009	1031.466009	orig071 sync: A
+1107.731013	1107.731013	orig071 note: big zero sync
+1107.735524	1107.735524	orig071 sync: 1 middle peak sync
+1148.790374	1148.790374	orig071 sync: B
+1148.863126	1148.863126	orig071 note: close next sync
+1198.995501	1198.995501	orig071 sync: 2 pre-EOF 
