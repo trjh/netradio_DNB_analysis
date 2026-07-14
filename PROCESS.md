@@ -574,11 +574,42 @@ file's `file start sync` offset yields **master time**.
        itself is **stripped** from the emitted `.tsv`. `<name>` resolves three ways:
        the **primary stem** (`== <stem>`) → labels pass through verbatim; **another capture stem**
        (e.g. `d356-375`) → re-homed onto that file via `file_<name>:` (the secondary mechanism);
-       **anything else** (e.g. `orig069`) → prefix-expanded (`sync: 0` → `orig069 sync: 0`;
-       free text → `orig069 note: <text>`). A file that uses `LABELTRACK` is **validated**: every
-       label-track block (the file start, and each backwards-timestamp boundary) must carry a marker,
-       or `sort_tsv.py` fails before writing. Legacy exports with no `LABELTRACK` markers are sorted
-       unchanged. Use `--stem <name>` to set the primary when reading from stdin.
+       **anything else** (e.g. `070.labels`) → prefix-expanded (`sync: 0` → `orig070 sync: 0`).
+       A file that uses `LABELTRACK` is **validated**: every label-track block (the file start, and
+       each backwards-timestamp boundary) must carry a marker, or `sort_tsv.py` fails before writing.
+       Legacy exports with no `LABELTRACK` markers are sorted unchanged. Use `--stem <name>` to set
+       the primary when reading from stdin.
+- **The track name is not the qualifier.** A track called `070.labels`, `069-dig.labels` or
+       `069.vinyl` holds labels *about* `orig070` / `orig069` — so the qualifier is the **3-digit
+       original in the name**, not the name itself. `069-dig` and `069.vinyl` are two tracks about
+       the same original and both expand to `orig069`.
+
+**Free text vs. a mistyped keyword**
+
+You should not have to type `note:` in front of every passing thought, and a fat-fingered
+keyword should not slip through silently. `sort_tsv.py` tells them apart by **shape**, not by
+whether the label happens to parse. In order:
+
+1. **Already names its subject** (`orig070 sync: A`, `file end: …`, `069s0`) → emitted as written.
+2. **`<qualifier> ` + label parses** → qualified: `sync: 0` → `orig070 sync: 0`.
+3. **Keyword-shaped but parses under no rule** → **ERROR**, and nothing is written. A label is
+   keyword-shaped if it leads with an entity (`orig…`, `track…`, `file…`, `mix…`), a verb *and its
+   colon* (`sync:`, `start:`, `end:`, `note:`, `ID:`), or the compact `NNNs`/`NNNe` form. So
+   `orig070 start` (no colon), `orig069: start` (colon misplaced) and `s71e1` (transposed `071e1`)
+   are all caught.
+4. **Free text** → auto-noted: `start overlap` → `note: start overlap` (or `orig070 note: …` inside
+   a numbered track). No warning; the run prints a **summary** of everything it auto-noted, so you
+   can still eyeball the list.
+
+Free text is anything without that shape — `peak`, `drum starts`, `close next sync`,
+`vocals: oh-ohh`, `sync2.1-spectro` all sail through untouched.
+
+**Scope check (numbered label tracks).** Inside `LABELTRACK 071`, every label is *about* 071, so a
+label whose head names a different original — `orig017 sync: A` — is an **ERROR**. This is the one
+class of typo no grammar check can see: `orig017 sync: A` parses perfectly. The check reads the
+label's **head** only, so a note's body may mention any original freely
+(`orig071 note: 069s0 is the digital sync` is fine). For a genuine cross-reference, write it in the
+primary track.
 
 **File-level markers (the connection backbone)**
 
@@ -612,8 +643,11 @@ file's `file start sync` offset yields **master time**.
 **Original-track spans**
 
 - `origNNN start: …` / `origNNN end: …` / `origNNN note: …` — where the original starts/ends/notes.
+       **The colon is required**, and it takes the sync point it refers to: `orig070 start: A`, not
+       a bare `orig070 start`. (A bare one is keyword-shaped and errors — see *Free text vs. a
+       mistyped keyword* above.)
 - Shorthand `NNNs…` / `NNNe…` (3 digits + `s`/`e`) — compact orig start/end (e.g. `069s0`,
-       `065e10`, `067eB`).
+       `065e10`, `067eB`). Note the digits come **first**: `071e1`, never `s71e1`.
 
 **Generic notes & skips**
 
