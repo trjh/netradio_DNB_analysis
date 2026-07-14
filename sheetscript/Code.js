@@ -86,6 +86,19 @@ function ParseTSV(fileContent) {
       continue;
     }
 
+    // `file_<other>: <label>` — a label about a NEIGHBOUR file, written while working in this
+    // one (sort_tsv homes a whole `LABELTRACK <other>` track this way). It sits on the OWNER's
+    // timeline but describes <other>, so importing it here misattributes it to the owner — and
+    // silently: the patterns below are unanchored, so `file_d376-395: 071eA` reads as an Orig
+    // End on THIS file, and `file_d376-395: orig071 sync: A` would feed the A/B speed calc with
+    // a timestamp from the wrong file's timeline. Skip them. They are the seed for
+    // <other>.starter.labels.tsv (`streamalign starter`); <other>'s own .labels.tsv is what
+    // reaches the sheet.
+    if (/^file_[^:]+:/i.test(label)) {
+      console.log('DEBUG: skipping neighbour label (belongs to another file): ' + label);
+      continue;
+    }
+
     if (label == '') {
       var rowData = ['', '', '', '', '', '', '', '', '', ''];
       data.push(rowData);

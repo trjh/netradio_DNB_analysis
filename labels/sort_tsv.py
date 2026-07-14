@@ -9,6 +9,9 @@ import contextlib
 import json
 import time
 
+# `scripts/` sits beside `labels/`; used to reach streamalign for starter seeding.
+SCRIPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
+
 # Initialize lists to store lines to be sorted and unrecognized lines
 sort_lines = []         # stores entries of the form (timestamp1, timestamp2, label, line number)
                         # in preparation for sorting/writing
@@ -537,6 +540,34 @@ def report_keyword_errors():
     return len(keyword_errors)
 
 
+# Seed each neighbour this file links, right here (Proposal B). sort_tsv records the
+# `file_<other>:` link; `streamalign starter` turns it into `<other>.starter.labels.tsv`.
+# Making that a second, hand-run command meant it was simply forgotten -- the exact failure
+# mode PLAN_labelling_process.md names in its Motivation ("forgotten manual steps"). There is
+# no reason to hold them apart: if the sort found a link, the seed is derivable now.
+def emit_starters(path):
+    if not path or not secondfiles:
+        return
+    owner = _stem(path)
+    labels_dir = os.path.dirname(os.path.abspath(path)) or "."
+    # emit_starter reads `<stem>.labels.tsv`, and so does the rest of the pipeline
+    # (groundtruth.is_pipeline_label_file). A file sorted to a bare `<stem>.tsv` is invisible
+    # to all of it -- say so rather than seeding nothing in silence.
+    if not os.path.exists(os.path.join(labels_dir, owner + ".labels.tsv")):
+        sys.stderr.write(
+            "NOTE: not seeding starters. The pipeline reads `%s.labels.tsv`, but this sorted to"
+            " `%s.tsv` -- name the Audacity export `%s.labels.txt`.\n" % (owner, owner, owner))
+        return
+    sys.path.insert(0, SCRIPTS_DIR)
+    try:
+        from streamalign import emit_labels
+    except ImportError as exc:
+        sys.stderr.write(f"NOTE: starter seeding unavailable ({exc})\n")
+        return
+    for other, out in sorted(emit_labels.emit_starter(owner, labels_dir=labels_dir).items()):
+        sys.stderr.write(f"Seeded {os.path.basename(out)} for {other}\n")
+
+
 # Summarise the free-text labels that were auto-noted, so they can be eyeballed without
 # having to prefix every one of them with `note:` by hand.
 def report_auto_notes():
@@ -558,6 +589,7 @@ def main():
     parser.add_argument('--test',   action='store_true', help='Test mode -- do not write or move files, just show notes')
     parser.add_argument('--live',   action='store_true', help='Read labels from currently loaded file(s) in Audacity, but do not write')
     parser.add_argument('--stem',   help='Primary file stem for LABELTRACK scoping (defaults to the input filename; needed for stdin)')
+    parser.add_argument('--no-starter', action='store_true', help='Do not seed <other>.starter.labels.tsv for the neighbours this file links')
     parser.add_argument('--debug',  action='store_true', help='Print debug information')
 
     # Parse the command-line arguments
@@ -606,6 +638,10 @@ def main():
                 sys.exit('Exiting.')
             for entry in write_lines:
                 output.write("{:.6f}\t{:.6f}\t{}\n".format(*entry))
+
+        # the sort recorded the `file_<other>:` links; seed the neighbours from them now
+        if not args.no_starter:
+            emit_starters(filename)
 
     # If we're in live mode, compare our entries to the ones written -- they
     # have 3 fewer significant digits, so we don't want to write them
