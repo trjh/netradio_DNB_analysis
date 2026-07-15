@@ -1,0 +1,77 @@
+"""The sheet import filter, mirrored and pinned.
+
+`sheetscript/Code.js` decides which files in `labels/` reach the Google Sheet. It is Apps
+Script with no test harness, so the rule is easy to drift. This file encodes the SAME rule in
+Python and pins three things:
+
+  1. it matches `groundtruth.is_pipeline_label_file` (so the sheet and the engine can never
+     again disagree about what is real) -- with `remainder.tsv` the one hand-kept exception;
+  2. against the real committed `labels/` listing, the scratch files (`*.hints.tsv`, a bare
+     mis-named `<stem>.tsv`, `*.starter.labels.tsv`) are excluded and the hand/engine files
+     are included;
+  3. the Code.js source still contains the rule this mirror claims -- a guard against the JS
+     changing while this test keeps passing.
+"""
+
+import os
+import re
+import sys
+import unittest
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(REPO, "scripts"))
+
+from streamalign import groundtruth as gt  # noqa: E402
+
+
+def sheet_imports(name):
+    """Python mirror of Code.js's file-level import filter.
+
+    Note `.starter.labels.tsv` ALSO ends `.labels.tsv`, so it must be excluded explicitly --
+    a seed file is not a hand file.
+    """
+    return ((name.endswith(".labels.tsv") and not name.endswith(".starter.labels.tsv"))
+            or name == "remainder.tsv")
+
+
+class TheRuleMatchesThePipeline(unittest.TestCase):
+    def test_sheet_and_engine_agree_except_for_remainder(self):
+        for name in ("d356-375.labels.tsv", "d356-375.auto.labels.tsv",
+                     "d356-375.starter.labels.tsv", "d356-375.hints.tsv",
+                     "d356-375.tsv", "remainder.tsv", "notes.txt"):
+            expected = gt.is_pipeline_label_file(name) or name == "remainder.tsv"
+            self.assertEqual(sheet_imports(name), expected, name)
+
+
+class ScratchNeverReachesTheSheet(unittest.TestCase):
+    def test_the_leakers_are_excluded(self):
+        # these three are committed/on-disk today and were all being swept into the sheet
+        for name in ("d356-375.hints.tsv", "d356-375.tsv", "d376-395.starter.labels.tsv"):
+            self.assertFalse(sheet_imports(name), name)
+
+    def test_hand_and_auto_and_remainder_are_included(self):
+        for name in ("d336-355.labels.tsv", "d900-901.auto.labels.tsv", "remainder.tsv"):
+            self.assertTrue(sheet_imports(name), name)
+
+    def test_against_the_real_labels_listing(self):
+        labels = os.path.join(REPO, "labels")
+        for name in os.listdir(labels):
+            if not name.endswith(".tsv"):
+                continue
+            # every .tsv the sheet takes is a pipeline file or the remainder; nothing else
+            if sheet_imports(name):
+                self.assertTrue(gt.is_pipeline_label_file(name) or name == "remainder.tsv", name)
+
+
+class CodeJsStillHasTheRule(unittest.TestCase):
+    def test_source_matches_this_mirror(self):
+        src = open(os.path.join(REPO, "sheetscript", "Code.js"), encoding="utf-8").read()
+        # the exact predicate, whitespace-insensitive
+        self.assertTrue(
+            re.search(r"endsWith\('\.labels\.tsv'\)\s*&&\s*!file\.name\.endsWith\('\.starter"
+                      r"\.labels\.tsv'\)\)\s*\|\|\s*file\.name\s*===\s*'remainder\.tsv'", src),
+            "Code.js import filter no longer matches tests/test_sheet_import.sheet_imports")
+
+
+if __name__ == "__main__":
+    unittest.main()

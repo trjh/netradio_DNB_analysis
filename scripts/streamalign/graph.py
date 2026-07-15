@@ -9,11 +9,18 @@ The discovered edges + Tim's hand `verified` edges form the graph the global sol
 walks, anchored at d000-018 = master 0.
 """
 
+import os
 import re
 
-import numpy as np
-
 from . import audio as _audio
+
+# numpy is used only by the blind-alignment maths (find_window_in / blind_offset); imported
+# lazily so those are the sole numpy touch-point in this module. (The package's `audio` import
+# still brings numpy in transitively -- sort_tsv guards its next_stem call for that reason.)
+def _np():
+    import numpy as np
+    return np
+
 
 _RANGE = re.compile(r"^d-?(\d+)-(\d+)")
 
@@ -36,6 +43,7 @@ def find_window_in(probe, signal):
     lag = index in `signal` where probe[0] aligns; ncc = normalized correlation of
     the matched region in [0,1].
     """
+    np = _np()
     p = np.asarray(probe, dtype=np.float64)
     p = p - p.mean()
     s = np.asarray(signal, dtype=np.float64)
@@ -130,6 +138,99 @@ def discover_overlaps(stems, conf_min=0.8, max_gap_min=30, win_s=20.0):
         else:
             skipped += 1
     return edges, skipped
+
+
+def _loose(stem):
+    """Coerce the notes' `dnb356-375` to the on-disk `d356-375` without needing the audio.
+
+    `tracklist2017.normalise_stem` does this properly by checking which capture exists, but
+    next_stem must run headless (in a worktree, in tests), so it falls back to the one known
+    inconsistency: a `dnb` prefix for a `d` capture.
+    """
+    return re.sub(r"^dnb", "d", _audio.stem_of(stem), flags=re.IGNORECASE)
+
+
+def _forward_link(stem, labels_dir=None):
+    """The neighbour a `<stem>.labels.tsv` links as beginning latest inside it, or None.
+
+    A `file_<other>:` row is the labeller saying "<other> starts here inside me" -- the
+    authoritative successor relation. If several neighbours are linked (a file can overlap
+    more than one), the one that begins LATEST is the successor; the earlier ones are
+    mid-file overlaps.
+    """
+    from . import emit_labels as _emit
+    from . import groundtruth as _gt
+    path = os.path.join(labels_dir or _gt.LABELS_DIR, _audio.stem_of(stem) + ".labels.tsv")
+    rows = _emit._read_label_lines(path)
+    links = _emit._links_in(rows) if rows else {}
+    if not links:
+        return None
+    return max(links, key=links.get)
+
+
+def _tracklist_successor(stem):
+    """The capture the 1998/2017 notes place immediately after `stem`, or None."""
+    from . import tracklist2017 as _tl
+    blocks = _tl.parse()
+    target = _loose(stem)
+    # prefer an explicit `(direct transition from <stem>)`
+    for other, info in blocks.items():
+        tf = info.get("transition_from")
+        if tf and _loose(tf) == target:
+            return _loose(other)
+    # else the next block in the notes' stream order
+    keys = [_loose(k) for k in blocks]
+    if target in keys and keys.index(target) < len(keys) - 1:
+        return keys[keys.index(target) + 1]
+    return None
+
+
+def _filename_successor(stem, labels_dir=None):
+    """The labelled capture whose filename range starts nearest AFTER `stem`, or None.
+
+    Weakest signal -- filename minutes are only hints (see filename_range) -- and used only
+    when nothing better resolves.
+    """
+    from . import groundtruth as _gt
+    here = filename_range(_audio.stem_of(stem))
+    if not here:
+        return None
+    best, best_start = None, None
+    for name in os.listdir(labels_dir or _gt.LABELS_DIR):
+        if not name.endswith(".labels.tsv"):
+            continue
+        other = _audio.stem_of(name[: -len(".labels.tsv")])
+        rng = filename_range(other)
+        if not rng or rng[0] <= here[0]:
+            continue
+        if best_start is None or rng[0] < best_start:
+            best, best_start = other, rng[0]
+    return best
+
+
+def next_stem(stem, labels_dir=None):
+    """Best guess at the capture that follows `stem`, with the reason it was chosen.
+
+    Returns `(stem, why)` or `(None, why)`. Sources, most-authoritative first:
+      1. **hand link** -- a `file_<other>:` row in `<stem>.labels.tsv` (Tim saying "next");
+      2. **1998/2017 notes** -- `tracklist2017`'s transition/stream order;
+      3. **filename range** -- nearest labelled capture starting after this one (a hint).
+
+    Pure logic (regex + reading label files + the notes) -- so sort_tsv can name the next file
+    directly, before the slow engine step, without loading any audio.
+    """
+    stem = _audio.stem_of(stem)
+    link = _forward_link(stem, labels_dir)
+    if link:
+        return link, "hand link (file_%s: in %s.labels.tsv)" % (link, stem)
+    nb = _tracklist_successor(stem)
+    if nb:
+        return nb, "1998/2017 notes (follows %s)" % stem
+    fn = _filename_successor(stem, labels_dir)
+    if fn:
+        return fn, "filename range -- a hint, verify (nearest after %s)" % stem
+    return None, ("no successor found for %s -- add a file_<next>: link, or pass --nextfile"
+                  % stem)
 
 
 def connected_components(stems, edges):

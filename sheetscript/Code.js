@@ -32,9 +32,14 @@ function GithubImport() {
   for (var i = 0; i < repoData.length; i++) {
     var file = repoData[i];
 
-    // Check if the file is a .tsv file (skip seed-only .starter.labels.tsv — Proposal B,
-    // these only pre-position labels in Audacity and must not reach the sheet)
-    if (file.name.endsWith('.tsv') && !file.name.endsWith('.starter.labels.tsv')) {
+    // Import ONLY pipeline label files, mirroring groundtruth.is_pipeline_label_file so the
+    // sheet and the engine can never disagree about what is real: `*.labels.tsv` (incl.
+    // `*.auto.labels.tsv`), plus the one hand-kept exception `remainder.tsv`. This deliberately
+    // EXCLUDES `*.starter.labels.tsv` (seed-only), `*.hints.tsv` (the engine's guesses/questions
+    // — these were leaking in and landing as rows indistinguishable from hand labels), and a
+    // bare mis-named `<stem>.tsv` (an export that should have been `<stem>.labels.tsv`).
+    if ((file.name.endsWith('.labels.tsv') && !file.name.endsWith('.starter.labels.tsv'))
+        || file.name === 'remainder.tsv') {
       console.log('INFO: Reading file: ' + file.name)
 
       // Get the raw content of the .tsv file
@@ -83,6 +88,19 @@ function ParseTSV(fileContent) {
     console.log('DEBUG: Processing line ' + j + ' ts ' + timestamp + ' entry ' + label)
     if (isNotFloat(timestamp)) {
       console.log('WARN: Timestamp [' + timestamp + '] is not a float, j=' + j + ' data:' + tsvRow);
+      continue;
+    }
+
+    // `file_<other>: <label>` — a label about a NEIGHBOUR file, written while working in this
+    // one (sort_tsv homes a whole `LABELTRACK <other>` track this way). It sits on the OWNER's
+    // timeline but describes <other>, so importing it here misattributes it to the owner — and
+    // silently: the patterns below are unanchored, so `file_d376-395: 071eA` reads as an Orig
+    // End on THIS file, and `file_d376-395: orig071 sync: A` would feed the A/B speed calc with
+    // a timestamp from the wrong file's timeline. Skip them. They are the seed for
+    // <other>.starter.labels.tsv (`streamalign starter`); <other>'s own .labels.tsv is what
+    // reaches the sheet.
+    if (/^file_[^:]+:/i.test(label)) {
+      console.log('DEBUG: skipping neighbour label (belongs to another file): ' + label);
       continue;
     }
 

@@ -147,10 +147,13 @@ def publish(paths, message, dry_run=False, refresh=True, python=None):
 
     # all valid: sort each (a .txt export is converted to .tsv here), then commit + push.
     # Stage the POST-conversion .tsv paths, since sort_tsv renames any .txt away.
+    # `--no-next`: publish is non-interactive with no terminal, so sort_tsv must not try to prep
+    # the next file (its TTY guard would skip it anyway; this is explicit belt-and-braces, and
+    # keeps publish from spending time on a hints run mid-push).
     py = python or sys.executable
     staged = [published_path(p) for p in paths]
     for p in paths:
-        if _run([py, SORT_TSV, p], dry_run) != 0:
+        if _run([py, SORT_TSV, p, "--no-next"], dry_run) != 0:
             sys.stderr.write("sort_tsv failed on %s — aborting before push\n" % p)
             return 1
     if _run(["git", "add"] + staged, dry_run, cwd=HERE) != 0:

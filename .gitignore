@@ -53,6 +53,12 @@ Archive/
 audacity/
 jaz_links
 labels/tmp/
+
+# Regenerable label scratch: the engine's per-file guesses (streamalign hints) and the
+# neighbour seeds (streamalign starter / sort_tsv). Both are derived from the committed
+# *.labels.tsv and must not reach the sheet or the solve -- keep them local.
+labels/*.hints.tsv
+labels/*.starter.labels.tsv
 logo-tmp/
 sources_local
 TIM-ENV.md

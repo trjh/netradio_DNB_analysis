@@ -50,6 +50,10 @@ Work **outward from already-placed neighbours** — a file is ready when it over
 one already on the master clock. The chain starts from the anchor `d000-018 = 0`. Use the
 **File List** complete/verified columns plus [`tracklist-2017.txt`](./tracklist-2017.txt).
 
+In practice you rarely start here cold: finishing a file (step 6) **guesses this file for you**
+from its `file_<next>:` link and offers to prep it, so step 0 is usually just confirming that
+guess.
+
 ### 1. Open it, carrying the previous file's work forward
 
 Rather than starting from a blank project, reuse the previous capture's Audacity project so
@@ -99,8 +103,10 @@ You get, in one file:
 Every row carries its confidence spelled out (`confidence 9.8/10`) and is marked `HINT`.
 
 **Hints never touch your labels.** They are written to `<stem>.hints.tsv`, which is not a
-`.labels.tsv` and is invisible to the solve, the build and the sheet. They only ever *add*:
-import the track, copy across what you accept, delete the rest.
+`.labels.tsv` and so is invisible to the solve and the build; it is **gitignored** (regenerable
+scratch), and the sheet importer skips it by name — so the engine's guesses can never reach the
+sheet as if they were facts. They only ever *add*: import the track, copy across what you
+accept, delete the rest.
 
 **Plain `python3` works too**, but without the librosa venv you get everything *except* the
 sync anchors (they need chroma). `make align-check` tells you whether you're set up for them.
@@ -177,13 +183,29 @@ This **is** the txt→tsv tool — there is no other. It sorts, splits `file_OTH
 neighbour's file, validates the grammar, and flags a sync line missing `verified` or a
 `file end:` missing `COMPLETE`.
 
-### 7. Seed the next file
+**Name the export `<stem>.labels.txt`, not `<stem>.txt`.** The pipeline and the sheet read
+`<stem>.labels.tsv`; a bare `<stem>.tsv` is written fine but invisible to solve, build, publish
+and the sheet — so `sort_tsv.py` warns you when it writes one.
 
-If you captured where the **next** file begins (a `file_<next>:` link), carry it forward so
-the next file doesn't start blank:
+**This command does steps 6 + 7, and offers step 0 for the next file.** On a successful sort it
+also **seeds the neighbours** (step 7, below — no separate command) and then **offers to prep
+the next file**: it guesses the successor from your `file_<next>:` link (falling back to the
+1998/2017 notes, then the filename range) and, if you agree, runs `streamalign hints` on it so
+its `<next>.hints.tsv` is waiting. `--nextfile <stem>` overrides the guess; `--no-next` skips
+it; `--next` runs without asking. The prompt appears only at a real terminal, so `publish.py`
+(which calls `sort_tsv.py`) never blocks.
+
+### 7. Seed the next file — automatic
+
+If you captured where the **next** file begins (a `file_<next>:` link), its labels are carried
+forward so the next file doesn't start blank. **`sort_tsv.py` does this for you in step 6** —
+you don't run a separate command. It writes `<next>.starter.labels.tsv` (gitignored,
+regenerable) for every neighbour this file links.
+
+To re-seed by hand (or after editing the links), the underlying command still exists:
 
 ```bash
-PYTHONPATH=scripts python3 -m streamalign starter <this-stem>
+PYTHONPATH=scripts python3 -m streamalign starter <this-stem>   # sort_tsv already ran this
 ```
 
 ### 8. Identify the tracks
@@ -332,15 +354,18 @@ make sync            # 3-way, PR-based; reads NETRADIO_PLAYER_REPO from .env_var
 make tracklist-check # report whether the two copies agree
 ```
 
-### 11. Publish
+### 11. Publish — push your labels to the sheet
 
 ```bash
-python3 labels/publish.py <stem> --check   # gate only, no push
-python3 labels/publish.py <stem>           # gate → sort → commit → push → refresh the sheet
+python3 labels/publish.py <stem>           # update the Google Sheet from your labels
+python3 labels/publish.py <stem> --check   # check only, push nothing
 ```
 
-Hard-gated: it refuses unverified syncs, a missing `COMPLETE`, or bad grammar, and it is
-all-or-nothing across the files you give it. Then **loop to step 0.**
+That first line is the whole job: it takes your finished `<stem>.labels.tsv` and gets it into
+the sheet. Under the hood it **hard-gates** every file first — re-running `sort_tsv.py --test`
+to refuse an unverified sync, a `file end` missing `COMPLETE`, or bad grammar — and only if all
+pass does it sort → `git commit` → `git push` → POST the sheet's refresh webhook. All-or-nothing
+across the files you give it. Then **loop to step 0.**
 
 ---
 
@@ -574,11 +599,42 @@ file's `file start sync` offset yields **master time**.
        itself is **stripped** from the emitted `.tsv`. `<name>` resolves three ways:
        the **primary stem** (`== <stem>`) → labels pass through verbatim; **another capture stem**
        (e.g. `d356-375`) → re-homed onto that file via `file_<name>:` (the secondary mechanism);
-       **anything else** (e.g. `orig069`) → prefix-expanded (`sync: 0` → `orig069 sync: 0`;
-       free text → `orig069 note: <text>`). A file that uses `LABELTRACK` is **validated**: every
-       label-track block (the file start, and each backwards-timestamp boundary) must carry a marker,
-       or `sort_tsv.py` fails before writing. Legacy exports with no `LABELTRACK` markers are sorted
-       unchanged. Use `--stem <name>` to set the primary when reading from stdin.
+       **anything else** (e.g. `070.labels`) → prefix-expanded (`sync: 0` → `orig070 sync: 0`).
+       A file that uses `LABELTRACK` is **validated**: every label-track block (the file start, and
+       each backwards-timestamp boundary) must carry a marker, or `sort_tsv.py` fails before writing.
+       Legacy exports with no `LABELTRACK` markers are sorted unchanged. Use `--stem <name>` to set
+       the primary when reading from stdin.
+- **The track name is not the qualifier.** A track called `070.labels`, `069-dig.labels` or
+       `069.vinyl` holds labels *about* `orig070` / `orig069` — so the qualifier is the **3-digit
+       original in the name**, not the name itself. `069-dig` and `069.vinyl` are two tracks about
+       the same original and both expand to `orig069`.
+
+**Free text vs. a mistyped keyword**
+
+You should not have to type `note:` in front of every passing thought, and a fat-fingered
+keyword should not slip through silently. `sort_tsv.py` tells them apart by **shape**, not by
+whether the label happens to parse. In order:
+
+1. **Already names its subject** (`orig070 sync: A`, `file end: …`, `069s0`) → emitted as written.
+2. **`<qualifier> ` + label parses** → qualified: `sync: 0` → `orig070 sync: 0`.
+3. **Keyword-shaped but parses under no rule** → **ERROR**, and nothing is written. A label is
+   keyword-shaped if it leads with an entity (`orig…`, `track…`, `file…`, `mix…`), a verb *and its
+   colon* (`sync:`, `start:`, `end:`, `note:`, `ID:`), or the compact `NNNs`/`NNNe` form. So
+   `orig070 start` (no colon), `orig069: start` (colon misplaced) and `s71e1` (transposed `071e1`)
+   are all caught.
+4. **Free text** → auto-noted: `start overlap` → `note: start overlap` (or `orig070 note: …` inside
+   a numbered track). No warning; the run prints a **summary** of everything it auto-noted, so you
+   can still eyeball the list.
+
+Free text is anything without that shape — `peak`, `drum starts`, `close next sync`,
+`vocals: oh-ohh`, `sync2.1-spectro` all sail through untouched.
+
+**Scope check (numbered label tracks).** Inside `LABELTRACK 071`, every label is *about* 071, so a
+label whose head names a different original — `orig017 sync: A` — is an **ERROR**. This is the one
+class of typo no grammar check can see: `orig017 sync: A` parses perfectly. The check reads the
+label's **head** only, so a note's body may mention any original freely
+(`orig071 note: 069s0 is the digital sync` is fine). For a genuine cross-reference, write it in the
+primary track.
 
 **File-level markers (the connection backbone)**
 
@@ -612,8 +668,13 @@ file's `file start sync` offset yields **master time**.
 **Original-track spans**
 
 - `origNNN start: …` / `origNNN end: …` / `origNNN note: …` — where the original starts/ends/notes.
+       **The colon is required**; the argument after it is **optional**. `orig070 start: A` anchors
+       the start to sync point `A`; a bare **`orig070 start:`** simply says the original begins
+       here — the timestamp is the data and there is no sync point to name. What does *not* parse
+       is dropping the colon (`orig070 start`) or misplacing it (`orig069: start`) — both are
+       keyword-shaped and error out, see *Free text vs. a mistyped keyword* above.
 - Shorthand `NNNs…` / `NNNe…` (3 digits + `s`/`e`) — compact orig start/end (e.g. `069s0`,
-       `065e10`, `067eB`).
+       `065e10`, `067eB`). Note the digits come **first**: `071e1`, never `s71e1`.
 
 **Generic notes & skips**
 
@@ -627,12 +688,17 @@ file's `file start sync` offset yields **master time**.
 
 ## File-naming: who owns what
 
-| File | Who writes it | Authority |
-|---|---|---|
-| `<stem>.labels.tsv` | **you**, by hand | authoritative; nothing else may overwrite it |
-| `<stem>.auto.labels.tsv` | the engine (`tail-solve --emit`) | regenerable; consumed by solve/build |
-| `<stem>.starter.labels.tsv` | `streamalign starter` | seed only; excluded from import/solve/build |
-| `<stem>.hints.tsv` | `streamalign hints` | **suggestions + questions**; invisible to everything, yours to accept or delete |
+| File | Who writes it | Committed? | Authority |
+|---|---|---|---|
+| `<stem>.labels.tsv` | **you**, by hand | **yes** | authoritative; nothing else may overwrite it. Reaches the sheet. |
+| `<stem>.auto.labels.tsv` | the engine (`tail-solve --emit`) | yes | regenerable; consumed by solve/build. Reaches the sheet. |
+| `<stem>.starter.labels.tsv` | `sort_tsv.py` (auto) / `streamalign starter` | **gitignored** | seed only; excluded from import/solve/build |
+| `<stem>.hints.tsv` | `streamalign hints` | **gitignored** | **suggestions + questions**; invisible to solve/build **and the sheet**, yours to accept or delete |
+
+The sheet importer (`sheetscript/Code.js`) reads **only** `*.labels.tsv` (including
+`*.auto.labels.tsv`) plus the one hand-kept `remainder.tsv` — mirroring
+`groundtruth.is_pipeline_label_file`, so the sheet and the engine agree on what is real. A bare
+`<stem>.tsv`, a `*.starter.labels.tsv`, and a `*.hints.tsv` are all excluded.
 
 ---
 
