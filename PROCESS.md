@@ -187,7 +187,7 @@ neighbour's file, validates the grammar, and flags a sync line missing `verified
 `<stem>.labels.tsv`; a bare `<stem>.tsv` is written fine but invisible to solve, build, publish
 and the sheet — so `sort_tsv.py` warns you when it writes one.
 
-**One command does steps 6 + 7, and offers step 0 for the next file.** On a successful sort it
+**This command does steps 6 + 7, and offers step 0 for the next file.** On a successful sort it
 also **seeds the neighbours** (step 7, below — no separate command) and then **offers to prep
 the next file**: it guesses the successor from your `file_<next>:` link (falling back to the
 1998/2017 notes, then the filename range) and, if you agree, runs `streamalign hints` on it so
