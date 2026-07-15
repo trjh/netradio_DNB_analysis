@@ -86,6 +86,7 @@ def merged(tr, albums, n):
         "artist": t.get("artist") or alb.get("artist") or "",
         "year": af.get("year") or tf.get("year") or "",   # prefer the album's year
         "album_id": t.get("album"),
+        "release": alb.get("title") or "",          # album/release name
         "artwork": t.get("artwork") or alb.get("artwork"),
         "begin": t["master_begin_seconds"],
         "end": t["master_end_seconds"],
@@ -217,23 +218,10 @@ def render_background(tr, albums, start, end):
 
 # --- per-track foreground card (baked over a copy of the dimmed mosaic) ------
 F_TRACK = font("Futura.ttc", 30)
-F_TITLE = font("Futura.ttc", 74)
 F_ARTIST = font("Futura.ttc", 44)
-F_YEAR = font("Georgia Italic.ttf", 34)
+F_REL = font("Futura.ttc", 32)
+F_YEAR = font("Georgia Italic.ttf", 32)
 F_HEAD = font("Futura.ttc", 34)
-
-
-def wrap(draw, text, fnt, maxw):
-    words, lines, cur = text.split(), [], ""
-    for w in words:
-        t = (cur + " " + w).strip()
-        if draw.textlength(t, font=fnt) <= maxw or not cur:
-            cur = t
-        else:
-            lines.append(cur); cur = w
-    if cur:
-        lines.append(cur)
-    return lines[:2]
 
 
 def render_card(bg, tr, albums, n, idx, count, header):
@@ -252,20 +240,32 @@ def render_card(bg, tr, albums, n, idx, count, header):
     draw = ImageDraw.Draw(img)
     draw.rectangle([CX, CY, CX + COV - 1, CY + COV - 1], outline=(255, 255, 255, 60), width=2)
 
-    # bottom-justify the text block so its baseline aligns with the cover's bottom
+    # Text block right of the cover, bottom-justified against the cover's base:
+    #   TRACK n • idx OF N  /  title (one line, shrunk to fit)  /  artist  /  release + year.
+    # The release line is dropped for the Net Radio promos (no commercial release).
     tx = CX + COV + 46
-    title_lines = wrap(draw, m["title"], F_TITLE, W - tx - 90)
-    block_h = 50 + 82 * len(title_lines) + 6 + 52
-    ty = (CY + COV) - block_h
+    maxw = W - tx - 90
+    tsize = 74                                   # shrink the title until it fits on one line
+    while tsize > 40 and draw.textlength(m["title"], font=font("Futura.ttc", tsize)) > maxw:
+        tsize -= 2
+    f_title = font("Futura.ttc", tsize)
+    release = m["release"] if (m["album_id"] and m["album_id"] != "net-radio") else ""
+
+    h_track, h_title, h_artist = 48, tsize + 12, 56
+    h_rel = 44 if release else 0
+    ty = (CY + COV) - (h_track + h_title + h_artist + h_rel)
+
     draw.text((tx, ty), f"TRACK {n}  •  {idx} OF {count}", font=F_TRACK, fill=ACCENT)
-    ty += 50
-    for ln in title_lines:
-        draw.text((tx, ty), ln, font=F_TITLE, fill=(255, 255, 255)); ty += 82
-    ty += 6
+    ty += h_track
+    draw.text((tx, ty), m["title"], font=f_title, fill=(255, 255, 255))
+    ty += h_title
     draw.text((tx, ty), m["artist"], font=F_ARTIST, fill=(228, 233, 242))
-    if m["year"]:
-        aw = draw.textlength(m["artist"], font=F_ARTIST)
-        draw.text((tx + aw + 22, ty + 8), m["year"], font=F_YEAR, fill=(160, 170, 185))
+    ty += h_artist
+    if release:
+        draw.text((tx, ty), release, font=F_REL, fill=(170, 180, 195))
+        if m["year"]:
+            rw = draw.textlength(release, font=F_REL)
+            draw.text((tx + rw + 16, ty + 3), m["year"], font=F_YEAR, fill=(150, 160, 175))
 
     draw.text((90, 70), header, font=F_HEAD, fill=(210, 220, 235))
     logo = Image.open(LOGO).convert("RGB")
