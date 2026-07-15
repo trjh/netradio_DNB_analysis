@@ -37,9 +37,17 @@ help in summarizing and cross-referencing the information.
 * [STREAM_PROVENANCE.md](./STREAM_PROVENANCE.md) -- how the capture files came to exist (RealAudio loop -> `/dev/audio` dump -> hex -> wav/au), why they overlap and contain skips, and what "master time" actually is
 * [scripts/streamalign/](./scripts/streamalign) -- the Stream Alignment Engine; see its [README](./scripts/streamalign/README.md) (status) and [WALKTHROUGH](./scripts/streamalign/WALKTHROUGH.md) (how the functions compose)
 * [docs/SCRIPTS.md](./docs/SCRIPTS.md) -- **every script**: purpose, when to run it, which python it needs
-* [FINDING_MYSTERY_TRACKS.md](./FINDING_MYSTERY_TRACKS.md) -- **identifying the unnamed tracks**: where to publish the excerpts and ask (Dogs on Acid, r/AtmosphericDnB, Discogs, tuneID), the chroma-matching method that works offline, and every dead end already tried
+* [FINDING_MYSTERY_TRACKS.md](./FINDING_MYSTERY_TRACKS.md) -- **identifying the unnamed tracks**: where to publish the excerpts and ask (Dogs on Acid, r/AtmosphericDnB, Discogs, tuneID), the chroma-matching method that works offline, and every dead end already tried (incl. the commercial fingerprint APIs — see below)
 * [PROCESS.md](./PROCESS.md) -- **how the analysis is actually done**: the per-recording loop (manual + engine), the by-ear technique for seating an original against the mix, and what the engine can/cannot do
 * [HOWTO.md](./HOWTO.md) -- howto / FAQ: **which tool to run, when, and why** (notate → build → serve → publish)
+
+## Identifying the mystery tracks — what works, and what doesn't
+
+The full playbook is in [FINDING_MYSTERY_TRACKS.md](./FINDING_MYSTERY_TRACKS.md); the short version:
+
+* **Publishing the excerpt and asking humans is what actually works** (r/AtmosphericDnB solved one). **Chroma-matching** (`scripts/identify_by_chroma.py`) is the machine method that survives the 1998 codec/EQ damage, because it keeps harmony and discards the timbre the damage destroys — but it can only find records you already have in the pool, so the real work is *acquiring candidates*.
+* **Machine fingerprinting is a proven dead end on this audio.** AcoustID/Chromaprint can't work on the stream (0.511 vs its own clean original; 0.50 is random), and — tested 2026-07-15 — the commercial acoustic APIs **ACRCloud and AudD** fail the same way: they nail clean controls but returned nothing on the real mysteries (MT4/6/7) and only noise on a known-but-degraded control (MT5). `scripts/identify_by_api.py` runs them anyway as a cheap periodic re-check. Detail in FINDING §4.
+* **Worth a hands-on try: the *independent* consumer engines.** Because ACRCloud and AudD share the spectral-peak approach that the codec defeats, try services with a *different* algorithm and catalogue — **Shazam** (Apple), **SoundHound**, and **Google** (Sound Search / "Hum to Search" / Circle to Search). A different engine *might* survive where these didn't (low odds, but free — play a clean clip in). **Skip web "Shazam alternatives" that just resell ACRCloud/AudD** (e.g. AHA Music is built on ACRCloud) — they fail identically, so they're not a new shot.
 
 ## Process — how the analysis is actually done
 

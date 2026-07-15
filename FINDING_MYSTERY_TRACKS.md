@@ -124,9 +124,20 @@ PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --all-mystery
 # 2. search the listen queue's downloaded, UNLISTENED tracks (slow — runs for hours)
 PYTHONPATH=scripts .venv/bin/python scripts/match_queue.py --out /tmp/queue-match.txt
 
-# 3. build the video to post
+# 3. a cheap re-check against the commercial catalogues (ACRCloud + AudD). Proven defeated by
+#    the codec on the clips tried so far (see §4), so expect nothing — but catalogues grow and a
+#    cleaner future clip might land, and it costs a few free requests. Needs the API keys in .env_vars.
+python3 scripts/identify_by_api.py --query "Mystery Track 8.wav" --windows 8
+
+# 4. build the video to post
 bash scripts/mkvideo.sh "$NETRADIO_SOURCES_DIR/Mystery Track 8.wav" 8
 ```
+
+**Also worth a hands-on spot-check:** play the clean clip into **Shazam**, **SoundHound**, and
+**Google** ("Hum to Search" / Sound Search / Circle to Search) — three engines *independent* of
+ACRCloud/AudD, so a different algorithm might survive the 1998 damage where the APIs above didn't
+(low odds; see §4). Don't bother with web tools that resell ACRCloud/AudD (e.g. AHA Music) — they
+fail identically.
 
 No list to edit, nowhere to register it: **both searches derive their queries from
 `track-metadata.json` + the clips on disk**, so a new clip is picked up automatically and a
@@ -225,6 +236,36 @@ nearly turned this into a false claim about AcoustID's coverage:
 > into compact hashes for a fast index, and it is that quantisation the codec destroys. Raw chroma
 > + DTW keeps all 12 dimensions and tolerates the degradation. The feature was always right; the
 > hashing is what breaks.
+
+### ✗ Commercial fingerprint APIs (ACRCloud + AudD) — **tested 2026-07-15, defeated by the same damage**
+
+The obvious next thought: the big "what song is this" services (ACRCloud ~150M tracks, AudD ~160M)
+search catalogues the local chroma pool can't, and they claim noise-robustness. So `scripts/identify_by_api.py`
+carves clean interior windows from each mystery clip and submits them to both. The result is
+conclusive and negative:
+
+- **Clean controls identify perfectly** — a clean FLAC of Skyjuice – "The Rope-a-Dope" scores
+  **100** on ACRCloud and matches on AudD. The pipeline works.
+- **Every real mystery (MT4, MT6, MT7) returns nothing** from either engine, across every window.
+- **The decisive control:** Mystery Track 5 is *solved* — Jacob's Optical Stairway – "Solar
+  Feelings", a catalogued R&S release — but its **stream capture** drew a blank from AudD and one
+  garbage hit from ACRCloud (Rami Eid – "In The Shade", a 2020 Latin-pop track, score 34, the
+  noise floor). Clean copies match; the stream captures do not.
+
+Same wall as AcoustID: ACRCloud and AudD are *also* spectral-peak fingerprinters, and the
+1998 ISDN/EQ damage destroys what they key on. Catalogue size was never the problem.
+
+**Worth a manual try anyway — but only with *independent* engines.** A different fingerprint
+algorithm *might* survive the damage where these two didn't (low odds — the degradation is
+fundamental — but free to try by playing a clean clip in):
+
+- **Shazam** (Apple's own peak-pairing engine), **SoundHound** (its own engine; also does
+  humming), and **Google** (Sound Search / "Hum to Search" / Circle to Search — its own ML
+  model, huge catalogue). Three genuinely different algorithms and catalogues.
+- **Skip the web "Shazam alternatives" that just resell ACRCloud/AudD** — e.g. **AHA Music is
+  built on ACRCloud** — they will fail *identically* to the test above, so they're not a new shot.
+- None have a batch/file API worth scripting (Shazam has no developer API at all), so this is a
+  hands-on, one-clip-at-a-time spot-check, not part of the automated sweep.
 
 ### ✗ Blind chroma search for a record inside a capture
 
