@@ -15,8 +15,19 @@ instead, so it can name a record nobody here owns. That is the whole reason to u
 The catch, stated honestly. This project already proved (`Archive/LESSON_acoustid_stream.md`)
 that Chromaprint FAILS on this material: a 1998 broadcast capture scores 0.511 against its own
 clean original, and 0.50 is random. ACRCloud and AudD are ALSO spectral-peak fingerprinters, so
-the ISDN/RealAudio codec + the DJ's EQ may defeat them the same way. This tool does not assume
-they win -- it is the experiment that finds out. Treat every hit as a lead to CONFIRM BY EAR.
+the ISDN/RealAudio codec + the DJ's EQ may defeat them the same way. Treat every hit as a lead
+to CONFIRM BY EAR.
+
+**The experiment ran (2026-07-15), and the answer is no.** Both engines identify CLEAN controls
+perfectly (Skyjuice - The Rope-a-Dope, score 100). But every real mystery with a clip -- MT4,
+MT6, MT7 -- returned nothing from either engine across every window. The decisive control: MT5
+is SOLVED (Jacob's Optical Stairway - "Solar Feelings", a catalogued release), yet its STREAM
+capture drew a blank from AudD and one garbage hit from ACRCloud (Rami Eid - "In The Shade", a
+2020 Latin-pop track, score 34 -- the noise floor). Clean copies match; stream captures do not.
+So acoustic-API ID is defeated by the 1998 damage the same way AcoustID is. This tool stays as
+a cheap re-check (catalogues grow; a future, cleaner clip might land), but chroma -- which
+discards timbre and keeps harmony -- remains the method that survives. The work is ACQUIRING
+CANDIDATES for the chroma pool, not fingerprint lookups.
 
 Clean windows, all hits
 -----------------------
