@@ -236,6 +236,7 @@ class EnumerateTests(unittest.TestCase):
             "characterise_overlap": staticmethod(lambda skp, ref, lo, hi, seed: {
                 "walk": [(49.0, -10.0, 0.95), (51.0, -11.2, 0.95)],
                 "skips": [{"at_s": 50.0, "delta_s": -1.2, "before_s": 49.0, "after_s": 51.0}]}),
+            "offset_at": staticmethod(self._sk.offset_at),
         })
 
     def tearDown(self):
@@ -255,108 +256,65 @@ class EnumerateTests(unittest.TestCase):
             self.labels, pairs=[("d099-118", "d100-119")]), [])
 
 
-class GenerateClipsTests(unittest.TestCase):
-    """generate_clips with audio + ffmpeg write + clip builder stubbed."""
-    def setUp(self):
-        self.out = tempfile.mkdtemp()
-        self._a, self._clips_mk, self._clips_wr, self._walk = (
-            skip_review._audio, skip_review._clips.make_skip_clip,
-            skip_review._clips.write_clip, skip_review._skips.walk_overlap)
-        skip_review._audio = _AudioStub
-        skip_review._skips.walk_overlap = staticmethod(lambda *a, **k: [])
-        skip_review._clips.make_skip_clip = staticmethod(
-            lambda a, b, skip, walk, sr=0: (np.zeros(int(_AudioStub.SR * 5)),
-                                            [{"t": 0.0, "label": "x"}]))
-        self._written = []
-        skip_review._clips.write_clip = staticmethod(
-            lambda arr, path, sr=0: self._written.append(path))
-
-    def tearDown(self):
-        skip_review._audio = self._a
-        skip_review._clips.make_skip_clip = self._clips_mk
-        skip_review._clips.write_clip = self._clips_wr
-        skip_review._skips.walk_overlap = self._walk
-
-    def test_generates_manifest_and_sidecar(self):
+class PersistCandidatesTests(unittest.TestCase):
+    """persist_candidates writes the sidecar (no audio, no mp3 -- the clip layer is retired)."""
+    def test_writes_sidecar_keyed_by_stable_id(self):
+        out = tempfile.mkdtemp()
         cand = {"skipper": "d100-119", "reference": "d099-118", "at_s": 50.0,
                 "delta_s": -1.2, "before_s": 49.0, "after_s": 51.0,
                 "seed_offset_s": -600.0, "conf": 0.95}
-        entries = skip_review.generate_clips([cand], self.out)
-        self.assertEqual(len(entries), 1)
-        cid = entries[0]["id"]
-        self.assertEqual(cid, "d100-119_d099-118_skip1")
-        self.assertTrue(self._written[0].endswith(cid + ".mp3"))
-        with open(os.path.join(self.out, "manifest.json")) as f:
-            manifest = json.load(f)
-        self.assertEqual(manifest["clips"][0]["id"], cid)
-        sidecar = skip_review.load_candidates(self.out)
+        sidecar = skip_review.persist_candidates([cand], out)
+        cid = "d100-119_d099-118_skip1"
         self.assertIn(cid, sidecar)
         self.assertEqual(sidecar[cid]["delta_s"], -1.2)
+        # persisted to disk, readable back
+        self.assertEqual(skip_review.load_candidates(out)[cid]["at_s"], 50.0)
+        # no mp3 / manifest was produced
+        self.assertFalse(os.path.exists(os.path.join(out, "manifest.json")))
+        self.assertEqual([f for f in os.listdir(out) if f.endswith(".mp3")], [])
 
-    def test_rerun_prunes_rejected_clip_from_manifest_sidecar_and_disk(self):
-        labels = tempfile.mkdtemp()
+    def test_rerun_prunes_a_rejected_skip(self):
+        out, labels = tempfile.mkdtemp(), tempfile.mkdtemp()
         cid = "d100-119_d099-118_skip1"
-        # seed a prior run: manifest + sidecar + on-disk mp3 for the clip
-        import streamalign.clips as _clips
-        _clips._append_manifest(self.out, [{"id": cid, "audio": cid + ".mp3",
-                                            "title": "old rejected"}])
-        skip_review.save_candidates(self.out, {cid: {
+        skip_review.save_candidates(out, {cid: {
             "id": cid, "skipper": "d100-119", "reference": "d099-118",
             "at_s": 50.0, "delta_s": -1.2, "before_s": 49.4, "after_s": 50.6}})
-        mp3 = os.path.join(self.out, cid + ".mp3")
-        open(mp3, "wb").close()
-        # Tim rejects it; a rerun produces no matching candidate
         skip_review.reject_skip("d100-119", 50.0, -1.2, labels_dir=labels)
-        skip_review.generate_clips([], self.out, labels_dir=labels)
-        # gone from BOTH stores and disk; the player will never resurface it
-        with open(os.path.join(self.out, "manifest.json")) as f:
-            ids = [c.get("id") for c in json.load(f)["clips"]]
-        self.assertNotIn(cid, ids)
-        self.assertNotIn(cid, skip_review.load_candidates(self.out))
-        self.assertFalse(os.path.exists(mp3))
-
-    def test_rerun_keeps_unrelated_clips(self):
-        labels = tempfile.mkdtemp()
-        import streamalign.clips as _clips
-        _clips._append_manifest(self.out, [{"id": "other_tool_clip", "audio": "x.mp3"}])
-        skip_review.reject_skip("d100-119", 50.0, -1.2, labels_dir=labels)
-        skip_review.generate_clips([], self.out, labels_dir=labels)
-        with open(os.path.join(self.out, "manifest.json")) as f:
-            ids = [c.get("id") for c in json.load(f)["clips"]]
-        self.assertIn("other_tool_clip", ids)   # non-skip clips untouched
+        skip_review.persist_candidates([], out, labels_dir=labels)   # a re-run
+        self.assertNotIn(cid, skip_review.load_candidates(out))       # gone from the sidecar
 
 
-class CliSkipClipsTests(unittest.TestCase):
-    """The skip-clips CLI must prune rejected clips even when enumeration is empty."""
+class ScanForHintsTests(unittest.TestCase):
+    """scan_for_hints feeds `streamalign hints`: detect, persist, return this file's skips."""
     def setUp(self):
-        import argparse
-        import streamalign.__main__ as main_mod
-        import streamalign.clips as _clips
-        self.main_mod = main_mod
-        self.out = tempfile.mkdtemp()
         self.labels = tempfile.mkdtemp()
-        self.cid = "d100-119_d099-118_skip1"
-        _clips._append_manifest(self.out, [{"id": self.cid, "audio": self.cid + ".mp3"}])
-        skip_review.save_candidates(self.out, {self.cid: {
-            "id": self.cid, "skipper": "d100-119", "reference": "d099-118",
-            "at_s": 50.0, "delta_s": -1.2, "before_s": 49.4, "after_s": 50.6}})
-        self.mp3 = os.path.join(self.out, self.cid + ".mp3")
-        open(self.mp3, "wb").close()
-        skip_review.reject_skip("d100-119", 50.0, -1.2, labels_dir=self.labels)
-        self._enum = skip_review.enumerate_candidates
-        skip_review.enumerate_candidates = staticmethod(lambda *a, **k: [])
-        self.args = argparse.Namespace(out=self.out, conf_min=0.7, labels=self.labels)
+        self._enum, self._gt, self._solve = (
+            skip_review.enumerate_candidates, skip_review._gt, skip_review._solve)
+        skip_review._solve = type("S", (), {"_dedupe": staticmethod(lambda e: list(e))})
+        skip_review._gt = type("G", (), {
+            "alignment_edges": staticmethod(lambda ld=None: [("d099-118", "d100-119")]),
+            "LABELS_DIR": self.labels})
+        skip_review.enumerate_candidates = staticmethod(lambda labels_dir=None, pairs=None: [
+            {"skipper": "d100-119", "reference": "d099-118", "at_s": 50.0, "delta_s": -1.2,
+             "before_s": 49.0, "after_s": 51.0, "seed_offset_s": -600.0, "conf": 0.95}])
 
     def tearDown(self):
         skip_review.enumerate_candidates = self._enum
+        skip_review._gt, skip_review._solve = self._gt, self._solve
 
-    def test_cli_prunes_rejected_when_no_new_candidates(self):
-        self.main_mod._cmd_skip_clips(self.args)   # the documented rerun path
-        with open(os.path.join(self.out, "manifest.json")) as f:
-            ids = [c.get("id") for c in json.load(f)["clips"]]
-        self.assertNotIn(self.cid, ids)
-        self.assertNotIn(self.cid, skip_review.load_candidates(self.out))
-        self.assertFalse(os.path.exists(self.mp3))
+    def test_returns_only_skips_attributed_to_this_file_with_ids(self):
+        # d100-119 is the skipper -> it owns the skip
+        rows = skip_review.scan_for_hints("d100-119", labels_dir=self.labels)
+        self.assertEqual(len(rows), 1)
+        cid, at_s, direction, mag, other = rows[0]
+        self.assertEqual(cid, "d100-119_d099-118_skip1")
+        self.assertEqual((at_s, direction, other), (50.0, "ahead", "d099-118"))
+        # the sidecar is written so skip-reject <id> can act on it
+        self.assertIn(cid, skip_review.load_candidates(self.labels))
+
+    def test_the_reference_file_gets_no_skip_row(self):
+        # the same skip belongs to the skipper; labelling the reference must not re-surface it
+        self.assertEqual(skip_review.scan_for_hints("d099-118", labels_dir=self.labels), [])
 
 
 if __name__ == "__main__":

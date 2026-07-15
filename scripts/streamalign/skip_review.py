@@ -1,14 +1,16 @@
-"""Batch skip-check clip runner + confirm/reject write-back (F1).
+"""Skip detection + a candidate sidecar + confirm/reject write-back (F1).
 
 Two pieces the rest of G1 leaves open:
 
-1. **Batch runner** — `generate_clips()` enumerates the detected skips across the
-   placed / hand-verified overlap pairs and drives `clips.py` to render one
-   skip-check clip per skip into the clip review player's dir (`player/public/clips/`
-   by default), plus a `skip-candidates.json` sidecar so each clip's
-   skipper/reference/position/magnitude survive for the write-back step. Today
-   `clips.generate_skip_clips` is per-pair and keeps no candidate record; this drives
-   the whole graph in one pass and persists what each clip *is*.
+1. **Detection + sidecar** — `enumerate_candidates()` detects the skips across the
+   placed / hand-verified overlap pairs, and `persist_candidates()` writes a
+   `skip-candidates.json` sidecar (next to the labels) so each skip's
+   skipper/reference/position/magnitude survive under a stable id for the write-back
+   step. `streamalign hints` calls these and emits the skip as a `note QUESTION:` row
+   carrying its id, so you audition it **in Audacity against the real capture** and act
+   on it by id. (The old averaged-overlap review clips were retired -- see
+   `Archive/skip-clips/`: two recordings mixed on top of each other never gave an
+   audible coherent-vs-doubling signal.)
 
 2. **Confirm/reject write-back** (the loop Tim asked for), keyed by clip id:
    * **CONFIRM** (the clip sounds coherent ⇒ the skip is right) → append the skip to
@@ -28,16 +30,15 @@ Consumption by the solve/emit path:
   * Anything auto-detected but neither confirmed nor rejected stays **provisional** —
     `emit_labels` marks it `AUTO GENERATED`.
 
-Audio is required only by `enumerate_candidates`/`generate_clips`; the decision store
-and `apply_decisions` are pure I/O and run anywhere (so they're fully unit-tested
-without the captures on disk).
+Audio is required only by `enumerate_candidates`; the decision store, `persist_candidates`
+and `apply_decisions` are pure I/O and run anywhere (so they're fully unit-tested without the
+captures on disk).
 """
 
 import json
 import os
 
 from . import audio as _audio
-from . import clips as _clips
 from . import groundtruth as _gt
 from . import skips as _skips
 from . import solve as _solve
@@ -265,8 +266,8 @@ def enumerate_candidates(labels_dir=None, pairs=None, conf_min=0.7,
                 continue
             # local skipper→reference offsets bracketing the skip, so the write-back can
             # convert into the reference's timeline if Tim reattributes (--owner).
-            off_before = _clips._offset_at(char["walk"], sk["before_s"])
-            off_after = _clips._offset_at(char["walk"], sk["after_s"])
+            off_before = _skips.offset_at(char["walk"], sk["before_s"])
+            off_after = _skips.offset_at(char["walk"], sk["after_s"])
             candidates.append({
                 "skipper": skipper, "reference": reference,
                 "at_s": sk["at_s"], "delta_s": sk["delta_s"],
@@ -298,7 +299,7 @@ def _filename_start(stem):
 
 
 def clip_id(cand, index):
-    """Stable id for a candidate clip (matches clips.py's <a>_<b>_skipN style)."""
+    """Stable id for a candidate skip (`<skipper>_<reference>_skipN`); confirm/reject key."""
     return "%s_%s_skip%d" % (cand["skipper"], cand["reference"], index + 1)
 
 
@@ -314,82 +315,59 @@ def _candidate_rejected(cand, rejections):
     return is_rejected(stem, at, delta, rejections)
 
 
-def _prune_manifest(out_dir, drop_ids):
-    """Remove the given clip ids from out_dir/manifest.json (atomic). Other clips
-    (incl. non-skip ones) are untouched."""
-    path = os.path.join(out_dir, "manifest.json")
-    if not os.path.isfile(path):
-        return
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            data = json.load(handle)
-    except (OSError, ValueError):
-        return
-    data["clips"] = [c for c in data.get("clips", []) if c.get("id") not in drop_ids]
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as handle:
-        json.dump(data, handle, indent=2)
-    os.replace(tmp, path)
+def persist_candidates(candidates, out_dir, labels_dir=None):
+    """Write the detected skips to `skip-candidates.json`, keyed by a stable id.
 
+    This is what lets `skip-confirm <id>` / `skip-reject <id>` act on a skip later without
+    re-detecting -- `streamalign hints` calls it and prints each id in its `note QUESTION:`
+    row. No audio, no mp3 rendering (that was the retired clip review layer): the sidecar IS
+    the record. Returns `{id: candidate}`.
 
-def generate_clips(candidates, out_dir, labels_dir=None, sr=_audio.SR):
-    """Render one skip-check clip per candidate into out_dir + manifest + sidecar.
-
-    Reuses clips.make_skip_clip / write_clip / _append_manifest, then persists the
-    candidate metadata to `skip-candidates.json` keyed by clip id, so confirm/reject
-    can act on a clip id later without re-detecting. Returns the manifest entries.
-
-    On every run, any skip Tim has since **rejected** is pruned from the manifest, the
-    sidecar, and disk — so a rerun never resurfaces a rejected clip in the review player
-    (enumerate already drops rejected candidates from the new batch; this also clears
-    stale entries persisted by an earlier run).
+    Any skip since **rejected** is pruned from the sidecar on every run, so a re-run never
+    resurfaces it (enumerate already drops rejected candidates from the new batch; this also
+    clears stale entries persisted by an earlier run).
     """
     os.makedirs(out_dir, exist_ok=True)
-    entries = []
     sidecar = load_candidates(out_dir)
-    # number skips per (skipper,reference) pair so ids match clips.generate_skip_clips
     seen_pair = {}
     for cand in candidates:
-        a = _audio.load_audio(cand["skipper"])
-        b = _audio.load_audio(cand["reference"])
-        walk = _skips.walk_overlap(a, b, cand["before_s"] - _clips.PAD_S - 2.0,
-                                   cand["after_s"] + _clips.PAD_S + 2.0,
-                                   cand["seed_offset_s"])
-        made = _clips.make_skip_clip(a, b, cand, walk, sr=sr)
-        if made is None:
-            continue
-        clip, ann = made
         pair = (cand["skipper"], cand["reference"])
         idx = seen_pair.get(pair, 0)
         seen_pair[pair] = idx + 1
         cid = clip_id(cand, idx)
-        fn = cid + ".mp3"
-        _clips.write_clip(clip, os.path.join(out_dir, fn), sr=sr)
-        word, mag = _direction(cand["delta_s"])
-        entries.append({
-            "id": cid, "audio": fn,
-            "title": "%s ↔ %s: skip %s %.3fs @ %s %.1fs" % (
-                cand["skipper"], cand["reference"], word, mag, cand["skipper"], cand["at_s"]),
-            "description": ("A=%s (skipper — skip attributed here), B=%s (reference). "
-                            "Coherent ⇒ confirm; doubling ⇒ reject." % (
-                                cand["skipper"], cand["reference"])),
-            "duration": len(clip) / sr,
-            "annotations": ann,
-        })
         sidecar[cid] = dict(cand, id=cid)
-    _clips._append_manifest(out_dir, entries)
-    # prune any now-rejected skip from both stores + disk so it never resurfaces
     rejections = load_rejections(labels_dir)
-    drop = {cid for cid, c in sidecar.items() if _candidate_rejected(c, rejections)}
-    if drop:
-        sidecar = {cid: c for cid, c in sidecar.items() if cid not in drop}
-        _prune_manifest(out_dir, drop)
-        for cid in drop:
-            mp3 = os.path.join(out_dir, cid + ".mp3")
-            if os.path.isfile(mp3):
-                os.remove(mp3)
+    sidecar = {cid: c for cid, c in sidecar.items() if not _candidate_rejected(c, rejections)}
     save_candidates(out_dir, sidecar)
-    return entries
+    return sidecar
+
+
+def scan_for_hints(stem, labels_dir=None):
+    """Detect this capture's skips, persist the sidecar, and return rows for its hints file.
+
+    `streamalign hints` calls this: it emits one `note QUESTION:` per skip **attributed to
+    this file** (a skip is a discontinuity in the further-from-anchor capture -- the skipper),
+    carrying the skip's id so it can be ruled on later with `skip-confirm`/`skip-reject <id>`
+    (the sidecar it writes is what those act on -- no clip needed). Skips where this file is the
+    *reference* belong to the neighbour and surface when that file is labelled.
+
+    Returns `[(id, at_s, direction, magnitude_s, other_stem)]`, all in this file's local time.
+    """
+    stem = _audio.stem_of(stem)
+    edges = [(a, b) for (a, b) in _solve._dedupe(_gt.alignment_edges(labels_dir))
+             if stem in (a, b)]
+    if not edges:
+        return []
+    cands = enumerate_candidates(labels_dir=labels_dir, pairs=edges)
+    sidecar = persist_candidates(cands, out_dir=(labels_dir or _gt.LABELS_DIR),
+                                 labels_dir=labels_dir)
+    out = []
+    for cid, cand in sidecar.items():
+        if cand.get("skipper") != stem:
+            continue
+        word, mag = _direction(cand["delta_s"])
+        out.append((cid, cand["at_s"], word, mag, cand["reference"]))
+    return sorted(out, key=lambda r: r[1])
 
 
 def candidates_path(out_dir):
@@ -437,7 +415,7 @@ def reattribute(cand, owner):
     obf, oaf = cand.get("off_before_s"), cand.get("off_after_s")
     if obf is None or oaf is None:
         raise ValueError("cannot reattribute to %s: per-point offsets missing from the "
-                         "candidate (re-run skip-clips to record them)" % ref)
+                         "candidate (re-run `streamalign hints` to record them)" % ref)
     rb, ra = cand["before_s"] - obf, cand["after_s"] - oaf   # → reference-local times
     lo, hi = sorted((rb, ra))
     return ref, 0.5 * (lo + hi), -cand["delta_s"], lo, hi, skipper
