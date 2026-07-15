@@ -130,3 +130,20 @@ def characterise_overlap(a_name, b_name, a_start_s, a_end_s, seed_offset_s,
     skips = detect_skips(walk)
     return {"a": _audio.stem_of(a_name), "b": _audio.stem_of(b_name),
             "walk": walk, "skips": skips}
+
+
+def offset_at(walk, t, max_dist_s=5.0):
+    """Offset of the confident walk point nearest time `t` (None if none is close).
+
+    Moved here from the (retired) clip renderer: it reads only the walk that
+    `characterise_overlap` produces, so it belongs with detection, not with audio clips.
+    `enumerate_candidates` uses it to bracket each skip with local offsets.
+    """
+    best = None
+    for wt, wo, wc in walk:
+        if wc < 0.8:
+            continue
+        d = abs(wt - t)
+        if best is None or d < best[0]:
+            best = (d, wo)
+    return best[1] if best and best[0] <= max_dist_s else None

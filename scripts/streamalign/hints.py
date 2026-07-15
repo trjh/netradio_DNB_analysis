@@ -255,22 +255,27 @@ def build_hints(stem, labels_dir=None, audio_dir=None, decim=8):
             diag["questions"] += 1
             continue
 
-        # skips, walked over the same overlap
-        try:
-            from . import skips as _skips
-            char = _skips.characterise_overlap(stem, other, lo, hi, off)
-            for sk in char.get("skips", []):
-                t = sk["at_s"]
-                direction = "ahead" if sk.get("delta_s", 0) < 0 else "back"
-                rows.append(_question(
-                    t, t,
-                    "possible SKIP %s %.3fs here (found while walking the overlap with %s). "
-                    "Confirm or reject -- if it is real it needs a `file note: SKIP %s %.3fs`."
-                    % (direction, abs(sk["delta_s"]), other, direction, abs(sk["delta_s"]))))
-                diag["questions"] += 1
-                diag["skips"] += 1
-        except Exception:                                          # pragma: no cover
-            pass
+        # skips are detected once for the whole file, after the neighbour loop (below) --
+        # via skip_review.scan_for_hints, which also persists the id so skip-reject can act.
+
+    # --- skips over every verified overlap, with an id you can rule on ------------------
+    # Detection lives in skips.py (unchanged); scan_for_hints orients each skip, persists the
+    # `skip-candidates.json` sidecar, and hands back the skips ATTRIBUTED TO THIS FILE. You
+    # audition each in Audacity against the real capture (the old averaged-overlap review clip
+    # never gave an audible signal); if real it needs a `file note: SKIP <dir> <mag>s`, and if
+    # spurious `streamalign skip-reject <id>` stops the engine re-proposing it.
+    try:
+        from . import skip_review as _skip_review
+        for cid, at_s, direction, mag, other in _skip_review.scan_for_hints(stem, labels_dir):
+            rows.append(_question(
+                at_s, at_s,
+                "possible SKIP %s %.3fs here (found while walking the overlap with %s) "
+                "[id %s]. If real: `file note: SKIP %s %.3fs`. If not: `streamalign "
+                "skip-reject %s`." % (direction, mag, other, cid, direction, mag, cid)))
+            diag["questions"] += 1
+            diag["skips"] += 1
+    except Exception:                                              # pragma: no cover
+        pass
 
     # --- what was playing at the join (carry-forward content) --------------------------
     # An exactly-joined file inherits whatever the owner had mid-flight at the join, so the
