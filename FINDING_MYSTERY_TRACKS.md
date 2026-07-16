@@ -267,6 +267,25 @@ fundamental — but free to try by playing a clean clip in):
 - None have a batch/file API worth scripting (Shazam has no developer API at all), so this is a
   hands-on, one-clip-at-a-time spot-check, not part of the automated sweep.
 
+### ✗ TrackSniff — tested 2026-07-16, no match on MT4
+
+<https://tracksniff.com/results/EydDqHszfRI> — a DJ-mix-oriented "what's the track ID" web tool
+(upload, or paste a YouTube / SoundCloud / Mixcloud / TikTok URL; five confidence tiers from
+Unknown → Verified). It returned **no identification** for Mystery Track 4.
+
+**Same wall, dressed for DJs.** TrackSniff's actual novelty is *mix segmentation* — detecting where
+each record starts and ends inside a continuous set — not a recognition primitive that survives
+codec damage. Underneath it is still **audio-fingerprint-against-a-commercial-catalogue**, the exact
+class the ACRCloud + AudD entry above proves the 1998 ISDN/EQ degradation defeats. Its backend isn't
+publicly disclosed (the reviews only say "fingerprints matched against millions of songs" + "AI");
+if it resells ACRCloud/AudD it fails *identically*, and even if the fingerprinter is bespoke,
+catalogue size was never the bottleneck — the solved-MT5 control shows clean copies match while the
+stream capture doesn't. Its one plausible edge, an electronic-music-weighted catalogue, doesn't
+change the damage wall.
+
+Net: a confirmed dead end for MT4, and **not** a new scriptable method. Worth at most a one-off
+manual paste for MT6/MT7 if you're already on the site — expect the same blank.
+
 ### ✗ Blind chroma search for a record inside a capture
 
 `track_mix.locate_original` — right 2 times in 8, and its *most confident* answer was wrong by 25
