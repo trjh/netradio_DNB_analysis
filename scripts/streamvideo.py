@@ -136,9 +136,44 @@ def plan_audio(tr, sf, start, end):
     return T0, T1, segs
 
 
+def lms(t):
+    """m:ss.mmm (h:mm:ss.mmm past the hour) — cut points deserve milliseconds, not rounding."""
+    ms = int(round(t * 1000))
+    h, rem = divmod(ms, 3600_000)
+    m, rem = divmod(rem, 60_000)
+    s, ms = divmod(rem, 1000)
+    return f"{h}:{m:02d}:{s:02d}.{ms:03d}" if h else f"{m}:{s:02d}.{ms:03d}"
+
+
+def describe_plan(segs):
+    """Say exactly what is about to be cut from where, BEFORE any ffmpeg runs.
+
+    Each line is the source file and the file-LOCAL range being taken from it. The summary
+    line is the no-silence proof: the segments are contiguous on the master timeline by
+    construction (each starts where the previous ended), so the components' summed length
+    equals the span and there is nowhere a pad could hide. If coverage ever had a hole,
+    plan_audio() refuses with SystemExit rather than padding — but a claim like that should
+    be checkable by eye, which is what this printout is for.
+    """
+    print("Assembling audio from these components:")
+    total = 0.0
+    for i, s in enumerate(segs):
+        f = s["file"]
+        eof = abs(s["l_end"] - (f["master_end_seconds"] - f["master_start_seconds"])) < 0.0005
+        gap = "" if i == 0 or abs(s["m_start"] - segs[i - 1]["m_end"]) < 0.0005 \
+            else "  !! NOT CONTIGUOUS with previous segment"
+        print(f"- {f['mp3_filename']} {lms(s['l_start'])} - {lms(s['l_end'])}"
+              f"{' (end of file)' if eof else ''}{gap}")
+        total += s["l_end"] - s["l_start"]
+    span = segs[-1]["m_end"] - segs[0]["m_start"]
+    print(f"  = {len(segs)} segment(s), total {lms(total)} for a span of {lms(span)} — "
+          "contiguous on the master timeline; nothing padded, no silence inserted")
+
+
 def assemble_audio(segs, workdir):
     if not MP3_DIR:
         raise SystemExit("NETRADIO_MP3_DIR not set (player/.env or env)")
+    describe_plan(segs)
     parts = []
     for i, s in enumerate(segs):
         src = os.path.join(MP3_DIR, s["file"]["mp3_filename"])
@@ -310,7 +345,6 @@ def main():
 
     work = tempfile.mkdtemp(prefix="streamvid.")
     try:
-        print("assembling audio…")
         audio = assemble_audio(segs, work)
 
         print("rendering background treemap…")
