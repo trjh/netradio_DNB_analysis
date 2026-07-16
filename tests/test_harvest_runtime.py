@@ -208,6 +208,62 @@ class EvictingAPurgedLead(unittest.TestCase):
         self.assertIn("keep-me", [m["url"] for m in state["matches"]])
 
 
+class ARulingSpendsTheExcerpt(unittest.TestCase):
+    """The excerpt exists so a human can confirm or reject the lead by ear. Once they have --
+    match, not-a-match, heard -- that purpose is spent, and only the 30-day TTL sweep would ever
+    have reclaimed the audio. `drop_ruled_excerpts` reclaims it on the next pass instead.
+
+    The LEAD must survive whole: the score is the record, the audio was only ever the evidence.
+    """
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+
+    def _wav(self, name):
+        path = os.path.join(self.dir, name)
+        open(path, "wb").close()
+        return path
+
+    def test_a_ruled_leads_audio_goes_and_its_numbers_stay(self):
+        wav = self._wav("MT4-0.0603-aaaa.wav")
+        state = {"kept": 1, "matches": [{"mystery": 4, "cost": 0.0603, "url": "u1",
+                                         "at_s": 12.0, "verdict": "near", "audio": wav}]}
+        self.assertEqual(harvest.drop_ruled_excerpts(state, {"u1"}), 1)
+        self.assertFalse(os.path.exists(wav))
+        m = state["matches"][0]
+        self.assertNotIn("audio", m)
+        self.assertEqual((m["url"], m["cost"], m["at_s"]), ("u1", 0.0603, 12.0))
+        self.assertEqual(state["kept"], 0)
+
+    def test_an_unruled_lead_keeps_its_excerpt(self):
+        wav = self._wav("MT4-0.0603-bbbb.wav")
+        state = {"kept": 1, "matches": [{"mystery": 4, "cost": 0.0603, "url": "u1", "audio": wav}]}
+        self.assertEqual(harvest.drop_ruled_excerpts(state, {"someone-else"}), 0)
+        self.assertTrue(os.path.exists(wav))
+        self.assertEqual(state["matches"][0]["audio"], wav)
+        self.assertEqual(state["kept"], 1)
+
+    def test_a_ruled_lead_with_no_audio_is_a_no_op(self):
+        """The normal case after --purge-audio, and for every rescan-found lead."""
+        state = {"kept": 0, "matches": [{"mystery": 4, "cost": 0.06, "url": "u1"}]}
+        self.assertEqual(harvest.drop_ruled_excerpts(state, {"u1"}), 0)
+        self.assertEqual(state["kept"], 0)
+
+    def test_an_already_gone_file_still_clears_the_row(self):
+        """TTL sweep or a hand-rm got there first; the row must stop advertising audio anyway."""
+        state = {"kept": 1, "matches": [{"mystery": 4, "cost": 0.06, "url": "u1",
+                                         "audio": os.path.join(self.dir, "never-existed.wav")}]}
+        self.assertEqual(harvest.drop_ruled_excerpts(state, {"u1"}), 1)
+        self.assertNotIn("audio", state["matches"][0])
+        self.assertEqual(state["kept"], 0)
+
+    def test_kept_never_goes_negative(self):
+        state = {"kept": 0, "matches": [{"mystery": 4, "cost": 0.06, "url": "u1",
+                                         "audio": self._wav("MT4-0.06-cccc.wav")}]}
+        harvest.drop_ruled_excerpts(state, {"u1"})
+        self.assertEqual(state["kept"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
 
