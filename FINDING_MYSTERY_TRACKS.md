@@ -24,10 +24,17 @@ someone who was there.
 |---|---|
 | Mystery Track 3 | <https://www.youtube.com/watch?v=jKEt_2jLzYo> — **SOLVED**: Aquarius — *Wave Forms* |
 | Mystery Tracks 4 & 5 | <https://soundcloud.com/trjh/sets/track-id-requested> — **MT5 SOLVED**: Jacob's Optical Stairway — *Solar Feelings* (J Majik remix). MT4 still open (the same replier had not heard it either). |
+| Mystery Track 4 (2026-07-16) | Reddit round, still open: [r/AtmosphericDnB](https://www.reddit.com/r/AtmosphericDnB/s/A6HV01HyuU) · [r/DnB](https://www.reddit.com/r/DnB/s/Yx5wclnR6F) · [r/WhatsThisSong](https://www.reddit.com/r/WhatsThisSong/s/NvR2FATglT) · [r/Identificationofmusic](https://www.reddit.com/r/Identificationofmusic/s/7VhxjwubSH) |
 
 **Asking works.** Two of the three published mysteries have been named by strangers, from
 [one Reddit thread](https://www.reddit.com/r/AtmosphericDnB/comments/16n4u0m/). That is a better
 hit rate than every machine method in this document combined — which is why publishing is §1.
+
+> **Lesson — post it clean in each place, don't repost.** The r/DnB entry above was a *repost of
+> the r/AtmosphericDnB thread* rather than a fresh, self-contained request. A crosspost reads as
+> low-effort, buries the audio, and loses the context (the timeline neighbours, the hook) that
+> makes someone bother. Write each post standalone: direct audio link + what's around it +
+> whatever vocal/hook you can name (see "What to say when you post").
 
 > **Newly solved ⇒ new work.** A named track still needs its **original acquired** (see
 > `PROCESS.md` step 9): without the record we cannot seat sync anchors, recover the mix/original
@@ -71,18 +78,24 @@ and **11** (no master span in `track-metadata.json` — it needs labelling befor
 
 ### Where to ask
 
-Ordered by how likely the people there are to have *owned the record in 1998*:
+Ordered by how likely the people there are to have *owned the record in 1998*. **Best remaining
+shots first — the top three are still untried** (MT4's 2026-07-16 round only hit Reddit):
 
-1. **Dogs on Acid** — the D&B forum, and the best bet for this era.
+1. **Dogs on Acid** ⭐ *untried* — the D&B forum, and the best bet for this era.
    - [Track ID Megathread](https://www.dogsonacid.com/threads/track-id-megathread.827362/)
    - [90's & 00's Track ID](https://www.dogsonacid.com/threads/90s-00s-track-id-vol-6.830381/)
-2. **r/AtmosphericDnB** — already used, and it *worked*: Mystery Track 3 was identified from
-   [this thread](https://www.reddit.com/r/AtmosphericDnB/comments/16n4u0m/). Keep going back.
-3. **Discogs Groups** — [track-ID threads](https://www.discogs.com/group/thread/736684) sit next
-   to the database that will name the pressing once someone recognises it.
-4. **tuneID.com** — a [D&B archive](https://www.tuneid.com/archive/index.php/f-82.html) built
-   for exactly this question.
-5. **r/NameThatSong**, **WatZatSong** — generalists. Lower hit rate for this genre, but free.
+2. **Discogs Groups** ⭐ *untried* — [track-ID threads](https://www.discogs.com/group/thread/736684)
+   sit next to the database that will name the pressing once someone recognises it.
+3. **tuneID.com** ⭐ *untried* — a [D&B archive](https://www.tuneid.com/archive/index.php/f-82.html)
+   built for exactly this question.
+4. **r/AtmosphericDnB** — used, and it *worked*: Mystery Track 3 was named from
+   [this thread](https://www.reddit.com/r/AtmosphericDnB/comments/16n4u0m/); MT4 posted again
+   2026-07-16. The genre-right Reddit sub — keep going back.
+5. **r/DnB** — the big general D&B sub (used 2026-07-16). Far more reach than r/AtmosphericDnB but
+   noisier; post it **clean**, not as a crosspost (see the lesson under "Already published").
+6. **Music-ID generalists** — **r/WhatsThisSong** and **r/Identificationofmusic** (both used
+   2026-07-16), plus **r/NameThatSong** and **WatZatSong**. Lower hit rate for this genre, but
+   free and high-traffic; best when there's a vocal or hook to hang the ID on.
 
 ### What to say when you post
 
