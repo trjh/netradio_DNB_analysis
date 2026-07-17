@@ -455,6 +455,32 @@ def sweep_excerpts():
             pass
 
 
+def drop_ruled_excerpts(state, retired):
+    """A ruled-on lead loses its audio; the numbers stay. Returns how many were dropped.
+
+    The excerpt exists for exactly one purpose: to let a human confirm or reject the lead by ear.
+    Once the ruling is made -- match, not-a-match, heard, any of RULED_ON -- that purpose is spent,
+    and holding the audio a day longer serves nothing. The lead itself survives whole (url, cost,
+    mystery, key, at_s, verdict): the SCORE is the record; the audio was only ever the evidence.
+
+    Runs on every pass, right after the listen queue is re-read, so a ruling made at /harvest
+    takes effect within one loop iteration. The TTL sweep above remains the backstop for anything
+    ruled while the harvester was off.
+    """
+    dropped = 0
+    for m in state.get("matches") or []:
+        path = m.pop("audio", None) if m.get("url") in retired else None
+        if not path:
+            continue
+        try:
+            os.unlink(path)
+        except OSError:
+            pass                       # already gone -- the row still stops carrying it
+        state["kept"] = max(0, state.get("kept", 0) - 1)
+        dropped += 1
+    return dropped
+
+
 # --- the queue ---------------------------------------------------------------------------------
 
 def enumerate_channel(url, limit=None):
@@ -767,6 +793,12 @@ def run(args):
         # day MT8's clip lands, all ~900 signatures already on disk get scored against it, without
         # re-downloading a single track. Positions (`at_s`) on old rows get filled in on the way.
         _, retired = listen_queue_split()
+        # A ruling spends the excerpt: the audio existed to let the human make the call, and the
+        # call has been made. Drop it now, not at the 30-day sweep.
+        n_dropped = drop_ruled_excerpts(state, retired)
+        if n_dropped:
+            _save(STATE, state)
+            print("dropped %d ruled-on excerpt(s) -- the leads keep their numbers" % n_dropped)
         todo = len(unscored_pairs(state, q, retired, qs))
         if todo:
             state["rescan_pending"] = todo
