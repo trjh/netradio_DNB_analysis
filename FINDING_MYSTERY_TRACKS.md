@@ -22,12 +22,22 @@ someone who was there.
 
 | Track | Where |
 |---|---|
+| Mystery Track 2 (2017) | [tuneID thread](https://www.tuneid.com/showthread.php?96545-spacey-track-from-Netradio-com-late-90s) — **SOLVED** 2017-11-07: Dr. Know — *Make Me Feel* (named by a stranger 12 days after posting). The earliest ask-a-human win, and why tuneID stays on the list. |
 | Mystery Track 3 | <https://www.youtube.com/watch?v=jKEt_2jLzYo> — **SOLVED**: Aquarius — *Wave Forms* |
 | Mystery Tracks 4 & 5 | <https://soundcloud.com/trjh/sets/track-id-requested> — **MT5 SOLVED**: Jacob's Optical Stairway — *Solar Feelings* (J Majik remix). MT4 still open (the same replier had not heard it either). |
+| Mystery Track 4 (2026-07-16) | Full round, still open. Clip now on YouTube: <https://www.youtube.com/watch?v=EydDqHszfRI> (it's **track 68 of 91** — [`TRACKLIST.md#t68`](./TRACKLIST.md#t68), between Aquarius *Wave Forms* and P.F.M. *Hypnotising*; the "Hey man, you want a tune?" vocal is sampled from *Angel Heart*, 1987). Posted: [r/AtmosphericDnB](https://www.reddit.com/r/AtmosphericDnB/s/A6HV01HyuU) · [r/DnB](https://www.reddit.com/r/DnB/s/Yx5wclnR6F) · [r/WhatsThisSong](https://www.reddit.com/r/WhatsThisSong/s/NvR2FATglT) · [r/Identificationofmusic](https://www.reddit.com/r/Identificationofmusic/s/7VhxjwubSH) · [tuneID](https://www.tuneid.com/showthread.php?107112-quot-Hey-Man-You-Want-A-Tune-quot-track-from-1990s) · [Dogs on Acid megathread p48](https://www.dogsonacid.com/threads/track-id-megathread.827362/page-48) |
 
-**Asking works.** Two of the three published mysteries have been named by strangers, from
-[one Reddit thread](https://www.reddit.com/r/AtmosphericDnB/comments/16n4u0m/). That is a better
-hit rate than every machine method in this document combined — which is why publishing is §1.
+**Asking works.** Three published mysteries have been named by strangers: MT2 on
+[tuneID in 2017](https://www.tuneid.com/showthread.php?96545-spacey-track-from-Netradio-com-late-90s),
+MT3 and MT5 from [one Reddit thread](https://www.reddit.com/r/AtmosphericDnB/comments/16n4u0m/).
+That is a better hit rate than every machine method in this document combined — which is why
+publishing is §1.
+
+> **Lesson — post it clean in each place, don't repost.** The r/DnB entry above was a *repost of
+> the r/AtmosphericDnB thread* rather than a fresh, self-contained request. A crosspost reads as
+> low-effort, buries the audio, and loses the context (the timeline neighbours, the hook) that
+> makes someone bother. Write each post standalone: direct audio link + what's around it +
+> whatever vocal/hook you can name (see "What to say when you post").
 
 > **Newly solved ⇒ new work.** A named track still needs its **original acquired** (see
 > `PROCESS.md` step 9): without the record we cannot seat sync anchors, recover the mix/original
@@ -71,18 +81,28 @@ and **11** (no master span in `track-metadata.json` — it needs labelling befor
 
 ### Where to ask
 
-Ordered by how likely the people there are to have *owned the record in 1998*:
+Ordered by how likely the people there are to have *owned the record in 1998*. MT4's 2026-07-16
+round has now hit **all of these except Discogs Groups** — post there next, and use this whole
+list for each new mystery (MT6/MT7):
 
-1. **Dogs on Acid** — the D&B forum, and the best bet for this era.
+1. **Dogs on Acid** — the D&B forum, and the best bet for this era. MT4 posted 2026-07-16
+   ([megathread p48](https://www.dogsonacid.com/threads/track-id-megathread.827362/page-48)).
    - [Track ID Megathread](https://www.dogsonacid.com/threads/track-id-megathread.827362/)
    - [90's & 00's Track ID](https://www.dogsonacid.com/threads/90s-00s-track-id-vol-6.830381/)
-2. **r/AtmosphericDnB** — already used, and it *worked*: Mystery Track 3 was identified from
-   [this thread](https://www.reddit.com/r/AtmosphericDnB/comments/16n4u0m/). Keep going back.
-3. **Discogs Groups** — [track-ID threads](https://www.discogs.com/group/thread/736684) sit next
-   to the database that will name the pressing once someone recognises it.
-4. **tuneID.com** — a [D&B archive](https://www.tuneid.com/archive/index.php/f-82.html) built
-   for exactly this question.
-5. **r/NameThatSong**, **WatZatSong** — generalists. Lower hit rate for this genre, but free.
+2. **Discogs Groups** ⭐ *untried* — [track-ID threads](https://www.discogs.com/group/thread/736684)
+   sit next to the database that will name the pressing once someone recognises it.
+3. **tuneID.com** — a [D&B archive](https://www.tuneid.com/archive/index.php/f-82.html) built for
+   exactly this question, **and it has already delivered**: MT2 was named there in 2017. MT4
+   posted 2026-07-16
+   ([thread](https://www.tuneid.com/showthread.php?107112-quot-Hey-Man-You-Want-A-Tune-quot-track-from-1990s)).
+4. **r/AtmosphericDnB** — used, and it *worked*: Mystery Track 3 was named from
+   [this thread](https://www.reddit.com/r/AtmosphericDnB/comments/16n4u0m/); MT4 posted again
+   2026-07-16. The genre-right Reddit sub — keep going back.
+5. **r/DnB** — the big general D&B sub (used 2026-07-16). Far more reach than r/AtmosphericDnB but
+   noisier; post it **clean**, not as a crosspost (see the lesson under "Already published").
+6. **Music-ID generalists** — **r/WhatsThisSong** and **r/Identificationofmusic** (both used
+   2026-07-16), plus **r/NameThatSong** and **WatZatSong**. Lower hit rate for this genre, but
+   free and high-traffic; best when there's a vocal or hook to hang the ID on.
 
 ### What to say when you post
 
@@ -266,6 +286,25 @@ fundamental — but free to try by playing a clean clip in):
   built on ACRCloud** — they will fail *identically* to the test above, so they're not a new shot.
 - None have a batch/file API worth scripting (Shazam has no developer API at all), so this is a
   hands-on, one-clip-at-a-time spot-check, not part of the automated sweep.
+
+### ✗ TrackSniff — tested 2026-07-16, no match on MT4
+
+<https://tracksniff.com/results/EydDqHszfRI> — a DJ-mix-oriented "what's the track ID" web tool
+(upload, or paste a YouTube / SoundCloud / Mixcloud / TikTok URL; five confidence tiers from
+Unknown → Verified). It returned **no identification** for Mystery Track 4.
+
+**Same wall, dressed for DJs.** TrackSniff's actual novelty is *mix segmentation* — detecting where
+each record starts and ends inside a continuous set — not a recognition primitive that survives
+codec damage. Underneath it is still **audio-fingerprint-against-a-commercial-catalogue**, the exact
+class the ACRCloud + AudD entry above proves the 1998 ISDN/EQ degradation defeats. Its backend isn't
+publicly disclosed (the reviews only say "fingerprints matched against millions of songs" + "AI");
+if it resells ACRCloud/AudD it fails *identically*, and even if the fingerprinter is bespoke,
+catalogue size was never the bottleneck — the solved-MT5 control shows clean copies match while the
+stream capture doesn't. Its one plausible edge, an electronic-music-weighted catalogue, doesn't
+change the damage wall.
+
+Net: a confirmed dead end for MT4, and **not** a new scriptable method. Worth at most a one-off
+manual paste for MT6/MT7 if you're already on the site — expect the same blank.
 
 ### ✗ Blind chroma search for a record inside a capture
 
