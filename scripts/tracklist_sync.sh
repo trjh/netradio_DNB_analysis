@@ -3,13 +3,20 @@
 # (TRACKLIST.md / SOURCES.md), each a pure render of the data:
 #   * track-metadata.json   (analysis = canonical, player = mirror)  — 3-way synced
 #   * listen_queue.json     (player only)                            — mirrored when it changes
+#   * subscriptions.json    (player only)                            — mirrored when it changes
 #   * TRACKLIST.md          (analysis only)                          — regenerated from the synced
 #                            track-metadata.json and included in the analysis PR (render only)
 #   * SOURCES.md            (player only)                            — regenerated from the synced
 #                            track-metadata.json (+ source-inventory.json) and included in the player PR
+#   * QUEUE_VIEW.md         (player only)                            — regenerated from the synced
+#                            listen_queue.json and included in that same player PR (render only)
 # It NEVER touches source/scripts and NEVER drags unrelated commits into main: every PR is cut from
 # a FRESH worktree off origin/main and contains ONLY those file(s). It never commits to main
 # directly. Symmetric — `make sync` runs from EITHER repo.
+#
+# The final step reconciles each repo's LIVE checkout: if it sits on `main` and is strictly
+# behind origin/main, it is fast-forwarded (never merged, never stashed) — so a sync run leaves
+# no repo needing the stash/pull/pop dance afterwards. See reconcile_main below.
 #
 #   track-metadata.json copies equal      -> verify each repo's main has it (re-PR any that lag)
 #   only player changed since baseline     -> winner = player; land it on BOTH mains
@@ -32,6 +39,7 @@ PLAYER="${NETRADIO_PLAYER_REPO:?set NETRADIO_PLAYER_REPO to the player repo path
 A="$ANALYSIS/track-metadata.json"            # canonical
 P="$PLAYER/metadata/track-metadata.json"     # mirror
 PQ="$PLAYER/metadata/listen_queue.json"      # player-only
+PS="$PLAYER/metadata/subscriptions.json"     # player-only
 MARKER="$PLAYER/metadata/.track-metadata.synced"   # LOCAL baseline (gitignored, never PR'd)
 
 say() { printf '%s\n' "$*"; }
@@ -205,8 +213,68 @@ else
 fi
 
 # --- listen_queue.json (player-only): land it on the player main when it differs ---
+# QUEUE_VIEW.md is a pure render of listen_queue.json, so it rides along as a derived extra: the
+# derive only runs when listen_queue.json actually changed (same as SOURCES.md/TRACKLIST.md above),
+# which keeps its 'generated <timestamp>' line from churning a spurious PR on unchanged runs.
 if [ -f "$PQ" ]; then
-  ensure_on_main "$PLAYER" "metadata/listen_queue.json" "$PQ" "sync/listen-queue" "data: sync listen_queue.json"
+  ensure_on_main "$PLAYER" "metadata/listen_queue.json" "$PQ" "sync/listen-queue" \
+    "data: sync listen_queue.json + regen QUEUE_VIEW.md" \
+    "make queue-view >/dev/null" "QUEUE_VIEW.md"
   say "listen_queue.json: $OUTCOME"
 fi
+
+# --- subscriptions.json (player-only): land it on the player main when it differs -----------
+# Same treatment as listen_queue.json (no derived view). Before this section existed, local
+# subscribe/unsubscribe edits only reached main via hand commits — and were silently lost when
+# a working copy was rebuilt (a whole channel subscription went missing that way once).
+if [ -f "$PS" ]; then
+  ensure_on_main "$PLAYER" "metadata/subscriptions.json" "$PS" "sync/subscriptions" \
+    "data: sync subscriptions.json"
+  say "subscriptions.json: $OUTCOME"
+fi
+
+# --- reconcile the LIVE checkouts: fast-forward main to origin/main -------------------------
+# ensure_on_main lands data via throwaway worktrees and never touches the live checkout, so
+# local `main` falls behind origin/main after every merged sync PR — and pulling by hand under
+# a RUNNING player is the stash/pull/pop trap (a stash-pop conflict on listen_queue.json makes
+# the store load an empty queue, and the next save clobbers the file). This step removes that
+# chore: a live checkout sitting on `main`, strictly behind origin/main, is fast-forwarded.
+# Dirty LIVE data files (the running player rewrites listen_queue.json continuously) are set
+# aside verbatim and put back after the ff — never stashed, never merged — so the newest local
+# data always survives on disk and the next sync run PRs whatever delta remains. Nothing is
+# silenced (the worktree rule): any git failure is shown, and the live files are restored
+# before moving on. A diverged main (local commits origin lacks) is reported, not rewritten.
+reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to set aside...]
+  local repo="$1" label="$2"; shift 2
+  git -C "$repo" fetch -q origin main
+  local head origin cur
+  head="$(git -C "$repo" rev-parse HEAD)"; origin="$(git -C "$repo" rev-parse origin/main)"
+  if [ "$head" = "$origin" ]; then say "  $label: main already at origin/main"; return 0; fi
+  cur="$(git -C "$repo" symbolic-ref --short -q HEAD || echo '(detached)')"
+  if [ "$cur" != main ]; then say "  $label: checked out on '$cur' — leaving main alone"; return 0; fi
+  if ! git -C "$repo" merge-base --is-ancestor "$head" "$origin"; then
+    say "  $label: main has commits origin/main lacks — not rewriting; reconcile by hand"; return 0
+  fi
+  local n; n="$(git -C "$repo" rev-list --count "$head..$origin")"
+  if $DRY; then say "  [dry-run] $label: would fast-forward main $n commit(s) to origin/main"; return 0; fi
+  local f aside=()
+  for f in "$@"; do
+    if [ -f "$repo/$f" ] && ! git -C "$repo" diff --quiet HEAD -- "$f"; then
+      cp "$repo/$f" "$repo/$f.reconcile-bak"    # the live bytes, restored below (gitignored)
+      git -C "$repo" checkout HEAD -- "$f"      # clean worktree AND index for this file
+      aside+=("$f")
+    fi
+  done
+  local ok=true
+  git -C "$repo" merge --ff-only origin/main || ok=false
+  for f in ${aside[@]+"${aside[@]}"}; do mv "$repo/$f.reconcile-bak" "$repo/$f"; done
+  if $ok; then say "  $label: main fast-forwarded $n commit(s) (live data kept: ${aside[*]:-none})"
+  else say "  $label: fast-forward FAILED (above) — live files restored; reconcile by hand"; fi
+}
+
+say "reconciling live checkouts (fast-forward main -> origin/main):"
+reconcile_main "$ANALYSIS" analysis "track-metadata.json" "TRACKLIST.md"
+reconcile_main "$PLAYER"   player \
+  "metadata/track-metadata.json" "metadata/listen_queue.json" "metadata/subscriptions.json" \
+  "metadata/source-inventory.json" "QUEUE_VIEW.md" "SOURCES.md"
 say "sync done."
