@@ -18,6 +18,9 @@
 # behind origin/main, it is fast-forwarded (never merged, never stashed) — so a sync run leaves
 # no repo needing the stash/pull/pop dance afterwards. See reconcile_main below.
 #
+# The run starts with a SELF-CHECK: both repos' copies of this script must be byte-identical,
+# otherwise the sync refuses to run (copies have drifted before; see the check for the fix).
+#
 #   track-metadata.json copies equal      -> verify each repo's main has it (re-PR any that lag)
 #   only player changed since baseline     -> winner = player; land it on BOTH mains
 #   only analysis changed since baseline   -> winner = analysis; land it on BOTH mains
@@ -134,6 +137,26 @@ landed() { [ "$1" = NOOP ] || [ "$1" = MERGED ]; }   # is the content durably on
 # Echo the resolved repo paths up front so it's always clear which checkouts are in play.
 say "NETRADIO_ANALYSIS_REPO=$ANALYSIS"
 say "NETRADIO_PLAYER_REPO=$PLAYER"
+
+# --- self-check: this script must be byte-identical in both repos ---------------------------
+# Each repo carries a copy of scripts/tracklist_sync.sh, and copies drift silently (it
+# happened: the analysis copy sat weeks behind, missing the QUEUE_VIEW.md derive). Refuse to
+# run on divergent copies — data synced by two different versions of the sync is worse than a
+# blocked run. Fix = copy the version you just edited over the other and PR it in BOTH repos.
+SELF_P="$PLAYER/scripts/tracklist_sync.sh"
+SELF_A="$ANALYSIS/scripts/tracklist_sync.sh"
+if ! cmp -s "$SELF_P" "$SELF_A"; then
+  {
+    say "ERROR: scripts/tracklist_sync.sh differs between the two repos:"
+    diff -u "$SELF_A" "$SELF_P" | head -40 || true
+    say ""
+    say "Copy the version you just edited over the other, PR it in BOTH repos, then re-run:"
+    say "  cp '$SELF_P' '$SELF_A'    # player copy wins"
+    say "  cp '$SELF_A' '$SELF_P'    # analysis copy wins"
+  } >&2
+  exit 1
+fi
+say "self-check: tracklist_sync.sh identical in both repos ✓"
 
 # --- track-metadata.json: 3-way sync between the canonical (analysis) and the mirror (player) ---
 ha=$(nhash "$A"); hp=$(nhash "$P")
