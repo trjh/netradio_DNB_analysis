@@ -12,6 +12,12 @@ Caveats baked into the parsing: the labels (`2`, `A`, `B`, …) repeat across se
 timestamps are ranges (we take the start column), and pairing is by matching label
 within a file at the nearest timestamp. So this captures the clean, adjacent
 `orig/track` pairs — enough for rate validation — not every annotation.
+
+Note on chroma: the `chroma_cqt` calls below are NOT the canonical signature recipe
+(`chroma_recipe.compute_chroma`) and are deliberately kept separate. This is the alignment
+engine's DTW rate/offset estimation — configurable `sr`/`hop`, and some passes intentionally do
+NOT add epsilon or L2-normalise — a different computation from the comparable pool signature.
+It is the documented exception to the "one recipe" guard (see `tests/test_bucket_tooling.py`).
 """
 
 import os

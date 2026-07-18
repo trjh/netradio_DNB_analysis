@@ -53,7 +53,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from streamalign import audio as _audio     # noqa: E402
 
 AUDIO_EXTS = ("mp3", "flac", "m4a", "opus", "wav", "wv", "aif", "aiff", "ogg")
-HOP = 2048
+import chroma_recipe                              # noqa: E402  (THE recipe)
+
+HOP = chroma_recipe.HOP
 QUERY_S = 120.0
 
 # A real match sat at 0.034 and the best wrong answer at 0.102. Demand a match be clearly
@@ -63,11 +65,7 @@ MAX_RATIO = 0.60        # best must beat second-best by at least this factor
 
 
 def chroma(samples, sr=None):
-    import librosa
-    sr = sr or _audio.SR
-    c = librosa.feature.chroma_cqt(y=np.asarray(samples, dtype="float32"),
-                                   sr=sr, hop_length=HOP) + 1e-6
-    return librosa.util.normalize(c, norm=2, axis=0)
+    return chroma_recipe.compute_chroma(samples, sr=sr)   # THE recipe; sr override preserved
 
 
 def cost(query_chroma, cand_chroma):
