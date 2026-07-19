@@ -41,20 +41,33 @@ def _album(track, albums):
     return albums.get(track.get("album")) if track.get("album") else None
 
 
+# Sentinel values that mean "checked, no such link exists" (e.g. the Net Radio promos carry
+# discogs: "n/a"). They are truthy strings, so without this they'd render a badge linking to a
+# bogus href like `](n/a)`. Treat them as absent so the badge is dropped entirely.
+_NO_LINK = {"", "n/a", "na", "none", "null", "-", "tbd", "?"}
+
+
+def _link(value):
+    if not value:
+        return None
+    v = str(value).strip()
+    return None if v.lower() in _NO_LINK else v
+
+
 def listen_field(track, albums, key):
     """Track-specific link first (precise for the song), else the album's."""
-    f = track.get("fields") or {}
-    if f.get(key):
-        return f[key]
+    v = _link((track.get("fields") or {}).get(key))
+    if v:
+        return v
     alb = _album(track, albums)
-    return (alb.get("fields") or {}).get(key) if alb else None
+    return _link((alb.get("fields") or {}).get(key)) if alb else None
 
 
 def info_field(track, albums, key):
     """Album-first (release info belongs to the album), else the track's."""
     alb = _album(track, albums)
-    av = (alb.get("fields") or {}).get(key) if alb else None
-    return av or (track.get("fields") or {}).get(key)
+    av = _link((alb.get("fields") or {}).get(key)) if alb else None
+    return av or _link((track.get("fields") or {}).get(key))
 
 
 def cover_url(track, albums):

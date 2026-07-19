@@ -7,7 +7,13 @@ import sys
 import argparse
 import contextlib
 import json
+import subprocess
 import time
+
+# `labels/` and `scripts/` both sit under the repo root; used to reach streamalign (starter
+# seeding + next_stem) and to source `.env_vars` for the engine steps.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCRIPTS_DIR = os.path.join(REPO_ROOT, "scripts")
 
 # Initialize lists to store lines to be sorted and unrecognized lines
 sort_lines = []         # stores entries of the form (timestamp1, timestamp2, label, line number)
@@ -23,13 +29,18 @@ current_track_name = None  # active LABELTRACK scope while reading sequential in
 prev_ts = None          # previous label's start timestamp, to detect label-track block boundaries
 seen_labeltrack = False # True once any LABELTRACK marker is seen (i.e. the convention is in use)
 missing_markers = []    # (line_number, reason) for label-track blocks lacking a LABELTRACK header
+keyword_errors = []     # (line_number, label, reason) for labels that TRIED to be a keyword and failed
+auto_notes = []         # (line_number, label) for free text auto-noted -- reported as a summary
 
 # Define regular expressions for matching keywords
 keyword_patterns = [
     r"(start(\d+):\s*)?ID(\d+)?:\s*(.+)",
     r"file (start )?sync: (.+):? ([0-9.]+)",
     r"((track)(\d+)?|(orig)(\d+))\s+sync:\s+(.)(.*)",
-    r"orig(\d+)\s+(start|end|note):\s+(.*)",
+    # The argument is OPTIONAL: `orig070 start: A` anchors the start to sync point A, while a
+    # bare `orig070 start:` just says the original begins here -- the timestamp is the data, and
+    # there is no sync point to name. `\s+(.*)` demanded an argument and rejected the latter.
+    r"orig(\d+)\s+(start|end|note):\s*(.*)",
     r"(file|mix) (start|end|note): (.*)",
     r"note(\s\S+?)?: (.*)",
     r"(\d{3})[se](.+)",
@@ -49,10 +60,39 @@ labeltrack_regex = re.compile(r"^LABELTRACK\s+(\S+)\s*$", flags=re.IGNORECASE)
 # track, free text) is prefix-expanded onto the active track.
 capture_stem_regex = re.compile(r"^d-?\d", flags=re.IGNORECASE)
 
-# Known label/audio suffixes, longest-first, so `d336-355.labels.tsv` -> `d336-355` and
-# `d356-375.wav` -> `d356-375` while a bare `orig069` is left untouched.
+# Known label/audio suffixes, longest-first, so `d336-355.labels.tsv` -> `d336-355`,
+# `070.labels` -> `070` and `d356-375.wav` -> `d356-375`, while a bare `orig069` is left
+# untouched. `.labels` is listed in its own right: an in-Audacity track is named `070.labels`,
+# with no file extension after it.
 _STEM_SUFFIXES = (".starter.labels.tsv", ".auto.labels.tsv", ".labels.tsv", ".labels.txt",
-                  ".tsv", ".txt", ".wav", ".au", ".mp3")
+                  ".labels", ".tsv", ".txt", ".wav", ".au", ".mp3")
+
+# A LABELTRACK name is a *track* name, not a label qualifier: the tracks `070.labels`,
+# `069-dig.labels` and `069.vinyl` all hold labels written about `orig070` / `orig069`.
+# So the qualifier is derived from the track's 3-digit original, not from its stem.
+_ORIGINAL_NUM_RE = re.compile(r"(\d{3})")
+_ALREADY_QUALIFIER_RE = re.compile(r"^(orig|track)\d+$", flags=re.IGNORECASE)
+
+# Does a label already name its subject? (`orig070 sync: A`, `file end: …`, `069s0`)
+# Such a label is emitted as written -- never prefixed with the scope's qualifier.
+_QUALIFIED_LABEL_RE = re.compile(
+    r"^(orig\d+|track\d+|file_[^:]+:|file\b|mix\b|\d{3}[se])", flags=re.IGNORECASE)
+
+# Did a label *try* to be a keyword and fail? This is the typo net, and it is deliberately
+# narrow: a keyword is betrayed by an entity at the head (`orig070…`, `file…`), a verb with
+# its colon (`sync:`, `start:`), or the compact sync form (`069s0`). Free text -- `start
+# overlap`, `close next sync`, `peak` -- has none of those and is auto-noted, not flagged.
+_KEYWORD_SHAPED_RES = [
+    re.compile(r"^(orig|track)\s*\d*\b", flags=re.IGNORECASE),   # orig070 …, track sync: …
+    re.compile(r"^(file|mix)\b", flags=re.IGNORECASE),           # file start sync: …
+    re.compile(r"^(sync|start|end|note|ID)\d*\s*:", flags=re.IGNORECASE),  # sync: 0, start068: …
+    re.compile(r"^\w{0,2}\d{2,3}[se]\w*$", flags=re.IGNORECASE), # 069s0, 071eA -- and s71e1
+]
+
+# The original a label's *head* refers to (`orig017 sync: A` -> 017, `069s0` -> 069). Anchored
+# at the head on purpose: a note's free-text body may mention any number without being a claim
+# about it.
+_HEAD_REF_RE = re.compile(r"^(?:orig|track)(\d{3})\b|^(\d{3})[se]", flags=re.IGNORECASE)
 
 
 def _stem(name):
@@ -80,36 +120,108 @@ def classify_track(name, primary):
     return "prefix"
 
 
-def expand_label(name, label):
-    """Prefix-expand a label for a non-file LABELTRACK scope (e.g. orig069).
+def track_qualifier(stem):
+    """The label qualifier a prefix-scope LABELTRACK implies: `070.labels` -> `orig070`.
 
-    1. already starts with '<name> '          -> unchanged (idempotent)
-    2. '<name> ' + label matches the grammar  -> use it  (sync: 0 -> orig069 sync: 0)
-    3. otherwise                              -> '<name> note: ' + label
+    `069-dig` and `069.vinyl` are two label tracks about the same original, so both yield
+    `orig069`. A name that is already a qualifier (`orig069`) is returned as-is; a name with
+    no original in it (`mix`) scopes to itself.
     """
-    if label.startswith(name + " "):
+    if _ALREADY_QUALIFIER_RE.match(stem):
+        return stem
+    match = _ORIGINAL_NUM_RE.search(stem)
+    return "orig" + match.group(1) if match else stem
+
+
+def scope_number(stem):
+    """The 3-digit original a prefix-scope LABELTRACK is about, or None."""
+    match = _ORIGINAL_NUM_RE.search(stem)
+    return match.group(1) if match else None
+
+
+def parses(label):
+    """True if `label` matches the label grammar as written."""
+    return any(rx.match(label) for rx in keyword_regexes)
+
+
+def is_keyword_shaped(label):
+    """True if `label` tried to be a keyword -- so failing to parse is a typo, not free text."""
+    return any(rx.match(label) for rx in _KEYWORD_SHAPED_RES)
+
+
+def check_scope_ref(label, scopenum):
+    """In a numbered label track, every label is about *that* original. Flag any other."""
+    match = _HEAD_REF_RE.match(label)
+    if not match:
+        return
+    ref = match.group(1) or match.group(2)
+    if ref != scopenum:
+        keyword_errors.append(
+            (line_number, label,
+             "refers to %s inside the %s label track -- typo, or move it to the primary track"
+             % (ref, scopenum)))
+
+
+def expand_label(qualifier, label, scopenum=None):
+    """Classify one label inside a LABELTRACK scope and return the text to emit.
+
+    The rules are ordered so that free text costs nothing to write while a mistyped keyword
+    still gets caught -- the distinction is *shape*, not whether the label happens to parse:
+
+    0. already names its subject (`orig070 sync: A`, `069s0`) -> emitted as written
+    1. `<qualifier> ` + label parses                          -> qualified (`sync: 0` -> `orig070 sync: 0`)
+    2. keyword-shaped but parses under no rule                -> ERROR: a typo'd keyword
+    3. free text                                              -> a note (listed in the run summary)
+    """
+    if _QUALIFIED_LABEL_RE.match(label):
+        if not parses(label):
+            keyword_errors.append((line_number, label, "looks like a keyword but does not parse"))
+        elif scopenum:
+            check_scope_ref(label, scopenum)
         return label
-    candidate = name + " " + label
-    if any(rx.match(candidate) for rx in keyword_regexes):
-        return candidate
-    return name + " note: " + label
+
+    if qualifier:
+        candidate = qualifier + " " + label
+        if parses(candidate):
+            return candidate
+    elif parses(label):
+        return label
+
+    if is_keyword_shaped(label):
+        keyword_errors.append((line_number, label, "looks like a keyword but does not parse"))
+        return label
+
+    auto_notes.append((line_number, label))
+    return "%s note: %s" % (qualifier, label) if qualifier else "note: " + label
 
 
 def scope_label(name, primary, label):
     """Apply LABELTRACK scoping to one label's text per its name class."""
     kind = classify_track(name, primary)
     if kind == "primary":
-        return label
+        return expand_label(None, label)
+
     if kind == "file":
-        prefix = "file_%s: " % _stem(name)
-        return label if label.startswith(prefix) else prefix + label
-    return expand_label(_stem(name), label)
+        stem = _stem(name)
+        # A label may already carry its own `file_<name>:` prefix. Compare by *stem*, so the
+        # `.wav` that gets typed in Audacity (`file_d376-395.wav:`) is recognised as this file
+        # rather than double-prefixed into a second, bogus secondary (which then re-split on
+        # re-entry and blew up the write pass).
+        match = re.match(r"file_([^:]+):\s*(.*)", label)
+        if match and _stem(match.group(1)) != stem:
+            return label     # a label about a *different* file: it routes to that file's bucket
+        inner = match.group(2) if match else label
+        return "file_%s: %s" % (stem, expand_label(None, inner))
+
+    stem = _stem(name)
+    return expand_label(track_qualifier(stem), label, scope_number(stem))
 
 
 def reset_state():
     """Reset module-level accumulators (used by tests and re-entrant runs)."""
     global sort_lines, secondfiles, line_number, adjust_value, secondaryfile
     global primary_stem, current_track_name, prev_ts, seen_labeltrack, missing_markers
+    global keyword_errors, auto_notes
     sort_lines = []
     secondfiles = dict()
     line_number = 0
@@ -120,6 +232,8 @@ def reset_state():
     prev_ts = None
     seen_labeltrack = False
     missing_markers = []
+    keyword_errors = []
+    auto_notes = []
 
 # Function to sort lines -- put "file start" at the top, always, then sort by
 # timestamp, then sort by label
@@ -139,22 +253,18 @@ def process_entry(parts):
 
     # is this a 'second file' entry?
     if match := re.match(r"file_([^:]+):\s+(.+)",parts[2]):
-        secondfile = match.group(1)
+        secondfile = _stem(match.group(1))
         label = match.group(2)
         if secondfile not in secondfiles:
             secondfiles[secondfile] = []
-        secondfiles[secondfile].append((parts[0],parts[1],label,parts[3]))
+        # a list, not a tuple: adjust_line() writes back into the entry in place
+        secondfiles[secondfile].append([parts[0],parts[1],label,parts[3]])
         return
 
-    matched_keyword = None
-    # Check for keywords in the text portion of the line
-    for pattern in keyword_regexes:
-        match = pattern.match(parts[2])
-        if match:
-            matched_keyword = match.group(0)
-            break
-
-    if not matched_keyword:
+    # Files using the LABELTRACK convention have already had every label classified by
+    # scope_label() -- anything unparseable is either a reported keyword_error or was
+    # deliberately auto-noted, so re-warning here would just double up.
+    if not seen_labeltrack and not parses(parts[2]):
         sys.stderr.write(f"WARNING: Unrecognized keywords ({parts[2]}) at line {parts[3]} ts {parts[0]}\n")
 
     if re.match(r"file start", parts[2]):
@@ -383,17 +493,186 @@ def assemble_write_lines(do_adjustment):
     sort_lines.sort(key=tracksort)
     write_lines.extend(sort_lines)
     sort_lines = []
-    for sf in secondfiles:
-        sys.stderr.write(f"---\nProcessing secondary entries for file {sf}\n")
-        secondaryfile = sf
-        for entry in secondfiles[sf]:
-            process_entry(entry)
-        sort_lines.sort(key=tracksort)
-        write_lines.extend(sort_lines)
-        sort_lines = []
+    # Work-queue, not `for sf in secondfiles`: process_entry() splits any `file_<other>:` label
+    # it is handed, so a secondary's own labels can name a *further* file and add a key. Walking
+    # the dict directly raised "dictionary changed size during iteration" the moment that
+    # happened; draining a queue processes the new file instead of dying on it.
+    spans = []          # (begin, end, stem) of each secondary's rows within write_lines
+    done = set()
+    while True:
+        pending = [sf for sf in secondfiles if sf not in done]
+        if not pending:
+            break
+        for sf in pending:
+            done.add(sf)
+            sys.stderr.write(f"---\nProcessing secondary entries for file {sf}\n")
+            secondaryfile = sf
+            for entry in secondfiles[sf]:
+                process_entry(entry)
+            sort_lines.sort(key=tracksort)
+            begin = len(write_lines)
+            write_lines.extend(sort_lines)
+            spans.append((begin, len(write_lines), sf))
+            sort_lines = []
+    secondaryfile = None
     if do_adjustment:
         write_lines = list(map(adjust_line, write_lines))
+    # Re-attach the `file_<stem>:` prefix process_entry() peeled off to bucket the row.
+    # Peeling it and writing the bare inner label was DESTRUCTIVE: `streamalign starter`
+    # reads exactly these rows back out of the committed `.labels.tsv` (emit_labels._LINK_RE,
+    # `^file_([^:]+):`) to seed the neighbour's starter file. So a sort over a file carrying a
+    # neighbour's label track silently ate the link the starter emitter depends on -- and left
+    # the neighbour's labels behind as anonymous rows at ITS timestamps, belonging to no file.
+    # Re-attaching makes the round-trip idempotent and keeps the link. After adjust_line(), so
+    # its anchored `file (start )?sync:` match still sees the bare label.
+    for begin, end, sf in spans:
+        for entry in write_lines[begin:end]:
+            entry[2] = "file_%s: %s" % (sf, entry[2])
     return write_lines
+
+
+# Print the keyword errors -- labels that tried to be a keyword and failed. Free text is never
+# in here; it is auto-noted and summarised by report_auto_notes(). Returns the error count.
+def report_keyword_errors():
+    if not keyword_errors:
+        return 0
+    sys.stderr.write("ERROR: %d label(s) look like a keyword but do not parse:\n"
+                     % len(keyword_errors))
+    for lineno, label, reason in keyword_errors:
+        sys.stderr.write(f"  line {lineno}: {label!r} -- {reason}\n")
+    return len(keyword_errors)
+
+
+# Seed each neighbour this file links, right here (Proposal B). sort_tsv records the
+# `file_<other>:` link; `streamalign starter` turns it into `<other>.starter.labels.tsv`.
+# Making that a second, hand-run command meant it was simply forgotten -- the exact failure
+# mode PLAN_labelling_process.md names in its Motivation ("forgotten manual steps"). There is
+# no reason to hold them apart: if the sort found a link, the seed is derivable now.
+def emit_starters(path):
+    if not path or not secondfiles:
+        return
+    owner = _stem(path)
+    labels_dir = os.path.dirname(os.path.abspath(path)) or "."
+    # emit_starter reads `<owner>.labels.tsv`. If the sort wrote a bare `<owner>.tsv` there is
+    # no such file to read -- skip quietly; check_output_name() has already flagged the naming.
+    if not os.path.exists(os.path.join(labels_dir, owner + ".labels.tsv")):
+        return
+    sys.path.insert(0, SCRIPTS_DIR)
+    try:
+        from streamalign import emit_labels
+    except ImportError as exc:
+        sys.stderr.write(f"NOTE: starter seeding unavailable ({exc})\n")
+        return
+    for other, out in sorted(emit_labels.emit_starter(owner, labels_dir=labels_dir).items()):
+        sys.stderr.write(f"Seeded {os.path.basename(out)} for {other}\n")
+
+
+# Warn when the written file won't be seen downstream. The pipeline
+# (groundtruth.is_pipeline_label_file) and the sheet (Code.js) both key on `<stem>.labels.tsv`
+# (or `.auto.labels.tsv`); a file sorted to a bare `<stem>.tsv` is written fine but invisible to
+# solve, build, publish AND the sheet. Flag it at write time, every time -- not only when there
+# were neighbours to seed (the old check lived inside emit_starters and missed the no-neighbour
+# case, which is exactly when a lone mis-named export slips through).
+def check_output_name(path):
+    if not path:
+        return  # stdout
+    name = os.path.basename(path)
+    if name.endswith(".labels.tsv") or name.endswith(".auto.labels.tsv"):
+        return
+    stem = _stem(path)
+    sys.stderr.write(
+        "NOTE: wrote `%s`, but the pipeline and the sheet read `%s.labels.tsv`.\n"
+        "      This file is invisible to solve / build / publish / the sheet -- rename the\n"
+        "      Audacity export `%s.labels.txt` so the sort produces `%s.labels.tsv`.\n"
+        % (name, stem, stem, stem))
+
+
+def load_env_vars(path=None):
+    """Fold the repo-root `.env_vars` into os.environ so the engine steps see e.g.
+    NETRADIO_SOURCES_DIR (the Makefile sources it; a bare `python3 sort_tsv.py` did not).
+
+    `.env_vars` is `VAR=value`, `#` comments, no quotes/`export` (per `.env_vars.example`).
+    Real environment variables win -- setdefault, never clobber. A missing file is fine.
+    """
+    path = path or os.path.join(REPO_ROOT, ".env_vars")
+    try:
+        with open(path) as handle:
+            for line in handle:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                os.environ.setdefault(key.strip(), val.strip())
+    except OSError:
+        pass
+
+
+def engine_python():
+    """The interpreter that can run the librosa-backed engine (hints/align): the 3.13 `.venv`
+    if built, else None. sort_tsv itself is stdlib and runs under whatever launched it, but
+    librosa has no 3.14 wheels -- so the engine step needs `.venv`. None => tell the user."""
+    venv = os.path.join(REPO_ROOT, ".venv", "bin", "python")
+    return venv if os.path.exists(venv) else None
+
+
+def prep_next(path, force=False, override=None):
+    """After a successful sort, prep the next capture: resolve it and run `streamalign hints`.
+
+    `override` (--nextfile STEM) wins; else `graph.next_stem` guesses from the links/notes and
+    reports why. On a TTY, ask first (hints is slow -- full-capture cross-correlation). Off a
+    TTY (publish, a pipe, CI) NEVER block: print the command and return. That non-interactive
+    guard is what stops publish.py -- which runs sort_tsv as a subprocess with no terminal --
+    from hanging forever on the prompt.
+    """
+    owner = _stem(path)
+    labels_dir = os.path.dirname(os.path.abspath(path)) or "."
+    if override:
+        nxt, why = _stem(override), "you asked (--nextfile %s)" % override
+    else:
+        sys.path.insert(0, SCRIPTS_DIR)
+        try:
+            from streamalign import graph
+        except ImportError as exc:
+            sys.stderr.write(f"NOTE: can't guess the next file ({exc}); pass --nextfile STEM\n")
+            return
+        nxt, why = graph.next_stem(owner, labels_dir=labels_dir)
+    if not nxt:
+        sys.stderr.write(f"NOTE: {why}\n")
+        return
+
+    py = engine_python()
+    shown = ".venv/bin/python" if py else "python3"
+    cmd = f"PYTHONPATH=scripts {shown} -m streamalign hints {nxt}"
+    sys.stderr.write(f"\nNext file looks like {nxt}  [{why}].\n")
+
+    if not force:
+        if not sys.stdin.isatty():
+            sys.stderr.write(f"NOTE: not a terminal -- skipping next-file prep. To prep it:\n  {cmd}\n")
+            return
+        try:
+            answer = input(f"Prep {nxt} now? runs `{cmd}` [Y/n] ").strip().lower()
+        except EOFError:
+            return
+        if answer not in ("", "y", "yes"):
+            sys.stderr.write(f"Skipped. To prep it later:\n  {cmd}\n")
+            return
+
+    if not py:
+        sys.stderr.write(f"NOTE: the 3.13 .venv isn't built (run `make align-env`). When ready:\n  {cmd}\n")
+        return
+    sys.stderr.write(f"Running: {cmd}\n")
+    subprocess.run([py, "-m", "streamalign", "hints", nxt],
+                   cwd=REPO_ROOT, env={**os.environ, "PYTHONPATH": "scripts"})
+
+
+# Summarise the free-text labels that were auto-noted, so they can be eyeballed without
+# having to prefix every one of them with `note:` by hand.
+def report_auto_notes():
+    if not auto_notes:
+        return
+    sys.stderr.write("\nAuto-noted %d free-text label(s) (no `note:` needed):\n" % len(auto_notes))
+    for lineno, label in auto_notes:
+        sys.stderr.write(f"  line {lineno}: {label}\n")
 
 ## MAIN ##
 
@@ -407,6 +686,10 @@ def main():
     parser.add_argument('--test',   action='store_true', help='Test mode -- do not write or move files, just show notes')
     parser.add_argument('--live',   action='store_true', help='Read labels from currently loaded file(s) in Audacity, but do not write')
     parser.add_argument('--stem',   help='Primary file stem for LABELTRACK scoping (defaults to the input filename; needed for stdin)')
+    parser.add_argument('--no-starter', action='store_true', help='Do not seed <other>.starter.labels.tsv for the neighbours this file links')
+    parser.add_argument('--next', action='store_true', help='Prep the next file without prompting (run `streamalign hints` on it)')
+    parser.add_argument('--nextfile', metavar='STEM', help='Prep this specific next file, overriding the guess')
+    parser.add_argument('--no-next', action='store_true', help='Do not prep the next file at all')
     parser.add_argument('--debug',  action='store_true', help='Print debug information')
 
     # Parse the command-line arguments
@@ -434,9 +717,12 @@ def main():
         # Get lines from filename or stdin
         read_labels_filepipe(test_mode)
 
-    # Fail early (before writing) if the file uses LABELTRACK but a block is missing its marker
-    if report_missing():
-        sys.exit("Exiting: fix the missing LABELTRACK markers above.")
+    # Fail early -- before writing anything -- on a missing LABELTRACK marker or a mistyped
+    # keyword. The auto-note summary prints either way: it is information, not a fault.
+    errors = report_missing() + report_keyword_errors()
+    report_auto_notes()
+    if errors:
+        sys.exit(f"\nExiting: fix the {errors} error(s) above (nothing was written).")
 
     # Sort primary + secondary entries into final write order (with optional adjustment)
     write_lines = assemble_write_lines(do_adjustment)
@@ -452,6 +738,19 @@ def main():
                 sys.exit('Exiting.')
             for entry in write_lines:
                 output.write("{:.6f}\t{:.6f}\t{}\n".format(*entry))
+
+        # flag a mis-named output the pipeline/sheet won't see (every time, not just when seeding)
+        check_output_name(filename)
+
+        # the sort recorded the `file_<other>:` links; seed the neighbours from them now
+        if not args.no_starter:
+            emit_starters(filename)
+
+        # one command, not two: prep the next file (resolve it, run `streamalign hints`).
+        # Guarded by TTY inside prep_next so a non-interactive caller (publish) can't hang.
+        if not args.no_next:
+            load_env_vars()
+            prep_next(filename, force=(args.next or bool(args.nextfile)), override=args.nextfile)
 
     # If we're in live mode, compare our entries to the ones written -- they
     # have 3 fewer significant digits, so we don't want to write them
