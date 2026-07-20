@@ -76,43 +76,43 @@
 3436.896012	3436.896012	note: file end d06-083b pre-skips
 3462.912039	3462.912039	note: file end d064-083b post-all-skips
 3673.672060	3673.672060	note: end file d065-087 (PRIMARY FILE)
-2600.159997	2600.159997	file start sync: d069-086.wav 1593.848006 verified d026-073b
-2600.159997	2847.168000	file note: in sync with d026-073b over this range
-2847.168000	3673.567997	file note: in sync with d065-087 over this range
-3673.567997	3673.567997	file end: d069-086.wav COMPLETE
-2337.090597	2337.090597	file start sync: d066-085.wav 1593.848006 verified d026-073b
-2337.090597	3537.090535	file note: in sync with d065-087 over this range
-3537.090544	3537.090544	file end: d066-085.wav COMPLETE
-2236.896012	2236.896012	file start sync: d064-083b.wav 1593.848006 verified d026-073b
-2470.757762	2470.949762	file note: skip1 0.192s
-2470.949762	2470.949762	file note: resume from skip1
-2560.993503	2565.889503	file note: skip2 ahead 4.896s
-2565.889502	2565.889502	file note: resume from skip2
-2802.145752	2802.529814	file note: skip3 ahead 0.384s
-2802.529814	2802.529814	file note: resume from skip3
-2912.935439	2918.119439	file note: skip4 span 5.184s
-2918.119439	2918.119439	file note: resume from skip4
-2945.862439	2946.918456	file note: skip5 ahead 1.056s
-2946.918439	2950.940357	file note: resume from skip5, 1.05s not in sync
-3139.875751	3140.643752	file note: skip6 ahead 0.768s
-3140.643752	3140.643752	file note: resume from skip6
-3237.889864	3240.001939	file note: skip7 ahead 2.112s
-3240.001939	3240.001939	file note: resume from skip7
-3414.729796	3420.777723	file note: skip8 ahead 6.048s
-3430.179723	3430.563785	file note: skip9 ahead 0.384s
-3434.504348	3439.496289	file note: skip10 ahead 4.992s
-3439.496289	3439.881723	file note: skip10 resumes brief out of sync
-3462.912039	3462.912039	file end: d064-083b COMPLETE
-1137.090596	1137.090596	file start sync: d046-065.wav 1593.848006 verified d026-073b
-1137.090596	2334.751119	file note: in sync with d026-073b.wav over this range
-2334.751119	2334.751119	file end: d046-065.wav COMPLETE
-826.631994	826.631994	file start sync: d041-064.wav 1593.848006 verified d026-073b
-826.631994	2293.320060	file note: in sync with d026-073b over this range (not including skips)
-1156.710872	1157.670935	file note: skip ahead 0.960063s
-1157.670935	1157.670935	file note: skip destination (post-split-and-sync)
-2293.320060	2293.320060	file end: d041-064.wav COMPLETE
--62.909466	-62.909466	file start sync: d026-045.wav 1593.848006 verified d019-040
--62.909466	826.631994	file note: in sync with d019-040.wav over this range
--6.343130	-6.340590	note: file sync wave
-826.631994	1137.090534	file note: in sync with d026-073b.wav over this range
-1137.434909	1137.434909	file end: d026-045.wav COMPLETED
+2600.159997	2600.159997	file_d069-086: file start sync: d069-086.wav 1593.848006 verified d026-073b
+2600.159997	2847.168000	file_d069-086: file note: in sync with d026-073b over this range
+2847.168000	3673.567997	file_d069-086: file note: in sync with d065-087 over this range
+3673.567997	3673.567997	file_d069-086: file end: d069-086.wav COMPLETE
+2337.090597	2337.090597	file_d066-085: file start sync: d066-085.wav 1593.848006 verified d026-073b
+2337.090597	3537.090535	file_d066-085: file note: in sync with d065-087 over this range
+3537.090544	3537.090544	file_d066-085: file end: d066-085.wav COMPLETE
+2236.896012	2236.896012	file_d064-083b: file start sync: d064-083b.wav 1593.848006 verified d026-073b
+2470.757762	2470.949762	file_d064-083b: file note: skip1 0.192s
+2470.949762	2470.949762	file_d064-083b: file note: resume from skip1
+2560.993503	2565.889503	file_d064-083b: file note: skip2 ahead 4.896s
+2565.889502	2565.889502	file_d064-083b: file note: resume from skip2
+2802.145752	2802.529814	file_d064-083b: file note: skip3 ahead 0.384s
+2802.529814	2802.529814	file_d064-083b: file note: resume from skip3
+2912.935439	2918.119439	file_d064-083b: file note: skip4 span 5.184s
+2918.119439	2918.119439	file_d064-083b: file note: resume from skip4
+2945.862439	2946.918456	file_d064-083b: file note: skip5 ahead 1.056s
+2946.918439	2950.940357	file_d064-083b: file note: resume from skip5, 1.05s not in sync
+3139.875751	3140.643752	file_d064-083b: file note: skip6 ahead 0.768s
+3140.643752	3140.643752	file_d064-083b: file note: resume from skip6
+3237.889864	3240.001939	file_d064-083b: file note: skip7 ahead 2.112s
+3240.001939	3240.001939	file_d064-083b: file note: resume from skip7
+3414.729796	3420.777723	file_d064-083b: file note: skip8 ahead 6.048s
+3430.179723	3430.563785	file_d064-083b: file note: skip9 ahead 0.384s
+3434.504348	3439.496289	file_d064-083b: file note: skip10 ahead 4.992s
+3439.496289	3439.881723	file_d064-083b: file note: skip10 resumes brief out of sync
+3462.912039	3462.912039	file_d064-083b: file end: d064-083b COMPLETE
+1137.090596	1137.090596	file_d046-065: file start sync: d046-065.wav 1593.848006 verified d026-073b
+1137.090596	2334.751119	file_d046-065: file note: in sync with d026-073b.wav over this range
+2334.751119	2334.751119	file_d046-065: file end: d046-065.wav COMPLETE
+826.631994	826.631994	file_d041-064: file start sync: d041-064.wav 1593.848006 verified d026-073b
+826.631994	2293.320060	file_d041-064: file note: in sync with d026-073b over this range (not including skips)
+1156.710872	1157.670935	file_d041-064: file note: skip ahead 0.960063s
+1157.670935	1157.670935	file_d041-064: file note: skip destination (post-split-and-sync)
+2293.320060	2293.320060	file_d041-064: file end: d041-064.wav COMPLETE
+-62.909466	-62.909466	file_d026-045: file start sync: d026-045.wav 1593.848006 verified d019-040
+-62.909466	826.631994	file_d026-045: file note: in sync with d019-040.wav over this range
+-6.343130	-6.340590	file_d026-045: note: file sync wave
+826.631994	1137.090534	file_d026-045: file note: in sync with d026-073b.wav over this range
+1137.434909	1137.434909	file_d026-045: file end: d026-045.wav COMPLETED
