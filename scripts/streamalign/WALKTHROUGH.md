@@ -204,10 +204,19 @@ python3 -m streamalign validate             # the P0+P1 harness:
 ```
 
 `validate` is the headline check: take every hand-verified pair
-(`alignment_edges`), `align_pair` each (skipping pairs with no audio), and
-`score_pairwise` against `resolve_starts`. It prints per-pair error sorted worst-
-first plus a summary (median, max, “within N samples”). This is how the 41/57-within
--1 ms result and the diagnosed outliers were produced.
+(`alignment_edges`), and for each `slice_check` it against `resolve_starts` —
+cut equal-length slices over the labeled overlap and correlate them, asking
+"does the audio confirm the labels?". Each pair is **confirmed** (residual ≈ 0,
+high confidence), **suspect** (real overlap but the audio doesn't match at the
+labeled offset — sorted worst-first, `resid_ms` measures how far off), or
+**adjacent** (labels place them end-to-end, no overlap to compare — listed apart,
+not an error). Grading by the overlap directly — rather than re-deriving the
+offset with `align_pair`'s coarse full-signal search — is what makes it robust for
+pairs that differ greatly in length: the coarse cross-correlation's lag decode
+splits at `nfft/2`, which is only valid when the two files are similar length, so
+a 20-min capture sitting ~39 min into a 47-min one used to score a garbage
+multi-minute "error"; the equal-length slice compare keeps the peak well inside
+`nfft/2` and confirms it.
 
 ---
 

@@ -10,10 +10,13 @@
       if both are in the ground truth, also the expected offset and error in ms.
 
   python3 -m streamalign validate
-      Aligns every hand-verified pair and prints a per-pair error table (error in
-      ms/samples, confidence), worst first, then a summary: median/max error, how
-      many fall within the pass tolerance, and pairs skipped for missing audio.
-      The headline "does the engine match Tim's hand work" check.
+      Verifies every hand-verified pair by comparing ONLY its overlapping audio
+      (equal-length slices tiled across the labeled overlap): confirmed (residual
+      ~0, high confidence), suspect (real overlap but the audio doesn't match at the
+      labeled offset — worst first, resid_ms = how far off), or adjacent (labels
+      place the pair end-to-end, no overlap — listed apart, not an error). Ends with
+      a graded / confirmed / suspect / adjacent / skipped summary. The headline
+      "does the audio confirm Tim's hand labels" check.
 
   python3 -m streamalign track-mix --meta track-metadata.json --sources sources_local
       G2 1st pass: chroma+DTW-align every synced original to its mix region, grade
@@ -34,7 +37,6 @@ from . import align as _align
 from . import audio as _audio
 from . import emit_labels as _emit
 from . import groundtruth as _gt
-from . import score as _score
 from . import skip_review as _skip_review
 from . import tail as _tail
 from . import track_mix as _track_mix
@@ -103,7 +105,8 @@ def _unique_edges(edges):
 def _cmd_validate(args):
     g = _gt.resolve_starts(args.labels)
     edges = _unique_edges(_gt.alignment_edges(args.labels))
-    results = []
+    graded = []
+    adjacent = []
     skipped = []
     for a, b in edges:
         if a not in g or b not in g:
@@ -112,23 +115,41 @@ def _cmd_validate(args):
             skipped.append((a, b, "no-audio"))
             continue
         try:
-            results.append(_align.align_pair(a, b, decim=args.decim))
+            r = _align.slice_check(a, b, g[a], g[b],
+                                   min_overlap_s=args.min_overlap)
         except Exception as exc:  # noqa: BLE001 - report and continue the sweep
             skipped.append((a, b, str(exc)[:60]))
-    rows, summary = _score.score_pairwise(results, g)
-    rows.sort(key=lambda r: -abs(r["error_samples"]))
-    print("%-13s %-13s %10s %9s %7s" % ("a", "b", "err_ms", "err_samp", "conf"))
-    for r in rows:
-        flag = "  <-- check" if abs(r["error_samples"]) > args.tol else ""
-        print("%-13s %-13s %10.2f %9.1f %7.3f%s"
-              % (r["a"], r["b"], r["error_ms"], r["error_samples"],
-                 r["confidence"] or 0.0, flag))
-    print("\nsummary: n=%d  median=%.2f samp  max=%.1f samp (%.2f ms)"
-          % (summary.get("n", 0), summary.get("median_samp", 0),
-             summary.get("max_samp", 0), summary.get("max_ms", 0)))
-    within = sum(1 for r in rows if abs(r["error_samples"]) <= args.tol)
-    print("within %d samples (%.2f ms): %d/%d"
-          % (args.tol, args.tol / _audio.SR * 1000.0, within, len(rows)))
+            continue
+        (adjacent if r["status"] == "adjacent" else graded).append(r)
+
+    def confirmed(r):
+        return (r["confidence"] or 0.0) >= args.conf_ok and abs(r["residual_samples"]) <= args.tol
+
+    # Each hand-verified pair is graded by comparing ONLY its overlapping audio,
+    # positioned at the labels' offset. This asks "does the audio confirm the labels?"
+    # robustly, without a full-signal search that misdecodes large lags on very
+    # different-length pairs. Three outcomes: confirmed (audio matches), suspect
+    # (real overlap but doesn't match), adjacent (no overlap — not gradeable).
+    ok = [r for r in graded if confirmed(r)]
+    suspect = [r for r in graded if not confirmed(r)]
+    suspect.sort(key=lambda r: ((r["confidence"] or 0.0), -abs(r["residual_samples"])))
+    ok.sort(key=lambda r: -abs(r["residual_samples"]))
+
+    print("%-13s %-13s %10s %9s %7s %8s" % ("a", "b", "resid_ms", "resid_sm", "conf", "overlap"))
+    for r in suspect + ok:
+        flag = "  <-- SUSPECT" if not confirmed(r) else ""
+        print("%-13s %-13s %10.2f %9.1f %7.3f %7.0fs%s"
+              % (r["a"], r["b"], r["residual_ms"], r["residual_samples"],
+                 r["confidence"] or 0.0, r["overlap_seconds"], flag))
+    if adjacent:
+        print("\nadjacent (overlap < %.1fs — labels place them end-to-end, nothing to compare):"
+              % args.min_overlap)
+        for r in sorted(adjacent, key=lambda r: r["a"]):
+            print("  %-13s %-13s  overlap=%.2fs" % (r["a"], r["b"], r["overlap_seconds"]))
+    print("\nsummary: %d graded (%d confirmed, %d suspect), %d adjacent, %d skipped"
+          % (len(graded), len(ok), len(suspect), len(adjacent), len(skipped)))
+    print("confirmed = conf>=%.2f and |residual|<=%d samp (%.2f ms)"
+          % (args.conf_ok, args.tol, args.tol / _audio.SR * 1000.0))
     if skipped:
         print("skipped %d pairs (%s ...)"
               % (len(skipped), ", ".join("%s/%s:%s" % s for s in skipped[:4])))
@@ -235,8 +256,13 @@ def main(argv=None):
     pa = sub.add_parser("align", help="align two captures")
     pa.add_argument("a")
     pa.add_argument("b")
-    pv = sub.add_parser("validate", help="align every hand-verified pair and score")
-    pv.add_argument("--tol", type=int, default=16, help="pass tolerance in samples (16=1ms)")
+    pv = sub.add_parser("validate",
+                        help="verify every hand-verified pair by comparing its overlapping audio")
+    pv.add_argument("--tol", type=int, default=16, help="confirm tolerance in samples (16=1ms)")
+    pv.add_argument("--min-overlap", type=float, default=5.0,
+                    help="seconds of overlap required to grade a pair (else 'adjacent')")
+    pv.add_argument("--conf-ok", type=float, default=0.5,
+                    help="min normalized-correlation confidence to confirm a pair")
     pt = sub.add_parser("track-mix", help="G2 1st pass: align synced originals to the mix")
     pt.add_argument("--meta", default="track-metadata.json", help="track-metadata.json path")
     pt.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")

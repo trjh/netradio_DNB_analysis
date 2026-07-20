@@ -11,6 +11,8 @@ import shutil
 import sys
 import unittest
 
+import numpy as np
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
 
 from streamalign import align, audio, emit_labels, graph, groundtruth, score, skips, solve, track_mix  # noqa: E402
@@ -84,6 +86,124 @@ class AlignTests(unittest.TestCase):
         expected = gt["d001-026b"] - gt["d000-018"]
         err_samples = abs(r["offset_seconds"] - expected) * audio.SR
         self.assertLess(err_samples, 16, "error %.1f samples" % err_samples)
+        self.assertGreater(r["confidence"], 0.9)
+
+
+class SliceCheckTests(unittest.TestCase):
+    """`validate`'s per-pair grader: compare only the overlapping audio, positioned
+    at the labels' offset. Synthetic so they run without the capture files."""
+
+    SR = audio.SR
+
+    def _shared(self, seed):
+        # 30 s of noise; `a` = master [0,25), `b` = master [5,30) — a real 20 s overlap.
+        rng = np.random.default_rng(seed)
+        base = rng.standard_normal(30 * self.SR).astype(np.float32)
+        return base[: 25 * self.SR], base[5 * self.SR:]
+
+    def test_confirms_correct_labels(self):
+        a, b = self._shared(0)
+        r = align._slice_grade(a, b, 0.0, 5.0, sr=self.SR)  # labels: b starts at 5.0 s (true)
+        self.assertEqual(r["status"], "graded")
+        self.assertLess(abs(r["residual_samples"]), 16, "residual %.1f" % r["residual_samples"])
+        self.assertGreater(r["confidence"], 0.9)
+        self.assertAlmostEqual(r["overlap_seconds"], 20.0, places=3)
+
+    def test_adjacent_pair_not_graded(self):
+        # Butt-jointed: a = [0,10), b = [10,20). No shared audio -> not a misalignment.
+        rng = np.random.default_rng(1)
+        a = rng.standard_normal(10 * self.SR).astype(np.float32)
+        b = rng.standard_normal(10 * self.SR).astype(np.float32)
+        r = align._slice_grade(a, b, 0.0, 10.0, sr=self.SR)
+        self.assertEqual(r["status"], "adjacent")
+        self.assertLess(r["overlap_seconds"], 5.0)
+        self.assertNotIn("confidence", r)
+
+    def test_flags_and_measures_a_bad_label(self):
+        # Same audio as the confirmed case, but the label claims b starts 0.5 s late.
+        # The overlap still matches -> high conf, and the residual MEASURES the 0.5 s error.
+        a, b = self._shared(0)
+        r = align._slice_grade(a, b, 0.0, 5.5, sr=self.SR)
+        self.assertEqual(r["status"], "graded")
+        self.assertGreater(r["confidence"], 0.9)
+        self.assertAlmostEqual(r["residual_ms"], -500.0, delta=5.0)
+
+    def test_confirms_across_a_long_overlap(self):
+        # A long, fully-matching overlap must confirm across MULTIPLE chunks.
+        rng = np.random.default_rng(4)
+        base = rng.standard_normal(90 * self.SR).astype(np.float32)
+        a = base[: 80 * self.SR]        # master [0,80)
+        b = base[5 * self.SR:]          # master [5,90) -> 75 s overlap
+        r = align._slice_grade(a, b, 0.0, 5.0, sr=self.SR)
+        self.assertEqual(r["status"], "graded")
+        self.assertGreaterEqual(r["chunks"], 2)
+        self.assertLess(abs(r["residual_samples"]), 16)
+        self.assertGreater(r["confidence"], 0.9)
+
+    def test_flags_a_late_divergence(self):
+        # a and b share the first 45 s of a 90 s overlap, then b diverges (a skip /
+        # bad edit / wrong label PAST the start). Inspecting only the beginning would
+        # confirm it; tiling the whole overlap must catch the later mismatch.
+        rng = np.random.default_rng(3)
+        a = rng.standard_normal(90 * self.SR).astype(np.float32)
+        b = a.copy()
+        b[45 * self.SR:] = rng.standard_normal(45 * self.SR).astype(np.float32)
+        r = align._slice_grade(a, b, 0.0, 0.0, sr=self.SR)
+        self.assertEqual(r["status"], "graded")
+        self.assertLess(r["confidence"], 0.5,
+                        "late divergence not caught (conf=%.3f)" % r["confidence"])
+
+    def test_flags_a_short_interior_divergence(self):
+        # A 10 s divergence in the MIDDLE of an 80 s overlap (seconds 35-45), with the
+        # audio re-aligned on either side. Spread-out windows could leave this region
+        # in an unchecked gap; gap-free overlapping tiling must still catch it.
+        rng = np.random.default_rng(5)
+        a = rng.standard_normal(80 * self.SR).astype(np.float32)
+        b = a.copy()
+        b[35 * self.SR:45 * self.SR] = rng.standard_normal(10 * self.SR).astype(np.float32)
+        r = align._slice_grade(a, b, 0.0, 0.0, sr=self.SR)
+        self.assertEqual(r["status"], "graded")
+        self.assertLess(r["confidence"], 0.5,
+                        "interior divergence not caught (conf=%.3f)" % r["confidence"])
+
+    def test_flags_a_boundary_divergence(self):
+        # A divergence at the very START and at the very END of the overlap (no
+        # interior context on one side) must be caught too — the whole overlap is
+        # graded, not just the interior. 6 s >= the ~win/2 detection floor.
+        rng = np.random.default_rng(6)
+        for lo, hi in ((0, 6), (74, 80)):               # first 6 s / last 6 s of 80 s
+            a = rng.standard_normal(80 * self.SR).astype(np.float32)
+            b = a.copy()
+            b[lo * self.SR:hi * self.SR] = rng.standard_normal((hi - lo) * self.SR).astype(np.float32)
+            r = align._slice_grade(a, b, 0.0, 0.0, sr=self.SR)
+            self.assertEqual(r["status"], "graded")
+            self.assertLess(r["confidence"], 0.5,
+                            "boundary divergence [%d,%d] not caught (conf=%.3f)"
+                            % (lo, hi, r["confidence"]))
+
+    def test_tiling_is_gap_free(self):
+        # The window schedule must cover the whole span with no gaps: consecutive
+        # window starts step by <= the window length, and the last window reaches the
+        # span end. (Regression for spread-out windows leaving unchecked interior gaps.)
+        for span in (7.0, 74.0, 123.4, 4000.0):
+            starts, win = align._chunk_starts(0.0, span, min(10.0, span))
+            self.assertGreater(win, 0.0)
+            self.assertAlmostEqual(starts[0], 0.0)
+            self.assertAlmostEqual(starts[-1] + win, span, places=6)
+            steps = [starts[i + 1] - starts[i] for i in range(len(starts) - 1)]
+            for st in steps:
+                self.assertLessEqual(st, win + 1e-9, "gap: step %.3f > win %.3f" % (st, win))
+
+    def test_unequal_length_large_offset_live(self):
+        # The pair that started all this: a 20-min capture sitting ~39 min into a
+        # 47-min one. A full-signal search misdecodes the large lag; the slice compare
+        # confirms the labels. Skips when the capture audio isn't on disk.
+        if not _have_audio("d066-085", "d026-073b"):
+            self.skipTest("audio/ffmpeg not available")
+        gt = groundtruth.resolve_starts()
+        r = align.slice_check("d066-085", "d026-073b", gt["d066-085"], gt["d026-073b"])
+        self.assertEqual(r["status"], "graded")
+        self.assertLess(abs(r["residual_samples"]), 16, "residual %.1f" % r["residual_samples"])
         self.assertGreater(r["confidence"], 0.9)
 
 

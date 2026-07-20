@@ -325,7 +325,7 @@ whether it is reliable enough to trust.
 
 ```bash
 python3 scripts/build_track_metadata.py --seed track-metadata.json   # labels + remainder.tsv → JSON
-PYTHONPATH=scripts python3 -m streamalign validate                   # engine vs hand: error table
+PYTHONPATH=scripts python3 -m streamalign validate                   # audio vs hand labels: confirmed/suspect/adjacent
 ```
 
 `build_track_metadata.py` is the **only** writer of `track-metadata.json`. Nothing in the
