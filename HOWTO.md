@@ -135,9 +135,18 @@ PYTHONPATH=scripts python3 -m streamalign align <a> <b>   # align two specific c
 **What each prints** (all **read-only** — none of them touch `track-metadata.json`):
 - **`groundtruth`** — each file's resolved hand master-start in seconds (and whether its audio
   is found). This is the "answer key" your hand labels define.
-- **`validate`** — for every hand-verified overlapping pair, the engine's alignment error vs
-  your hand answer: a table of `err_ms` / `err_samples` / `confidence`, then a summary
-  (median/max error, how many are within tolerance). Rows past tolerance are flagged `<-- check`.
+- **`validate`** — for every hand-verified pair, cut equal-length slices tiled across the whole
+  labeled overlap and correlate each: does the audio confirm the labels *everywhere in the
+  overlap*? Each pair lands in one of three buckets — **confirmed** (every chunk matches:
+  residual ≈ 0, high `conf`), **suspect** (real overlap but some chunk doesn't match — flagged
+  `<-- SUSPECT`, `conf` is the weakest chunk, `resid_ms` the largest drift), or **adjacent**
+  (labels place them end-to-end with no overlap — nothing to compare, listed separately, *not*
+  an error). Ends with a `graded / confirmed / suspect / adjacent / skipped` summary. Two
+  suspect signatures to read: **low `conf` throughout** = a genuinely mis-placed file (or no real
+  overlap); **high `conf` but a clean constant `resid_ms` after some point** = a *skip within the
+  overlap* (the file-start label is fine — `skips.py`/P2 characterises it). Grading the overlap
+  directly, rather than re-deriving the offset from scratch, is what keeps very different-length
+  pairs from tripping the coarse large-lag decode.
 - **`align <a> <b>`** — the offset, confidence, and error-vs-ground-truth for one specific pair.
 
 **How it helps:** these tell you *whether the computed placements are trustworthy* — i.e. does

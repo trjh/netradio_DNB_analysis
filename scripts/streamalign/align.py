@@ -14,6 +14,11 @@ Strategy:
 Offset convention: `offset_samples` is `master_start(b) - master_start(a)` in
 samples, i.e. how much later b's content sits than a's. Positive => b starts after
 a. (a[t] == b[t - offset] over the overlap.)
+
+`align_pair` derives the offset from scratch. To *verify* an already-labeled pair
+(the `validate` command), `slice_check` instead cuts equal-length slices over the
+labeled overlap and correlates those — robust for very different-length pairs,
+where the coarse full-signal decode (split at `nfft/2`) would misread a large lag.
 """
 
 import numpy as np
@@ -160,3 +165,136 @@ def align_pair(a_name, b_name, decim=8, radius=2000, sr=_audio.SR):
         "offset_seconds": offset / float(sr),
         "confidence": conf,
     }
+
+
+# A chunk whose own confidence is below this is treated as "did not match", so its
+# (meaningless) residual is not reported as the pair's drift. Separate from the CLI's
+# --conf-ok, which decides the confirmed/suspect verdict.
+_RESID_CONF_FLOOR = 0.5
+
+
+def _chunk_xcorr(sla, slb):
+    """Equal-length slice cross-correlation -> (residual_samples, confidence).
+
+    Equal length is the whole point: the coarse full-signal bug came from very
+    different-length inputs (the lag decode split at nfft/2 is only valid when
+    len(a)==len(b)); with equal slices the peak is always well inside nfft/2, so any
+    realistic residual decodes correctly. residual == how far the audio's best match
+    sits from where the labels put it; confidence == normalized correlation (0 => no
+    match at the labeled offset).
+    """
+    n = min(len(sla), len(slb))
+    if n < 100:
+        return 0.0, 0.0
+    sla = _as_float(sla[:n]) - _as_float(sla[:n]).mean()
+    slb = _as_float(slb[:n]) - _as_float(slb[:n]).mean()
+    nfft = _next_pow2(2 * n - 1)
+    cc = np.fft.irfft(np.fft.rfft(sla, nfft) * np.conj(np.fft.rfft(slb, nfft)), nfft)
+    k = int(np.argmax(cc))
+    lag = k if k < nfft // 2 else k - nfft          # sla[i] ~ slb[i-lag]
+    resid = lag + _parabolic(cc, k)
+    denom = float(np.sqrt(float((sla * sla).sum()) * float((slb * slb).sum())))
+    conf = float(cc[k] / denom) if denom > 0 else 0.0
+    return resid, conf
+
+
+def _chunk_starts(span_start, span, win, hop_frac=0.5, max_chunks=400):
+    """Window starts that tile `[span_start, span_start+span]` with no gaps.
+
+    Windows are `win` seconds long stepping by `win*hop_frac` (<= win => overlapping,
+    so every point of the span is inside a window and any divergence >= ~win/2 drops
+    some window's confidence). Returns `(starts, win)`. If the span is longer than
+    `max_chunks` windows can tile, `win` is WIDENED so `max_chunks` still cover it
+    with the same overlap fraction (this raises the detection floor — a coarser check
+    — rather than leaving unchecked gaps).
+    """
+    if span <= win:
+        return [span_start], span
+    hop = win * hop_frac
+    n = int(np.ceil((span - win) / hop)) + 1              # last window covers the end
+    if n > max_chunks:
+        n = max_chunks
+        win = span / (1.0 + (n - 1) * hop_frac)           # span = win + (n-1)*win*hop_frac
+    step = (span - win) / (n - 1)                         # <= hop <= win => gap-free
+    return [span_start + i * step for i in range(n)], win
+
+
+def _slice_grade(a, b, gt_a, gt_b, sr=_audio.SR, min_overlap_s=5.0, pad_s=0.0,
+                 chunk_s=10.0, max_chunks=400):
+    """Grade a hand-labeled pair from decoded audio arrays. See `slice_check`.
+
+    `gt_a`/`gt_b` are the labels' master-start seconds. Returns the same dict as
+    `slice_check` minus the a/b stem keys.
+    """
+    dur_a = len(a) / float(sr)
+    dur_b = len(b) / float(sr)
+    ov0 = max(gt_a, gt_b)
+    ov1 = min(gt_a + dur_a, gt_b + dur_b)
+    overlap = ov1 - ov0
+    if overlap < min_overlap_s:
+        # Adjacent / butt-jointed captures: the labels place them end-to-end, so
+        # there is no shared audio to correlate. NOT a misalignment.
+        return {"status": "adjacent", "overlap_seconds": overlap}
+    # Tile the WHOLE labeled overlap with overlapping equal-length windows and
+    # correlate each pair of slices. Inspecting only a prefix (or leaving gaps between
+    # spread-out windows) would confirm a pair while missing a skip / bad edit / label
+    # drift elsewhere in the overlap. Gap-free coverage means no such region is
+    # invisible. `pad_s` (default 0) can drop the outer seconds of the overlap — the
+    # ends are a capture's start/end — but the correlation is amplitude-normalized, so
+    # a fade there does not need trimming; the whole overlap is graded by default.
+    pad = min(pad_s, overlap * 0.4)
+    span_start = ov0 + pad
+    span = overlap - 2 * pad
+    starts, win = _chunk_starts(span_start, span, min(chunk_s, span), max_chunks=max_chunks)
+    ns = int(round(win * sr))
+    chunks = []
+    for s in starts:
+        na = int(round((s - gt_a) * sr))
+        nb = int(round((s - gt_b) * sr))
+        chunks.append(_chunk_xcorr(a[na:na + ns], b[nb:nb + ns]))
+    confs = [c for _, c in chunks]
+    # The pair confirms only if EVERY chunk matches -> the weakest chunk sets the
+    # confidence. Report the drift of the well-matched chunk that is furthest off (a
+    # constant post-skip offset shows up here even while confidence stays high); if no
+    # chunk matched, the confidence already tells the story so residual is 0.
+    min_conf = min(confs)
+    good = [(r, c) for r, c in chunks if c >= _RESID_CONF_FLOOR]
+    resid = max((rc[0] for rc in good), key=abs, default=0.0)
+    return {
+        "status": "graded",
+        "overlap_seconds": overlap,
+        "chunks": len(chunks),
+        "residual_samples": resid,
+        "residual_ms": resid / float(sr) * 1000.0,
+        "confidence": min_conf,
+    }
+
+
+def slice_check(a_name, b_name, gt_a, gt_b, sr=_audio.SR, min_overlap_s=5.0,
+                pad_s=0.0, chunk_s=10.0, max_chunks=400):
+    """Verify a hand-labeled pair by comparing ONLY their overlapping audio.
+
+    Tiles the whole labeled overlap (`gt_b - gt_a`) with overlapping equal-length
+    windows and cross-correlates each pair of slices, rather than re-deriving the
+    offset from scratch. Equal-length slices make it robust for pairs that differ
+    greatly in length (where a full-signal cross-correlation can misdecode a large
+    lag), and the gap-free tiling means a divergence anywhere in the overlap — start,
+    middle, or end, and not falling between windows — is caught, down to ~chunk_s/2
+    seconds (the uniform detection floor). Returns:
+
+      status == 'adjacent'  overlap below `min_overlap_s`; nothing to compare.
+                            (keys: a, b, status, overlap_seconds)
+      status == 'graded'    (keys: a, b, status, overlap_seconds, chunks,
+                            residual_samples, residual_ms, confidence)
+
+    `confidence` is the WEAKEST chunk's normalized correlation: a pair confirms only
+    if every chunk of the overlap matches. `residual` is the largest drift among the
+    chunks that did match; it is only meaningful when `confidence` is high.
+    """
+    a = _audio.load_audio(a_name, sr=sr)
+    b = _audio.load_audio(b_name, sr=sr)
+    r = _slice_grade(a, b, gt_a, gt_b, sr=sr, min_overlap_s=min_overlap_s,
+                     pad_s=pad_s, chunk_s=chunk_s, max_chunks=max_chunks)
+    r["a"] = _audio.stem_of(a_name)
+    r["b"] = _audio.stem_of(b_name)
+    return r

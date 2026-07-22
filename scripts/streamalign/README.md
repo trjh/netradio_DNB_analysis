@@ -82,10 +82,15 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix \
 - **`align A B`** — prints the measured offset (seconds + samples) and confidence
   for the pair, and, if both are in the ground truth, the expected offset and the
   error in ms.
-- **`validate`** — aligns every hand-verified pair and prints a per-pair error
-  table (error in ms / samples, confidence), worst first, then a summary (median /
-  max error, how many fall within the pass tolerance, and pairs skipped for missing
-  audio). This is the headline "does the engine match Tim's hand work" check.
+- **`validate`** — verifies every hand-verified pair by comparing ONLY its
+  overlapping audio: equal-length slices tiled across the labeled overlap are
+  cross-correlated, so a divergence anywhere in the overlap (not just its start) is
+  caught. Each pair is **confirmed** (residual ≈ 0, high confidence), **suspect**
+  (real overlap but the audio doesn't match at the labeled offset — worst first,
+  `resid_ms` measures how far off), or **adjacent** (labels place the pair
+  end-to-end, no overlap to compare — listed apart, not an error), then a summary
+  (graded / confirmed / suspect / adjacent / skipped). The headline "does the audio
+  confirm Tim's hand labels" check.
 - **`track-mix`** — G2 1st pass: chroma+DTW-align every synced original to its mix
   region, grade the recovered rate against the sync ground truth, and print a
   per-track table (rate / gt_rate / err / confidence / cost / reliable / within-tol)
