@@ -278,15 +278,22 @@ python3 labels/publish.py <stem> --check   # check only, push nothing
 ```
 
 Warnings:
-- **Do not `git push` by hand first — publish does it.** Chain: hard-gate (`sort_tsv.py
-  --test`: unverified sync / missing `COMPLETE` / bad grammar → refuse) → sort → `git commit`
-  → `git push` → POST the sheet webhook. All-or-nothing across the files you give it.
-- It commits + pushes **the repo it lives in, on your current branch** — run from your
-  labelling checkout, on `main`.
+- **BROKEN as of 2026-07-25: the final push fails on branch protection** (GH013: main
+  accepts PRs only — hit live; `GIT_MAIN_COMMIT_OK` only bypasses the *local* guard, the
+  remote still rejects, and the failed commit strands your local `main` ahead of origin).
+  **Interim flow:** commit the sorted `labels/<stem>.labels.tsv` on a branch → PR → merge →
+  click **Reload Data** on the sheet. A publish.py rework (branch+PR, like the sync's
+  `ensure_on_main`) is queued.
+- When publish works again: **do not `git push` by hand first — publish does it.** Chain:
+  hard-gate (`sort_tsv.py --test`: unverified sync / missing `COMPLETE` / bad grammar →
+  refuse) → sort → commit → push → POST the sheet webhook. All-or-nothing across the files
+  you give it. It acts on **the repo it lives in, on your current branch** — run from your
+  labelling checkout.
 
 Need-to-know:
-- `NETRADIO_SHEET_WEBHOOK` unset → the push still happens; click **Reload Data** on the
-  sheet yourself (publish prints the reminder).
+- The sheet imports from **origin `main`** — labels reach it only once merged there.
+- `NETRADIO_SHEET_WEBHOOK` unset → click **Reload Data** yourself (publish prints the
+  reminder).
 - Then **loop to step 0.**
 
 ---
@@ -466,7 +473,7 @@ mention any original; put genuine cross-references in the primary track.
   OFFSET + local time = master time.
 - `file sync: FILE.wav OFFSET verified OTHERFILE` — sync tying this file to another; often
   authoritative for local 0.
-- `file end: FILE.wav … COMPLETE` — endpoint; **drives "complete"**.
+- `file end: FILE.wav … COMPLETE` (or `COMPLETED`) — endpoint; **drives "complete"**.
 - `verified OTHERFILE` / `verified by …` / `MARK verified by …` / `NOT VERIFIED` — the
   connection record; **drives "verified"**.
 - `file_OTHER: <label>` — re-home `<label>` onto a different wav's track.
