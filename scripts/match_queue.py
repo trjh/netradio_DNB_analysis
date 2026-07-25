@@ -25,7 +25,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from streamalign import audio as _audio          # noqa: E402
 
-HOP = 2048
+import chroma_recipe                              # noqa: E402  (THE recipe)
+
+HOP = chroma_recipe.HOP
 CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                      ".chroma-cache")
 AUDIO_EXTS = (".m4a", ".opus", ".mp3", ".webm", ".flac", ".wav", ".ogg", ".wv", ".aac")
@@ -51,9 +53,7 @@ def chroma_of(path, min_seconds=45.0):
         return None
     if len(y) < min_seconds * _audio.SR:
         return None
-    c = librosa.feature.chroma_cqt(y=np.asarray(y, dtype="float32"),
-                                   sr=_audio.SR, hop_length=HOP) + 1e-6
-    c = librosa.util.normalize(c, norm=2, axis=0)
+    c = chroma_recipe.compute_chroma(y)             # THE recipe (chroma_recipe.py)
     os.makedirs(CACHE, exist_ok=True)
     np.save(cached, c.astype("float16"))          # float16: half the disk, no loss that matters
     return c
