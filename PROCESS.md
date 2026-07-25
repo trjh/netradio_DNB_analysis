@@ -309,13 +309,24 @@ ear using the technique below.
 Then grade the result:
 
 ```bash
-make align-env      # once: the librosa venv (python3.13) + NETRADIO_SOURCES_DIR in .env_vars
+make align-env       # once per machine (python3.13 venv — numba has no 3.14 wheels)
 make align-check
-.venv/bin/python -m streamalign track-mix --meta track-metadata.json --sources <originals-dir>
+PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix --tracks <n> [<n> …]
 ```
 
-`track-mix` recovers the mix/original rate + offset per track (chroma + DTW) and reports
-whether it is reliable enough to trust.
+Warnings:
+- `PYTHONPATH=scripts` is required — without it: `No module named streamalign`.
+- `--sources` is a **flag** (default `sources_local`); `NETRADIO_SOURCES_DIR` is not read
+  by this subcommand.
+
+Need-to-know:
+- Defaults: `--meta track-metadata.json`, `--sources sources_local`.
+- `--tracks <n> …` = grade only this file's tracks; omit = re-grade all synced originals.
+- **`sort_tsv.py` does not do this step** (it covers 6–7 and offers 0/2 for the next file).
+  Steps 8–9 apply only to files with unidentified/original-bearing tracks; 9 only where you
+  have the original.
+- `track-mix` recovers the mix/original rate + offset per track (chroma + DTW) and reports
+  whether it is reliable enough to trust.
 
 > **Sanity check that costs nothing:** a DJ pitches a record by a *few percent*. If your two
 > anchors imply a rate far from 1.0, they are not both on the record — the engine gates its own
@@ -324,9 +335,24 @@ whether it is reliable enough to trust.
 ### 10. Build + validate
 
 ```bash
-python3 scripts/build_track_metadata.py --seed track-metadata.json   # labels + remainder.tsv → JSON
-PYTHONPATH=scripts python3 -m streamalign validate                   # audio vs hand labels: confirmed/suspect/adjacent
+python3 scripts/build_track_metadata.py --seed track-metadata.json     # labels + remainder.tsv → JSON
+PYTHONPATH=scripts .venv/bin/python -m streamalign validate            # audio vs hand labels
 ```
+
+Warnings:
+- `validate` needs the alignment venv (`.venv/bin/python`, from `make align-env`) — plain
+  `python3` fails with `No module named 'numpy'`.
+
+Need-to-know:
+- `validate` grades **overlapping capture pairs only** (confirmed/suspect/adjacent). Pairs
+  come from `verified <capture-stem>` annotations on sync rows — `verified d336-355` makes
+  an edge; `verified by 067 Wave Forms` (a track) does not.
+- **A tail file placed via originals may not appear at all — that's expected, not a
+  failure.** End-to-end tail captures have no shared audio (< 5 s overlap = "adjacent",
+  none = nothing), so there is nothing for validate to compare; its placement is carried
+  by the step-9 track anchors instead.
+- What you're actually checking here: your new file's overlap pairs (if any) come out
+  **confirmed**, and no previously-confirmed pair went suspect.
 
 `build_track_metadata.py` is the **only** writer of `track-metadata.json`. Nothing in the
 notating steps above writes it. It reads the hand labels **and** `labels/remainder.tsv` (the
@@ -361,11 +387,18 @@ python3 labels/publish.py <stem>           # update the Google Sheet from your l
 python3 labels/publish.py <stem> --check   # check only, push nothing
 ```
 
-That first line is the whole job: it takes your finished `<stem>.labels.tsv` and gets it into
-the sheet. Under the hood it **hard-gates** every file first — re-running `sort_tsv.py --test`
-to refuse an unverified sync, a `file end` missing `COMPLETE`, or bad grammar — and only if all
-pass does it sort → `git commit` → `git push` → POST the sheet's refresh webhook. All-or-nothing
-across the files you give it. Then **loop to step 0.**
+Warnings:
+- **Do not `git push` by hand first — publish does it.** The chain is: hard-gate
+  (`sort_tsv.py --test`: unverified sync / missing `COMPLETE` / bad grammar → refuse) →
+  sort → `git commit` → `git push` → POST the sheet webhook. All-or-nothing across the
+  files you give it.
+- It commits + pushes **the repo it lives in, on your current branch** — run it from your
+  labelling checkout, on `main`.
+
+Need-to-know:
+- `NETRADIO_SHEET_WEBHOOK` unset → the push still happens; you just click **Reload Data**
+  on the sheet yourself (publish prints the reminder).
+- Then **loop to step 0.**
 
 ---
 
