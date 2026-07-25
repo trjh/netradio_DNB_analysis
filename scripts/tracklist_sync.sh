@@ -4,6 +4,8 @@
 #   * track-metadata.json   (analysis = canonical, player = mirror)  — 3-way synced
 #   * listen_queue.json     (player only)                            — mirrored when it changes
 #   * subscriptions.json    (player only)                            — mirrored when it changes
+#   * harvest-queue.json    (player data/, snapshot of analysis .harvest/queue.json)
+#                            — committed for progress history + disaster recovery, when it changes
 #   * TRACKLIST.md          (analysis only)                          — regenerated from the synced
 #                            track-metadata.json and included in the analysis PR (render only)
 #   * SOURCES.md            (player only)                            — regenerated from the synced
@@ -43,6 +45,8 @@ A="$ANALYSIS/track-metadata.json"            # canonical
 P="$PLAYER/metadata/track-metadata.json"     # mirror
 PQ="$PLAYER/metadata/listen_queue.json"      # player-only
 PS="$PLAYER/metadata/subscriptions.json"     # player-only
+HQ="$ANALYSIS/.harvest/queue.json"           # analysis harvester's live work queue (the source)
+PHQ="$PLAYER/data/harvest-queue.json"        # player mirror: committed snapshot + recovery source
 MARKER="$PLAYER/metadata/.track-metadata.synced"   # LOCAL baseline (gitignored, never PR'd)
 
 say() { printf '%s\n' "$*"; }
@@ -256,6 +260,20 @@ if [ -f "$PS" ]; then
   say "subscriptions.json: $OUTCOME"
 fi
 
+# --- harvest-queue.json (analysis .harvest/queue.json -> player data/, committed snapshot) ---
+# The harvester's work queue { pending, done } lives in the analysis repo's gitignored .harvest/
+# state dir, so a wiped Mac loses `done` — the record of which URLs have been fetched, INCLUDING
+# the failures (too-short/404/blocked), which leave no trace in the signature pool. `done` is the
+# one .harvest file not rebuildable from the pool, so we snapshot it into the player's committed
+# data/ for progress history + disaster recovery. The live harvester stays the source of truth;
+# this is a one-way mirror (analysis -> player), landed only when it differs from the player main.
+if [ -f "$HQ" ]; then
+  ensure_on_main "$PLAYER" "data/harvest-queue.json" "$HQ" "sync/harvest-queue" \
+    "data: sync harvest-queue.json"
+  say "harvest-queue.json: $OUTCOME"
+  $DRY || { mkdir -p "$(dirname "$PHQ")"; cp "$HQ" "$PHQ"; }   # keep the live mirror in step
+fi
+
 # --- reconcile the LIVE checkouts: fast-forward main to origin/main -------------------------
 # ensure_on_main lands data via throwaway worktrees and never touches the live checkout, so
 # local `main` falls behind origin/main after every merged sync PR — and pulling by hand under
@@ -299,5 +317,5 @@ say "reconciling live checkouts (fast-forward main -> origin/main):"
 reconcile_main "$ANALYSIS" analysis "track-metadata.json" "TRACKLIST.md"
 reconcile_main "$PLAYER"   player \
   "metadata/track-metadata.json" "metadata/listen_queue.json" "metadata/subscriptions.json" \
-  "metadata/source-inventory.json" "QUEUE_VIEW.md" "SOURCES.md"
+  "metadata/source-inventory.json" "QUEUE_VIEW.md" "SOURCES.md" "data/harvest-queue.json"
 say "sync done."
