@@ -59,6 +59,7 @@ from streamalign import chroma_match as _cm          # noqa: E402
 from streamalign import groundtruth as _gt           # noqa: E402
 from streamalign import mystery as _mystery          # noqa: E402
 
+import chroma_recipe                                 # noqa: E402  (THE recipe, single source)
 import selftest                                      # noqa: E402  (the canary; see run())
 import sigstore                                      # noqa: E402  (bucket = the pool's only home)
 
@@ -70,7 +71,7 @@ PAUSE = os.path.join(STATE_DIR, "PAUSED")
 CACHE = os.path.join(HOME, ".chroma-cache")
 KEEP = os.path.join(os.path.expanduser("~"), "media", "netradio-candidates")
 
-HOP = 2048
+HOP = chroma_recipe.HOP          # single source: chroma_recipe.py
 QUERY_S = 120.0
 # The shortest clip we will search WITH. MT7's is 23 seconds, and it produced five confident false
 # positives all within 0.0007 of each other: a short query drives every cost down until the matcher
@@ -219,12 +220,10 @@ def stream_chroma(url):
     if yt.returncode != 0 or not raw:
         return None, None, yt_err.strip().split("\n")[-1][:160] if yt_err else "no audio"
     y = np.frombuffer(raw, dtype="float32")
-    if len(y) < 45 * _audio.SR:
+    if len(y) < chroma_recipe.MIN_SECONDS * _audio.SR:
         return None, None, "too short (%.0fs)" % (len(y) / _audio.SR)
 
-    c = librosa.feature.chroma_cqt(y=np.asarray(y, dtype="float32"),
-                                   sr=_audio.SR, hop_length=HOP) + 1e-6
-    c = librosa.util.normalize(c, norm=2, axis=0)
+    c = chroma_recipe.compute_chroma(y)          # THE recipe, in one place (chroma_recipe.py)
     os.makedirs(CACHE, exist_ok=True)
     np.save(sig_path(url), c.astype("float16"))
     # The bucket is the signature's long-term home (see sigstore). Upload now, verified; on
@@ -725,10 +724,9 @@ def queries(state=None):
                                    % (round(secs), MIN_QUERY_S)})
             continue
         y = _audio.load_audio(e["clip"])[:int(QUERY_S * _audio.SR)]
-        c = librosa.feature.chroma_cqt(y=np.asarray(y, dtype="float32"),
-                                       sr=_audio.SR, hop_length=HOP) + 1e-6
+        c = chroma_recipe.compute_chroma(y)          # same recipe as the candidates it scores
         qkey = "%d:%s" % (e["number"], clip_fingerprint(e["clip"]))
-        out.append((e["number"], librosa.util.normalize(c, norm=2, axis=0), qkey))
+        out.append((e["number"], c, qkey))
 
     if state is not None:                     # so /harvest can say what it is NOT asking, and why
         state["searching"] = [n for n, _, _ in out]
