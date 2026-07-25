@@ -4,6 +4,7 @@ All offline: stream_chroma and the matcher are stubbed; soundfile writes real (t
 the retained-audio → excerpt path is exercised for real.
 """
 
+import io
 import json
 import os
 import sys
@@ -279,6 +280,140 @@ class TestCollector(Base):
         self.assertIn(key, state["scored"]["MT4:deadbeef"])          # scored regardless
         self.assertEqual(state["matches"], [])                       # but no clip-less hit row
         self.assertEqual(state["kept"], 0)
+
+
+class TestWatcherHold(TestCollector):
+    """The watching-file rule (watcher plan, rotation): a FRESH `<jobs>/_watching.json`
+    naming a worker holds that worker's whole evidence set from cleanup; stale/absent
+    self-heals; other workers are untouched; grants retire with the evidence set."""
+
+    def _watching(self, worker="edge-w1", age_s=0):
+        import time
+        os.makedirs(collector.JOBS, exist_ok=True)
+        p = os.path.join(collector.JOBS, "_watching.json")
+        with open(p, "w") as fh:
+            json.dump({"worker": worker, "watcher_id": "wt-1", "since": 0}, fh)
+        if age_s:
+            past = time.time() - age_s
+            os.utime(p, (past, past))
+        return p
+
+    def _tag_result_worker(self, worker):
+        name = [n for n in os.listdir(collector.RESULTS) if n.endswith(".json")][0]
+        p = os.path.join(collector.RESULTS, name)
+        with open(p) as fh:
+            rec = json.load(fh)
+        rec["worker"] = worker
+        with open(p, "w") as fh:
+            json.dump(rec, fh)
+
+    def test_fresh_watch_holds_evidence_until_the_watch_ends(self):
+        q = self._harvested()
+        self._tag_result_worker("edge-w1")
+        watching = self._watching("edge-w1")
+        state = harvest.blank_state()
+        key = harvest._sig_key(URL)
+        jobdir = os.path.join(collector.JOBS, key[:-4])
+
+        self.assertEqual(collector.collect_once(state, q, []), 1)
+        self.assertEqual(q["done"], [URL])                    # durability unaffected
+        self.assertTrue(os.path.isdir(jobdir))                # evidence HELD
+        self.assertEqual(len(os.listdir(collector.RESULTS)), 1)   # record still on spool
+
+        collector.collect_once(state, q, [])                  # still watched: still held
+        self.assertTrue(os.path.isdir(jobdir))
+
+        os.unlink(watching)                                   # watch ends (rotation)
+        collector.collect_once(state, q, [])
+        self.assertFalse(os.path.isdir(jobdir))               # now retired
+        self.assertEqual(os.listdir(collector.RESULTS), [])
+
+    def test_stale_watching_file_self_heals_to_normal_cleanup(self):
+        q = self._harvested()
+        self._tag_result_worker("edge-w1")
+        self._watching("edge-w1", age_s=collector.WATCH_IDLE_S + 60)
+        state = harvest.blank_state()
+        collector.collect_once(state, q, [])
+        self.assertEqual(os.listdir(collector.RESULTS), [])   # cleaned: the hold expired
+
+    def test_a_watch_on_one_worker_does_not_hold_another(self):
+        q = self._harvested()
+        self._tag_result_worker("edge-w2")
+        self._watching("edge-w1")
+        state = harvest.blank_state()
+        key = harvest._sig_key(URL)
+        collector.collect_once(state, q, [])
+        self.assertEqual(os.listdir(collector.RESULTS), [])
+        self.assertFalse(os.path.isdir(os.path.join(collector.JOBS, key[:-4])))
+
+    def test_prune_grants_fires_with_cleanup_when_fleet_configured(self):
+        q = self._harvested()
+        state = harvest.blank_state()
+        for k, v in [("NETRADIO_CONTROLLER_URL", "http://ctl"),
+                     ("NETRADIO_FLEET_TOKEN", "ft"), ("NETRADIO_COLLECTOR_TOKEN", "ct")]:
+            os.environ[k] = v
+            self.addCleanup(os.environ.pop, k, None)
+        calls = []
+
+        def urlopen(req, timeout=None):
+            calls.append((req.full_url, {k.lower(): v for k, v in req.headers.items()},
+                          json.loads(req.data)))
+
+            class R(io.BytesIO):
+                def __enter__(self): return self
+                def __exit__(self, *a): return False
+            return R(b"{}")
+        import urllib.request
+        with unittest.mock.patch.object(urllib.request, "urlopen", side_effect=urlopen):
+            collector.collect_once(state, q, [])
+        self.assertEqual(len(calls), 1)
+        url_called, headers, body = calls[0]
+        self.assertEqual(url_called, "http://ctl/lease/prune-grants")
+        self.assertEqual(headers.get("x-fleet-token"), "ft")
+        self.assertEqual(headers.get("x-collector-token"), "ct")
+        self.assertEqual(body, {"sigkey": harvest._sig_key(URL)})
+
+    def test_failed_prune_is_durably_owed_and_retires_on_a_later_pass(self):
+        """Controller down during cleanup: the evidence is gone but the prune debt survives
+        in pending_prunes.json; the next pass retires it — without re-scoring anything."""
+        q = self._harvested()
+        state = harvest.blank_state()
+        for k, v in [("NETRADIO_CONTROLLER_URL", "http://ctl"),
+                     ("NETRADIO_FLEET_TOKEN", "ft"), ("NETRADIO_COLLECTOR_TOKEN", "ct")]:
+            os.environ[k] = v
+            self.addCleanup(os.environ.pop, k, None)
+        key = harvest._sig_key(URL)
+        import urllib.request
+
+        with unittest.mock.patch.object(urllib.request, "urlopen",
+                                        side_effect=OSError("controller down")):
+            collector.collect_once(state, q, [])
+        self.assertEqual(os.listdir(collector.RESULTS), [])      # evidence cleaned...
+        self.assertEqual(collector._pending_prunes(), [key])     # ...but the debt is durable
+        analyzed_after_first = state["analyzed"]
+
+        calls = []
+
+        def urlopen(req, timeout=None):
+            calls.append(json.loads(req.data)["sigkey"])
+
+            class R(io.BytesIO):
+                def __enter__(self): return self
+                def __exit__(self, *a): return False
+            return R(b"{}")
+        with unittest.mock.patch.object(urllib.request, "urlopen", side_effect=urlopen):
+            collector.collect_once(state, q, [])                 # a later, healthy pass
+        self.assertEqual(calls, [key])                           # retired exactly once
+        self.assertEqual(collector._pending_prunes(), [])
+        self.assertEqual(state["analyzed"], analyzed_after_first)  # no re-scoring
+
+    def test_prune_grants_dark_without_tokens_makes_no_network_call(self):
+        q = self._harvested()
+        state = harvest.blank_state()
+        import urllib.request
+        with unittest.mock.patch.object(urllib.request, "urlopen") as uo:
+            collector.collect_once(state, q, [])
+        uo.assert_not_called()
 
 
 if __name__ == "__main__":

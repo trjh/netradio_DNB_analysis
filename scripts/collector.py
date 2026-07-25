@@ -45,6 +45,25 @@ from harvester import JOBS, RESULTS, STATE_DIR       # noqa: E402  (the shared l
 
 LOCK = os.path.join(STATE_DIR, "collector.lock")
 JOB_TTL_S = 7 * 24 * 3600          # orphaned job dirs are swept after a week
+WATCH_IDLE_S = float(os.environ.get("NETRADIO_WATCH_IDLE_S", "900"))   # watcher hold freshness
+
+
+def _watched_worker():
+    """The worker under the watcher's hold, iff `<jobs>/_watching.json` is FRESH (touched
+    within WATCH_IDLE_S). The watcher plan's rotation rule (player repo,
+    PLAN_edge_chroma_watcher.md): while a fresh watching file names a worker, that worker's
+    jobs keep their WHOLE evidence set — retained audio, attempt sig, grant record — so the
+    watcher can verify them; a stale or absent file self-heals to normal cleanup (watcher
+    died or rotated). JOB_TTL_S stays as the max-hold backstop. Path resolved at call time
+    because tests re-point JOBS."""
+    path = os.path.join(JOBS, "_watching.json")
+    try:
+        if time.time() - os.path.getmtime(path) > WATCH_IDLE_S:
+            return None
+        with open(path) as fh:
+            return (json.load(fh) or {}).get("worker") or None
+    except (OSError, ValueError):
+        return None
 
 
 def enabled():
@@ -122,6 +141,8 @@ def collect_once(state, q, qs):
                 if url not in (q.get("done") or []):
                     q.setdefault("done", []).append(url)
                 _save(QUEUE, q)
+            if rec.get("worker") and rec["worker"] == _watched_worker():
+                continue          # watched: hold the evidence set; a later pass cleans up
             _cleanup(rpath, sigkey)
             folded += 1
             continue
@@ -152,8 +173,16 @@ def collect_once(state, q, qs):
         state["updated"] = _now()
         _save(STATE, state)
         _save(QUEUE, q)
+        # The watcher's hold, checked strictly AFTER durability: scoring + queue are saved, so
+        # deferring cleanup costs nothing — the record replays as marker-present until the
+        # watch ends, then the evidence set (audio + attempt sig + grants) retires as one.
+        if rec.get("worker") and rec["worker"] == _watched_worker():
+            folded += 1
+            continue
         _cleanup(rpath, sigkey)
         folded += 1
+
+    retry_prunes()          # grant retirements owed from earlier passes/outages
 
     # Prune fold markers whose spool record is gone — the record can never replay again.
     stale = [k for k in state.get("folded", {})
@@ -165,10 +194,72 @@ def collect_once(state, q, qs):
     return folded
 
 
+def _fleet():
+    """(controller, fleet_token, collector_token) when ALL are configured, else None."""
+    base = os.environ.get("NETRADIO_CONTROLLER_URL", "").rstrip("/")
+    fleet = os.environ.get("NETRADIO_FLEET_TOKEN", "")
+    coll = os.environ.get("NETRADIO_COLLECTOR_TOKEN", "")
+    return (base, fleet, coll) if (base and fleet and coll) else None
+
+
+def _prunes_path():
+    return os.path.join(os.path.dirname(STATE), "pending_prunes.json")
+
+
+def _pending_prunes():
+    try:
+        with open(_prunes_path()) as fh:
+            return list(json.load(fh))
+    except (OSError, ValueError):
+        return []
+
+
+def _prune_grants(sigkey):
+    """One prune attempt against the controller. True = nothing further owed (acknowledged,
+    or the fleet is dark so no grant record exists); False = owed and must retry — the
+    caller keeps the sigkey in pending_prunes.json. Never raises: a controller outage must
+    not kill the fold loop."""
+    cfg = _fleet()
+    if not cfg:
+        return True
+    base, fleet, coll = cfg
+    import urllib.request
+    req = urllib.request.Request(base + "/lease/prune-grants",
+                                 data=json.dumps({"sigkey": sigkey}).encode(),
+                                 headers={"content-type": "application/json",
+                                          "x-fleet-token": fleet,
+                                          "x-collector-token": coll})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            r.read()
+        return True
+    except Exception:
+        return False
+
+
+def retry_prunes():
+    """Drain pending_prunes.json — the durable retry key for grant retirement (the spool
+    record is gone by then, so THIS file is what makes a missed prune re-prunable). Called
+    every fold pass; returns how many were acknowledged."""
+    pend = _pending_prunes()
+    if not pend or not _fleet():
+        return 0
+    left = [k for k in pend if not _prune_grants(k)]
+    if left != pend:
+        _save(_prunes_path(), left)
+    return len(pend) - len(left)
+
+
 def _cleanup(rpath, sigkey):
     """Best-effort: a cleanup failure must not kill the loop — the done[] replay key makes
-    the next pass finish it."""
+    the next pass finish it. Grant retirement is durably owed BEFORE the evidence is
+    destroyed: sigkey lands in pending_prunes.json first, so a crash or controller outage
+    anywhere below still retires the grants on a later pass (retry_prunes)."""
     import shutil
+    if _fleet():
+        pend = _pending_prunes()
+        if sigkey not in pend:
+            _save(_prunes_path(), pend + [sigkey])
     try:
         os.unlink(rpath)
     except OSError:
@@ -176,6 +267,10 @@ def _cleanup(rpath, sigkey):
     jd = os.path.join(JOBS, sigkey[:-4])
     if os.path.isdir(jd):
         shutil.rmtree(jd, ignore_errors=True)         # excerpt (if any) is already cut
+    if _prune_grants(sigkey):                         # grants die with the evidence set
+        pend = _pending_prunes()
+        if sigkey in pend:
+            _save(_prunes_path(), [k for k in pend if k != sigkey])
 
 
 def sweep_jobs():
