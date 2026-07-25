@@ -104,3 +104,20 @@ separate them; what identifies a record is that it beats the field, not that it 
 **These are the false negatives we did not know about.** A search that misses them reports a clean negative and nobody is any the wiser:
 
 - **14 Me'Shell NdegéOcello - Stay (The Midnight Rockers Remix)** — own original ranked **6** (cost 0.0879); track 24 won instead.
+
+## tries — how many transpositions get the expensive aligner (measured 2026-07-25)
+
+The matcher OTI-ranks all 12 rotations for pennies and DTWs only the top `tries`.
+Experiment: every pool signature (4,240) scored against both current mysteries (MT4, MT6)
+at `tries=3` AND `tries=12`, read-only, nice'd — **87.8 minutes total** for the double
+scan.
+
+- **41% of pairs (3,419/8,374) scored LOWER at 12** — the OTI ranking's top-3 missed the
+  best key that often on this codec-damaged audio. Median inflation 0.0038, max 0.0397
+  (a 0.1096 "non-match" that was really 0.0699 in the right key).
+- **No leader changed**: MT4's and MT6's best candidates (0.0547 / 0.0850) and their
+  dense top-5 boards were identical at both settings — no hidden lead *that day*.
+- Decision (Tim): the false-negative risk is real, the cost is 4x DTW at fetch rate
+  (negligible next to polite fetching), so **`DEFAULT_TRIES` is now 12** — exhaustive —
+  env-tunable via `NETRADIO_CHROMA_TRIES`. `tries=3` remains fine for bulk offline
+  sweeps where wall-clock matters more than the last 0.04 of cost.
