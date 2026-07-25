@@ -59,7 +59,8 @@ endif
 	.venv/bin/pip install -r requirements-streamalign.txt
 	@echo
 	@echo "alignment venv ready. Run the librosa-backed tools with .venv/bin/python, e.g.:"
-	@echo "  PYTHONPATH=scripts .venv/bin/python -m streamalign hints d356-375"
+	@echo "  PYTHONPATH=scripts .venv/bin/python -m streamalign hints <stem>"
+	@echo "(hints = prep for the file you are ABOUT to label; sort_tsv offers it for the next stem)"
 
 align-check:          ## verify the alignment venv can do the librosa-backed work
 	@.venv/bin/python -c "import librosa, numpy; print('librosa', librosa.__version__, '/ numpy', numpy.__version__)" \

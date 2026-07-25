@@ -60,6 +60,7 @@ from streamalign import groundtruth as _gt           # noqa: E402
 from streamalign import mystery as _mystery          # noqa: E402
 
 import selftest                                      # noqa: E402  (the canary; see run())
+import sigstore                                      # noqa: E402  (bucket = the pool's only home)
 
 HOME = _gt.REPO_ROOT
 STATE_DIR = os.path.join(HOME, ".harvest")
@@ -226,6 +227,11 @@ def stream_chroma(url):
     c = librosa.util.normalize(c, norm=2, axis=0)
     os.makedirs(CACHE, exist_ok=True)
     np.save(sig_path(url), c.astype("float16"))
+    # The bucket is the signature's long-term home (see sigstore). Upload now, verified; on
+    # failure the local file simply stays -- eviction never fires for an unverified key, so a
+    # flaky upload costs disk space, never data.
+    if sigstore.enabled():
+        sigstore.put(sig_path(url), _sig_key(url))
     return c, y, None
 
 
@@ -300,6 +306,36 @@ def _sig_key(url):
     return os.path.basename(sig_path(url))
 
 
+_REMOTE_KEYS = {"at": 0.0, "keys": None}     # session cache of the bucket's key listing
+
+
+def _remote_keys(max_age_s=900):
+    """The bucket's signature keys, cached for a while -- None when the store is dark or the
+    listing failed (callers must not treat that as 'empty')."""
+    if not sigstore.enabled():
+        return None
+    now = time.time()
+    if _REMOTE_KEYS["keys"] is not None and now - _REMOTE_KEYS["at"] < max_age_s:
+        return _REMOTE_KEYS["keys"]
+    keys = sigstore.list_keys()
+    if keys is not None:
+        _REMOTE_KEYS.update(at=now, keys=keys)
+    return _REMOTE_KEYS["keys"]
+
+
+def _load_sig(url):
+    """A signature by hook or by crook: the working cache first, then the bucket. None if it
+    exists in neither (i.e. this URL genuinely needs its audio fetched)."""
+    path = sig_path(url)
+    if not os.path.exists(path) and sigstore.enabled():
+        if not sigstore.fetch(_sig_key(url), CACHE):
+            return None
+    try:
+        return np.load(path).astype("float32")
+    except (OSError, ValueError):
+        return None
+
+
 def unscored_pairs(state, q, retired, qs, limit=None):
     """Every (mystery, cached-signature) pair we have NOT scored yet.
 
@@ -322,8 +358,14 @@ def unscored_pairs(state, q, retired, qs, limit=None):
             if url in retired:
                 continue
             key = _sig_key(url)
-            if key in seen or not os.path.exists(sig_path(url)):
+            if key in seen:
                 continue
+            # A signature counts as HELD if it is in the working cache OR the bucket -- eviction
+            # (sigstore) moves cold ones out of the cache, and _load_sig pulls them back to score.
+            if not os.path.exists(sig_path(url)):
+                remote = _remote_keys()
+                if remote is None or key not in remote:
+                    continue
             out.append((num, qc, qkey, url, key))
             if limit and len(out) >= limit:
                 return out
@@ -338,9 +380,8 @@ def score_cached(state, num, qc, qkey, url, key):
     so `/harvest` could not cue the link and Tim had to hunt through a 108-minute mix by hand.
     The position was never lost: it is recomputable from the signature we already hold.
     """
-    try:
-        c = np.load(sig_path(url)).astype("float32")
-    except (OSError, ValueError):
+    c = _load_sig(url)
+    if c is None:
         return None
     cost, shift, at = _cm.match(qc, c)
     state.setdefault("scored", {}).setdefault(qkey, []).append(key)
@@ -805,6 +846,14 @@ def run(args):
             n = rescan(state, q, retired, qs, limit=RESCAN_PER_PASS)
             state["rescan_pending"] = max(0, todo - n)
             _save(STATE, state)
+        elif sigstore.enabled():
+            # Rescan backlog empty = every cached signature is scored vs every current mystery,
+            # which is exactly when cold ones may leave the disk (verified-remote only).
+            n_ev, freed = sigstore.evict_cold(CACHE, state.get("scored") or {},
+                                              [qk for _, _, qk in qs])
+            if n_ev:
+                print("evicted %d cold signature(s) to the bucket (%.1f MB freed)"
+                      % (n_ev, freed / 1e6))
 
         if not q["pending"]:
             # Nothing to fetch -- but a rescan backlog is still real work, so do it flat out rather
@@ -851,9 +900,10 @@ def run(args):
         # there is no audio (only the signature), so a cached candidate cannot yield an excerpt --
         # which is fine: we only ever excerpt something we are already streaming.
         samples = None
-        cached = os.path.exists(sig_path(url))
+        c = _load_sig(url)                 # working cache, else the bucket -- no audio either way
+        cached = c is not None
         if cached:
-            c, err = np.load(sig_path(url)).astype("float32"), None
+            err = None
             state["skipped_cached"] += 1
         else:
             c, samples, err = stream_chroma(url)
@@ -963,6 +1013,11 @@ def main():
                     help="drop every lead for Mystery Track N, and every scored pairing against it. "
                          "For when the QUESTION was bad -- a clip too short to distinguish records "
                          "with. The next clip then starts clean against the whole corpus.")
+    ap.add_argument("--migrate-sigs", action="store_true",
+                    help="move the signature archive fully into the bucket: upload+verify every "
+                         "local signature, then evict the cold ones (verified remote AND scored "
+                         "against every current mystery). Run with the harvester STOPPED or "
+                         "paused. After this, local disk holds only work in progress.")
     ap.add_argument("--rescan", action="store_true",
                     help="score every cached signature against every mystery it has not met yet, "
                          "in one go. No network. The running harvester does this by itself, a "
@@ -982,6 +1037,37 @@ def main():
               % (args.forget, leads, pairs))
         print("# Cut a better clip and it re-enters the search by itself, against every cached "
               "signature.")
+        return
+    if args.migrate_sigs:
+        if not sigstore.enabled():
+            print("# sigstore is dark -- set NETRADIO_SIG_BUCKET (and profile/endpoint) in "
+                  ".env_vars first.")
+            return
+        state = _load(STATE, blank_state())
+        qs = queries()
+        names = sorted(n for n in os.listdir(CACHE)
+                       if n.startswith("u") and n.endswith(".npy")) if os.path.isdir(CACHE) else []
+        up = failed = 0
+        for name in names:
+            path = os.path.join(CACHE, name)
+            try:
+                local = os.path.getsize(path)
+            except OSError:
+                continue
+            if sigstore.remote_size(name) == local:
+                continue                        # already there, verified
+            if sigstore.put(path, name):
+                up += 1
+            else:
+                failed += 1
+        n_ev, freed = sigstore.evict_cold(CACHE, state.get("scored") or {},
+                                          [qk for _, _, qk in qs])
+        left = len(names) - n_ev
+        print("# migrate: %d uploaded, %d upload failure(s); %d evicted (%.1f MB freed); "
+              "%d signature(s) still local (unscored vs a current mystery, or unverified)."
+              % (up, failed, n_ev, freed / 1e6, left))
+        if failed:
+            print("# NOTHING that failed to upload was deleted. Fix the store config and re-run.")
         return
     if args.rescan:
         state = _load(STATE, blank_state())
