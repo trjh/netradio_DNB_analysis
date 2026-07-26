@@ -28,10 +28,17 @@ transpositions. Only the best few then pay for a DTW. Verified on the MT5 case: 
 true rotation (+11) first.
 """
 
+import os
+
 import numpy as np
 
 N_PITCH = 12
-DEFAULT_TRIES = 3          # how many OTI-ranked rotations to actually DTW
+# How many OTI-ranked rotations to actually DTW. 12 = exhaustive, the default since the
+# 2026-07-25 experiment (see docs/CALIBRATION.md §tries): on this codec-damaged audio the
+# cheap OTI ranking picked a suboptimal key in 41% of pairs (median cost inflation 0.0038,
+# max 0.0397) — no leader changed that day, but the false-negative risk is real and a full
+# corpus double-scan cost only ~88 min, so the 4x DTW price is affordable at fetch rate.
+DEFAULT_TRIES = int(os.environ.get("NETRADIO_CHROMA_TRIES", "12") or 12)
 
 
 def transposition_order(query, candidate):
