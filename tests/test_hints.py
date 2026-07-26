@@ -201,3 +201,50 @@ class TestAnchorPairOrdering(unittest.TestCase):
         self.assertTrue(lo <= 0.99 <= hi)      # a real pitch
         self.assertFalse(lo <= 0.30 <= hi)     # matched noise -- both real failures looked
         self.assertFalse(lo <= 0.10 <= hi)     # exactly like this
+
+
+class TestNotesDriftBaseline(unittest.TestCase):
+    """The notes-disagreement QUESTION must fire on a NEW step only: drift the notes
+    already carry from earlier discovered holes (e.g. the +3.754s at d356-375) is
+    agreement, not disagreement, and must not re-ask on every later tail file."""
+
+    def _with(self, starts, notes):
+        import unittest.mock
+        from streamalign import tracklist2017 as tl
+        return (unittest.mock.patch.object(gt, "resolve_starts", return_value=starts),
+                unittest.mock.patch.object(tl, "parse", return_value=notes))
+
+    def test_inherited_drift_is_the_baseline_not_zero(self):
+        starts = {"dA": 1000.0, "dB": 2000.0, "dC": 3000.0}
+        notes = {"dA": {"master_start_s": 999.0},        # +1.0 background
+                 "dB": {"master_start_s": 1996.2},       # +3.8 -- a hole was found here
+                 "dC": {"master_start_s": 2996.2}}       # +3.8 inherited
+        p1, p2 = self._with(starts, notes)
+        with p1, p2:
+            self.assertAlmostEqual(hints._notes_drift_baseline("dC", None), 3.8, places=6)
+            # dB's own baseline excludes itself: it sees only dA's +1.0
+            self.assertAlmostEqual(hints._notes_drift_baseline("dB", None), 1.0, places=6)
+
+    def test_clean_tree_dnb_stem_variant_still_matches(self):
+        starts = {"d356-375": 21078.306, "d376-395": 22278.306}
+        notes = {"dnb356-375": {"master_start_s": 21074.552}}   # the non-hermetic parse key
+        p1, p2 = self._with(starts, notes)
+        with p1, p2:
+            self.assertAlmostEqual(hints._notes_drift_baseline("d376-395", None),
+                                   3.754, places=3)
+
+    def test_no_notes_at_all_baselines_to_zero(self):
+        p1, p2 = self._with({"dX": 5.0}, {})
+        with p1, p2:
+            self.assertEqual(hints._notes_drift_baseline("dX", None), 0.0)
+
+    def test_carried_anchor_uses_its_own_position_not_the_last_delta(self):
+        # dB is not yet in the resolved starts (carried hand-link only, master 2004):
+        # its baseline must come from its local predecessor dA (+1.0), NOT the timeline's
+        # last delta (dZ's +5.0) — otherwise a real +3 step is silently suppressed.
+        starts = {"dA": 1000.0, "dZ": 3000.0}
+        notes = {"dA": {"master_start_s": 999.0}, "dZ": {"master_start_s": 2995.0}}
+        p1, p2 = self._with(starts, notes)
+        with p1, p2:
+            self.assertAlmostEqual(
+                hints._notes_drift_baseline("dB", None, master=2004.0), 1.0, places=6)

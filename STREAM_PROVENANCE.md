@@ -101,3 +101,41 @@ labels were *original-track-vs-stream* comparisons, not stream-vs-stream); that
 assumption is to be **verified, not assumed**. See the player repo's `TASKLIST.md`
 ("Stream Alignment Engine") and `scripts/alignfinder.py` (the earlier interactive,
 pairwise prototype) for the working plan.
+
+## Three timelines (decided 2026-07-26)
+
+"Master time" hides three distinct clocks. Naming them resolved a real 3.754 s dispute:
+
+1. **The master broadcast timeline** — the real-time clock of the original 1998
+   broadcast. Unknowable in full; it is what everything below tries to track.
+2. **The recordings' timeline** — what the capture chain reconstructs. It has
+   *within-capture* skips (measurable wherever two captures overlap) and, worse,
+   **holes between recordings**, which no amount of capture-vs-capture correlation
+   can see: an exactly-joined chain silently drops the missing time.
+3. **The originals' timelines** — each record's own internal clock. Wherever a record
+   plays solo in the stream, its timeline is a fragment of **absolute clock**: aligning
+   the stream against the original (`track sync:`/`origNNN sync:` anchors) measures the
+   recordings' timeline against something hole-proof.
+
+**The measured case.** `d356-375` was placed by original-anchoring (`verified by 067
+Wave Forms`), not by chaining — and that placement exposed a **3.135 s hole** between
+`d336-355`'s end (master 21075.171) and `d356-375`'s start (21078.306). The 1998/2017
+notes chain the recordings as if continuous, so from that point their master times run
+**3.754 s early** (the 3.135 s hole plus ~0.6 s accumulated background):
+
+    d088-107 … d288-307   labels − notes = +0.87 … +0.96
+    d308-327, d328-342                     +1.87
+    d336-355                               +0.62   (the labeled SKIP ahead 1.248s)
+    d356-375, d376-395                     +3.75   (the hole, discovered by anchoring)
+
+**Consequences.**
+
+- The labels are authoritative over the notes wherever they disagree by an amount that
+  matches the accumulated hole/skip record — the notes *cannot* represent missing
+  inter-recording time.
+- `streamalign hints` compares a new placement against the notes using the
+  **neighbours' drift as the baseline** (only a *new* step is questioned), so resolved
+  holes are not re-litigated on every later file.
+- Original-anchoring is the only tool that measures timeline 2 against timeline 1's
+  fragments — which is why the tail (exactly-joined captures, no overlaps) is placed by
+  track anchors (PROCESS.md step 9) rather than by chaining alone.
