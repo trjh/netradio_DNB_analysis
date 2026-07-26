@@ -205,8 +205,9 @@ class TestAnchorPairOrdering(unittest.TestCase):
 
 class TestNotesDriftBaseline(unittest.TestCase):
     """The notes-disagreement QUESTION must fire on a NEW step only: drift the notes
-    already carry from earlier discovered holes (e.g. the +3.754s at d356-375) is
-    agreement, not disagreement, and must not re-ask on every later tail file."""
+    already carry from earlier discovered missing time (e.g. the +3.754s at d356-375 --
+    the two labeled skips inside d336-355) is agreement, not disagreement, and must not
+    re-ask on every later tail file."""
 
     def _with(self, starts, notes):
         import unittest.mock
@@ -217,7 +218,7 @@ class TestNotesDriftBaseline(unittest.TestCase):
     def test_inherited_drift_is_the_baseline_not_zero(self):
         starts = {"dA": 1000.0, "dB": 2000.0, "dC": 3000.0}
         notes = {"dA": {"master_start_s": 999.0},        # +1.0 background
-                 "dB": {"master_start_s": 1996.2},       # +3.8 -- a hole was found here
+                 "dB": {"master_start_s": 1996.2},       # +3.8 -- missing time found here
                  "dC": {"master_start_s": 2996.2}}       # +3.8 inherited
         p1, p2 = self._with(starts, notes)
         with p1, p2:

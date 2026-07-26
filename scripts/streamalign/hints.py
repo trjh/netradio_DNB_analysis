@@ -123,9 +123,10 @@ def overlapping_neighbours(stem, starts, audio_dir=None, min_overlap_s=MIN_OVERL
 def _notes_drift_baseline(stem, labels_dir, master=None):
     """The labels-minus-notes drift the 1998/2017 notes ALREADY carry at this point in the
     chain: the delta of the nearest placed capture that starts before `stem`'s (else the
-    nearest after; else 0.0). The notes chain the recordings as if continuous, so every
-    inter-recording hole shifts all later deltas permanently -- a new file inheriting its
-    neighbours' drift is agreement, not disagreement."""
+    nearest after; else 0.0). The notes chain the recordings' physical durations as if
+    nothing is missing, so every stretch of missing time the labels discover shifts all
+    later deltas permanently -- a new file inheriting its neighbours' drift is
+    agreement, not disagreement."""
     from . import tracklist2017 as _tl
     starts = _gt.resolve_starts(labels_dir)
     own = starts.get(stem)
@@ -364,12 +365,13 @@ def _tracklist_rows(stem, duration, master, diag, audio_dir=None, labels_dir=Non
                           % note["continuation"]))
 
     # Cross-check the anchor against the notes -- a THIRD independent source. The notes
-    # timeline chains the recordings as if continuous, so it CANNOT see audio missing
-    # BETWEEN captures; every hole the label chain discovers (via an original-anchored
+    # timeline chains the recordings' physical durations as if nothing is missing, so it
+    # CANNOT see broadcast time the captures never recorded; every such stretch the
+    # labels discover (e.g. the two skips inside d336-355, exposed by an original-anchored
     # placement -- see STREAM_PROVENANCE.md, "Three timelines") shifts all later files'
-    # deltas by the hole's size, permanently. So the baseline is the NEIGHBOURS' delta,
-    # not zero: question only a NEW step, never the inherited, already-resolved drift
-    # (the +3.754s discovered at d356-375 would otherwise re-fire on every tail file).
+    # deltas by that much, permanently. So the baseline is the NEIGHBOURS' delta, not
+    # zero: question only a NEW step, never the inherited, already-resolved drift
+    # (the +3.754s at d356-375/d376-395 would otherwise re-fire on every tail file).
     ms = note.get("master_start_s")
     if ms is not None and master is not None:
         delta = master - ms
@@ -380,7 +382,7 @@ def _tracklist_rows(stem, duration, master, diag, audio_dir=None, labels_dir=Non
                 0.0, 0.0,
                 "the 1998/2017 notes put this file's start at master %.3f, but the hand labels "
                 "place it at %.3f -- a %+.3fs disagreement, of which %+.3fs is the drift the "
-                "notes already carry from earlier discovered holes (see STREAM_PROVENANCE.md). "
+                "notes already carry from earlier discovered missing time (see STREAM_PROVENANCE.md). "
                 "The NEW step of %+.3fs is the outlier worth resolving: either this placement "
                 "is wrong, or the recordings are missing ~that much audio near this file's "
                 "start. Which is it?" % (ms, master, delta, baseline, step)))
