@@ -48,7 +48,9 @@ from streamalign import groundtruth as _gt       # noqa: E402
 from streamalign import track_mix as _tm         # noqa: E402
 from streamalign import tracklist2017 as _tl     # noqa: E402
 
-HOP = 2048
+import chroma_recipe                              # noqa: E402  (THE recipe, single source)
+
+HOP = chroma_recipe.HOP
 QUERY_S = 90.0
 # Where inside the track's extract to sample. NOT the start: that is where the DJ is still
 # blending the previous record in, so the first minute is often two records at once. Measured:
@@ -58,10 +60,7 @@ EDGE_SKIP = 0.25
 
 
 def chroma(y):
-    import librosa
-    c = librosa.feature.chroma_cqt(y=np.asarray(y, dtype="float32"),
-                                   sr=_audio.SR, hop_length=HOP) + 1e-6
-    return librosa.util.normalize(c, norm=2, axis=0)
+    return chroma_recipe.compute_chroma(y)          # THE recipe (chroma_recipe.py)
 
 
 def imprecise(stem):
