@@ -10,8 +10,8 @@
 #                            track-metadata.json and included in the analysis PR (render only)
 #   * SOURCES.md            (player only)                            — regenerated from the synced
 #                            track-metadata.json (+ source-inventory.json) and included in the player PR
-#   * QUEUE_VIEW.md         (player only)                            — regenerated from the synced
-#                            listen_queue.json and included in that same player PR (render only)
+#   (QUEUE_VIEW.md — the queue's Markdown render — was retired 2026-07-24: unusable at 8k+
+#    entries; renderer archived in the player repo, see its PLAN_queue_markdown.md)
 # It NEVER touches source/scripts and NEVER drags unrelated commits into main: every PR is cut from
 # a FRESH worktree off origin/main and contains ONLY those file(s). It never commits to main
 # directly. Symmetric — `make sync` runs from EITHER repo.
@@ -240,13 +240,10 @@ else
 fi
 
 # --- listen_queue.json (player-only): land it on the player main when it differs ---
-# QUEUE_VIEW.md is a pure render of listen_queue.json, so it rides along as a derived extra: the
-# derive only runs when listen_queue.json actually changed (same as SOURCES.md/TRACKLIST.md above),
-# which keeps its 'generated <timestamp>' line from churning a spurious PR on unchanged runs.
+# (QUEUE_VIEW.md used to ride along here as a derived extra; retired 2026-07-24.)
 if [ -f "$PQ" ]; then
   ensure_on_main "$PLAYER" "metadata/listen_queue.json" "$PQ" "sync/listen-queue" \
-    "data: sync listen_queue.json + regen QUEUE_VIEW.md" \
-    "make queue-view >/dev/null" "QUEUE_VIEW.md"
+    "data: sync listen_queue.json"
   say "listen_queue.json: $OUTCOME"
 fi
 
@@ -317,5 +314,5 @@ say "reconciling live checkouts (fast-forward main -> origin/main):"
 reconcile_main "$ANALYSIS" analysis "track-metadata.json" "TRACKLIST.md"
 reconcile_main "$PLAYER"   player \
   "metadata/track-metadata.json" "metadata/listen_queue.json" "metadata/subscriptions.json" \
-  "metadata/source-inventory.json" "QUEUE_VIEW.md" "SOURCES.md" "data/harvest-queue.json"
+  "metadata/source-inventory.json" "SOURCES.md" "data/harvest-queue.json"
 say "sync done."
