@@ -37,6 +37,7 @@ help in summarizing and cross-referencing the information.
 * [STREAM_PROVENANCE.md](./STREAM_PROVENANCE.md) -- how the capture files came to exist (RealAudio loop -> `/dev/audio` dump -> hex -> wav/au), why they overlap and contain skips, and what "master time" actually is
 * [scripts/streamalign/](./scripts/streamalign) -- the Stream Alignment Engine; see its [README](./scripts/streamalign/README.md) (status) and [WALKTHROUGH](./scripts/streamalign/WALKTHROUGH.md) (how the functions compose)
 * [docs/SCRIPTS.md](./docs/SCRIPTS.md) -- **every script**: purpose, when to run it, which python it needs
+* [docs/CHROMA_PRIMER.md](./docs/CHROMA_PRIMER.md) -- **how chroma matching works**: what a chromagram is, how a mystery clip is found in a candidate, why DJ-blended edges don't break it, and the limits of mix-in-mix matches
 * [FINDING_MYSTERY_TRACKS.md](./FINDING_MYSTERY_TRACKS.md) -- **identifying the unnamed tracks**: where to publish the excerpts and ask (Dogs on Acid, r/AtmosphericDnB, Discogs, tuneID), the chroma-matching method that works offline, and every dead end already tried (incl. the commercial fingerprint APIs — see below)
 * [PROCESS.md](./PROCESS.md) -- **how the analysis is actually done**: the per-recording loop (manual + engine), the by-ear technique for seating an original against the mix, and what the engine can/cannot do
 * [HOWTO.md](./HOWTO.md) -- howto / FAQ: **which tool to run, when, and why** (notate → build → serve → publish)
