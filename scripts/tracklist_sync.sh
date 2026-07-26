@@ -2,7 +2,9 @@
 # Cross-repo DATA sync. The files this touches are the shared data files plus the derived views
 # (TRACKLIST.md / SOURCES.md), each a pure render of the data:
 #   * track-metadata.json   (analysis = canonical, player = mirror)  — 3-way synced
-#   * listen_queue.json     (player only)                            — mirrored when it changes
+#   * listen_queue          (player only)                            — mirrored when it changes;
+#                            pre-P2 the single listen_queue.json, post-P2 the shard DIR + manifest
+#                            (metadata/listen_queue/shard-*.json + index.json) — see PLAN_queue_scale
 #   * subscriptions.json    (player only)                            — mirrored when it changes
 #   * harvest-queue.json    (player data/, snapshot of analysis .harvest/queue.json)
 #                            — committed for progress history + disaster recovery, when it changes
@@ -43,7 +45,8 @@ ANALYSIS="${NETRADIO_ANALYSIS_REPO:?set NETRADIO_ANALYSIS_REPO to the analysis r
 PLAYER="${NETRADIO_PLAYER_REPO:?set NETRADIO_PLAYER_REPO to the player repo path}"
 A="$ANALYSIS/track-metadata.json"            # canonical
 P="$PLAYER/metadata/track-metadata.json"     # mirror
-PQ="$PLAYER/metadata/listen_queue.json"      # player-only
+PQ="$PLAYER/metadata/listen_queue.json"      # player-only (pre-P2: single file)
+PQD="$PLAYER/metadata/listen_queue"          # player-only (P2: shard dir — shards + index.json)
 PS="$PLAYER/metadata/subscriptions.json"     # player-only
 HQ="$ANALYSIS/.harvest/queue.json"           # analysis harvester's live work queue (the source)
 PHQ="$PLAYER/data/harvest-queue.json"        # player mirror: committed snapshot + recovery source
@@ -134,6 +137,63 @@ ensure_on_main() {   # $1=repo $2=rel $3=src $4=branch $5=commit-msg [$6=derive-
   git -C "$repo" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"
   git -C "$repo" worktree prune
   git -C "$repo" branch -D "$br" >/dev/null 2>&1 || true   # local stable branch is free once the worktree is gone
+}
+
+# P2 (docs/PLAN_queue_scale.md §6): the listen queue's canon becomes a DIRECTORY of shards + a
+# manifest once migrated, not one file. This mirrors that whole tree onto origin/main in ONE PR (the
+# shard-set + manifest must land atomically). Modeled on ensure_on_main, minus the single-file cmp
+# and the derived-view machinery (the queue has no derived view — QUEUE_VIEW.md was retired). Only
+# the committed files (shard-*.json + index.json) are copied; the journal + derived views under the
+# dir are gitignored, so git skips them. Dormant until the split (see split_listen_queue.py).
+ensure_tree_on_main() {   # $1=repo $2=reldir $3=srcdir $4=branch $5=commit-msg
+  local repo="$1" rel="$2" src="$3" br="$4" msg="$5"
+  git -C "$repo" fetch -q origin main
+  if $DRY; then
+    say "  [dry-run] $repo: would mirror tree $rel onto origin/main (branch $br)"; OUTCOME=DRY; return 0
+  fi
+  git -C "$repo" worktree prune
+  mkdir -p "$repo/.worktree"
+  local wt; wt="$(mktemp -d "$repo/.worktree/sync.XXXXXX")"
+  git -C "$repo" worktree add -q -B "$br" "$wt" origin/main
+  mkdir -p "$wt/$rel"
+  find "$wt/$rel" -maxdepth 1 -name 'shard-*.json' -delete 2>/dev/null || true   # mirror EXACTLY:
+  rm -f "$wt/$rel/index.json"                                                     # drop then re-copy
+  [ -e "$src/index.json" ] && cp "$src/index.json" "$wt/$rel/"
+  local f; for f in "$src"/shard-*.json; do [ -e "$f" ] && cp "$f" "$wt/$rel/"; done
+  # The pre-P2 base tracks the single "$rel.json"; the split deleted it from the live working tree.
+  # Stage its DELETION in THIS SAME commit so the shard tree ATOMICALLY REPLACES it — otherwise the
+  # dead single file stays tracked on main alongside the shards (two canonical reps, and a tool not
+  # checking manifest_exists() could read the stale one). Only fires while it's still tracked.
+  if git -C "$wt" ls-files --error-unmatch -- "$rel.json" >/dev/null 2>&1; then
+    git -C "$wt" rm -q -- "$rel.json"
+  fi
+  git -C "$wt" add -A -- "$rel"
+  if git -C "$wt" diff --cached --quiet; then
+    say "  $repo: origin/main already current for $rel"; OUTCOME=NOOP
+  else
+    git -C "$wt" commit -q -m "$msg"
+    git -C "$wt" push -q -f -u origin "$br"
+    local existing; existing="$( cd "$wt" && gh pr list --head "$br" --state open --json number --jq '.[0].number // empty' 2>/dev/null || true )"
+    if [ -n "$existing" ]; then say "  $repo: updated open PR #$existing for $rel"
+    else ( cd "$wt" && gh pr create --fill --base main ); fi
+    if read -r -p "  Accept (merge) the $repo PR for $rel now? [y/N] " ans && [[ "${ans:-}" == [yY] ]]; then
+      ( cd "$wt" && gh pr merge --merge ) || true
+      git -C "$wt" fetch -q origin main
+      # Confirm the WHOLE atomic migration commit landed: the shard tree matches AND the legacy single
+      # file is ABSENT on origin/main. Tree-only would falsely pass if main happened to match the
+      # shards while STILL tracking "$rel.json" (a failed merge + an independently-current tree) —
+      # declaring MERGED and deleting the branch while origin/main keeps two canonical reps. In
+      # steady-state post-migration the file is already absent, so the check is trivially true.
+      if git -C "$wt" diff --quiet FETCH_HEAD -- "$rel" \
+         && ! git -C "$wt" cat-file -e "FETCH_HEAD:$rel.json" 2>/dev/null; then   # tree + no legacy
+        say "  merged ✓ (confirmed on origin/main)"; OUTCOME=MERGED
+        git -C "$repo" push -q origin --delete "$br" 2>/dev/null || true
+      else say "  merge NOT fully confirmed on origin/main — left pending"; OUTCOME=OPEN; fi
+    else say "  left open for review."; OUTCOME=OPEN; fi
+  fi
+  git -C "$repo" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"
+  git -C "$repo" worktree prune
+  git -C "$repo" branch -D "$br" >/dev/null 2>&1 || true
 }
 
 landed() { [ "$1" = NOOP ] || [ "$1" = MERGED ]; }   # is the content durably on main?
@@ -239,9 +299,15 @@ else
   say "track-metadata.json NOT fully landed (analysis=$oa player=$op) — marker unchanged; re-run after merging the open PR(s)."
 fi
 
-# --- listen_queue.json (player-only): land it on the player main when it differs ---
+# --- listen_queue (player-only): land it on the player main when it differs ---
 # (QUEUE_VIEW.md used to ride along here as a derived extra; retired 2026-07-24.)
-if [ -f "$PQ" ]; then
+# P2: post-migration the canon is the shard dir + manifest ($PQD/index.json is the migration marker);
+# pre-migration it is the single $PQ. Mirror whichever is the live canon.
+if [ -f "$PQD/index.json" ]; then
+  ensure_tree_on_main "$PLAYER" "metadata/listen_queue" "$PQD" "sync/listen-queue" \
+    "data: sync listen_queue shards"
+  say "listen_queue shards: $OUTCOME"
+elif [ -f "$PQ" ]; then
   ensure_on_main "$PLAYER" "metadata/listen_queue.json" "$PQ" "sync/listen-queue" \
     "data: sync listen_queue.json"
   say "listen_queue.json: $OUTCOME"
@@ -297,15 +363,22 @@ reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to 
   if $DRY; then say "  [dry-run] $label: would fast-forward main $n commit(s) to origin/main"; return 0; fi
   local f aside=()
   for f in "$@"; do
-    if [ -f "$repo/$f" ] && ! git -C "$repo" diff --quiet HEAD -- "$f"; then
-      cp "$repo/$f" "$repo/$f.reconcile-bak"    # the live bytes, restored below (gitignored)
-      git -C "$repo" checkout HEAD -- "$f"      # clean worktree AND index for this file
+    # P2: a pathspec may be the shard DIRECTORY (metadata/listen_queue), not just a file — so guard
+    # with -e and back up with `cp -a` (recursive). `git diff/checkout -- <dir>` already handle a
+    # dir pathspec and only touch TRACKED files (the gitignored journal/derived views are left be).
+    # The -e guard also stops the deleted single listen_queue.json from RESURRECTING at migration
+    # time: once the split removes it, it is not -e, so its `git checkout HEAD -- $f` never runs (the
+    # ensure_tree_on_main sync commit is what carries its deletion onto main).
+    if [ -e "$repo/$f" ] && ! git -C "$repo" diff --quiet HEAD -- "$f"; then
+      rm -rf "$repo/$f.reconcile-bak"
+      cp -a "$repo/$f" "$repo/$f.reconcile-bak"   # the live bytes, restored below (gitignored)
+      git -C "$repo" checkout HEAD -- "$f"        # clean worktree AND index for this file/dir
       aside+=("$f")
     fi
   done
   local ok=true
   git -C "$repo" merge --ff-only origin/main || ok=false
-  for f in ${aside[@]+"${aside[@]}"}; do mv "$repo/$f.reconcile-bak" "$repo/$f"; done
+  for f in ${aside[@]+"${aside[@]}"}; do rm -rf "$repo/$f"; mv "$repo/$f.reconcile-bak" "$repo/$f"; done
   if $ok; then say "  $label: main fast-forwarded $n commit(s) (live data kept: ${aside[*]:-none})"
   else say "  $label: fast-forward FAILED (above) — live files restored; reconcile by hand"; fi
 }
@@ -313,6 +386,7 @@ reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to 
 say "reconciling live checkouts (fast-forward main -> origin/main):"
 reconcile_main "$ANALYSIS" analysis "track-metadata.json" "TRACKLIST.md"
 reconcile_main "$PLAYER"   player \
-  "metadata/track-metadata.json" "metadata/listen_queue.json" "metadata/subscriptions.json" \
+  "metadata/track-metadata.json" "metadata/listen_queue.json" "metadata/listen_queue" \
+  "metadata/subscriptions.json" \
   "metadata/source-inventory.json" "SOURCES.md" "data/harvest-queue.json"
 say "sync done."
