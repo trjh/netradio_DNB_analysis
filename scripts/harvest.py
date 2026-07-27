@@ -661,22 +661,33 @@ def _load_queue_items():
 
     if manifest_path is None:
         with open(LISTEN_QUEUE, "r", encoding="utf-8") as fh:
-            return (json.load(fh) or {}).get("items") or []
-
-    shard_dir = os.path.dirname(manifest_path)
-    with open(manifest_path, "r", encoding="utf-8") as fh:
-        manifest = json.load(fh) or {}
-    items = []
-    for entry in manifest.get("shards") or []:
-        name = (entry or {}).get("name")
-        if not name:
-            continue
-        with open(os.path.join(shard_dir, name), "r", encoding="utf-8") as fh:
-            chunk = json.load(fh)
-        if isinstance(chunk, dict):      # tolerate a {"items": [...]} shard wrapper
-            chunk = chunk.get("items") or []
-        items.extend(chunk or [])
-    return items
+            items = (json.load(fh) or {}).get("items") or []
+    else:
+        shard_dir = os.path.dirname(manifest_path)
+        with open(manifest_path, "r", encoding="utf-8") as fh:
+            manifest = json.load(fh) or {}
+        items = []
+        for entry in manifest.get("shards") or []:
+            # Shape errors are ValueError on purpose: syntactically-valid-but-wrong JSON must
+            # land in the caller's "try again next pass" net, not crash the harvester.
+            if not isinstance(entry, dict):
+                raise ValueError("manifest shard entry is not an object")
+            name = entry.get("name")
+            if not name:
+                continue
+            with open(os.path.join(shard_dir, name), "r", encoding="utf-8") as fh:
+                chunk = json.load(fh)
+            if isinstance(chunk, dict):      # tolerate a {"items": [...]} shard wrapper
+                chunk = chunk.get("items") or []
+            if not isinstance(chunk, list):
+                raise ValueError("shard %s is not a list" % name)
+            items.extend(chunk)
+    if not isinstance(items, list):
+        raise ValueError("listen queue items is not a list")
+    # One corrupt entry must not starve the harvester of the other thousands: drop non-object
+    # items rather than failing the whole read (a torn file can't produce these -- that's a
+    # JSON parse error -- so this is programmatic corruption, tolerated per-item).
+    return [it for it in items if isinstance(it, dict)]
 
 
 def _is_cooling(item):

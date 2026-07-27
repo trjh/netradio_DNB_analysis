@@ -146,6 +146,33 @@ class ShardedListenQueue(unittest.TestCase):
         harvest.LISTEN_QUEUE = d                       # a dir with no index.json yet
         self.assertEqual(harvest.listen_queue_split(), ([], set()))
 
+    def test_a_manifest_with_string_shard_entries_is_survived(self):
+        # syntactically valid, wrong SHAPE: {"shards": ["shard-0000.json"]} must land in the
+        # "try again next pass" net, not crash the harvester (local-review 2026-07-27 finding)
+        d = self._shards([("shard-0000.json", [{"url": "https://y/a"}])])
+        with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as fh:
+            json.dump({"shards": ["shard-0000.json"]}, fh)
+        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+
+    def test_a_wrapped_shard_whose_items_is_a_string_is_survived(self):
+        d = self._shards([("shard-0000.json", [{"url": "https://y/a"}])])
+        with open(os.path.join(d, "shard-0000.json"), "w", encoding="utf-8") as fh:
+            json.dump({"items": "nope"}, fh)
+        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+
+    def test_a_non_list_shard_is_survived(self):
+        d = self._shards([("shard-0000.json", [{"url": "https://y/a"}])])
+        with open(os.path.join(d, "shard-0000.json"), "w", encoding="utf-8") as fh:
+            json.dump("nope", fh)
+        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+
+    def test_a_corrupt_item_is_dropped_without_starving_the_rest(self):
+        # one non-object item must not hide the other thousands behind an empty read
+        self._shards([("shard-0000.json", [{"url": "https://y/a"}, "corrupt",
+                                           {"url": "https://y/b"}])])
+        cand, _ = harvest.listen_queue_split()
+        self.assertEqual(cand, ["https://y/a", "https://y/b"])
+
 
 @unittest.skipIf(harvest is None, "harvest.py needs the librosa venv (.venv) — skipping")
 class RetryAfterCooling(unittest.TestCase):
