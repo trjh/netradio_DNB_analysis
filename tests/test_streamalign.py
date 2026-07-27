@@ -78,6 +78,24 @@ class ScoreTests(unittest.TestCase):
 
 
 class AlignTests(unittest.TestCase):
+    def test_coarse_offset_negative_lag_with_unequal_lengths(self):
+        # Regression: a short `a` deep inside a long `b` is a large NEGATIVE lag. The old
+        # decode split the circular index at nfft//2, which is only valid for equal-length
+        # inputs — here the true lag -7900 wrapped to k=292 (< nfft//2 = 4096) and decoded
+        # as a bogus POSITIVE offset. Positive lags can never reach k >= len(a).
+        rng = np.random.default_rng(7)
+        a = rng.standard_normal(100)
+        b = np.zeros(8000)
+        b[7900:8000] = a                      # b[t] = a[t-7900]  =>  a[t] ~ b[t+7900], lag -7900
+        self.assertEqual(align.coarse_offset(a, b, decim=1), -7900)
+
+    def test_coarse_offset_positive_lag_unchanged(self):
+        # Sanity: the ordinary positive-lag decode (k < len(a)) is untouched by the fix.
+        rng = np.random.default_rng(8)
+        a = rng.standard_normal(8000)
+        b = a[50:150].copy()                  # b[t] = a[t+50]  =>  a[t] ~ b[t-50], lag +50
+        self.assertEqual(align.coarse_offset(a, b, decim=1), 50)
+
     def test_clean_overlap_within_one_ms(self):
         if not _have_audio("d000-018", "d001-026b"):
             self.skipTest("audio/ffmpeg not available")

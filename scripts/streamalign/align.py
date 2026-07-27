@@ -56,7 +56,13 @@ def coarse_offset(a, b, decim=8):
     bd = bd - bd.mean()
     cc, nfft = _xcorr_full(ad, bd)
     k = int(np.argmax(cc))
-    lag_d = k if k < nfft // 2 else k - nfft
+    # Decode the circular index. Positive lags can only occupy k in [0, len(ad)-1]
+    # (cc[k] pairs ad[t] with bd[t-k], so k >= len(ad) has no valid t); everything
+    # above that is a wrapped negative lag. Splitting at nfft//2 instead is only
+    # valid when len(a) == len(b) — with a short `a` against a long `b` (the
+    # from-scratch solve path), a large negative lag wraps to k < nfft//2 and
+    # decodes as a bogus positive offset.
+    lag_d = k if k < len(ad) else k - nfft
     return lag_d * decim
 
 
