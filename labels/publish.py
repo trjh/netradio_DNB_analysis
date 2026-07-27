@@ -152,9 +152,24 @@ def _capture(cmd, cwd=None):
 
 
 def _branch_name(now=None):
-    """A fresh, unique publish branch: labels/publish-YYYYMMDD-HHMMSS (UTC)."""
+    """A fresh publish branch: labels/publish-YYYYMMDD-HHMMSS (UTC)."""
     now = now or datetime.datetime.now(datetime.timezone.utc)
     return "labels/publish-" + now.strftime("%Y%m%d-%H%M%S")
+
+
+def _unique_branch(name, root):
+    """`name`, or `name-2`/`name-3`/… — whichever first claims NO existing local or remote ref.
+
+    Second-resolution timestamps are not unique on their own (a rapid retry, or a leftover
+    branch from an interrupted run), and colliding would reset-and-delete a branch this run
+    does not own. Both checks are read-only; the remote check degrades to local-only offline
+    (ls-remote returns nothing — the push would fail later anyway)."""
+    candidate, n = name, 1
+    while (_capture(["git", "rev-parse", "--verify", "refs/heads/" + candidate], cwd=root)
+           or _capture(["git", "ls-remote", "--heads", "origin", candidate], cwd=root)):
+        n += 1
+        candidate = "%s-%d" % (name, n)
+    return candidate
 
 
 def _repo_root_for(staged, dry_run):
@@ -226,7 +241,9 @@ def _open_pr(staged, branch, message, dry_run):
     if _run(["git", "fetch", "origin", "main"], dry_run, cwd=root) != 0:
         sys.stderr.write("publish: could not fetch origin/main (using last-known ref)\n")
 
-    if _run(["git", "worktree", "add", "-q", "-B", branch, wt, "origin/main"],
+    # `-b`, not `-B`: the caller made the name unique, so an existing branch here is a true
+    # race — fail loudly rather than reset (and later delete) a branch this run does not own.
+    if _run(["git", "worktree", "add", "-q", "-b", branch, wt, "origin/main"],
             dry_run, cwd=root) != 0:
         sys.stderr.write("publish: could not create the publish worktree — nothing pushed\n")
         return 1
@@ -315,6 +332,11 @@ def publish(paths, message, dry_run=False, refresh=True, python=None, branch=Non
             return 1
 
     branch = branch or _branch_name()
+    root = _repo_root_for(staged, dry_run)
+    if root:
+        # second-resolution names collide on rapid retries / leftover branches; a collision
+        # would have the worktree machinery reset-and-delete a branch this run does not own
+        branch = _unique_branch(branch, root)
     rc = _open_pr(staged, branch, message, dry_run)
     if rc != 0:
         return rc

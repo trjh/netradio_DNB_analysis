@@ -14,6 +14,7 @@ The branch/PR machinery is exercised two ways with NO network and NO real push:
 
 import io
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -149,6 +150,53 @@ class BranchNameTests(unittest.TestCase):
         self.assertRegex(name, r"^labels/publish-\d{8}-\d{6}$")
 
 
+class UniqueBranchTests(unittest.TestCase):
+    """Second-resolution names collide on rapid retries / leftover branches; a collision would
+    have the worktree machinery reset-and-delete a branch the run does not own (local-review
+    2026-07-27 finding). `_unique_branch` suffixes past ANY existing local or remote ref."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.origin = os.path.join(self.tmp, "origin.git")
+        self.repo = os.path.join(self.tmp, "work")
+        subprocess.run(["git", "init", "--bare", "-b", "main", self.origin], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["git", "init", "-b", "main", self.repo], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for args in (("config", "user.email", "t@t"), ("config", "user.name", "t"),
+                     ("commit", "--allow-empty", "-m", "seed"),
+                     ("remote", "add", "origin", self.origin),
+                     ("push", "-q", "origin", "main")):
+            subprocess.run(["git", "-C", self.repo, *args], check=True, env=dict(
+                os.environ, GIT_MAIN_COMMIT_OK="True"),
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def test_fresh_name_passes_through(self):
+        self.assertEqual(publish._unique_branch("labels/publish-x", self.repo),
+                         "labels/publish-x")
+
+    def test_existing_local_branch_gets_a_suffix(self):
+        subprocess.run(["git", "-C", self.repo, "branch", "labels/publish-x"], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.assertEqual(publish._unique_branch("labels/publish-x", self.repo),
+                         "labels/publish-x-2")
+
+    def test_existing_remote_branch_gets_a_suffix(self):
+        subprocess.run(["git", "-C", self.repo, "push", "-q", "origin",
+                        "main:refs/heads/labels/publish-x"], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.assertEqual(publish._unique_branch("labels/publish-x", self.repo),
+                         "labels/publish-x-2")
+
+    def test_suffixes_walk_past_multiple_collisions(self):
+        for b in ("labels/publish-x", "labels/publish-x-2"):
+            subprocess.run(["git", "-C", self.repo, "branch", b], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.assertEqual(publish._unique_branch("labels/publish-x", self.repo),
+                         "labels/publish-x-3")
+
+
 # A `_run` seam that runs the LOCAL git ops for real (so refs actually move) but no-ops the
 # network + cleanup ops (so nothing leaves the machine and the branch/worktree survive for
 # assertions). Records every command it is handed.
@@ -179,7 +227,8 @@ class _SeamRun:
     def branch_arg(self):
         for cmd in self.calls:
             if cmd[:3] == ["git", "worktree", "add"]:
-                return cmd[cmd.index("-B") + 1]
+                flag = "-b" if "-b" in cmd else "-B"
+                return cmd[cmd.index(flag) + 1]
         return None
 
 
