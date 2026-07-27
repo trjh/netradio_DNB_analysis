@@ -101,3 +101,50 @@ labels were *original-track-vs-stream* comparisons, not stream-vs-stream); that
 assumption is to be **verified, not assumed**. See the player repo's `TASKLIST.md`
 ("Stream Alignment Engine") and `scripts/alignfinder.py` (the earlier interactive,
 pairwise prototype) for the working plan.
+
+## Three timelines (decided 2026-07-26)
+
+"Master time" hides three distinct clocks. Naming them resolved a real 3.754 s dispute:
+
+1. **The master broadcast timeline** — the real-time clock of the original 1998
+   broadcast. Unknowable in full; it is what everything below tries to track.
+2. **The recordings' timeline** — what the capture chain reconstructs. It has
+   *within-capture* skips (measurable wherever two captures overlap — in a solo
+   stretch only an original can expose them) and, in principle, **holes between
+   recordings**, which no amount of capture-vs-capture correlation can see: an
+   exactly-joined chain silently drops the missing time. (None measured yet — the
+   3.754 s case below turned out to be skips *within* a capture.)
+3. **The originals' timelines** — each record's own internal clock. Wherever a record
+   plays solo in the stream, its timeline is a fragment of **absolute clock**: aligning
+   the stream against the original (`track sync:`/`origNNN sync:` anchors) measures the
+   recordings' timeline against something hole-proof.
+
+**The measured case.** `d356-375`'s placement is original-anchored (`verified by 067
+Wave Forms`) — and holding that solo stretch of the chain against the originals'
+clocks exposed **3.135 s of missing time *inside* `d336-355`**: two labeled skips,
+`SKIP ahead 1.248s` (local ~393, confirmed against the d328-342 overlap) and
+`SKIP range - ahead 1.887s` (local ~751 — solo, so only the orig065/orig067 track
+syncs could see it). 1.248 + 1.887 = 3.135 exactly. The chain joins themselves are
+clean: `d336-355`'s end (master 21078.306) *is* `d356-375`'s start, and `d356-375`'s
+end (22278.306) *is* `d376-395`'s start — **no inter-recording hole**. The 1998/2017
+notes, though, chain the captures as "direct transition"s of their *physical*
+durations (1200.000 s of audio, where the labels span 1203.135 s of broadcast), so
+from `d356-375` on their master times run **3.754 s early** (the 3.135 s of skips
+plus ~0.6 s accumulated background):
+
+    d088-107 … d288-307   labels − notes = +0.87 … +0.96
+    d308-327, d328-342                     +1.87
+    d336-355                               +0.62
+    d356-375, d376-395                     +3.75   (+3.135: the two skips inside d336-355)
+
+**Consequences.**
+
+- The labels are authoritative over the notes wherever they disagree by an amount that
+  matches the labeled skip record — the notes chain physical durations, so they
+  *cannot* represent broadcast time the captures never recorded.
+- `streamalign hints` compares a new placement against the notes using the
+  **neighbours' drift as the baseline** (only a *new* step is questioned), so resolved
+  missing time is not re-litigated on every later file.
+- Original-anchoring is the only tool that measures timeline 2 against timeline 1's
+  fragments — which is why the tail (exactly-joined captures, no overlaps) is placed by
+  track anchors (PROCESS.md step 9) rather than by chaining alone.

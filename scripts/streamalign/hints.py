@@ -120,6 +120,38 @@ def overlapping_neighbours(stem, starts, audio_dir=None, min_overlap_s=MIN_OVERL
     return sorted(out, key=lambda t: -t[1])
 
 
+def _notes_drift_baseline(stem, labels_dir, master=None):
+    """The labels-minus-notes drift the 1998/2017 notes ALREADY carry at this point in the
+    chain: the delta of the nearest placed capture that starts before `stem`'s (else the
+    nearest after; else 0.0). The notes chain the recordings' physical durations as if
+    nothing is missing, so every stretch of missing time the labels discover shifts all
+    later deltas permanently -- a new file inheriting its neighbours' drift is
+    agreement, not disagreement."""
+    from . import tracklist2017 as _tl
+    starts = _gt.resolve_starts(labels_dir)
+    own = starts.get(stem)
+    if own is None:
+        own = master          # carried-anchor case: not yet in the resolved starts
+    try:
+        notes = _tl.parse()
+    except Exception:
+        return 0.0
+    deltas = []
+    for other, info in notes.items():
+        other = re.sub(r"^dnb(?=\d)", "d", other)   # the clean-tree parse variant (known
+        ms = (info or {}).get("master_start_s")      # non-hermeticity) must still match
+        if other == stem or ms is None or other not in starts:
+            continue
+        deltas.append((starts[other], starts[other] - ms))
+    if not deltas:
+        return 0.0
+    deltas.sort()
+    if own is None:
+        return deltas[-1][1]
+    before = [d for s, d in deltas if s <= own]
+    return before[-1] if before else deltas[0][1]
+
+
 def _carry_forward_anchor(stem, labels_dir):
     """(owner, link_local_t, owner_duration) for the hand `file_<stem>:` link that anchors
     `stem`, or None. This is how an exactly-joined capture gets its master start: a neighbour's
@@ -295,7 +327,7 @@ def build_hints(stem, labels_dir=None, audio_dir=None, decim=8):
                 % (owner, last_t)))
 
     # --- the 1998/2017 notes ------------------------------------------------------------
-    rows.extend(_tracklist_rows(stem, duration, master, diag, audio_dir))
+    rows.extend(_tracklist_rows(stem, duration, master, diag, audio_dir, labels_dir=labels_dir))
 
     # --- sync anchors: where a single original plays alone --------------------------------
     rows.extend(_anchor_rows(stem, duration, diag, audio_dir))
@@ -306,7 +338,7 @@ def build_hints(stem, labels_dir=None, audio_dir=None, decim=8):
     return rows, diag
 
 
-def _tracklist_rows(stem, duration, master, diag, audio_dir=None):
+def _tracklist_rows(stem, duration, master, diag, audio_dir=None, labels_dir=None):
     """Hints from `tracklist-2017.txt` -- the oldest evidence, and often the ONLY evidence.
 
     For a capture with no overlapping neighbour these notes are worth more than the whole
@@ -332,17 +364,28 @@ def _tracklist_rows(stem, duration, master, diag, audio_dir=None):
                           "the 1998/2017 notes say this file opens mid-track, continuing: %s"
                           % note["continuation"]))
 
-    # Cross-check the anchor against the notes -- a THIRD independent source.
+    # Cross-check the anchor against the notes -- a THIRD independent source. The notes
+    # timeline chains the recordings' physical durations as if nothing is missing, so it
+    # CANNOT see broadcast time the captures never recorded; every such stretch the
+    # labels discover (e.g. the two skips inside d336-355, exposed by an original-anchored
+    # placement -- see STREAM_PROVENANCE.md, "Three timelines") shifts all later files'
+    # deltas by that much, permanently. So the baseline is the NEIGHBOURS' delta, not
+    # zero: question only a NEW step, never the inherited, already-resolved drift
+    # (the +3.754s at d356-375/d376-395 would otherwise re-fire on every tail file).
     ms = note.get("master_start_s")
     if ms is not None and master is not None:
         delta = master - ms
-        if abs(delta) > 2.5:
+        baseline = _notes_drift_baseline(stem, labels_dir, master=master)
+        step = delta - baseline
+        if abs(step) > 2.5:
             rows.append(_question(
                 0.0, 0.0,
                 "the 1998/2017 notes put this file's start at master %.3f, but the hand labels "
-                "place it at %.3f -- a %+.3fs disagreement. Across every other placed capture "
-                "those notes agree with the labels to within ~1-2s, so a gap this size is an "
-                "outlier and worth resolving. Which is right?" % (ms, master, delta)))
+                "place it at %.3f -- a %+.3fs disagreement, of which %+.3fs is the drift the "
+                "notes already carry from earlier discovered missing time (see STREAM_PROVENANCE.md). "
+                "The NEW step of %+.3fs is the outlier worth resolving: either this placement "
+                "is wrong, or the recordings are missing ~that much audio near this file's "
+                "start. Which is it?" % (ms, master, delta, baseline, step)))
             diag["questions"] += 1
 
     for track in note.get("tracks", []):
