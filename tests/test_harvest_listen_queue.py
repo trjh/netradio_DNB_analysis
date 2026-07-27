@@ -236,7 +236,7 @@ class RetryAfterCooling(unittest.TestCase):
         # "tomorrow"/"9999" would compare lexically greater than any ISO date FOREVER — only a
         # parseable YYYY-MM-DD may cool, everything else is not-cooling (local-review finding)
         for ra in ("2000-01-01", self._today(), None, 12345, {"nope": 1},
-                   "tomorrow", "9999", "2026-13-45", "", "2020-7-2"):
+                   "tomorrow", "9999", "2026-13-45", "", "2020-7-2", "2999-1-1"):
             with self.subTest(retry_after=ra):
                 item = {"url": "https://y/c"}
                 if ra is not None:

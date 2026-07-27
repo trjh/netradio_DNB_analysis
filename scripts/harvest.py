@@ -703,17 +703,18 @@ def _is_cooling(item):
     """True while the item's `retry_after` (ISO `YYYY-MM-DD`) is still in the FUTURE.
 
     Mirrors the player's rule: a URL a recent fetch failed on is held back from the network until
-    its date passes, and NOTHING else changes. The compare is on the PARSED date, not the string:
-    a lexical compare would let junk cool forever ("tomorrow" > "2026-...") and strptime alone
-    would let non-canonical forms lie ("2026-7-2" parses to July 2nd but sorts as future). Any
-    unparseable value is not-cooling -- corrupt data must never suppress a URL until hand-repair.
+    its date passes, and NOTHING else changes. Only the CANONICAL form the player writes
+    (zero-padded `YYYY-MM-DD`, then a real calendar date) may cool: the player stamps dates with
+    isoformat(), so anything else is corruption, and the safe failure mode for corruption is
+    not-cooling -- one wasted probe beats "2999-1-1" suppressing a URL until 2999. The compare is
+    on parsed dates, never lexical ("tomorrow" > "2026-..." forever).
     """
     ra = item.get("retry_after")
-    if not isinstance(ra, str):
+    if not isinstance(ra, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", ra):
         return False
     try:
         ra_date = datetime.strptime(ra, "%Y-%m-%d").date()
-    except ValueError:
+    except ValueError:                   # right shape, impossible date ("2026-13-45")
         return False
     return ra_date > datetime.now(timezone.utc).date()
 
