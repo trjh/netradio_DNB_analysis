@@ -686,7 +686,12 @@ def _load_queue_items():
             # as the queue. Anything else = corrupt manifest = retry next pass.
             if not isinstance(name, str) or not re.fullmatch(r"shard-\d+\.json", name):
                 raise ValueError("manifest shard name is not shard-NNNN.json")
-            with open(os.path.join(shard_dir, name), "r", encoding="utf-8") as fh:
+            path = os.path.join(shard_dir, name)
+            # ...and the file itself must LIVE in the queue dir: a canonically-named symlink
+            # pointing elsewhere would defeat the containment the name check promises.
+            if os.path.realpath(path) != os.path.join(os.path.realpath(shard_dir), name):
+                raise ValueError("shard %s resolves outside the queue directory" % name)
+            with open(path, "r", encoding="utf-8") as fh:
                 chunk = json.load(fh)
             if not isinstance(chunk, list):
                 raise ValueError("shard %s is not a list" % name)

@@ -185,6 +185,18 @@ class ShardedListenQueue(unittest.TestCase):
             json.dump({"shards": [{"name": 1}]}, fh)
         self.assertEqual(harvest.listen_queue_split(), ([], set()))
 
+    def test_a_symlinked_shard_never_escapes_the_dir(self):
+        # a canonically NAMED shard that is a symlink elsewhere defeats the name check —
+        # the resolved file must live in the queue dir (local-review finding)
+        d = self._shards([("shard-0000.json", [{"url": "https://y/a"}])])
+        outside = os.path.join(os.path.dirname(d), "symlink-target-%s.json" % os.path.basename(d))
+        with open(outside, "w", encoding="utf-8") as fh:
+            json.dump([{"url": "https://evil/x"}], fh)
+        self.addCleanup(os.unlink, outside)
+        os.unlink(os.path.join(d, "shard-0000.json"))
+        os.symlink(outside, os.path.join(d, "shard-0000.json"))
+        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+
     def test_a_traversal_or_absolute_shard_name_never_escapes_the_dir(self):
         # containment: a tampered manifest must not make the harvester read an UNRELATED
         # file as the queue (local-review finding)
