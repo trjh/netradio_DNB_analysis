@@ -636,10 +636,12 @@ def _is_own_clip(item):
     So check WHO uploaded it first, and keep the title check only as a second net -- narrowly,
     because real records are called things like "No Mystery" and "Mystery Blend".
     """
-    origin = (item.get("origin") or "").strip().lower()
+    origin = item.get("origin")
+    origin = origin.strip().lower() if isinstance(origin, str) else ""
     if any(o.lower() in origin for o in OWN_ORIGINS):
         return True
-    title = (item.get("title") or "").strip().lower()
+    title = item.get("title")
+    title = title.strip().lower() if isinstance(title, str) else ""
     return title.startswith("mystery track") or title.startswith("netradio mystery")
 
 
@@ -648,8 +650,8 @@ def _load_queue_items():
 
     Single file -> read its `items`. Sharded (a directory, or an `index.json` manifest named
     directly) -> read the manifest and concatenate the items of each `shard-NNNN.json` it names,
-    in manifest order. A shard is a bare JSON array (the object form is tolerated in case the
-    layout ever wraps them). Raises OSError/ValueError on a missing/torn/mid-write file -- the
+    in manifest order (each shard is a bare JSON array of items -- the player's committed
+    layout). Raises OSError/ValueError on a missing/torn/mid-write/wrong-shaped file -- the
     caller turns that into "empty, try again next pass".
     """
     if os.path.isdir(LISTEN_QUEUE):
@@ -666,19 +668,21 @@ def _load_queue_items():
         shard_dir = os.path.dirname(manifest_path)
         with open(manifest_path, "r", encoding="utf-8") as fh:
             manifest = json.load(fh) or {}
+        # Shape errors are ValueError on purpose: syntactically-valid-but-wrong JSON must
+        # land in the caller's "try again next pass" net, not crash the harvester.
+        if not isinstance(manifest, dict):
+            raise ValueError("manifest is not an object")
         items = []
         for entry in manifest.get("shards") or []:
-            # Shape errors are ValueError on purpose: syntactically-valid-but-wrong JSON must
-            # land in the caller's "try again next pass" net, not crash the harvester.
             if not isinstance(entry, dict):
                 raise ValueError("manifest shard entry is not an object")
             name = entry.get("name")
-            if not name:
+            if name is None:
                 continue
+            if not isinstance(name, str):
+                raise ValueError("manifest shard name is not a string")
             with open(os.path.join(shard_dir, name), "r", encoding="utf-8") as fh:
                 chunk = json.load(fh)
-            if isinstance(chunk, dict):      # tolerate a {"items": [...]} shard wrapper
-                chunk = chunk.get("items") or []
             if not isinstance(chunk, list):
                 raise ValueError("shard %s is not a list" % name)
             items.extend(chunk)
@@ -695,10 +699,16 @@ def _is_cooling(item):
 
     Mirrors the player's rule: a URL a recent fetch failed on is held back from the network until
     its date passes, and NOTHING else changes. Lexical compare works because ISO dates sort as
-    text; a non-string/absent value is not cooling.
+    text -- but ONLY a parseable ISO date counts: any other string (corrupt, wrong format) is
+    treated as not-cooling, because e.g. "tomorrow" > "2026-..." lexically FOREVER and would
+    suppress the URL until someone hand-repaired the queue.
     """
     ra = item.get("retry_after")
     if not isinstance(ra, str):
+        return False
+    try:
+        datetime.strptime(ra, "%Y-%m-%d")
+    except ValueError:
         return False
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return ra > today
@@ -714,12 +724,19 @@ def listen_queue_split():
         return [], set()
     try:
         items = _load_queue_items()
-    except (OSError, ValueError):
-        return [], set()                 # the player may be mid-write; try again next pass
+    except (OSError, ValueError, TypeError, AttributeError):
+        # OSError/ValueError = missing/torn/mid-write/wrong-shaped (the explicit checks in
+        # _load_queue_items raise ValueError). TypeError/AttributeError = the final net for any
+        # shape this code did not think of -- the docstring says NEVER raises, so make it true;
+        # a weird queue is "empty, try again next pass", not a dead harvester.
+        return [], set()
 
     candidates, retired = [], set()
     for it in items:
-        url = (it.get("url") or "").strip()
+        url = it.get("url")
+        if not isinstance(url, str):     # a non-string url is a corrupt item, not a crash
+            continue
+        url = url.strip()
         if not url.startswith("http"):
             continue
         if any(it.get(f) for f in RULED_ON) or _is_own_clip(it):

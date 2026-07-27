@@ -173,6 +173,28 @@ class ShardedListenQueue(unittest.TestCase):
         cand, _ = harvest.listen_queue_split()
         self.assertEqual(cand, ["https://y/a", "https://y/b"])
 
+    def test_a_non_object_manifest_is_survived(self):
+        d = self._shards([("shard-0000.json", [{"url": "https://y/a"}])])
+        with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as fh:
+            json.dump([1], fh)
+        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+
+    def test_a_non_string_shard_name_is_survived(self):
+        d = self._shards([("shard-0000.json", [{"url": "https://y/a"}])])
+        with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as fh:
+            json.dump({"shards": [{"name": 1}]}, fh)
+        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+
+    def test_corrupt_item_fields_are_tolerated_per_item(self):
+        # a mapping url, an int origin, an int title: each item is skipped or handled,
+        # never a crash, and the healthy neighbours survive
+        self._shards([("shard-0000.json", [{"url": {"nested": True}},
+                                           {"url": "https://y/a", "origin": 5, "title": 7},
+                                           {"url": "https://y/b"}])])
+        cand, retired = harvest.listen_queue_split()
+        self.assertEqual(cand, ["https://y/a", "https://y/b"])
+        self.assertEqual(retired, set())
+
 
 @unittest.skipIf(harvest is None, "harvest.py needs the librosa venv (.venv) — skipping")
 class RetryAfterCooling(unittest.TestCase):
@@ -197,7 +219,10 @@ class RetryAfterCooling(unittest.TestCase):
         self.assertEqual(retired, set())               # cooling never retires
 
     def test_past_today_absent_or_nonstring_retry_after_is_a_candidate(self):
-        for ra in ("2000-01-01", self._today(), None, 12345, {"nope": 1}):
+        # "tomorrow"/"9999" would compare lexically greater than any ISO date FOREVER — only a
+        # parseable YYYY-MM-DD may cool, everything else is not-cooling (local-review finding)
+        for ra in ("2000-01-01", self._today(), None, 12345, {"nope": 1},
+                   "tomorrow", "9999", "2026-13-45", ""):
             with self.subTest(retry_after=ra):
                 item = {"url": "https://y/c"}
                 if ra is not None:
