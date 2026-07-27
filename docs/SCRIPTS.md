@@ -128,10 +128,11 @@ you. (It does **not** mean "heard" — you can rule a record out as a match and 
 to it. The player keeps those two verdicts apart.)
 
 **What it does.** Takes its candidates from the player's **listen queue** (skipping anything
-already heard, discarded, ignored or duplicate) and keeps its own working queue in `.harvest/`.
-It reads the queue in whatever layout the player keeps it — the single `listen_queue.json`, or the
-sharded `listen_queue/` directory (its `index.json` manifest + `shard-NNNN.json` files) —
-read-only, never writing.
+already heard, discarded, ignored or duplicate — and holding back, temporarily, anything a recent
+fetch failed on: a `retry_after` date in the future keeps the URL off the network until it passes)
+and keeps its own working queue in `.harvest/`. It reads the queue in whatever layout the player
+keeps it — the single `listen_queue.json`, or the sharded `listen_queue/` directory (its
+`index.json` manifest + `shard-NNNN.json` files) — read-only, never writing.
 For each candidate: streams the audio (never to disk), reduces it to a **chroma signature** (12×N
 float16, ~55 KB against ~8 MB), throws the audio away, and scores the signature against every
 unsolved Mystery Track — **but only the mysteries it holds a clip of** (see

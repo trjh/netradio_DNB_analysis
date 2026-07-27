@@ -15,6 +15,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "scripts"))
@@ -144,6 +145,48 @@ class ShardedListenQueue(unittest.TestCase):
         self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         harvest.LISTEN_QUEUE = d                       # a dir with no index.json yet
         self.assertEqual(harvest.listen_queue_split(), ([], set()))
+
+
+@unittest.skipIf(harvest is None, "harvest.py needs the librosa venv (.venv) — skipping")
+class RetryAfterCooling(unittest.TestCase):
+    """`retry_after` (ISO YYYY-MM-DD) holds a URL back from the network while its date is in the
+    future -- exactly the player's rule. Cooling gates fetching and NOTHING else: the URL is not a
+    candidate, but it is NOT retired either, so it rejoins on its own once the date passes."""
+
+    def _queue(self, items):
+        fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        json.dump({"items": items}, fh)
+        fh.close()
+        harvest.LISTEN_QUEUE = fh.name
+        self.addCleanup(os.unlink, fh.name)
+
+    def _today(self):
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    def test_a_future_retry_after_is_neither_candidate_nor_retired(self):
+        self._queue([{"url": "https://y/cool", "retry_after": "2999-01-01"}])
+        cand, retired = harvest.listen_queue_split()
+        self.assertEqual(cand, [])
+        self.assertEqual(retired, set())               # cooling never retires
+
+    def test_past_today_absent_or_nonstring_retry_after_is_a_candidate(self):
+        for ra in ("2000-01-01", self._today(), None, 12345, {"nope": 1}):
+            with self.subTest(retry_after=ra):
+                item = {"url": "https://y/c"}
+                if ra is not None:
+                    item["retry_after"] = ra
+                self._queue([item])
+                cand, retired = harvest.listen_queue_split()
+                self.assertEqual(cand, ["https://y/c"])
+                self.assertEqual(retired, set())
+
+    def test_a_ruling_wins_over_cooling(self):
+        """A cooling item that has ALSO been ruled on stays retired -- retirement is permanent-ish
+        and outranks a temporary network cooldown."""
+        self._queue([{"url": "https://y/x", "retry_after": "2999-01-01", "not_a_match": True}])
+        cand, retired = harvest.listen_queue_split()
+        self.assertEqual(cand, [])
+        self.assertEqual(retired, {"https://y/x"})
 
 
 @unittest.skipIf(harvest is None, "harvest.py needs the librosa venv (.venv) — skipping")

@@ -679,6 +679,20 @@ def _load_queue_items():
     return items
 
 
+def _is_cooling(item):
+    """True while the item's `retry_after` (ISO `YYYY-MM-DD`) is still in the FUTURE.
+
+    Mirrors the player's rule: a URL a recent fetch failed on is held back from the network until
+    its date passes, and NOTHING else changes. Lexical compare works because ISO dates sort as
+    text; a non-string/absent value is not cooling.
+    """
+    ra = item.get("retry_after")
+    if not isinstance(ra, str):
+        return False
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return ra > today
+
+
 def listen_queue_split():
     """(candidates, retired) from the player's listen queue. Read-only; never raises.
 
@@ -698,7 +712,11 @@ def listen_queue_split():
         if not url.startswith("http"):
             continue
         if any(it.get(f) for f in RULED_ON) or _is_own_clip(it):
-            retired.add(url)
+            retired.add(url)             # a ruling wins over cooling: retirement is permanent-ish
+        elif _is_cooling(it):
+            continue                     # cooling gates the network only -- hold the URL back, but
+                                         # do NOT retire it: it rejoins on its own once the date
+                                         # passes, so nothing here drops it from pending.
         else:
             candidates.append(url)
     return candidates, retired
