@@ -698,20 +698,19 @@ def _is_cooling(item):
     """True while the item's `retry_after` (ISO `YYYY-MM-DD`) is still in the FUTURE.
 
     Mirrors the player's rule: a URL a recent fetch failed on is held back from the network until
-    its date passes, and NOTHING else changes. Lexical compare works because ISO dates sort as
-    text -- but ONLY a parseable ISO date counts: any other string (corrupt, wrong format) is
-    treated as not-cooling, because e.g. "tomorrow" > "2026-..." lexically FOREVER and would
-    suppress the URL until someone hand-repaired the queue.
+    its date passes, and NOTHING else changes. The compare is on the PARSED date, not the string:
+    a lexical compare would let junk cool forever ("tomorrow" > "2026-...") and strptime alone
+    would let non-canonical forms lie ("2026-7-2" parses to July 2nd but sorts as future). Any
+    unparseable value is not-cooling -- corrupt data must never suppress a URL until hand-repair.
     """
     ra = item.get("retry_after")
     if not isinstance(ra, str):
         return False
     try:
-        datetime.strptime(ra, "%Y-%m-%d")
+        ra_date = datetime.strptime(ra, "%Y-%m-%d").date()
     except ValueError:
         return False
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    return ra > today
+    return ra_date > datetime.now(timezone.utc).date()
 
 
 def listen_queue_split():
