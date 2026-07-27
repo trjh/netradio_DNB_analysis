@@ -270,30 +270,44 @@ make sync            # 3-way, PR-based; reads NETRADIO_PLAYER_REPO from .env_var
 make tracklist-check # do the two copies agree?
 ```
 
-### 11. Publish — push your labels to the sheet
+### 11. Publish — open a PR with your labels, merge it, refresh the sheet
 
 ```bash
-python3 labels/publish.py <stem>           # update the Google Sheet from your labels
-python3 labels/publish.py <stem> --check   # check only, push nothing
+python3 labels/publish.py <stem>           # validate → sort → branch → commit → push → open PR
+python3 labels/publish.py <stem> --check   # gate only, no branch/commit/push/PR
+python3 labels/publish.py <stem> --dry-run # show the whole plan, touch nothing
 ```
 
-Warnings:
-- **BROKEN as of 2026-07-25: the final push fails on branch protection** (GH013: main
-  accepts PRs only — hit live; `GIT_MAIN_COMMIT_OK` only bypasses the *local* guard, the
-  remote still rejects, and the failed commit strands your local `main` ahead of origin).
-  **Interim flow:** commit the sorted `labels/<stem>.labels.tsv` on a branch → PR → merge →
-  click **Reload Data** on the sheet. A publish.py rework (branch+PR, like the sync's
-  `ensure_on_main`) is queued.
-- When publish works again: **do not `git push` by hand first — publish does it.** Chain:
-  hard-gate (`sort_tsv.py --test`: unverified sync / missing `COMPLETE` / bad grammar →
-  refuse) → sort → commit → push → POST the sheet webhook. All-or-nothing across the files
-  you give it. It acts on **the repo it lives in, on your current branch** — run from your
-  labelling checkout.
+`main` is PR-only (branch protection: a direct push is rejected with GH013), so publish no
+longer pushes `main`. It hard-gates and sorts, then proposes the sorted labels on a fresh
+branch and opens a PR for a human to merge:
+
+1. **Hard gate** (`sort_tsv.py --test`: unverified sync / missing `COMPLETE` / bad grammar →
+   refuse). All-or-nothing across the files you give it — one failure and **nothing** is
+   committed or pushed.
+2. **Sort** each file **in place** in your checkout (so your local copy matches what the PR
+   proposes, exactly as before).
+3. **Branch → commit → push → PR:** the commit/push/PR happen in a **throwaway `git worktree`
+   under `.worktree/`** cut from `origin/main` (the same pattern `make sync` uses). Your
+   invoking checkout — its branch, index, HEAD — is left **untouched**, so publish is safe to
+   run even from the live `main` checkout the harvester runs out of. The branch is
+   `labels/publish-YYYYMMDD-HHMMSS` (UTC); the PR is opened with `gh pr create`.
+4. **Merge** the PR yourself. Publish **never pushes to main and never merges.** If `gh` is
+   missing or the PR can't be opened, the branch is still pushed and publish prints the exact
+   `compare/main...<branch>` URL to open the PR by hand.
+5. **Refresh the sheet — only after the merge.** The sheet imports from `origin/main`, so the
+   labels aren't there until the PR is merged; publish therefore **defers** the refresh and
+   prints a reminder. Once merged:
+
+   ```bash
+   python3 labels/publish.py --refresh-only   # POSTs NETRADIO_SHEET_WEBHOOK (GithubImport)
+   ```
 
 Need-to-know:
-- The sheet imports from **origin `main`** — labels reach it only once merged there.
-- `NETRADIO_SHEET_WEBHOOK` unset → click **Reload Data** yourself (publish prints the
-  reminder).
+- **Do not `git push` by hand first — publish does it** (onto its own branch, not main).
+- The sheet imports from **origin `main`** — labels reach it only once the PR is merged.
+- `NETRADIO_SHEET_WEBHOOK` unset → `--refresh-only` prints the **Reload Data** reminder and
+  you click it yourself.
 - Then **loop to step 0.**
 
 ---

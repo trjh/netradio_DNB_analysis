@@ -68,13 +68,14 @@ publish/import setup that follows.
 
 ### One-command publish (`labels/publish.py`)
 
-The last steps of the loop (sort → push → refresh; see [PROCESS.md](./PROCESS.md#11-publish))
-collapse into one **hard-gated** command:
+The last steps of the loop (sort → branch → PR → refresh; see
+[PROCESS.md](./PROCESS.md#11-publish)) collapse into one **hard-gated** command:
 
 ```bash
-python3 labels/publish.py d019-040          # validate → sort → commit → push → refresh
-python3 labels/publish.py d019-040 --check  # validate only (gate), no push
+python3 labels/publish.py d019-040          # validate → sort → branch → commit → push → open PR
+python3 labels/publish.py d019-040 --check  # validate only (gate), no branch/commit/push/PR
 python3 labels/publish.py d019-040 --dry-run
+python3 labels/publish.py --refresh-only    # AFTER the PR is merged: refresh the sheet
 ```
 
 It is **all-or-nothing**: it validates every target first and pushes **nothing** if any
@@ -82,9 +83,15 @@ fails. The gate (reusing `sort_tsv.py`'s checks) refuses **bad-syntax / unrecogn
 rows, **unverified** syncs, `file end` missing **COMPLETE**, missing `LABELTRACK` markers, and
 files with no start-sync / `file end … COMPLETE` anchor (a half-labelled tail capture can never
 reach the sheet). `*.starter.labels.tsv` (seed) and `*.auto.labels.tsv` (engine) are refused.
-On success it triggers the sheet refresh by POSTing to the Apps Script Web App at
-`NETRADIO_SHEET_WEBHOOK` (its `doPost` runs `GithubImport()`); if that's unset it prints the
-manual **Reload Data** reminder.
+
+`main` is PR-only (branch protection), so publish proposes the sorted labels on a fresh
+`labels/publish-YYYYMMDD-HHMMSS` branch and opens a PR with `gh pr create` (**never** pushing
+to main, **never** merging — a human merges). The commit/push/PR run in a throwaway `git
+worktree` under `.worktree/`, so the invoking checkout is left untouched and publish is safe to
+run from the live `main` checkout. The sheet imports from `origin/main`, so the refresh is
+**deferred** until the PR merges: after merging, run `--refresh-only` to POST the Apps Script
+Web App at `NETRADIO_SHEET_WEBHOOK` (its `doPost` runs `GithubImport()`); if that's unset it
+prints the manual **Reload Data** reminder.
 
 ### Spreadsheet import setup (GitHub token)
 
