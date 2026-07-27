@@ -2,12 +2,13 @@
 # Cross-repo DATA sync. The files this touches are the shared data files plus the derived views
 # (TRACKLIST.md / SOURCES.md), each a pure render of the data:
 #   * track-metadata.json   (analysis = canonical, player = mirror)  — 3-way synced
-#   * listen_queue          (player only)                            — mirrored when it changes;
-#                            pre-P2 the single listen_queue.json, post-P2 the shard DIR + manifest
-#                            (metadata/listen_queue/shard-*.json + index.json) — see PLAN_queue_scale
 #   * subscriptions.json    (player only)                            — mirrored when it changes
-#   * harvest-queue.json    (player data/, snapshot of analysis .harvest/queue.json)
-#                            — committed for progress history + disaster recovery, when it changes
+#   * listen_queue          (player only)   — RETIRED here (queue-scale P3, 2026-07-27): now rides the
+#                            standing `queue-data` branch via queue_sync.py / `make queue-sync`. The
+#                            per-change PR below only runs as a FALLBACK when NETRADIO_QUEUE_SYNC=0.
+#   * harvest-queue.json    (player data/, snapshot of analysis .harvest/queue.json)   — RETIRED here
+#                            for the same reason: it rides the SAME `queue-data` branch (Tim's decision
+#                            2). We still refresh the live mirror; the PR only runs when NETRADIO_QUEUE_SYNC=0.
 #   * TRACKLIST.md          (analysis only)                          — regenerated from the synced
 #                            track-metadata.json and included in the analysis PR (render only)
 #   * SOURCES.md            (player only)                            — regenerated from the synced
@@ -300,17 +301,24 @@ else
 fi
 
 # --- listen_queue (player-only): land it on the player main when it differs ---
-# (QUEUE_VIEW.md used to ride along here as a derived extra; retired 2026-07-24.)
-# P2: post-migration the canon is the shard dir + manifest ($PQD/index.json is the migration marker);
-# pre-migration it is the single $PQ. Mirror whichever is the live canon.
-if [ -f "$PQD/index.json" ]; then
-  ensure_tree_on_main "$PLAYER" "metadata/listen_queue" "$PQD" "sync/listen-queue" \
-    "data: sync listen_queue shards"
-  say "listen_queue shards: $OUTCOME"
-elif [ -f "$PQ" ]; then
-  ensure_on_main "$PLAYER" "metadata/listen_queue.json" "$PQ" "sync/listen-queue" \
-    "data: sync listen_queue.json"
-  say "listen_queue.json: $OUTCOME"
+# RETIRED (queue-scale P3, 2026-07-27): the listen queue now rides the standing `queue-data` branch,
+# committed every ~15 min + pushed hourly by the running player (queue_sync.py) and squash-merged by
+# Tim via `make queue-sync`. This per-change PR section only runs as a FALLBACK when the queue-data
+# automation is disabled (NETRADIO_QUEUE_SYNC=0). (QUEUE_VIEW.md — the old derived extra — retired
+# 2026-07-24.) P2: post-migration the canon is the shard dir + manifest ($PQD/index.json is the
+# migration marker); pre-migration it is the single $PQ. Mirror whichever is the live canon.
+if [ "${NETRADIO_QUEUE_SYNC:-1}" = "0" ]; then
+  if [ -f "$PQD/index.json" ]; then
+    ensure_tree_on_main "$PLAYER" "metadata/listen_queue" "$PQD" "sync/listen-queue" \
+      "data: sync listen_queue shards"
+    say "listen_queue shards: $OUTCOME"
+  elif [ -f "$PQ" ]; then
+    ensure_on_main "$PLAYER" "metadata/listen_queue.json" "$PQ" "sync/listen-queue" \
+      "data: sync listen_queue.json"
+    say "listen_queue.json: $OUTCOME"
+  fi
+else
+  say "listen_queue: handled by the queue-data branch (make queue-sync) — old PR flow skipped"
 fi
 
 # --- subscriptions.json (player-only): land it on the player main when it differs -----------
@@ -330,11 +338,20 @@ fi
 # one .harvest file not rebuildable from the pool, so we snapshot it into the player's committed
 # data/ for progress history + disaster recovery. The live harvester stays the source of truth;
 # this is a one-way mirror (analysis -> player), landed only when it differs from the player main.
+# RETIRED (queue-scale P3, 2026-07-27): data/harvest-queue.json now rides the SAME `queue-data` branch
+# as the listen-queue shards (Tim's decision 2) — committed + pushed by queue_sync.py, squash-merged
+# via `make queue-sync`. We still refresh the player's live mirror ($PHQ) from the harvester here so
+# the running player has current data on disk for queue_sync to commit; the per-change PR only runs as
+# a FALLBACK when the queue-data automation is disabled (NETRADIO_QUEUE_SYNC=0).
 if [ -f "$HQ" ]; then
-  ensure_on_main "$PLAYER" "data/harvest-queue.json" "$HQ" "sync/harvest-queue" \
-    "data: sync harvest-queue.json"
-  say "harvest-queue.json: $OUTCOME"
-  $DRY || { mkdir -p "$(dirname "$PHQ")"; cp "$HQ" "$PHQ"; }   # keep the live mirror in step
+  $DRY || { mkdir -p "$(dirname "$PHQ")"; cp "$HQ" "$PHQ"; }   # keep the live mirror in step (always)
+  if [ "${NETRADIO_QUEUE_SYNC:-1}" = "0" ]; then
+    ensure_on_main "$PLAYER" "data/harvest-queue.json" "$HQ" "sync/harvest-queue" \
+      "data: sync harvest-queue.json"
+    say "harvest-queue.json: $OUTCOME"
+  else
+    say "harvest-queue.json: refreshed live mirror; commit handled by the queue-data branch (make queue-sync)"
+  fi
 fi
 
 # --- reconcile the LIVE checkouts: fast-forward main to origin/main -------------------------
