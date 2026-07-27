@@ -594,6 +594,15 @@ def add_to_queue(urls, source):
 #
 # Nothing here writes to the player's file. If the env var is unset (a harvester run by hand,
 # without the player) this whole path is simply inert.
+#
+# NETRADIO_LISTEN_QUEUE may name any of three layouts -- we read all of them, still read-only:
+#   * the legacy single `listen_queue.json` (a {"items": [...]} object), or a rendered merged
+#     single-file view of the same shape;
+#   * the player's sharded DIRECTORY (the queue the player migrated to), or that directory's
+#     `index.json` manifest named directly -- a manifest listing `shard-NNNN.json` files, each a
+#     bare JSON array of items, which we read in manifest order and concatenate.
+# We tell them apart by inspecting the path (a dir, or a basename of `index.json`), not a new env
+# var -- the player owns the layout, and the harvester should follow it wherever it goes.
 
 LISTEN_QUEUE = os.environ.get("NETRADIO_LISTEN_QUEUE", "")
 
@@ -634,13 +643,52 @@ def _is_own_clip(item):
     return title.startswith("mystery track") or title.startswith("netradio mystery")
 
 
+def _load_queue_items():
+    """The listen queue's flat items list, whatever layout NETRADIO_LISTEN_QUEUE points at.
+
+    Single file -> read its `items`. Sharded (a directory, or an `index.json` manifest named
+    directly) -> read the manifest and concatenate the items of each `shard-NNNN.json` it names,
+    in manifest order. A shard is a bare JSON array (the object form is tolerated in case the
+    layout ever wraps them). Raises OSError/ValueError on a missing/torn/mid-write file -- the
+    caller turns that into "empty, try again next pass".
+    """
+    if os.path.isdir(LISTEN_QUEUE):
+        manifest_path = os.path.join(LISTEN_QUEUE, "index.json")
+    elif os.path.basename(LISTEN_QUEUE) == "index.json":
+        manifest_path = LISTEN_QUEUE
+    else:
+        manifest_path = None             # a plain file -> the legacy single-file layout
+
+    if manifest_path is None:
+        with open(LISTEN_QUEUE, "r", encoding="utf-8") as fh:
+            return (json.load(fh) or {}).get("items") or []
+
+    shard_dir = os.path.dirname(manifest_path)
+    with open(manifest_path, "r", encoding="utf-8") as fh:
+        manifest = json.load(fh) or {}
+    items = []
+    for entry in manifest.get("shards") or []:
+        name = (entry or {}).get("name")
+        if not name:
+            continue
+        with open(os.path.join(shard_dir, name), "r", encoding="utf-8") as fh:
+            chunk = json.load(fh)
+        if isinstance(chunk, dict):      # tolerate a {"items": [...]} shard wrapper
+            chunk = chunk.get("items") or []
+        items.extend(chunk or [])
+    return items
+
+
 def listen_queue_split():
-    """(candidates, retired) from the player's listen queue. Read-only; never raises."""
+    """(candidates, retired) from the player's listen queue. Read-only; never raises.
+
+    Reads whichever layout NETRADIO_LISTEN_QUEUE names (single file, merged view, or sharded
+    dir/manifest -- see _load_queue_items).
+    """
     if not LISTEN_QUEUE or not os.path.exists(LISTEN_QUEUE):
         return [], set()
     try:
-        with open(LISTEN_QUEUE, "r", encoding="utf-8") as fh:
-            items = (json.load(fh) or {}).get("items") or []
+        items = _load_queue_items()
     except (OSError, ValueError):
         return [], set()                 # the player may be mid-write; try again next pass
 

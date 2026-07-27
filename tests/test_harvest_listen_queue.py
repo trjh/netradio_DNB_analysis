@@ -11,6 +11,7 @@ exercised through a stub-free import guard (skipped if the analysis venv is abse
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -79,6 +80,69 @@ class ListenQueueSplit(unittest.TestCase):
 
     def test_inert_when_the_player_is_not_there(self):
         harvest.LISTEN_QUEUE = ""
+        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+
+
+@unittest.skipIf(harvest is None, "harvest.py needs the librosa venv (.venv) — skipping")
+class ShardedListenQueue(unittest.TestCase):
+    """The player migrated the single listen_queue.json to a sharded directory: an `index.json`
+    manifest naming `shard-NNNN.json` files, each a bare JSON array of items. The harvester must
+    read that layout too (still read-only, still crash-tolerant), pointed at either the directory
+    or the manifest itself."""
+
+    def _shards(self, shards, point_at="dir"):
+        """Build a shard dir from {name: [items]} and aim LISTEN_QUEUE at the dir or the manifest.
+        Returns the dir so a test can corrupt it further."""
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        manifest = {"schema": "netradio.listen-queue.v2", "shards": []}
+        for name, items in shards:
+            with open(os.path.join(d, name), "w", encoding="utf-8") as fh:
+                json.dump(items, fh)
+            manifest["shards"].append({"name": name, "count": len(items)})
+        with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as fh:
+            json.dump(manifest, fh)
+        harvest.LISTEN_QUEUE = d if point_at == "dir" else os.path.join(d, "index.json")
+        return d
+
+    def test_items_concatenate_across_shards_in_manifest_order(self):
+        self._shards([("shard-0000.json", [{"url": "https://y/a", "title": "A"}]),
+                      ("shard-0001.json", [{"url": "https://y/b", "title": "B"},
+                                           {"url": "https://y/c", "title": "C"}])])
+        cand, retired = harvest.listen_queue_split()
+        self.assertEqual(cand, ["https://y/a", "https://y/b", "https://y/c"])
+        self.assertEqual(retired, set())
+
+    def test_manifest_named_directly_also_works(self):
+        self._shards([("shard-0000.json", [{"url": "https://y/a"}]),
+                      ("shard-0001.json", [{"url": "https://y/b"}])], point_at="manifest")
+        cand, _ = harvest.listen_queue_split()
+        self.assertEqual(cand, ["https://y/a", "https://y/b"])
+
+    def test_rulings_and_own_clips_still_apply_across_shards(self):
+        self._shards([("shard-0000.json", [{"url": "https://y/a"},
+                                           {"url": "https://y/heard", "listened": True}]),
+                      ("shard-0001.json", [{"url": "https://y/own", "title": "Mystery Track 3"}])])
+        cand, retired = harvest.listen_queue_split()
+        self.assertEqual(cand, ["https://y/a"])
+        self.assertEqual(retired, {"https://y/heard", "https://y/own"})
+
+    def test_a_shard_named_by_the_manifest_but_missing_is_survived(self):
+        d = self._shards([("shard-0000.json", [{"url": "https://y/a"}]),
+                          ("shard-0001.json", [{"url": "https://y/b"}])])
+        os.unlink(os.path.join(d, "shard-0001.json"))
+        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+
+    def test_an_invalid_json_shard_is_survived(self):
+        d = self._shards([("shard-0000.json", [{"url": "https://y/a"}])])
+        with open(os.path.join(d, "shard-0000.json"), "w", encoding="utf-8") as fh:
+            fh.write('[{"url": "https://y/a"')       # truncated mid-write
+        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+
+    def test_a_missing_manifest_is_survived(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        harvest.LISTEN_QUEUE = d                       # a dir with no index.json yet
         self.assertEqual(harvest.listen_queue_split(), ([], set()))
 
 
