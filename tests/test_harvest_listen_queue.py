@@ -185,6 +185,20 @@ class ShardedListenQueue(unittest.TestCase):
             json.dump({"shards": [{"name": 1}]}, fh)
         self.assertEqual(harvest.listen_queue_split(), ([], set()))
 
+    def test_a_traversal_or_absolute_shard_name_never_escapes_the_dir(self):
+        # containment: a tampered manifest must not make the harvester read an UNRELATED
+        # file as the queue (local-review finding)
+        d = self._shards([("shard-0000.json", [{"url": "https://y/a"}])])
+        outside = os.path.join(os.path.dirname(d), "outside-%s.json" % os.path.basename(d))
+        with open(outside, "w", encoding="utf-8") as fh:
+            json.dump([{"url": "https://evil/x"}], fh)
+        self.addCleanup(os.unlink, outside)
+        for name in ("../" + os.path.basename(outside), outside, "shard-0000.json.bak"):
+            with self.subTest(name=name):
+                with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as fh:
+                    json.dump({"shards": [{"name": name}]}, fh)
+                self.assertEqual(harvest.listen_queue_split(), ([], set()))
+
     def test_corrupt_item_fields_are_tolerated_per_item(self):
         # a mapping url, an int origin, an int title: each item is skipped or handled,
         # never a crash, and the healthy neighbours survive

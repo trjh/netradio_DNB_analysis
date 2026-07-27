@@ -43,6 +43,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import time
@@ -679,8 +680,12 @@ def _load_queue_items():
             name = entry.get("name")
             if name is None:
                 continue
-            if not isinstance(name, str):
-                raise ValueError("manifest shard name is not a string")
+            # Only the committed filename form may be opened -- a bare `shard-NNNN.json`. This is
+            # containment, not just validation: `name` is joined to the queue dir, so a traversal
+            # ("../x.json") or absolute path in a tampered manifest would read an UNRELATED file
+            # as the queue. Anything else = corrupt manifest = retry next pass.
+            if not isinstance(name, str) or not re.fullmatch(r"shard-\d+\.json", name):
+                raise ValueError("manifest shard name is not shard-NNNN.json")
             with open(os.path.join(shard_dir, name), "r", encoding="utf-8") as fh:
                 chunk = json.load(fh)
             if not isinstance(chunk, list):
