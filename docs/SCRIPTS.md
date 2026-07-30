@@ -118,7 +118,8 @@ more than 10% of the corpus missing (`NETRADIO_REQUEUE_MISSING_CAP`) — a loss 
 *store* broke, so it **reports** (a standing `sig_alert` in the state, shown by the player's
 notices) and stands still rather than hammering hosts for days re-fetching hundreds of tracks.
 Raise the cap deliberately (e.g. `NETRADIO_REQUEUE_MISSING_CAP=1`) if the loss turns out to be
-real. **One writer, enforced:** all three paths hold the same flock (`harvest.WRITER_LOCK`, the
+real. Either way you can SEE it: every requeue leaves a row in `/harvest`'s issues list, and the
+past-the-cap alert additionally reddens the queue page's notice light. **One writer, enforced:** all three paths hold the same flock (`harvest.WRITER_LOCK`, the
 historic `collector.lock`) for their lifetime — a second writer, including this flag under a
 running daemon, refuses loudly instead of interleaving.
 

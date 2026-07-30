@@ -479,6 +479,13 @@ def requeue_missing_sigs(state, q, retired):
     q["pending"] = (q.get("pending") or []) + [u for u in missing if u not in pend]
     if state.pop("sig_alert", None) is not None:
         res["cleared"] = True
+    # Leave a visible record on /harvest (its issues list): routine self-healing should
+    # still be SEEN -- losing signatures at all is worth a raised eyebrow, even when the
+    # recovery needs no human. Not a notice: only the past-the-cap alert reddens a button.
+    state.setdefault("issues", [])
+    state["issues"] = (state["issues"] + [{"at": _now(),
+                                           "issue": "missing-sigs: requeued %d lost "
+                                                    "signature(s) for re-fetch" % len(missing)}])[-50:]
     return dict(res, requeued=len(missing),
                 why="requeued %d done URL(s) whose signature was lost -- the fetch path will "
                     "regenerate them" % len(missing))
@@ -502,8 +509,8 @@ def recover_missing_sigs_at_start(state=None):
     if rq["requeued"]:
         _save(QUEUE, q)
         print("# %s" % rq["why"])
-    if rq["reported"] or rq["cleared"]:
-        _save(STATE, state)
+    if rq["requeued"] or rq["reported"] or rq["cleared"]:
+        _save(STATE, state)               # the requeue also records an issues row
         if rq["reported"]:
             print("!! %s" % rq["why"])
     return rq

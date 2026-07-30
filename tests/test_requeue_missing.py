@@ -71,10 +71,16 @@ class SmallLossRequeues(RequeueBase):
         self.assertEqual(res["requeued"], 1)
         self.assertNotIn(URLS[0], q["done"])
         self.assertIn(URLS[0], q["pending"])
-        # again: the URL is now pending, done is clean — nothing further happens
+        # the self-heal leaves a visible record on /harvest (issues list) — routine, not a
+        # red notice, but never silent
+        rows = [i for i in state["issues"] if i["issue"].startswith("missing-sigs: requeued")]
+        self.assertEqual(len(rows), 1)
+        # again: the URL is now pending, done is clean — nothing further happens, no new row
         res2 = harvest.requeue_missing_sigs(state, q, retired=set())
         self.assertEqual(res2["requeued"], 0)
         self.assertEqual(q["pending"].count(URLS[0]), 1)
+        rows = [i for i in state["issues"] if i["issue"].startswith("missing-sigs: requeued")]
+        self.assertEqual(len(rows), 1)
 
     def test_a_requeued_url_is_never_duplicated_in_pending(self):
         for u in URLS[1:]:
