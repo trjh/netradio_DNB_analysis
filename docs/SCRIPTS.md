@@ -89,6 +89,10 @@ PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --forget 7     # drop MT7
 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --rescan       # score every cached signature
                                                                       # against every mystery it has
                                                                       # not met yet (no network)
+PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --requeue-missing-sigs
+                                                                      # re-fetch done URLs whose
+                                                                      # signature is LOST (run with
+                                                                      # the harvester stopped/paused)
 ```
 
 **A new mystery sees the WHOLE corpus.** A chroma signature is not tied to the question you asked
@@ -102,6 +106,18 @@ once, for when you want it finished now.
 This closes a real hole. `run()` only ever walked `pending`; once a URL reached `done` it was never
 looked at again — so a mystery whose clip arrived later was scored **only** against candidates
 fetched after it, and weeks of accumulated corpus were silently never tested against it.
+
+**Lost signatures regenerate.** The same "done is never looked at again" rule had a second hole:
+a signature that vanished from *both* the working cache and the bucket left its candidate
+permanently dark to every future mystery. The harvester now checks at the start of every run and
+puts such URLs back into `pending` so the ordinary fetch path re-signs them
+(`--requeue-missing-sigs` is the on-demand form). Two deliberate refusals: if the bucket can't be
+*listed*, "lost" and "evicted-to-the-bucket" are indistinguishable, so it does nothing; and past
+the safety cap — more than 10% of the corpus missing (`NETRADIO_REQUEUE_MISSING_CAP`) — a loss
+that size means the *store* broke, so it **reports** (a standing `sig_alert` in the state, shown
+by the player's notices) and stands still rather than hammering hosts for days re-fetching
+hundreds of tracks. Raise the cap deliberately (e.g. `NETRADIO_REQUEUE_MISSING_CAP=1`) if the
+loss turns out to be real.
 
 The rescan also fills in **where** each old match hit (`at_s`), which is why `/harvest` can cue a
 lead to the moment it matched even for leads found before that field existed. The position was

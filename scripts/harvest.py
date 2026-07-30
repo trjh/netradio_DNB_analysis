@@ -372,6 +372,95 @@ def unscored_pairs(state, q, retired, qs, limit=None):
     return out
 
 
+# Above this fraction of the corpus missing, requeue_missing_sigs refuses to act on its own.
+# A few lost signatures is routine wear (a crash mid-write, a bad eviction) and re-fetching is
+# exactly what the queue is for. A loss bigger than this means the STORE broke -- a wiped cache
+# AND absent bucket keys, a wrong endpoint, a wrong profile -- and mass re-fetching hundreds of
+# tracks would hammer hosts for days while destroying the evidence of what went wrong. So past
+# the cap it REPORTS and stands still; a human raises NETRADIO_REQUEUE_MISSING_CAP deliberately
+# (e.g. =1) if the loss turns out to be real. (Policy: Tim, 2026-07-30.)
+REQUEUE_MISSING_CAP = 0.10
+
+
+def _requeue_cap():
+    try:
+        return float(os.environ.get("NETRADIO_REQUEUE_MISSING_CAP", "") or REQUEUE_MISSING_CAP)
+    except ValueError:
+        return REQUEUE_MISSING_CAP
+
+
+def requeue_missing_sigs(state, q, retired):
+    """Move `done` URLs whose signature is LOST -- in neither the working cache nor the bucket --
+    back to `pending`, so the ordinary fetch path regenerates them.
+
+    `done` is never re-fetched, so before this existed a lost signature left its candidate
+    permanently dark to every FUTURE mystery -- in the worst case the whole pre-wipe corpus
+    (the resurfaced §7.d item). Regeneration is automatic: at the start of every run, and on
+    demand via --requeue-missing-sigs. `state["scored"]` is left alone on purpose -- the sig
+    key is content-addressed from the URL and the recipe is deterministic, so old pairings
+    stay valid and only unmet mysteries score the regenerated signature.
+
+    Two refusals, both deliberate:
+      * the bucket cannot be LISTED -> do nothing at all. An evicted-cold signature lives only
+        in the bucket; with the listing dark, "lost" and "evicted" are indistinguishable, and
+        requeuing evicted sigs would re-fetch the whole cold corpus for nothing.
+      * more than the cap is missing -> report, do not requeue (see REQUEUE_MISSING_CAP above).
+        The report is a standing `state["sig_alert"]` block (cleared here the moment the
+        condition stops holding) plus one `issues` row when it first arises -- not one per
+        supervisor respawn.
+
+    Mutates `q` and `state` in place; the CALLER saves whichever the result says changed.
+    Returns {"checked", "missing", "requeued", "reported", "cleared", "why"}.
+    """
+    res = {"checked": 0, "missing": 0, "requeued": 0, "reported": False, "cleared": False}
+    done = [u for u in (q.get("done") or []) if u not in retired]
+    res["checked"] = len(done)
+    if not done:
+        return dict(res, why="nothing in done to check")
+
+    remote = _remote_keys()
+    if sigstore.enabled() and remote is None:
+        return dict(res, why="bucket listing unavailable -- cannot tell lost from evicted, "
+                             "so nothing was requeued; fix the store and re-check")
+    remote = remote or set()
+
+    missing = [u for u in done
+               if not os.path.exists(sig_path(u)) and _sig_key(u) not in remote]
+    res["missing"] = len(missing)
+
+    if not missing:
+        if state.pop("sig_alert", None) is not None:
+            res["cleared"] = True                 # the loss was dealt with -- stand down
+        return dict(res, why="every done signature is held (cache or bucket)")
+
+    cap = _requeue_cap()
+    frac = len(missing) / len(done)
+    if frac > cap:
+        why = ("%d of %d done signatures are LOST (%.0f%% > the %.0f%% cap) -- NOT requeuing: "
+               "a loss that size means the store broke, not the files. Check the bucket "
+               "endpoint/profile and the cache dir; if the loss is real, re-run with "
+               "NETRADIO_REQUEUE_MISSING_CAP raised."
+               % (len(missing), len(done), frac * 100, cap * 100))
+        first = "sig_alert" not in state
+        state["sig_alert"] = {"at": _now(), "missing": len(missing), "corpus": len(done),
+                              "why": why}
+        if first:
+            state.setdefault("issues", [])
+            state["issues"] = (state["issues"] + [{"at": _now(),
+                                                   "issue": "missing-sigs: " + why}])[-50:]
+        return dict(res, reported=True, why=why)
+
+    missing_set = set(missing)
+    q["done"] = [u for u in q["done"] if u not in missing_set]
+    pend = set(q.get("pending") or [])
+    q["pending"] = (q.get("pending") or []) + [u for u in missing if u not in pend]
+    if state.pop("sig_alert", None) is not None:
+        res["cleared"] = True
+    return dict(res, requeued=len(missing),
+                why="requeued %d done URL(s) whose signature was lost -- the fetch path will "
+                    "regenerate them" % len(missing))
+
+
 def score_cached(state, num, qc, qkey, url, key):
     """Score one cached signature against one mystery. No network, ~0.06s. Returns a hit or None.
 
@@ -898,6 +987,21 @@ def run(args):
     else:
         print("# self-test skipped -- %s" % st.get("why"))
 
+    # LOST SIGNATURES REGENERATE. `done` is never re-fetched, so a signature missing from both
+    # the cache and the bucket left its candidate permanently dark to every future mystery.
+    # Check once per run, here at the start (loss happens out-of-band -- a wipe, a bad
+    # eviction -- not mid-session); past the cap this reports instead of requeuing.
+    q0 = _load(QUEUE, {"pending": [], "done": []})
+    _, retired0 = listen_queue_split()
+    rq = requeue_missing_sigs(state, q0, retired0)
+    if rq["requeued"]:
+        _save(QUEUE, q0)
+        print("# %s" % rq["why"])
+    if rq["reported"] or rq["cleared"]:
+        _save(STATE, state)
+        if rq["reported"]:
+            print("!! %s" % rq["why"])
+
     session_end = time.time() + random.uniform(*SESSION_S)
     while True:
         # The live canary, about once a day: the streaming path (yt-dlp -> ffmpeg -> chroma) is
@@ -1125,6 +1229,14 @@ def main():
                          "in one go. No network. The running harvester does this by itself, a "
                          "chunk at a time -- this is for when you want it finished NOW (e.g. you "
                          "have just added a Mystery Track clip).")
+    ap.add_argument("--requeue-missing-sigs", action="store_true",
+                    help="put done URLs whose signature is LOST (in neither the cache nor the "
+                         "bucket) back into pending so the fetch path regenerates them. The "
+                         "running harvester does this by itself at the start of every run -- "
+                         "this is the on-demand form. Refuses past the safety cap "
+                         "(NETRADIO_REQUEUE_MISSING_CAP, default 10%% of the corpus) and "
+                         "reports instead. Run with the harvester stopped or paused, like "
+                         "--migrate-sigs.")
     args = ap.parse_args()
 
     os.makedirs(STATE_DIR, exist_ok=True)
@@ -1170,6 +1282,17 @@ def main():
               % (up, failed, n_ev, freed / 1e6, left))
         if failed:
             print("# NOTHING that failed to upload was deleted. Fix the store config and re-run.")
+        return
+    if args.requeue_missing_sigs:
+        state = _load(STATE, blank_state())
+        q = _load(QUEUE, {"pending": [], "done": []})
+        _, retired = listen_queue_split()
+        res = requeue_missing_sigs(state, q, retired)
+        if res["requeued"]:
+            _save(QUEUE, q)
+        if res["reported"] or res["cleared"]:
+            _save(STATE, state)
+        print("# %s" % res["why"])
         return
     if args.rescan:
         state = _load(STATE, blank_state())
