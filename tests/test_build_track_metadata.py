@@ -284,11 +284,14 @@ class LiveTailTests(unittest.TestCase):
     def test_tail_present_and_tagged(self):
         self.assertGreaterEqual(len(self.tr), 91)
         self.assertEqual(self.tr["66"]["source"], "precise")
-        # The tail is now precisely labelled through 69 (Wave Forms, Mystery
-        # Track 4, Hypnotising); 70+ are still the rough first-pass fold.
-        self.assertEqual(self.tr["70"]["source"], "rough")
-        self.assertEqual(self.tr["70"]["title"], "Urban Style (Original Mix)")
+        # The tail is now precisely labelled through 71 (…Urban Style, On Line) — Tim's
+        # hand review keeps pushing this frontier, so this pin moves as the labels do
+        # (it read "through 69" until 2026-07-30). 72+ are still the rough first-pass fold.
+        self.assertEqual(self.tr["70"]["source"], "precise")
+        self.assertEqual(self.tr["70"]["title"], "Urban Style")   # the precise label's name
         self.assertEqual(self.tr["70"]["artist"], "Dead Calm")
+        self.assertEqual(self.tr["72"]["source"], "rough")
+        self.assertEqual(self.tr["72"]["title"], "Your Sound")
         # A Mystery Track placed on the PRECISE timeline but not yet named keeps
         # its number + segment and is tagged mystery. Regression guard: it used
         # to vanish (parse_label_track_id_text dropped title-only rows), leaving

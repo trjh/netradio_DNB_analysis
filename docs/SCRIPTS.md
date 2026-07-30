@@ -20,6 +20,20 @@ Most scripts want `PYTHONPATH=scripts` and the machine paths from `.env_vars`:
 set -a && . ./.env_vars && set +a
 ```
 
+**Running the tests:**
+
+```bash
+.venv/bin/python3 -m unittest discover -s tests    # the full suite (align venv)
+```
+
+The suite is hermetic on a fresh clone: it parses only committed evidence (the 2017 notes
+resolve capture stems against the committed `labels/` files when no audio is on disk), and
+the tests that decode/encode real audio **skip** cleanly when `librosa`/`soundfile` are
+absent. One deliberate exception: the undefined-name guard (`tests/test_harvest_runtime.py`)
+**fails, never skips**, when `pyflakes` is missing — a skip there is how a NameError ships.
+`pip install pyflakes` (it is in both requirements files) and it runs anywhere; the
+audio-dependent tests need the align venv (`make align-env`).
+
 ---
 
 ## Labelling a capture (the core loop — see [PROCESS](../PROCESS.md))

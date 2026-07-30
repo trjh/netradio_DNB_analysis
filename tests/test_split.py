@@ -15,17 +15,26 @@ import unittest.mock
 SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
 sys.path.insert(0, SCRIPTS)
 
-import numpy as np                     # noqa: E402
-import soundfile as sf                 # noqa: E402
+# Guard ONLY the third-party audio deps: absent -> the suite skips cleanly. The project
+# modules import OUTSIDE the guard (below), so a genuine import-time regression in the
+# split/collector code still FAILS the suite loudly instead of masquerading as a skip.
+try:
+    import numpy as np                 # noqa: E402
+    import soundfile as sf             # noqa: E402
+    HAVE_DEPS = True
+except ImportError:                    # numpy/soundfile absent -> skip, never an import ERROR
+    HAVE_DEPS = False
 
-import harvest                         # noqa: E402
-import harvester                       # noqa: E402
-import collector                       # noqa: E402
-import sigstore                        # noqa: E402
+if HAVE_DEPS:                          # collector itself needs soundfile at import time
+    import harvest                     # noqa: E402
+    import harvester                   # noqa: E402
+    import collector                   # noqa: E402
+    import sigstore                    # noqa: E402
 
 URL = "https://www.youtube.com/watch?v=testvideo001"
 
 
+@unittest.skipUnless(HAVE_DEPS, "audio deps unavailable -- see requirements-streamalign.txt")
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

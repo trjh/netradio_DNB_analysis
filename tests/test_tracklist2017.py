@@ -28,9 +28,25 @@ class TestParse(unittest.TestCase):
     def test_the_dnb_prefix_variant_normalises_to_the_real_stem(self):
         # The notes head one block `dnb356-375`; the capture on disk is `d356-375.wav`. The
         # engine must see the same stem as everything else, or the hints go to a file nobody
-        # has. Resolved against the audio that exists, not by a guessed rule.
+        # has. Resolved against the evidence that exists, not by a guessed rule.
         self.assertIn("d356-375", self.data)
         self.assertNotIn("dnb356-375", self.data)
+
+    def test_normalisation_is_hermetic_without_the_audio(self):
+        # A fresh clone has the committed LABEL files but none of the capture audio -- and it
+        # must parse identically to a loaded machine (this was the "fresh clone is RED"
+        # backlog item: with no audio to resolve against, `dnb356-375` stayed un-normalised
+        # and every downstream lookup of d356-375 blew up). The committed labels are the
+        # hermetic anchor, so an EMPTY audio dir must be enough.
+        import tempfile
+        empty = tempfile.mkdtemp(prefix="no_audio_")
+        try:
+            self.assertEqual(tl.normalise_stem("dnb356-375", audio_dir=empty), "d356-375")
+            data = tl.parse(audio_dir=empty)
+            self.assertIn("d356-375", data)
+            self.assertNotIn("dnb356-375", data)
+        finally:
+            os.rmdir(empty)
 
     def test_master_start_is_derived_not_assumed(self):
         # `351:14.552  00:00.000 -- START` -> 351*60 + 14.552
@@ -77,13 +93,19 @@ class TestAgreementWithTheHandLabels(unittest.TestCase):
     """The notes are approximate, but they are not random: where a capture is placed by hand,
     the two agree closely. That is what makes a LARGE disagreement meaningful."""
 
+    # The known anomaly: the d356-375 hand anchor sits ~3.75 s later than the 2017 notes --
+    # and because the d356-375 -> d376-395 join is LABEL-EXACT (tail-solve, analysis #111),
+    # d376-395 carries the very same offset downstream. One anomaly, two captures; excluding
+    # both is not hiding a second drift (the test below pins that their deltas are EQUAL).
+    _ANOMALY = ("d356-375", "d376-395")
+
     def test_the_notes_track_the_hand_labels_within_a_couple_of_seconds(self):
         from streamalign import groundtruth as gt
         data, starts = tl.parse(), gt.resolve_starts()
         deltas = [abs(d["master_start_s"] - starts[s])
                   for s, d in data.items()
                   if d.get("master_start_s") is not None and s in starts
-                  and s != "d356-375"]          # the known outlier -- see below
+                  and s not in self._ANOMALY]   # the known outlier + its exact-join carrier
         self.assertGreaterEqual(len(deltas), 5)
         self.assertLess(max(deltas), 2.5,
                         "the 2017 notes should agree with the hand labels to a couple of "
@@ -97,6 +119,11 @@ class TestAgreementWithTheHandLabels(unittest.TestCase):
         # ~3s late. If this ever drops below the others' spread, the anomaly was fixed and the
         # hint should stop asking about it.
         self.assertGreater(delta, 2.5)
+        # d376-395 must carry EXACTLY the same offset -- it is chained to d356-375 by a
+        # label-exact join, so a DIFFERENT delta there would be a genuinely new drift that
+        # the agreement test above must not be excluding.
+        delta_next = starts["d376-395"] - data["d376-395"]["master_start_s"]
+        self.assertAlmostEqual(delta_next, delta, places=2)
 
 
 if __name__ == "__main__":

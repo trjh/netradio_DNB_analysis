@@ -18,12 +18,22 @@ import chroma_recipe                    # noqa: E402
 import make_recipe                      # noqa: E402
 import make_canary                      # noqa: E402
 
+# chroma_recipe/make_canary import librosa LAZILY (inside the compute paths), so the module
+# imports above succeed on a bare clone — and the tests then error at call time. Probe once;
+# the classes that actually compute chroma skip cleanly instead.
+try:
+    import librosa                      # noqa: E402,F401
+    HAVE_LIBROSA = True
+except ImportError:                     # only the third-party dep -- anything else raises
+    HAVE_LIBROSA = False
+
 
 def _signal(seconds=70, seed=7):
     return (np.random.default_rng(seed).standard_normal(int(seconds * chroma_recipe.SR)) * 0.1
             ).astype("float32")
 
 
+@unittest.skipUnless(HAVE_LIBROSA, "librosa unavailable -- see requirements-streamalign.txt")
 class TestRecipeIsOneSource(unittest.TestCase):
     def test_compute_chroma_shape_dtype_and_determinism(self):
         y = _signal()
@@ -97,6 +107,7 @@ class TestMakeRecipe(unittest.TestCase):
             self.assertNotIn("toolchain", json.load(open(out)))
 
 
+@unittest.skipUnless(HAVE_LIBROSA, "librosa unavailable -- see requirements-streamalign.txt")
 class TestMakeCanary(unittest.TestCase):
     def test_sign_is_stored_float16_and_reproducible(self):
         y = _signal()

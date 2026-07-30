@@ -7,3 +7,4 @@
 pyaudacity @ git+https://github.com/bwagner/pyaudacity
 pydub
 numpy
+pyflakes            # the undefined-name test guard runs in ANY env (fails, never skips)
