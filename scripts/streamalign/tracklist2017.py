@@ -55,19 +55,32 @@ def _mmss(minutes, seconds):
     return int(minutes) * 60.0 + float(seconds)
 
 
+def _known_label_stem(stem):
+    """Does the COMMITTED evidence know this capture? A `<stem>.labels.tsv` (hand) or
+    `<stem>.auto.labels.tsv` (engine) in the labels dir is as authoritative as the audio
+    being present -- and unlike the audio, the label files are in the repo. Without this, a
+    fresh clone (no capture audio on disk) resolved `dnb356-375` differently from a loaded
+    machine, and the whole 2017-notes parse went red (the "not hermetic" backlog item)."""
+    for suffix in (".labels.tsv", ".auto.labels.tsv"):
+        if os.path.isfile(os.path.join(_gt.LABELS_DIR, stem + suffix)):
+            return True
+    return False
+
+
 def normalise_stem(name, audio_dir=None):
     """`dnb356-375` / `d356-375.wav` -> the stem the rest of the engine uses (`d356-375`).
 
     The 2017 notes are hand-typed and not consistent with the filenames on disk: one block is
-    headed `dnb356-375` where the capture is `d356-375.wav`. Resolve against the audio that
-    actually exists rather than guessing a rule.
+    headed `dnb356-375` where the capture is `d356-375.wav`. Resolve against evidence that
+    actually exists -- the audio on disk when we have it, else the committed label files --
+    rather than guessing a rule.
     """
     stem = _audio.stem_of(name)
-    if _audio.find_audio_file(stem, audio_dir):
+    if _audio.find_audio_file(stem, audio_dir) or _known_label_stem(stem):
         return stem
     if stem.lower().startswith("dnb"):
         alt = "d" + stem[3:]
-        if _audio.find_audio_file(alt, audio_dir):
+        if _audio.find_audio_file(alt, audio_dir) or _known_label_stem(alt):
             return alt
     return stem
 

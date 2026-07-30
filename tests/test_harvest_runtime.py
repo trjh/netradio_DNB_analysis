@@ -34,6 +34,16 @@ except Exception:                       # librosa/numba absent -> not this test'
 # SCRIPTS.md already files all three under "Retired". They are full of undefined names and always
 # were. Naming them here is the honest way to lint everything else: an exclusion you can see beats
 # a check narrowed until it passes.
+# librosa/soundfile are imported lazily by the paths these two classes exercise, so a
+# bare clone imports everything fine and then errors at call time. Probe once; skip clean.
+try:
+    import librosa                      # noqa: F401
+    import soundfile                    # noqa: F401
+    HAVE_AUDIO = True
+except Exception:
+    HAVE_AUDIO = False
+
+
 RETIRED = ("alignfinder.py", "pipeclient.py", "splitexport.py")
 
 
@@ -91,6 +101,7 @@ class NoUndefinedNames(unittest.TestCase):
 
 
 @unittest.skipIf(harvest is None, "needs the librosa venv")
+@unittest.skipUnless(HAVE_AUDIO, "audio deps unavailable -- see requirements-streamalign.txt")
 class ExcerptsAreExcerpts(unittest.TestCase):
     """The copyright posture rests on one claim: what we keep is far too short to be a copy.
 
@@ -394,6 +405,7 @@ class ABetterClipMustNotInheritTheOldOnesVerdicts(unittest.TestCase):
 
 
 @unittest.skipIf(harvest is None, "needs the librosa venv")
+@unittest.skipUnless(HAVE_AUDIO, "audio deps unavailable -- see requirements-streamalign.txt")
 class TheLiveCanaryMustNotCrashTheHarvester(unittest.TestCase):
     """The third crash-on-a-rarely-taken-branch, caught before it fired.
 

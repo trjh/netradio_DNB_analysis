@@ -13,3 +13,5 @@
 # then run the track_mix tools with .venv/bin/python.
 numpy>=2
 librosa>=0.11
+soundfile>=0.13     # harvester excerpts + the split/excerpt tests write real FLAC/WAV
+pyflakes>=3         # the undefined-name test guard (fails, never skips, by design)

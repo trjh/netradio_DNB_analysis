@@ -15,17 +15,21 @@ import unittest.mock
 SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
 sys.path.insert(0, SCRIPTS)
 
-import numpy as np                     # noqa: E402
-import soundfile as sf                 # noqa: E402
-
-import harvest                         # noqa: E402
-import harvester                       # noqa: E402
-import collector                       # noqa: E402
-import sigstore                        # noqa: E402
+try:
+    import numpy as np                 # noqa: E402
+    import soundfile as sf             # noqa: E402
+    import harvest                     # noqa: E402
+    import harvester                   # noqa: E402
+    import collector                   # noqa: E402
+    import sigstore                    # noqa: E402
+    HAVE_DEPS = True
+except Exception:                      # numpy/soundfile absent -> skip, never an import ERROR
+    HAVE_DEPS = False
 
 URL = "https://www.youtube.com/watch?v=testvideo001"
 
 
+@unittest.skipUnless(HAVE_DEPS, "audio deps unavailable -- see requirements-streamalign.txt")
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
