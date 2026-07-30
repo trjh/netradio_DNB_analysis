@@ -123,21 +123,49 @@ class QueryKeysArePublished(unittest.TestCase):
 
 @unittest.skipUnless(harvest, "harvest deps unavailable")
 class TheSplitRuntimePublishesToo(unittest.TestCase):
-    """Source pin (the pattern test_requeue_missing established): the collector is the
-    split runtime's ONE state writer, so it must pass its state into queries() — the
-    stamping only happens when state is supplied — and stamp the pool. If either call
-    drops out of collector.run(), /harvest goes dark in split mode (the original review
-    finding on this change)."""
+    """The collector is the split runtime's ONE state writer, so its per-pass refresh must
+    publish everything Mode A's run() would: the query fields, the no-queries lifecycle in
+    BOTH directions, and the pool count. (The original review findings on this change.)"""
 
-    def test_collector_run_publishes_the_dashboard_fields(self):
-        import inspect
+    def setUp(self):
         try:
             import collector
         except Exception:
             self.skipTest("collector deps unavailable")
-        src = inspect.getsource(collector.run)
-        self.assertIn("queries(state)", src)
-        self.assertIn("stamp_pool(state)", src)
+        self.collector = collector
+        self._remote = harvest._remote_keys
+        harvest._remote_keys = lambda max_age_s=900: {"a.npy", "b.npy"}
+
+    def tearDown(self):
+        harvest._remote_keys = self._remote
+
+    def test_an_empty_query_set_is_stamped_and_then_stands_down(self):
+        state = {"session": {"phase": "working", "until": 0}}
+        with unittest.mock.patch.object(self.collector, "queries", lambda state=None: []):
+            qs, changed = self.collector.refresh_dashboard_state(state)
+        self.assertEqual(qs, [])
+        self.assertTrue(changed)
+        self.assertIn("no_queries", state)
+        self.assertEqual(state["session"]["phase"], "nothing to search for")
+        self.assertEqual(state["pool"]["count"], 2)
+        # standing condition, idle pass: nothing changed -> not worth a write
+        with unittest.mock.patch.object(self.collector, "queries", lambda state=None: []):
+            _, changed = self.collector.refresh_dashboard_state(state)
+        self.assertFalse(changed)
+        # a usable clip returns -> the state stands down on THIS pass
+        qs_live = [(4, None, "4:f00")]
+
+        def live(st=None):
+            if st is not None:
+                st["searching"], st["skipped_queries"] = [4], []
+                st["query_keys"] = {"4": "4:f00"}
+            return qs_live
+        with unittest.mock.patch.object(self.collector, "queries", live):
+            qs, changed = self.collector.refresh_dashboard_state(state)
+        self.assertEqual(qs, qs_live)
+        self.assertTrue(changed)
+        self.assertNotIn("no_queries", state)
+        self.assertEqual(state["query_keys"], {"4": "4:f00"})
 
 
 @unittest.skipUnless(harvest, "harvest deps unavailable")

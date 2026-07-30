@@ -507,6 +507,30 @@ def requeue_missing_sigs(state, q, retired):
                     "regenerate them" % len(missing))
 
 
+def note_no_queries(state, qs):
+    """Keep the "nothing to search for" state truthful for WHICHEVER runtime just refreshed
+    the query set (Mode A's run(), or the split collector each pass).
+
+    An empty query set is a first-class state, not a print-and-vanish: in Mode A the
+    process EXITS and the supervisor respawns it in a loop, and before this stamp /harvest
+    kept showing the LAST session's stale phase ("working") with no explanation while the
+    queue page's button correctly went red. Stamped once (the `at` is when it AROSE, like
+    sig_alert), and it stands down by itself the moment a refresh finds something
+    searchable. Returns True when the state changed (worth persisting)."""
+    if not qs:
+        already = ("no_queries" in state
+                   and (state.get("session") or {}).get("phase") == "nothing to search for")
+        if already:
+            return False                      # standing -- an idle pass is not worth a write
+        state["no_queries"] = {"at": _now(),
+                               "why": "no unsolved mysteries with a usable clip -- nothing to "
+                                      "search for. See the searching table: every mystery is "
+                                      "either solved, clipless, or its clip was refused."}
+        state["session"] = {"phase": "nothing to search for", "until": 0}
+        return True
+    return state.pop("no_queries", None) is not None
+
+
 def recover_missing_sigs_at_start(state=None):
     """Lost-signature recovery at WRITER startup -- the one entry point all three writers
     share: run() (Mode A), collector.run() (split mode), and --requeue-missing-sigs (on
@@ -1036,19 +1060,11 @@ def run(args):
     state = _load(STATE, blank_state())
     qs = queries(state)
     if not qs:
-        # A first-class state, not a print-and-vanish. With nothing searchable this process
-        # EXITS and the supervisor respawns it in a loop -- and before this stamp, /harvest
-        # kept showing the LAST session's stale phase ("working") with no explanation, while
-        # the queue page's button correctly went red. Say what is wrong where the human looks.
-        state["no_queries"] = {"at": _now(),
-                               "why": "no unsolved mysteries with a usable clip -- nothing to "
-                                      "search for. See the searching table: every mystery is "
-                                      "either solved, clipless, or its clip was refused."}
-        state["session"] = {"phase": "nothing to search for", "until": 0}
+        note_no_queries(state, qs)
         _save(STATE, state)                   # queries(state) stamped searching/skipped too
         print("no unsolved mysteries with a usable clip -- nothing to search for")
         return
-    if state.pop("no_queries", None) is not None:
+    if note_no_queries(state, qs):
         _save(STATE, state)                   # searchable again -> the state stands down NOW
     print("# searching for Mystery Tracks %s" % ", ".join(str(n) for n, _, _ in qs))
     print("# work %s, idle %s, rotating hosts, jittered. Ctrl-C is safe (state is on disk)."
