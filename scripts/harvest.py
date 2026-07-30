@@ -460,8 +460,9 @@ def requeue_missing_sigs(state, q, retired):
     if frac > cap:
         why = ("%d of %d done signatures are LOST (%.0f%% > the %.0f%% cap) -- NOT requeuing: "
                "a loss that size means the store broke, not the files. Check the bucket "
-               "endpoint/profile and the cache dir; if the loss is real, re-run with "
-               "NETRADIO_REQUEUE_MISSING_CAP raised."
+               "endpoint/profile and the cache dir; if the loss is REAL, the deliberate "
+               "override is: NETRADIO_REQUEUE_MISSING_CAP=1 .venv/bin/python "
+               "scripts/harvest.py --requeue-missing-sigs"
                % (len(missing), len(done), frac * 100, cap * 100))
         first = "sig_alert" not in state
         state["sig_alert"] = {"at": _now(), "missing": len(missing), "corpus": len(done),
