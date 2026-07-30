@@ -91,8 +91,8 @@ PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --rescan       # score ev
                                                                       # not met yet (no network)
 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --requeue-missing-sigs
                                                                       # re-fetch done URLs whose
-                                                                      # signature is LOST (run with
-                                                                      # the harvester stopped/paused)
+                                                                      # signature is LOST (refuses
+                                                                      # while a writer runs)
 ```
 
 **A new mystery sees the WHOLE corpus.** A chroma signature is not tied to the question you asked
@@ -109,15 +109,18 @@ fetched after it, and weeks of accumulated corpus were silently never tested aga
 
 **Lost signatures regenerate.** The same "done is never looked at again" rule had a second hole:
 a signature that vanished from *both* the working cache and the bucket left its candidate
-permanently dark to every future mystery. The harvester now checks at the start of every run and
-puts such URLs back into `pending` so the ordinary fetch path re-signs them
-(`--requeue-missing-sigs` is the on-demand form). Two deliberate refusals: if the bucket can't be
-*listed*, "lost" and "evicted-to-the-bucket" are indistinguishable, so it does nothing; and past
-the safety cap — more than 10% of the corpus missing (`NETRADIO_REQUEUE_MISSING_CAP`) — a loss
-that size means the *store* broke, so it **reports** (a standing `sig_alert` in the state, shown
-by the player's notices) and stands still rather than hammering hosts for days re-fetching
-hundreds of tracks. Raise the cap deliberately (e.g. `NETRADIO_REQUEUE_MISSING_CAP=1`) if the
-loss turns out to be real.
+permanently dark to every future mystery. Every queue/state **writer** now runs the same recovery
+at startup — Mode A's `harvest.py --run` *and* the split collector — putting such URLs back into
+`pending` so the ordinary fetch path re-signs them (`--requeue-missing-sigs` is the on-demand
+form). Two deliberate refusals: if the bucket can't be *listed*, "lost" and
+"evicted-to-the-bucket" are indistinguishable, so it does nothing; and past the safety cap —
+more than 10% of the corpus missing (`NETRADIO_REQUEUE_MISSING_CAP`) — a loss that size means the
+*store* broke, so it **reports** (a standing `sig_alert` in the state, shown by the player's
+notices) and stands still rather than hammering hosts for days re-fetching hundreds of tracks.
+Raise the cap deliberately (e.g. `NETRADIO_REQUEUE_MISSING_CAP=1`) if the loss turns out to be
+real. **One writer, enforced:** all three paths hold the same flock (`harvest.WRITER_LOCK`, the
+historic `collector.lock`) for their lifetime — a second writer, including this flag under a
+running daemon, refuses loudly instead of interleaving.
 
 The rescan also fills in **where** each old match hit (`at_s`), which is why `/harvest` can cue a
 lead to the moment it matched even for leads found before that field existed. The position was

@@ -17,11 +17,13 @@ Scoring and match/board semantics are harvest.py's own functions and constants, 
 the split moves the work, it does not re-derive it.
 
 Enable with NETRADIO_COLLECTOR=on. Never run at the same time as `harvest.py --run` (Mode A):
-both write state.json and queue.json. One writer, or the file is eventually lost.
+both write state.json and queue.json. One writer, or the file is eventually lost — and this is
+now ENFORCED, not just documented: every writer (this run(), Mode A's run(), and the on-demand
+--requeue-missing-sigs) takes the same flock (harvest.WRITER_LOCK) for its lifetime, so
+whichever starts second refuses loudly.
 """
 
 import argparse
-import fcntl
 import hashlib
 import json
 import os
@@ -43,7 +45,8 @@ from harvest import (                                # noqa: E402
 from harvest import _cm                              # noqa: E402  (the matcher)
 from harvester import JOBS, RESULTS, STATE_DIR       # noqa: E402  (the shared layout)
 
-LOCK = os.path.join(STATE_DIR, "collector.lock")
+LOCK = harvest.WRITER_LOCK           # THE queue/state writer lock, shared with harvest.py
+                                     # (historic path name collector.lock; see harvest.py)
 JOB_TTL_S = 7 * 24 * 3600          # orphaned job dirs are swept after a week
 WATCH_IDLE_S = float(os.environ.get("NETRADIO_WATCH_IDLE_S", "900"))   # watcher hold freshness
 
@@ -295,12 +298,16 @@ def sweep_jobs():
 
 def run():
     os.makedirs(STATE_DIR, exist_ok=True)
-    lock = open(LOCK, "w")
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        print("another collector holds %s -- ONE writer, always" % LOCK)
+    lock = harvest.acquire_writer_lock()
+    if lock is None:
+        print("another queue/state writer holds %s (a collector, or harvest.py --run) -- "
+              "ONE writer, always" % LOCK)
         return
+    # LOST SIGNATURES REGENERATE in split mode too: this process is the split runtime's one
+    # queue/state writer, so the startup recovery harvest.run() does must happen HERE as
+    # well -- same function, same policy (requeue small losses; past the cap, report via
+    # sig_alert and stand still). No live state is held yet, so let it load-and-save.
+    harvest.recover_missing_sigs_at_start()
     while True:
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})

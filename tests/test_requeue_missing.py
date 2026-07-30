@@ -131,6 +131,69 @@ class MassLossReports(RequeueBase):
         self.assertEqual(q["pending"], URLS)
 
 
+class WriterLockAndStartup(RequeueBase):
+    """The ONE-writer lock is shared by every queue/state writer, and every writer runs the
+    startup recovery — including the split runtime's collector."""
+
+    def setUp(self):
+        super().setUp()
+        self._paths = harvest.WRITER_LOCK, harvest.STATE, harvest.QUEUE, harvest.listen_queue_split
+        harvest.WRITER_LOCK = os.path.join(self.tmp, "collector.lock")
+        harvest.STATE = os.path.join(self.tmp, "state.json")
+        harvest.QUEUE = os.path.join(self.tmp, "queue.json")
+        harvest.listen_queue_split = lambda: ([], set())
+
+    def tearDown(self):
+        (harvest.WRITER_LOCK, harvest.STATE, harvest.QUEUE,
+         harvest.listen_queue_split) = self._paths
+        super().tearDown()
+
+    def test_the_writer_lock_is_exclusive_until_released(self):
+        first = harvest.acquire_writer_lock()
+        self.assertIsNotNone(first)
+        self.assertIsNone(harvest.acquire_writer_lock())   # held -> a second writer refuses
+        first.close()                                      # the lock dies with the file
+        second = harvest.acquire_writer_lock()
+        self.assertIsNotNone(second)
+        second.close()
+
+    def test_startup_recovery_requeues_through_the_real_files(self):
+        for u in URLS[1:]:
+            self.hold(u)
+        harvest._save(harvest.QUEUE, self.q())
+        res = harvest.recover_missing_sigs_at_start()
+        self.assertEqual(res["requeued"], 1)
+        on_disk = harvest._load(harvest.QUEUE, {})
+        self.assertIn(URLS[0], on_disk["pending"])
+        self.assertNotIn(URLS[0], on_disk["done"])
+
+    def test_startup_recovery_persists_the_alert_on_mass_loss(self):
+        harvest._save(harvest.QUEUE, self.q())             # every sig lost
+        res = harvest.recover_missing_sigs_at_start()
+        self.assertTrue(res["reported"])
+        self.assertIn("sig_alert", harvest._load(harvest.STATE, {}))
+        self.assertEqual(harvest._load(harvest.QUEUE, {})["done"], URLS)
+
+    def test_every_writer_takes_the_lock_and_runs_the_recovery(self):
+        # A source-level pin: Mode A, the split collector, and the CLI must all go through
+        # acquire_writer_lock() and recover_missing_sigs_at_start(). If one of them stops,
+        # the split runtime silently loses the recovery (the original review finding).
+        import inspect
+        try:
+            import collector
+        except Exception:
+            self.skipTest("collector deps unavailable")
+        # same lock FILE, not a twin: collector aliases harvest's, whatever its value was
+        # at import time (tests re-point harvest.WRITER_LOCK, so compare source not value)
+        self.assertIn("LOCK = harvest.WRITER_LOCK", inspect.getsource(collector))
+        run_a = inspect.getsource(harvest.run)
+        run_split = inspect.getsource(collector.run)
+        cli = inspect.getsource(harvest.main)
+        for src in (run_a, run_split, cli):
+            self.assertIn("acquire_writer_lock()", src)
+            self.assertIn("recover_missing_sigs_at_start(", src)
+
+
 class BucketSemantics(RequeueBase):
     def test_a_bucket_held_sig_is_not_lost(self):
         harvest.sigstore.enabled = lambda: True
