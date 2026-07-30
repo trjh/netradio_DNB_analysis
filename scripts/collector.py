@@ -296,6 +296,23 @@ def sweep_jobs():
     return swept
 
 
+def refresh_dashboard_state(state):
+    """One pass of the /harvest bookkeeping Mode A's run() does at startup — THIS process
+    is the split runtime's one state writer, so it must publish the same facts:
+    queries(state) stamps searching/skipped_queries/query_keys, note_no_queries keeps the
+    "nothing to search for" state truthful in BOTH directions (stamped when the query set
+    empties, stood down when a usable clip returns), and stamp_pool records the bucket's
+    signature count. Returns (qs, changed) — persist when changed, because an otherwise
+    idle pass has no other save."""
+    dash = ("searching", "skipped_queries", "query_keys")
+    prev = {k: state.get(k) for k in dash}
+    qs = queries(state)
+    changed = prev != {k: state.get(k) for k in dash}
+    changed = harvest.note_no_queries(state, qs) or changed
+    changed = harvest.stamp_pool(state) or changed
+    return qs, changed
+
+
 def run():
     os.makedirs(STATE_DIR, exist_ok=True)
     lock = harvest.acquire_writer_lock()
@@ -311,7 +328,9 @@ def run():
     while True:
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})
-        qs = queries()
+        qs, changed = refresh_dashboard_state(state)
+        if changed:
+            _save(STATE, state)
         n = collect_once(state, q, qs)
 
         _, retired = listen_queue_split()

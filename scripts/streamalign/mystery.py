@@ -42,12 +42,20 @@ def current(sources_dir=None, metadata_path=None):
     sources_dir = sources_dir or os.environ.get("NETRADIO_SOURCES_DIR") or ""
     clips = {}
     if os.path.isdir(sources_dir):
+        # Lossless beats lossy, and .wav beats .wv only by convention (both are lossless;
+        # ffmpeg decodes WavPack natively, so decode was never the problem). `.wv` earned its
+        # place here the hard way: Mystery Track 4's clip was wavpack-compacted and became
+        # INVISIBLE to the whole search -- the harvester ran for days looking for everything
+        # except the thing it was missing a clip for.
+        rank = {".wav": 0, ".wv": 1, ".flac": 2, ".m4a": 3, ".mp3": 4}
+        best = {}
         for name in os.listdir(sources_dir):
-            m = _MYSTERY_RE.match(os.path.splitext(name)[0])
-            if m and name.lower().endswith((".wav", ".mp3", ".flac", ".m4a")):
-                # prefer wav over a lossy re-encode of the same clip
+            stem, ext = os.path.splitext(name)
+            m = _MYSTERY_RE.match(stem)
+            if m and ext.lower() in rank:
                 key = int(m.group(1))
-                if key not in clips or name.lower().endswith(".wav"):
+                if key not in best or rank[ext.lower()] < best[key]:
+                    best[key] = rank[ext.lower()]
                     clips[key] = os.path.join(sources_dir, name)
 
     out = []

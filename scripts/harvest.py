@@ -345,6 +345,22 @@ def _remote_keys(max_age_s=900):
     return _REMOTE_KEYS["keys"]
 
 
+def stamp_pool(state):
+    """Record the BUCKET's signature count on the state, for /harvest. Post-migration the
+    bucket is the pool's only home, so counting local `.npy` undercounts by thousands (the
+    working cache holds work-in-progress, ~1 file). Rides `_remote_keys()`'s ≤15-min session
+    cache -- no extra bucket listing, and the player never needs AWS creds; when the store is
+    dark or the listing failed, the previous stamp (with its honest `at`) is left standing.
+    Returns True when the stamped COUNT changed, so a caller with no other reason to save
+    knows this one is worth persisting."""
+    remote = _remote_keys()
+    if remote is None:
+        return False
+    prev = (state.get("pool") or {}).get("count")
+    state["pool"] = {"count": len(remote), "at": _now()}
+    return state["pool"]["count"] != prev
+
+
 def _load_sig(url):
     """A signature by hook or by crook: the working cache first, then the bucket. None if it
     exists in neither (i.e. this URL genuinely needs its audio fetched)."""
@@ -489,6 +505,30 @@ def requeue_missing_sigs(state, q, retired):
     return dict(res, requeued=len(missing),
                 why="requeued %d done URL(s) whose signature was lost -- the fetch path will "
                     "regenerate them" % len(missing))
+
+
+def note_no_queries(state, qs):
+    """Keep the "nothing to search for" state truthful for WHICHEVER runtime just refreshed
+    the query set (Mode A's run(), or the split collector each pass).
+
+    An empty query set is a first-class state, not a print-and-vanish: in Mode A the
+    process EXITS and the supervisor respawns it in a loop, and before this stamp /harvest
+    kept showing the LAST session's stale phase ("working") with no explanation while the
+    queue page's button correctly went red. Stamped once (the `at` is when it AROSE, like
+    sig_alert), and it stands down by itself the moment a refresh finds something
+    searchable. Returns True when the state changed (worth persisting)."""
+    if not qs:
+        already = ("no_queries" in state
+                   and (state.get("session") or {}).get("phase") == "nothing to search for")
+        if already:
+            return False                      # standing -- an idle pass is not worth a write
+        state["no_queries"] = {"at": _now(),
+                               "why": "no unsolved mysteries with a usable clip -- nothing to "
+                                      "search for. See the searching table: every mystery is "
+                                      "either solved, clipless, or its clip was refused."}
+        state["session"] = {"phase": "nothing to search for", "until": 0}
+        return True
+    return state.pop("no_queries", None) is not None
 
 
 def recover_missing_sigs_at_start(state=None):
@@ -979,6 +1019,11 @@ def queries(state=None):
     if state is not None:                     # so /harvest can say what it is NOT asking, and why
         state["searching"] = [n for n, _, _ in out]
         state["skipped_queries"] = skipped
+        # The CURRENT clip's query key per mystery. `state["scored"]` is keyed on these, and
+        # a re-cut clip CHANGES the key -- so only the harvester can say which key is "now".
+        # The dashboard joins this map to state["scored"] for its live "compared: N of pool"
+        # column, instead of guessing among stale fingerprints.
+        state["query_keys"] = {str(n): qkey for n, _, qkey in out}
     for s in skipped:
         print("# NOT searching MT%d -- %s" % (s["mystery"], s["why"]))
     return out
@@ -1015,8 +1060,12 @@ def run(args):
     state = _load(STATE, blank_state())
     qs = queries(state)
     if not qs:
+        note_no_queries(state, qs)
+        _save(STATE, state)                   # queries(state) stamped searching/skipped too
         print("no unsolved mysteries with a usable clip -- nothing to search for")
         return
+    if note_no_queries(state, qs):
+        _save(STATE, state)                   # searchable again -> the state stands down NOW
     print("# searching for Mystery Tracks %s" % ", ".join(str(n) for n, _, _ in qs))
     print("# work %s, idle %s, rotating hosts, jittered. Ctrl-C is safe (state is on disk)."
           % ("4-5h", "40-120m"))
@@ -1098,6 +1147,7 @@ def run(args):
         if n_dropped:
             _save(STATE, state)
             print("dropped %d ruled-on excerpt(s) -- the leads keep their numbers" % n_dropped)
+        stamp_pool(state)                     # bucket sig count for /harvest; ≤15-min cached
         todo = len(unscored_pairs(state, q, retired, qs))
         if todo:
             state["rescan_pending"] = todo

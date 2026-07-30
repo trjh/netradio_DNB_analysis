@@ -109,6 +109,17 @@ PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --requeue-missing-sigs
                                                                       # while a writer runs)
 ```
 
+**Clip formats: `.wav`, `.wv`, `.flac`, `.m4a`, `.mp3`** — lossless preferred, in that order
+(everything decodes through ffmpeg, which reads WavPack natively). `.wv` earned its place the
+hard way: Mystery Track 4's clip was wavpack-compacted and silently **left the query set** —
+the harvester ran for days with the page saying "working" while searching for everything except
+the one thing missing a clip. With no searchable clip at all, the harvester now stamps a
+first-class **"nothing to search for"** state (`state["no_queries"]` + phase) before exiting,
+instead of leaving a stale "working" phase behind; and each pass it publishes the **bucket's**
+signature count (`state["pool"]`, the pool's real size post-migration) and the current query
+key per mystery (`state["query_keys"]`) so `/harvest` can show a live "compared: N of pool"
+per mystery.
+
 **A new mystery sees the WHOLE corpus.** A chroma signature is not tied to the question you asked
 of it: the same 12×N matrix answers MT4 today and MT8 next month, for free. So the harvester
 remembers which **(signature, mystery)** pairs it has scored, and any unpaired combination is work
