@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build a "chunk of stream" video for a RANGE of tracks from the 1998 Netradio
-# D&B ISDN reconstruction -- the multi-track companion to mkvideo.sh.
+# D&B ISDN reconstruction -- the multi-track companion to mkmysteryvideo.sh.
 #
 #   scripts/mkstreamvideo.sh <start> <end> [outdir]
 #   scripts/mkstreamvideo.sh 1 31

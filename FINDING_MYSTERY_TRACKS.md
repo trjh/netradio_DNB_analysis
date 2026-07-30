@@ -60,7 +60,7 @@ in `sources/`, which is exactly the trap §1b describes: **the filename is not t
 **The video is built locally** — no website:
 
 ```bash
-bash scripts/mkvideo.sh "$NETRADIO_SOURCES_DIR/Mystery Track 6.wav" 6
+bash scripts/mkmysteryvideo.sh "$NETRADIO_SOURCES_DIR/Mystery Track 6.wav" 6
 ```
 
 It reproduces the format of the Mystery Track 3 upload from ffmpeg primitives: a generated
@@ -150,7 +150,7 @@ PYTHONPATH=scripts .venv/bin/python scripts/match_queue.py --out /tmp/queue-matc
 python3 scripts/identify_by_api.py --query "Mystery Track 8.wav" --windows 8
 
 # 4. build the video to post
-bash scripts/mkvideo.sh "$NETRADIO_SOURCES_DIR/Mystery Track 8.wav" 8
+bash scripts/mkmysteryvideo.sh "$NETRADIO_SOURCES_DIR/Mystery Track 8.wav" 8
 ```
 
 **Also worth a hands-on spot-check:** play the clean clip into **Shazam**, **SoundHound**, and
