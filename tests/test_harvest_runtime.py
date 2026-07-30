@@ -40,7 +40,7 @@ try:
     import librosa                      # noqa: F401
     import soundfile                    # noqa: F401
     HAVE_AUDIO = True
-except Exception:
+except ImportError:                     # only the third-party deps -- anything else raises
     HAVE_AUDIO = False
 
 

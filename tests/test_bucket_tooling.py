@@ -24,7 +24,7 @@ import make_canary                      # noqa: E402
 try:
     import librosa                      # noqa: E402,F401
     HAVE_LIBROSA = True
-except Exception:
+except ImportError:                     # only the third-party dep -- anything else raises
     HAVE_LIBROSA = False
 
 
