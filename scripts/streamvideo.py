@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Render a "chunk of stream" video for a range of tracks from the 1998
-Netradio D&B ISDN reconstruction. Companion to mkvideo.sh (the single-track
+Netradio D&B ISDN reconstruction. Companion to mkmysteryvideo.sh (the single-track
 "Unknown Track N" mystery posts); this one does a continuous multi-track span.
 
   scripts/streamvideo.py <start> <end> [outdir]
@@ -20,7 +20,7 @@ What it builds, from the player repo's committed metadata (never the CSV):
     the source capture file), baked over the dimmed mosaic and shown for the track's
     duration. Since the audio starts at master 0-of-span, video time == span time, so
     each card simply switches at the track's master_begin.
-  * blue showfreqs sound bars along the bottom (same recipe as mkvideo.sh).
+  * blue showfreqs sound bars along the bottom (same recipe as mkmysteryvideo.sh).
   * chapters.txt: a YouTube-ready timestamped tracklist (paste into the description;
     YouTube renders it as clickable scrubber chapters).
 
@@ -314,7 +314,7 @@ def hms(t):
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
-# --- bars filter (from mkvideo.sh, moved to a bottom strip) ------------------
+# --- bars filter (from mkmysteryvideo.sh, moved to a bottom strip) ------------------
 BW, BH, BX, BY = 1740, 120, 90, H - 150
 def bars_filter(ain):
     cols = BW // 20                       # ~20px pitch after neighbour-upscale

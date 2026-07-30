@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build an "Unknown Track N" video for a track-ID post -- locally, no website.
 #
-#   scripts/mkvideo.sh "~/Downloads/Netradio/mystery-uploads/Mystery Track 6.wav" 6
-#   scripts/mkvideo.sh <audio> <n> [outdir]
+#   scripts/mkmysteryvideo.sh "~/Downloads/Netradio/mystery-uploads/Mystery Track 6.wav" 6
+#   scripts/mkmysteryvideo.sh <audio> <n> [outdir]
 #
 # Reproduces the format of the Mystery Track 3 upload
 # (https://www.youtube.com/watch?v=jKEt_2jLzYo) from primitives:
@@ -26,8 +26,8 @@
 # robust anyway: the card is a reusable artefact you can eyeball before spending an encode on it.
 set -euo pipefail
 
-AUDIO="${1:?usage: mkvideo.sh <audio> <n> [outdir]}"
-N="${2:?usage: mkvideo.sh <audio> <n> [outdir]}"
+AUDIO="${1:?usage: mkmysteryvideo.sh <audio> <n> [outdir]}"
+N="${2:?usage: mkmysteryvideo.sh <audio> <n> [outdir]}"
 OUTDIR="${3:-$HOME/Downloads/Netradio/mystery-uploads}"
 FPS="${FPS:-30}"     # the reference is 60; 30 looks identical for bars and halves the encode.
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
