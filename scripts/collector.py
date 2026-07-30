@@ -312,6 +312,10 @@ def run():
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})
         qs = queries()
+        # Bucket sig count for /harvest (≤15-min cached listing). Persist only when the
+        # count moved -- an idle collector pass has no other reason to write state.json.
+        if harvest.stamp_pool(state):
+            _save(STATE, state)
         n = collect_once(state, q, qs)
 
         _, retired = listen_queue_split()
