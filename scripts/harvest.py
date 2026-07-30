@@ -43,6 +43,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import time
@@ -594,6 +595,15 @@ def add_to_queue(urls, source):
 #
 # Nothing here writes to the player's file. If the env var is unset (a harvester run by hand,
 # without the player) this whole path is simply inert.
+#
+# NETRADIO_LISTEN_QUEUE may name any of three layouts -- we read all of them, still read-only:
+#   * the legacy single `listen_queue.json` (a {"items": [...]} object), or a rendered merged
+#     single-file view of the same shape;
+#   * the player's sharded DIRECTORY (the queue the player migrated to), or that directory's
+#     `index.json` manifest named directly -- a manifest listing `shard-NNNN.json` files, each a
+#     bare JSON array of items, which we read in manifest order and concatenate.
+# We tell them apart by inspecting the path (a dir, or a basename of `index.json`), not a new env
+# var -- the player owns the layout, and the harvester should follow it wherever it goes.
 
 LISTEN_QUEUE = os.environ.get("NETRADIO_LISTEN_QUEUE", "")
 
@@ -627,30 +637,124 @@ def _is_own_clip(item):
     So check WHO uploaded it first, and keep the title check only as a second net -- narrowly,
     because real records are called things like "No Mystery" and "Mystery Blend".
     """
-    origin = (item.get("origin") or "").strip().lower()
+    origin = item.get("origin")
+    origin = origin.strip().lower() if isinstance(origin, str) else ""
     if any(o.lower() in origin for o in OWN_ORIGINS):
         return True
-    title = (item.get("title") or "").strip().lower()
+    title = item.get("title")
+    title = title.strip().lower() if isinstance(title, str) else ""
     return title.startswith("mystery track") or title.startswith("netradio mystery")
 
 
+def _load_queue_items():
+    """The listen queue's flat items list, whatever layout NETRADIO_LISTEN_QUEUE points at.
+
+    Single file -> read its `items`. Sharded (a directory, or an `index.json` manifest named
+    directly) -> read the manifest and concatenate the items of each `shard-NNNN.json` it names,
+    in manifest order (each shard is a bare JSON array of items -- the player's committed
+    layout). Raises OSError/ValueError on a missing/torn/mid-write/wrong-shaped file -- the
+    caller turns that into "empty, try again next pass".
+    """
+    if os.path.isdir(LISTEN_QUEUE):
+        manifest_path = os.path.join(LISTEN_QUEUE, "index.json")
+    elif os.path.basename(LISTEN_QUEUE) == "index.json":
+        manifest_path = LISTEN_QUEUE
+    else:
+        manifest_path = None             # a plain file -> the legacy single-file layout
+
+    if manifest_path is None:
+        with open(LISTEN_QUEUE, "r", encoding="utf-8") as fh:
+            items = (json.load(fh) or {}).get("items") or []
+    else:
+        shard_dir = os.path.dirname(manifest_path)
+        with open(manifest_path, "r", encoding="utf-8") as fh:
+            manifest = json.load(fh) or {}
+        # Shape errors are ValueError on purpose: syntactically-valid-but-wrong JSON must
+        # land in the caller's "try again next pass" net, not crash the harvester.
+        if not isinstance(manifest, dict):
+            raise ValueError("manifest is not an object")
+        items = []
+        for entry in manifest.get("shards") or []:
+            if not isinstance(entry, dict):
+                raise ValueError("manifest shard entry is not an object")
+            name = entry.get("name")
+            if name is None:
+                continue
+            # Only the committed filename form may be opened -- a bare `shard-NNNN.json`. This is
+            # containment, not just validation: `name` is joined to the queue dir, so a traversal
+            # ("../x.json") or absolute path in a tampered manifest would read an UNRELATED file
+            # as the queue. Anything else = corrupt manifest = retry next pass.
+            if not isinstance(name, str) or not re.fullmatch(r"shard-\d+\.json", name):
+                raise ValueError("manifest shard name is not shard-NNNN.json")
+            path = os.path.join(shard_dir, name)
+            # ...and the file itself must LIVE in the queue dir: a canonically-named symlink
+            # pointing elsewhere would defeat the containment the name check promises.
+            if os.path.realpath(path) != os.path.join(os.path.realpath(shard_dir), name):
+                raise ValueError("shard %s resolves outside the queue directory" % name)
+            with open(path, "r", encoding="utf-8") as fh:
+                chunk = json.load(fh)
+            if not isinstance(chunk, list):
+                raise ValueError("shard %s is not a list" % name)
+            items.extend(chunk)
+    if not isinstance(items, list):
+        raise ValueError("listen queue items is not a list")
+    # One corrupt entry must not starve the harvester of the other thousands: drop non-object
+    # items rather than failing the whole read (a torn file can't produce these -- that's a
+    # JSON parse error -- so this is programmatic corruption, tolerated per-item).
+    return [it for it in items if isinstance(it, dict)]
+
+
+def _is_cooling(item):
+    """True while the item's `retry_after` (ISO `YYYY-MM-DD`) is still in the FUTURE.
+
+    Mirrors the player's rule: a URL a recent fetch failed on is held back from the network until
+    its date passes, and NOTHING else changes. Only the CANONICAL form the player writes
+    (zero-padded `YYYY-MM-DD`, then a real calendar date) may cool: the player stamps dates with
+    isoformat(), so anything else is corruption, and the safe failure mode for corruption is
+    not-cooling -- one wasted probe beats "2999-1-1" suppressing a URL until 2999. The compare is
+    on parsed dates, never lexical ("tomorrow" > "2026-..." forever).
+    """
+    ra = item.get("retry_after")
+    if not isinstance(ra, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", ra):
+        return False
+    try:
+        ra_date = datetime.strptime(ra, "%Y-%m-%d").date()
+    except ValueError:                   # right shape, impossible date ("2026-13-45")
+        return False
+    return ra_date > datetime.now(timezone.utc).date()
+
+
 def listen_queue_split():
-    """(candidates, retired) from the player's listen queue. Read-only; never raises."""
+    """(candidates, retired) from the player's listen queue. Read-only; never raises.
+
+    Reads whichever layout NETRADIO_LISTEN_QUEUE names (single file, merged view, or sharded
+    dir/manifest -- see _load_queue_items).
+    """
     if not LISTEN_QUEUE or not os.path.exists(LISTEN_QUEUE):
         return [], set()
     try:
-        with open(LISTEN_QUEUE, "r", encoding="utf-8") as fh:
-            items = (json.load(fh) or {}).get("items") or []
-    except (OSError, ValueError):
-        return [], set()                 # the player may be mid-write; try again next pass
+        items = _load_queue_items()
+    except (OSError, ValueError, TypeError, AttributeError):
+        # OSError/ValueError = missing/torn/mid-write/wrong-shaped (the explicit checks in
+        # _load_queue_items raise ValueError). TypeError/AttributeError = the final net for any
+        # shape this code did not think of -- the docstring says NEVER raises, so make it true;
+        # a weird queue is "empty, try again next pass", not a dead harvester.
+        return [], set()
 
     candidates, retired = [], set()
     for it in items:
-        url = (it.get("url") or "").strip()
+        url = it.get("url")
+        if not isinstance(url, str):     # a non-string url is a corrupt item, not a crash
+            continue
+        url = url.strip()
         if not url.startswith("http"):
             continue
         if any(it.get(f) for f in RULED_ON) or _is_own_clip(it):
-            retired.add(url)
+            retired.add(url)             # a ruling wins over cooling: retirement is permanent-ish
+        elif _is_cooling(it):
+            continue                     # cooling gates the network only -- hold the URL back, but
+                                         # do NOT retire it: it rejoins on its own once the date
+                                         # passes, so nothing here drops it from pending.
         else:
             candidates.append(url)
     return candidates, retired
