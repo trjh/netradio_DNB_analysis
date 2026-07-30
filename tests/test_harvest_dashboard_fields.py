@@ -34,6 +34,14 @@ try:
 except Exception:                   # audio deps absent -> the harvest-side tests skip
     harvest = None
 
+# queries() itself does a lazy `import librosa` before any of our seams run, so the
+# query-key test needs the real thing even with the chroma computation patched out.
+try:
+    import librosa                  # noqa: F401
+    HAVE_LIBROSA = True
+except ImportError:
+    HAVE_LIBROSA = False
+
 
 class WvClipsAreSeen(unittest.TestCase):
     """`.wv` is a first-class clip format, and lossless always beats lossy."""
@@ -90,7 +98,8 @@ class PoolStamp(unittest.TestCase):
         self.assertEqual(state["pool"]["count"], 4244)      # the honest last stamp stands
 
 
-@unittest.skipUnless(harvest, "harvest deps unavailable")
+@unittest.skipUnless(harvest and HAVE_LIBROSA,
+                     "librosa unavailable -- see requirements-streamalign.txt")
 class QueryKeysArePublished(unittest.TestCase):
     def test_queries_publishes_the_current_key_per_mystery(self):
         state = {}
@@ -110,6 +119,25 @@ class QueryKeysArePublished(unittest.TestCase):
         self.assertEqual([n for n, _, _ in qs], [4])
         self.assertEqual(state["searching"], [4])
         self.assertEqual(state["query_keys"], {"4": "4:f00"})
+
+
+@unittest.skipUnless(harvest, "harvest deps unavailable")
+class TheSplitRuntimePublishesToo(unittest.TestCase):
+    """Source pin (the pattern test_requeue_missing established): the collector is the
+    split runtime's ONE state writer, so it must pass its state into queries() — the
+    stamping only happens when state is supplied — and stamp the pool. If either call
+    drops out of collector.run(), /harvest goes dark in split mode (the original review
+    finding on this change)."""
+
+    def test_collector_run_publishes_the_dashboard_fields(self):
+        import inspect
+        try:
+            import collector
+        except Exception:
+            self.skipTest("collector deps unavailable")
+        src = inspect.getsource(collector.run)
+        self.assertIn("queries(state)", src)
+        self.assertIn("stamp_pool(state)", src)
 
 
 @unittest.skipUnless(harvest, "harvest deps unavailable")

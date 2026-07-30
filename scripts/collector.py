@@ -311,10 +311,15 @@ def run():
     while True:
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})
-        qs = queries()
-        # Bucket sig count for /harvest (≤15-min cached listing). Persist only when the
-        # count moved -- an idle collector pass has no other reason to write state.json.
-        if harvest.stamp_pool(state):
+        # THIS process is the split runtime's one state writer, so the dashboard fields
+        # harvest.run() would publish must be published here too: pass the state so
+        # queries() stamps searching/skipped_queries/query_keys, and persist when any of
+        # them (or the bucket pool count) moved -- an idle pass has no other save.
+        dash = ("searching", "skipped_queries", "query_keys")
+        prev = {k: state.get(k) for k in dash}
+        qs = queries(state)
+        changed = prev != {k: state.get(k) for k in dash}
+        if harvest.stamp_pool(state) or changed:
             _save(STATE, state)
         n = collect_once(state, q, qs)
 
