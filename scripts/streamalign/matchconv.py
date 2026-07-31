@@ -379,6 +379,17 @@ def write_wav16(path, arr, sr=SR):
     return path
 
 
+def hint_filenames(stem, orig_num):
+    """(stream_side, orig_side) output names for one capture+original run.
+
+    BOTH carry the capture stem: hint writes atomically replace, so an
+    original-side name without the stem would be silently clobbered the next
+    time the same original is aligned inside a different capture.
+    """
+    return ("%s.orig%03d.match.hints.tsv" % (stem, int(orig_num)),
+            "orig%03d.%s.match.hints.tsv" % (int(orig_num), stem))
+
+
 def sonic_annotator_argv(stream_wav, orig_wav, out_dir, exe="sonic-annotator"):
     """The fixed argv for the a_b export. One list, no shell, nothing interpolated."""
     return [exe, "-m", "-d", "vamp:match-vamp-plugin:match:a_b",

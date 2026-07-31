@@ -271,3 +271,23 @@ class TestRunnerSeam(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestHintFilenames(unittest.TestCase):
+    """Two captures aligning the SAME original must never share an output name.
+
+    hint writes atomically replace their destination, so a stem-less
+    original-side name meant run 2 silently destroyed run 1's original-side
+    hints (review finding, 2026-07-31)."""
+
+    def test_orig_side_is_capture_specific(self):
+        s1, o1 = mc.hint_filenames("d376-395", 72)
+        s2, o2 = mc.hint_filenames("d356-375", 72)
+        self.assertNotEqual(o1, o2)
+        self.assertNotEqual(s1, s2)
+        self.assertEqual(len({s1, o1, s2, o2}), 4)
+
+    def test_names_stay_invisible_to_the_pipeline(self):
+        for name in mc.hint_filenames("d376-395", 72):
+            self.assertTrue(name.endswith(".hints.tsv"), name)
+            self.assertFalse(gt.is_pipeline_label_file(name), name)

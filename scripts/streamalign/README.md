@@ -111,7 +111,7 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints d376-395 72 --dry
 - **`match-hints STEM NNN`** — align-tool Pass 1: seat original `NNN` inside capture
   `STEM` and emit paired hint labels — `<stem>.origNNN.match.hints.tsv` (`track sync:`
   rows at capture-local times, proposed `origNNN start:`/`end:`) and
-  `origNNN.match.hints.tsv` (`origNNN sync:` rows at original-local seconds), every
+  `origNNN.<stem>.match.hints.tsv` (`origNNN sync:` rows at original-local seconds; the stem keeps runs against different captures from colliding), every
   row ` HINT`-marked with a spelled-out confidence, plus the recovered rate and
   polarity in a summary note. Runs `sonic-annotator` itself (or takes a pre-exported
   `match:a_b` CSV via `--csv`); emits QUESTION rows instead of silent guesses when

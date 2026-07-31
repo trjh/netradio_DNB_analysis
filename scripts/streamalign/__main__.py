@@ -122,8 +122,8 @@ def _cmd_match_hints(args):
         return
     out_dir = args.out or (args.labels or _gt.LABELS_DIR)
     os.makedirs(out_dir, exist_ok=True)
-    for rows, name in ((stream_rows, "%s.orig%03d.match.hints.tsv" % (stem, int(args.orig))),
-                       (orig_rows, "orig%03d.match.hints.tsv" % int(args.orig))):
+    s_name, o_name = _mc.hint_filenames(stem, args.orig)
+    for rows, name in ((stream_rows, s_name), (orig_rows, o_name)):
         print("wrote %s" % _hints.write_hints(rows, os.path.join(out_dir, name)))
     print("Import each in Audacity: File > Import > Labels -- they land as their OWN "
           "tracks, beside your labels. Nothing you have is touched.")
@@ -368,7 +368,7 @@ def main(argv=None):
     pm = sub.add_parser("match-hints",
                         help="align-tool Pass 1: MATCH-seed + PHAT-refine an original inside "
                              "a capture; emit paired <stem>.origNNN.match.hints.tsv / "
-                             "origNNN.match.hints.tsv (never labels)")
+                             "origNNN.<stem>.match.hints.tsv (never labels)")
     pm.add_argument("stem", help="capture stem the original plays inside, e.g. d376-395")
     pm.add_argument("orig", type=int, help="original track number (NNN, per sources_local)")
     pm.add_argument("--csv", default=None,
