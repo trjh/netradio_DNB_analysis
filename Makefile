@@ -19,7 +19,10 @@ export NETRADIO_SOURCES_DIR
 SHELL=bash
 
 .DEFAULT_GOAL := env
-env: venv dep
+env: venv dep match-tools   ## EVERYTHING the tools need, incl. the align binaries (sonic-annotator + match-vamp)
+
+match-tools:          ## install/build sonic-annotator + the match-vamp plugin (idempotent; macOS)
+	bash scripts/install_match_tools.sh
 
 venv:
 	rm -rf .env
