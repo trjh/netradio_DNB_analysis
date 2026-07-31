@@ -117,6 +117,12 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(sa.start_for(starts, "d", 42, "Z", 50.0), 55.0)
         self.assertIsNone(sa.start_for(starts, "d", 7, "A", 0.0))
 
+    def test_duplicate_exact_labels_take_the_nearest_not_the_first(self):
+        # re-seating leaves stale duplicate `start: A` rows; the live bookkeeping is
+        # the one nearest the sync row (real case: track 010 in d019-040, 5.4 s apart)
+        starts = {("d", 10): [("A", 509.828182), ("A", 515.211983)]}
+        self.assertEqual(sa.start_for(starts, "d", 10, "A", 517.492078), 515.211983)
+
     def test_inside_shifts_edge_probes_rather_than_skipping(self):
         got = sa._inside(1.0, 1.0, 100.0, 100.0)
         self.assertIsNotNone(got)

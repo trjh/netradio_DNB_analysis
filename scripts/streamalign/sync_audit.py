@@ -61,14 +61,17 @@ def parse_orig_starts(labels_dir=None):
 
 
 def start_for(starts, stem, num, label, orig_ts):
-    """The clip-head time for a sync point: exact label match, else nearest in time."""
+    """The clip-head time for a sync point: nearest exact-label match, else nearest
+    of any label. Re-seating in Audacity leaves DUPLICATE `start: <label>` rows (an
+    old head and the current one), so among exact matches the one nearest the sync
+    row's own time is the live bookkeeping -- an arbitrary first-match can be
+    seconds of stale clip head."""
     rows = starts.get((stem, num))
     if not rows:
         return None
     exact = [t for lab, t in rows if lab == label]
-    if exact:
-        return exact[0]
-    return min((t for _, t in rows), key=lambda t: abs(t - orig_ts))
+    pool = exact or [t for _, t in rows]
+    return min(pool, key=lambda t: abs(t - orig_ts))
 
 
 def seat_metrics(stream, orig2, a_s, b2_s, win_s=WIN_S):
