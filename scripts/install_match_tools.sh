@@ -22,7 +22,7 @@ if command -v sonic-annotator >/dev/null 2>&1; then
 else
     SA_BIN="$BIN_DIR/sonic-annotator"
     if [ ! -x "$SA_BIN" ]; then
-        mkdir -p "$BUILD_DIR"
+        mkdir -p "$BUILD_DIR" "$BIN_DIR"
         curl -sL "$SA_URL" | tar xz -C "$BUILD_DIR"
         install -m 0755 "$BUILD_DIR/sonic-annotator-${SA_VERSION}-macos/sonic-annotator" "$BIN_DIR/"
     fi
