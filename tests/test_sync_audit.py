@@ -132,3 +132,34 @@ class TestHelpers(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(HAVE_FFMPEG, "ffmpeg not on PATH")
+class TestExhaustiveSweep(unittest.TestCase):
+    """The closed form residual = sqrt(2-2|rho|) at every lag, against brute force."""
+
+    def test_sweep_matches_brute_force_and_finds_the_seat(self):
+        rng = np.random.default_rng(3)
+        raw = rng.standard_normal(SR * 20).astype(np.float32)
+        k = np.hanning(33).astype(np.float32)
+        k /= k.sum()
+        base = np.convolve(raw, k, "same") + 0.1 * raw
+        stream = 0.05 * rng.standard_normal(SR * 20).astype(np.float32)
+        stream += base * 0.5
+        owin = base[8 * SR:9 * SR].copy()          # 1 s window whose seat is at 8 s
+        curve = sa.exhaustive_sweep(stream, owin)
+        self.assertEqual(len(curve), len(stream) + len(owin) - 1)
+        # global minimum at the planted seat (lag index = seat + n - 1)
+        self.assertEqual(int(np.argmin(curve)), 8 * SR + len(owin) - 1)
+        # the bed noise alone bounds the null: 0.05 bed vs ~0.117 signal -> ~37%
+        self.assertLess(float(curve.min()), 45.0)
+        # closed form == the audit's own metric, spot-checked by brute force
+        for lag_s in (3.0, 8.0, 14.5):
+            i = int(lag_s * SR)
+            seg = stream[i:i + len(owin)]
+            rho = abs(float(np.dot(seg, owin)
+                            / (np.linalg.norm(seg) * np.linalg.norm(owin))))
+            expect = 100.0 * np.sqrt(2 - 2 * rho)
+            self.assertAlmostEqual(float(curve[i + len(owin) - 1]), expect, delta=0.5)
+        # and the mass of the curve sits at the sqrt(2) cluster
+        self.assertGreater(float(np.median(curve)), 120.0)

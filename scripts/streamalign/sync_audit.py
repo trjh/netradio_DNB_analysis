@@ -220,3 +220,120 @@ def render(result):
                      "min %.1f%%  p5 %.1f%%  median %.1f%%  n=%d"
                      % (b.min(), np.percentile(b, 5), np.median(b), len(b)))
     return "\n".join(lines)
+
+
+# --- the exhaustive per-sample sweep (owner spec, 2026-07-31) -------------------------
+# "shouldn't that alignment point in the original be compared to every single one of the
+#  16000 * (# of secs in stream file) [positions]?" -- yes, and there is a closed form
+# that makes it cheap. The inspector's residual is computed with the original level-
+# matched (RMS gain) to the stream slice, and for level-matched signals the leftover
+# after best-polarity subtraction is a pure function of the normalised cross-correlation
+# rho at that lag:
+#
+#     residual = sqrt(2 - 2*|rho|)          (0 at rho=+-1, sqrt(2)~=141.4% at rho=0)
+#
+# -- which is also WHY unrelated positions cluster at ~141%: subtracting something
+# unrelated removes nothing, it adds the two energies (powers of uncorrelated signals
+# add), and with both level-matched that sum is sqrt(2) times the stream slice. So one
+# FFT cross-correlation plus a sliding energy sum yields the residual at EVERY sample
+# lag -- the full list the histogram wants -- in seconds instead of days.
+
+def exhaustive_sweep(stream, owin):
+    """residual% of the level-matched, best-polarity subtraction at EVERY sample lag.
+
+    Returns a float32 array of length len(stream) + len(owin) - 1: one value per
+    possible placement of the original window against the stream, including the
+    placements where the window hangs off either end (zero-padded there, so edge
+    values drift toward 141% as the overlap shrinks).
+    """
+    s = np.asarray(stream, dtype=np.float32)
+    o = np.asarray(owin, dtype=np.float32)
+    n = len(o)
+    try:                        # scipy's overlap-add is memory-lean on 20M-sample runs
+        from scipy.signal import oaconvolve
+        num = oaconvolve(s, o[::-1], mode="full")
+    except ImportError:         # core numpy fallback: one big FFT, same numbers
+        m = len(s) + n - 1
+        nfft = 1 << (m - 1).bit_length()
+        num = np.fft.irfft(np.fft.rfft(s, nfft) * np.fft.rfft(o[::-1], nfft), nfft)[:m]
+    padded_sq = np.concatenate([np.zeros(n - 1, np.float64),
+                                s.astype(np.float64) ** 2,
+                                np.zeros(n - 1, np.float64)])
+    csum = np.concatenate([[0.0], np.cumsum(padded_sq)])
+    win_energy = csum[n:] - csum[:-n]
+    denom = np.sqrt(np.maximum(win_energy, 1e-12)) * float(np.linalg.norm(o))
+    rho = np.abs(num) / np.maximum(denom, 1e-12)
+    return (100.0 * np.sqrt(np.clip(2.0 - 2.0 * np.clip(rho, 0.0, 1.0), 0.0, 4.0))
+            ).astype(np.float32)
+
+
+def sweep_point(track, label, labels_dir=None, sources_dir="sources_local",
+                audio_dir=None, wins=(6.0, 0.6), search_s=SEARCH_S):
+    """One hand sync point, swept against every sample position of its capture.
+
+    Reconstructs and refines the seat exactly like audit(), then for each window
+    size in `wins` takes the original's window at the verified seat and sweeps it
+    across the whole capture. Returns per-window: the histogram (1%-wide bins,
+    0..200%), the minimum and where it landed (should be the true seat), how many
+    positions fall below a few landmark values, and the true seat's own residual.
+    """
+    gt = _tm.track_sync_groundtruth(labels_dir)
+    starts = parse_orig_starts(labels_dir)
+    info = gt.get(int(track))
+    if not info or not info["rate"]:
+        raise ValueError("track %s has no rated sync ground truth" % track)
+    pr = next((p for p in info["pairs"] if p["label"] == label), None)
+    if pr is None:
+        raise ValueError("track %s has no sync point labelled %r" % (track, label))
+    stem = pr["file"].replace(".labels.tsv", "")
+    start_t = start_for(starts, stem, int(track), label, pr["orig_ts"])
+    if start_t is None:
+        raise ValueError("no origNNN start: bookkeeping for that point")
+    rate_mc = 1.0 / float(info["rate"])
+    stream = _audio.load_audio(stem, audio_dir=audio_dir)
+    orig_path = _tm.find_original(int(track), sources_dir)
+    if not orig_path:
+        raise ValueError("original %s not on disk" % track)
+    orig2 = _mc.resample_by_rate(_audio.load_audio(orig_path, use_cache=False), rate_mc)
+    placed = _inside(pr["track_ts"], (pr["orig_ts"] - start_t) / rate_mc,
+                     len(stream) / SR, len(orig2) / SR, search_s=search_s)
+    if placed is None:
+        raise ValueError("window does not fit inside both files")
+    a_s, b2_hand = placed
+    got = _mc._refine_peaks(stream, orig2, a_s, b2_hand, WIN_S, search_s, n_peaks=1)
+    if not got:
+        raise ValueError("refine failed at the reconstructed seat")
+    off_s, seat_conf, _ = got[0]
+    b2 = a_s - off_s
+    result = {"track": int(track), "label": label, "stem": stem,
+              "stream_t": float(a_s), "orig_t2": float(b2), "rate": float(info["rate"]),
+              "seat_conf": float(seat_conf), "stream_len_s": len(stream) / SR,
+              "windows": {}}
+    for win_s in wins:
+        n = int(win_s * SR)
+        b0 = int((b2 - win_s / 2) * SR)
+        owin = orig2[max(0, b0):max(0, b0) + n]
+        curve = exhaustive_sweep(stream, owin)
+        true_lag = int(round(a_s * SR - win_s / 2 * SR)) + n - 1  # window-start lag index
+        lo = int(np.argmin(curve))
+        hist, _ = np.histogram(curve, bins=200, range=(0.0, 200.0))
+        # min-per-quarter-second envelope: the whole 17M-value curve, viewable --
+        # dips below the ~141% mass are exactly the places the window "matches"
+        step = SR // 4
+        usable = curve[:len(curve) // step * step]
+        envelope = usable.reshape(-1, step).min(axis=1)
+        result["windows"]["%g" % win_s] = {
+            "n_positions": int(len(curve)),
+            "envelope_step_s": 0.25,
+            "envelope_offset_s": float(-(n - 1) / SR),
+            "envelope": [round(float(v), 2) for v in envelope],
+            "min_residual": float(curve.min()),
+            "min_at_s": float((lo - (n - 1)) / SR),
+            "true_at_s": float(a_s - win_s / 2),
+            "true_residual": float(curve[min(true_lag, len(curve) - 1)]),
+            "true_is_min": bool(abs(lo - true_lag) <= 2),
+            "below": {str(t): int(np.count_nonzero(curve < t))
+                      for t in (90, 100, 110, 120, 125, 130, 135)},
+            "hist": hist.tolist(),
+        }
+    return result

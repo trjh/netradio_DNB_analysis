@@ -141,6 +141,29 @@ def _cmd_sync_audit(args):
         print("wrote %s" % args.json)
 
 
+def _cmd_sync_sweep(args):
+    from . import sync_audit as _sa
+    result = _sa.sweep_point(args.track, args.label, labels_dir=args.labels,
+                             sources_dir=args.sources, wins=tuple(args.wins),
+                             search_s=args.search)
+    print("track %03d %s in %s  seat conf %.2f  (stream %.0f s)"
+          % (result["track"], result["label"], result["stem"], result["seat_conf"],
+             result["stream_len_s"]))
+    for win, w in result["windows"].items():
+        print("  win %ss: %d positions  min %.1f%% at %.3fs (true seat %.3fs%s)  "
+              "true-seat residual %.1f%%"
+              % (win, w["n_positions"], w["min_residual"], w["min_at_s"],
+                 w["true_at_s"], " = MIN" if w["true_is_min"] else "",
+                 w["true_residual"]))
+        print("  win %ss: positions below thresholds: %s"
+              % (win, "  ".join("<%s%%: %d" % kv for kv in sorted(
+                  w["below"].items(), key=lambda kv: int(kv[0])))))
+    if args.json:
+        with open(args.json, "w", encoding="utf-8") as handle:
+            json.dump(result, handle)
+        print("wrote %s" % args.json)
+
+
 def _cmd_inspect_slice(args):
     from . import inspect_slice as _isl
     from . import track_mix as _tm
@@ -427,6 +450,18 @@ def main(argv=None):
                      help="seat search radius seconds around the reconstructed seat")
     psa.add_argument("--json", default=None, help="write the full results JSON here")
 
+    psw = sub.add_parser("sync-sweep",
+                        help="sweep ONE hand sync point's original window against EVERY "
+                             "sample position of its capture; histogram + minima (the "
+                             "align-tool color-calibration curve)")
+    psw.add_argument("track", type=int, help="track number with hand sync ground truth")
+    psw.add_argument("label", help="sync point label (A, B, 1, ...)")
+    psw.add_argument("--wins", nargs="*", type=float, default=[6.0, 0.6],
+                     help="window sizes seconds (default: 6.0 0.6)")
+    psw.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
+    psw.add_argument("--search", type=float, default=1.5, help="seat search radius seconds")
+    psw.add_argument("--json", default=None, help="write the full results JSON here")
+
     pi = sub.add_parser("inspect-slice",
                         help="align-tool Pass 2: emit JSON slices (or --refine snap-to-best) "
                              "for the player's /align inspector; all DSP happens here")
@@ -457,7 +492,8 @@ def main(argv=None):
      "starter": _cmd_starter, "hints": _cmd_hints,
      "match-hints": _cmd_match_hints,
      "inspect-slice": _cmd_inspect_slice,
-     "sync-audit": _cmd_sync_audit}[args.cmd](args)
+     "sync-audit": _cmd_sync_audit,
+     "sync-sweep": _cmd_sync_sweep}[args.cmd](args)
 
 
 if __name__ == "__main__":
