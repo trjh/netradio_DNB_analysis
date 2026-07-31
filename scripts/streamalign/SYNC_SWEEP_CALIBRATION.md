@@ -68,6 +68,11 @@ point of this case.
 
 ![066 A: alignment value at every position](figs/sweep-066A-envelope.svg)
 
+Zoomed to the stretch containing both the hand seat and the global minimum, so the two
+can actually be seen:
+
+![066 A zoom: hand seat vs global minimum](figs/sweep-066A-zoom.svg)
+
 - At the **true seat the residual is ~104%** — *amber*, while being exactly right. The
   record is simply buried: after a correct subtraction, what remains is the *other*
   record the DJ is playing over it.
@@ -83,13 +88,17 @@ point of this case.
 
 ## The colors, picked from both histograms together
 
-![Both histograms and the proposed spectrum](figs/sweep-spectrum.svg)
+Histograms are capped at 145% — the sweep math shows values cannot exceed √2 ≈ 141%.
+The scale is a **gradient**, not bands:
 
-| Color | Range | Meaning, in these units |
+![Both histograms and the gradient spectrum](figs/sweep-spectrum.svg)
+
+| Zone | Range | Meaning, in these units |
 |---|---|---|
-| **green** | **below 90%** | Genuine match of material — unreachable by accident (007: 311 of 17.7 M positions; 066: only within the record's actual play-span). On loopy passages it identifies the *record*, not always the *bar*. |
-| **amber** | **90–125%** | Correlated but shallow. This is what a **correct seat in a busy mix looks like** (066 A reads 104% while exactly right). Believe the confidence number and the ear here. |
-| **red** | **≥ 125%** | Statistically indistinguishable from a wrong seat (the wrong-place cluster's rare outliers reach ~125–130%). |
+| **pure green** | **below 70%** | Unambiguous match of material — in these sweeps only the seat neighbourhood (007) or the record's own play-span (066) ever reads here. On loopy passages it identifies the *record*, not always the *bar*. |
+| **green fading into yellow** | **70–100%** | Strong-to-moderate correlation; the deeper the green, the more of the stream the slice explains. |
+| **yellow fading into red** | **100–125%** | Shallow correlation. This is what a **correct seat in a busy mix looks like** (066 A reads 104% while exactly right) — believe the confidence number and the ear here. |
+| **pure red** | **≥ 125%** | Statistically indistinguishable from a wrong seat (the wrong-place cluster's rare outliers reach ~125–130%). |
 
 And the rule the two cases force: **the residual measures how *exposed* the record is;
 the correlation confidence measures whether the *alignment* is right.** 007 A and 066 A
