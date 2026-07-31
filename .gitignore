@@ -85,3 +85,4 @@ clips_out/
 .chroma-cache/
 # Harvester runtime state (progress, matches, pause flag). Machine-local.
 .harvest/
+.venv
