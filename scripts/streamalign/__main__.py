@@ -129,6 +129,30 @@ def _cmd_match_hints(args):
           "tracks, beside your labels. Nothing you have is touched.")
 
 
+def _cmd_inspect_slice(args):
+    from . import inspect_slice as _isl
+    from . import track_mix as _tm
+
+    stem = _audio.stem_of(args.stem)
+    orig_path = _tm.find_original(args.orig, args.sources)
+    out = None
+    if not _audio.find_audio_file(stem):
+        out = {"error": "no audio for capture %s" % stem}
+    elif not orig_path:
+        out = {"error": "no original %03d-* under %s" % (int(args.orig), args.sources)}
+    if out is None:
+        fn = _isl.refine_seat if args.refine else _isl.build_slices
+        kwargs = {"radius_s": args.radius} if args.refine else {}
+        try:
+            out = fn(stem, orig_path, args.stream_t, args.orig_t, args.rate,
+                     args.invert, args.win, **kwargs)
+        except Exception as exc:   # stdout must stay JSON: the player relays it
+            out = {"error": "%s: %s" % (type(exc).__name__, str(exc)[:200])}
+    print(json.dumps(out))
+    if "error" in out:
+        raise SystemExit(1)
+
+
 def _cmd_hints(args):
     from . import hints as _hints
     rows, diag = _hints.build_hints(args.stem, labels_dir=args.labels, decim=args.decim)
@@ -379,6 +403,20 @@ def main(argv=None):
     pm.add_argument("--dry-run", action="store_true",
                     help="print the hint rows instead of writing files")
 
+    pi = sub.add_parser("inspect-slice",
+                        help="align-tool Pass 2: emit JSON slices (or --refine snap-to-best) "
+                             "for the player's /align inspector; all DSP happens here")
+    pi.add_argument("stem", help="capture stem, e.g. d376-395")
+    pi.add_argument("orig", type=int, help="original track number (NNN)")
+    pi.add_argument("--stream-t", type=float, required=True, help="capture-local seconds")
+    pi.add_argument("--orig-t", type=float, required=True, help="original-native seconds")
+    pi.add_argument("--rate", type=float, default=1.0, help="original-seconds per stream-second")
+    pi.add_argument("--invert", action="store_true", help="apply the polarity flip (M2)")
+    pi.add_argument("--win", type=float, default=6.0, help="comparison window seconds (cap 30)")
+    pi.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
+    pi.add_argument("--refine", action="store_true", help="snap-to-best instead of slices")
+    pi.add_argument("--radius", type=float, default=0.05, help="refine radius seconds (cap 2)")
+
     ph = sub.add_parser("hints",
                         help="emit <stem>.hints.tsv: suggested sync/start/end/skips + questions "
                              "to import alongside your hand labels (never overwrites them)")
@@ -393,7 +431,8 @@ def main(argv=None):
      "skip-confirm": _cmd_skip_confirm,
      "skip-reject": _cmd_skip_reject, "skip-rejections": _cmd_skip_rejections,
      "starter": _cmd_starter, "hints": _cmd_hints,
-     "match-hints": _cmd_match_hints}[args.cmd](args)
+     "match-hints": _cmd_match_hints,
+     "inspect-slice": _cmd_inspect_slice}[args.cmd](args)
 
 
 if __name__ == "__main__":
