@@ -84,13 +84,27 @@ def refine_offset(a, b, around, radius=2000, win=None, phat=True):
     estimates the residual delay. Returns (offset_samples_float, confidence) where
     confidence is the normalized correlation peak in [0,1] (1 == identical).
     """
+    return refine_offset_multi(a, b, around, radius=radius, win=win, phat=phat)[0]
+
+
+def refine_offset_multi(a, b, around, radius=2000, win=None, phat=True,
+                        n_peaks=1, min_sep=8000):
+    """Like refine_offset, but returns the `n_peaks` best SEPARATED peaks in the range.
+
+    Returns [(offset_samples_float, confidence)] sorted by correlation peak height,
+    always at least one entry. Loop-based material (all of drum & bass) genuinely
+    correlates at several whole-bar-shifted offsets, and the true seat is not always
+    the tallest peak in a wide search window -- callers that search wide need the
+    runners-up too. Peaks closer than `min_sep` samples (default 0.5 s at 16 kHz)
+    count as the same peak.
+    """
     a = _as_float(a)
     b = _as_float(b)
     # Overlap region in a's coordinates given offset `around` (a[t] ~ b[t-around]).
     lo = max(0, around)
     hi = min(len(a), len(b) + around)
     if hi - lo < 1000:
-        return float(around), 0.0
+        return [(float(around), 0.0)]
     if win is None:
         win = min(hi - lo, 1 << 20)  # up to ~65 s at 16 kHz
     mid = (lo + hi) // 2
@@ -117,16 +131,41 @@ def refine_offset(a, b, around, radius=2000, win=None, phat=True):
         ccp = np.fft.irfft(cross / mag, nfft)
     else:
         ccp = np.fft.irfft(cross, nfft)
-    k = int(np.argmax(ccp))
-    lag = k if k < nfft // 2 else k - nfft
-    frac = _parabolic(ccp, k)
-    # Convention: ccp[k] = sum_i aseg[i]*bseg[i-k], so the peak lag means
-    # aseg[i] ~ bseg[i-lag]. With aseg[i]=a[a0+i] and bseg[j]=b[b0+j], a match
-    # a[a0+i] ~ b[(a0+i)-offset] gives  b0 + i - lag = a0 + i - offset, i.e.
-    #   offset = (a0 - b0) + lag.
-    offset = (a0 - b0) + (lag + frac)
-    conf = _ncc_at(aseg, bseg, lag)
-    return float(offset), float(conf)
+    # Search only the lags the caller asked for: `around` +/- `radius`. The correlation
+    # array also contains every other circular lag -- including ranges that no sample
+    # pairing can produce (zero-padding artefacts beyond the segment lengths) -- and a
+    # spurious argmax there both breaks the "refine NEAR around" contract and, being
+    # unpairable, scores confidence 0. (Found when the matchconv rate sweep widened
+    # radius beyond the window length; small-radius callers get identical results.)
+    lag0 = around - (a0 - b0)
+    lags = np.arange(lag0 - radius, lag0 + radius + 1)
+    # ...and only the lags whose sample pairing actually covers most of the window.
+    # When the caller's b segment got clamped at the signal's edge, part of the
+    # requested range pairs only a sliver of the segments (or nothing): its "peaks"
+    # are zero-padding noise and their tiny-overlap confidences are meaningless.
+    la, lb = len(aseg), len(bseg)
+    shifts = -lags
+    overlap = np.minimum(np.minimum(la, lb - shifts), la + shifts)
+    lags = lags[overlap >= max(1000, la * 3 // 4)]
+    if len(lags) == 0:
+        return [(float(around), 0.0)]
+    vals = ccp[lags % nfft].copy()
+    peaks = []
+    for _ in range(max(1, n_peaks)):
+        i = int(np.argmax(vals))
+        if not np.isfinite(vals[i]) or (peaks and vals[i] <= 0):
+            break
+        lag = int(lags[i])
+        k = lag % nfft
+        frac = _parabolic(ccp, k)
+        # Convention: ccp[k] = sum_i aseg[i]*bseg[i-k], so the peak lag means
+        # aseg[i] ~ bseg[i-lag]. With aseg[i]=a[a0+i] and bseg[j]=b[b0+j], a match
+        # a[a0+i] ~ b[(a0+i)-offset] gives  b0 + i - lag = a0 + i - offset, i.e.
+        #   offset = (a0 - b0) + lag.
+        offset = (a0 - b0) + (lag + frac)
+        peaks.append((float(offset), float(_ncc_at(aseg, bseg, lag))))
+        vals[max(0, i - min_sep):i + min_sep + 1] = -np.inf
+    return peaks
 
 
 def _ncc_at(aseg, bseg, lag):
@@ -136,7 +175,11 @@ def _ncc_at(aseg, bseg, lag):
     """
     shift = -lag  # bseg index = i + shift
     if shift >= 0:
-        a_ = aseg[:max(0, len(aseg) - shift)]
+        # pair aseg[i] with bseg[i+shift]; aseg only shrinks if bseg runs out
+        # (bseg is longer than aseg whenever the caller widened it by a search
+        # radius, and truncating aseg by `shift` there zeroed the confidence of
+        # every peak found beyond one aseg-length -- the radius>win bug)
+        a_ = aseg[:max(0, min(len(aseg), len(bseg) - shift))]
         b_ = bseg[shift:shift + len(a_)]
     else:
         a_ = aseg[-shift:]

@@ -56,6 +56,16 @@ pairs. This is the data everything else is graded against.
 into per-track ground truth (the **rate** = mix-seconds per original-second) that
 the chroma+DTW aligner is graded against.
 
+`matchconv.py` (original-track↔mix, align-tool Pass 1) turns a **MATCH** (Sonic
+Visualiser's aligner, run headless via `sonic-annotator` + the `match-vamp` plugin)
+path into sample-tight paired sync points: the MATCH path is only a *coarse map*
+(its online DTW is forced to start the files together, so on a mix it lands seconds
+off with the wrong rate), then a rate sweep scored by GCC-PHAT confidence finds the
+true rate, a rate-corrected anchor grid walks the overlap at both polarities, and
+whole-overlap **anchor mass** picks between loop-shifted rival seats (drum & bass
+self-correlates at whole-bar shifts; the true seat is the one that explains the
+WHOLE overlap, not just the looped stretch).
+
 **3. Score (measure the finding vs the answer key).** `score.py` — pairwise and
 absolute error vs ground truth, plus redundant-overlap self-consistency.
 
@@ -74,6 +84,7 @@ PYTHONPATH=scripts python3 -m streamalign align d000-018 d001-026b
 PYTHONPATH=scripts python3 -m streamalign --labels <dir> validate
 PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix \
     --meta track-metadata.json --sources sources_local        # G2 1st pass (needs librosa)
+PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints d376-395 72 --dry-run
 ```
 
 - **`groundtruth`** — prints each file's resolved hand master-start (seconds) and
@@ -96,6 +107,16 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix \
   per-track table (rate / gt_rate / err / confidence / cost / reliable / within-tol)
   plus a summary (reliable, within-tolerance, flagged, no-original). `--json` writes
   the full results. Needs librosa — run with `.venv/bin/python`.
+
+- **`match-hints STEM NNN`** — align-tool Pass 1: seat original `NNN` inside capture
+  `STEM` and emit paired hint labels — `<stem>.origNNN.match.hints.tsv` (`track sync:`
+  rows at capture-local times, proposed `origNNN start:`/`end:`) and
+  `origNNN.<stem>.match.hints.tsv` (`origNNN sync:` rows at original-local seconds; the stem keeps runs against different captures from colliding), every
+  row ` HINT`-marked with a spelled-out confidence, plus the recovered rate and
+  polarity in a summary note. Runs `sonic-annotator` itself (or takes a pre-exported
+  `match:a_b` CSV via `--csv`); emits QUESTION rows instead of silent guesses when
+  coverage is thin or a rival loop-shifted seat scores close. Never writes a
+  `.labels.tsv`.
 
 ## Status (current)
 
