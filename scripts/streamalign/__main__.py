@@ -24,6 +24,14 @@
       + summary (reliable / within-tolerance / flagged / no-original). Needs librosa
       (run with .venv/bin/python). --json writes the full results to a file.
 
+  .venv/bin/python -m streamalign match-hints d376-395 72
+      Align-tool Pass 1: seat original 072 inside capture d376-395 (MATCH coarse
+      map via sonic-annotator, then rate-swept + rate-corrected GCC-PHAT anchors,
+      loop-shift disambiguation by whole-overlap anchor mass) and emit the paired
+      *.match.hints.tsv files for Audacity import. Needs numpy + ffmpeg (venv);
+      needs sonic-annotator + the match-vamp plugin unless --csv provides a
+      pre-exported match:a_b path CSV.
+
 Run from the repo's scripts/ dir or with scripts/ on PYTHONPATH.
 """
 
@@ -58,6 +66,67 @@ def _cmd_starter(args):
     for other in sorted(written):
         print("%-20s -> %s" % (other, written[other]))
     print("# %d starter file(s) (seed-only; excluded from import/solve/build)" % len(written))
+
+
+def _cmd_match_hints(args):
+    import tempfile
+
+    from . import hints as _hints
+    from . import matchconv as _mc
+    from . import track_mix as _tm
+
+    stem = _audio.stem_of(args.stem)
+    if not _audio.find_audio_file(stem):
+        print("no audio for capture %s" % stem)
+        return
+    orig_path = _tm.find_original(args.orig, args.sources)
+    if not orig_path:
+        print("no original %03d-* under %s" % (int(args.orig), args.sources))
+        return
+    stream = _audio.load_audio(stem)
+    orig = _audio.load_audio(orig_path, use_cache=False)
+    if args.csv:
+        pairs = _mc.parse_ab_csv(args.csv)
+    else:
+        with tempfile.TemporaryDirectory(prefix="matchconv-") as tmp:
+            s_wav = _mc.write_wav16(os.path.join(tmp, stem + ".wav"), stream)
+            o_wav = _mc.write_wav16(os.path.join(tmp, "orig%03d.wav" % int(args.orig)), orig)
+            pairs = _mc.parse_ab_csv(_mc.run_match(s_wav, o_wav, tmp))
+    result = _mc.convert(stream, orig, pairs, anchor_count=args.anchors)
+    rate, anchors = result["rate"], result["anchors"]
+    print("rate %.5f (original runs %+.2f%% vs stream)   polarity %s   sweep score %.2f"
+          % (rate, (rate - 1.0) * 100.0,
+             "INVERTED" if result["inverted"] else "normal", result["sweep_conf"]))
+    kept = sum(1 for m in result["grid"] if not m[4] and m[2] >= _mc.MIN_CONF)
+    print("# grid: %d probe(s), %d usable, %d selected; coverage %d%% of possible overlap"
+          "%s" % (len(result["grid"]), kept, len(anchors),
+                  round(result["coverage"] * 100),
+                  " (LOW -- possible loop-shift, verify by ear)"
+                  if result["coverage"] < 0.5 else ""))
+    if result["ambiguous"]:
+        print("!! a rival seat scored nearly as high -- likely whole-bar loop shift; "
+              "verify a structurally unique moment by ear")
+    for k, (a, off, conf, _inv, _out) in enumerate(anchors, start=1):
+        print("  sync %d  stream %9.3fs  <->  orig %9.3fs  confidence %.1f/10"
+              % (k, a, (a - off) * rate, 10.0 * conf))
+    if not anchors:
+        print("no anchors above confidence %.2f -- nothing to emit" % _mc.MIN_CONF)
+        return
+    stream_rows, orig_rows = _mc.build_rows(
+        args.orig, anchors, rate, result["inverted"],
+        orig_native_len_s=len(orig) / _audio.SR, stream_len_s=len(stream) / _audio.SR,
+        coverage=result["coverage"], ambiguous=result["ambiguous"])
+    if args.dry_run:
+        for a, b, text in sorted(stream_rows + orig_rows, key=lambda r: (r[0], r[1])):
+            print("%10.3f %10.3f  %s" % (a, b, text))
+        return
+    out_dir = args.out or (args.labels or _gt.LABELS_DIR)
+    os.makedirs(out_dir, exist_ok=True)
+    for rows, name in ((stream_rows, "%s.orig%03d.match.hints.tsv" % (stem, int(args.orig))),
+                       (orig_rows, "orig%03d.match.hints.tsv" % int(args.orig))):
+        print("wrote %s" % _hints.write_hints(rows, os.path.join(out_dir, name)))
+    print("Import each in Audacity: File > Import > Labels -- they land as their OWN "
+          "tracks, beside your labels. Nothing you have is touched.")
 
 
 def _cmd_hints(args):
@@ -296,6 +365,20 @@ def main(argv=None):
     pst.add_argument("owner", help="owner capture stem whose file_<other>: links seed neighbours")
     pst.add_argument("--out", default=None, help="output dir (default: labels dir)")
 
+    pm = sub.add_parser("match-hints",
+                        help="align-tool Pass 1: MATCH-seed + PHAT-refine an original inside "
+                             "a capture; emit paired <stem>.origNNN.match.hints.tsv / "
+                             "origNNN.match.hints.tsv (never labels)")
+    pm.add_argument("stem", help="capture stem the original plays inside, e.g. d376-395")
+    pm.add_argument("orig", type=int, help="original track number (NNN, per sources_local)")
+    pm.add_argument("--csv", default=None,
+                    help="pre-exported match:a_b CSV (else sonic-annotator is run)")
+    pm.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
+    pm.add_argument("--anchors", type=int, default=8, help="sync points to emit")
+    pm.add_argument("--out", default=None, help="output dir (default: labels dir)")
+    pm.add_argument("--dry-run", action="store_true",
+                    help="print the hint rows instead of writing files")
+
     ph = sub.add_parser("hints",
                         help="emit <stem>.hints.tsv: suggested sync/start/end/skips + questions "
                              "to import alongside your hand labels (never overwrites them)")
@@ -309,7 +392,8 @@ def main(argv=None):
      "validate": _cmd_validate, "track-mix": _cmd_track_mix, "tail-solve": _cmd_tail_solve,
      "skip-confirm": _cmd_skip_confirm,
      "skip-reject": _cmd_skip_reject, "skip-rejections": _cmd_skip_rejections,
-     "starter": _cmd_starter, "hints": _cmd_hints}[args.cmd](args)
+     "starter": _cmd_starter, "hints": _cmd_hints,
+     "match-hints": _cmd_match_hints}[args.cmd](args)
 
 
 if __name__ == "__main__":
