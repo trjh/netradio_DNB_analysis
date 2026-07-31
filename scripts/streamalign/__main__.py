@@ -150,11 +150,19 @@ def _cmd_sync_sweep(args):
           % (result["track"], result["label"], result["stem"], result["seat_conf"],
              result["stream_len_s"]))
     for win, w in result["windows"].items():
+        if w.get("error"):
+            print("  win %ss: %s" % (win, w["error"]))
+            continue
+        if w.get("front_clipped_s") or w.get("window_clipped_to_s"):
+            print("  win %ss: clipped by the original's edge (front %.2fs, length %s)"
+                  % (win, w.get("front_clipped_s") or 0.0,
+                     "%.2fs" % w["window_clipped_to_s"] if w.get("window_clipped_to_s")
+                     else "full"))
         print("  win %ss: %d positions  min %.1f%% at %.3fs (true seat %.3fs%s)  "
               "true-seat residual %.1f%%"
               % (win, w["n_positions"], w["min_residual"], w["min_at_s"],
                  w["true_at_s"], " = MIN" if w["true_is_min"] else "",
-                 w["true_residual"]))
+                 w["true_residual"] if w["true_residual"] is not None else float("nan")))
         print("  win %ss: positions below thresholds: %s"
               % (win, "  ".join("<%s%%: %d" % kv for kv in sorted(
                   w["below"].items(), key=lambda kv: int(kv[0])))))

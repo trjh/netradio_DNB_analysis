@@ -163,3 +163,33 @@ class TestExhaustiveSweep(unittest.TestCase):
             self.assertAlmostEqual(float(curve[i + len(owin) - 1]), expect, delta=0.5)
         # and the mass of the curve sits at the sqrt(2) cluster
         self.assertGreater(float(np.median(curve)), 120.0)
+
+
+@unittest.skipUnless(HAVE_FFMPEG, "ffmpeg not on PATH")
+class TestSweepEdgeWindows(TestAuditEndToEnd):
+    """A --wins wider than the original-side context must stay geometrically honest."""
+
+    def test_oversized_window_clips_consistently(self):
+        # point A sits 10 s into a 60 s original; a 40 s window overhangs the front
+        # by ~10 s: the clipped extract's stream-side start must shift accordingly
+        # and the hand seat must still be found as the (near-)minimum
+        r = sa.sweep_point(42, "A",
+                           labels_dir=os.path.join(self.tmp, "labels"),
+                           sources_dir=os.path.join(self.tmp, "sources"),
+                           audio_dir=os.path.join(self.tmp, "audio"),
+                           wins=(40.0,))
+        w = r["windows"]["40"]
+        self.assertIsNone(w.get("error"))
+        self.assertAlmostEqual(w["front_clipped_s"], 10.0, delta=0.2)
+        self.assertIsNotNone(w["true_residual"])
+        self.assertTrue(w["true_is_min"], w)
+        # clipped front => the true window start sits at the seat's orig-local 0
+        self.assertAlmostEqual(w["true_at_s"], 20.0, delta=0.1)
+
+    def test_zero_window_rejected(self):
+        with self.assertRaises(ValueError):
+            sa.sweep_point(42, "A",
+                           labels_dir=os.path.join(self.tmp, "labels"),
+                           sources_dir=os.path.join(self.tmp, "sources"),
+                           audio_dir=os.path.join(self.tmp, "audio"),
+                           wins=(0.0,))

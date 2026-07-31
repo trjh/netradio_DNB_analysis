@@ -311,10 +311,24 @@ def sweep_point(track, label, labels_dir=None, sources_dir="sources_local",
               "windows": {}}
     for win_s in wins:
         n = int(win_s * SR)
+        if n <= 0:
+            raise ValueError("window sizes must be positive")
         b0 = int((b2 - win_s / 2) * SR)
-        owin = orig2[max(0, b0):max(0, b0) + n]
+        # the requested window may overhang the original's edges: use the ACTUAL
+        # clipped extract for every derived number, and shift the corresponding
+        # stream-side start by however much the front was clipped -- otherwise the
+        # true-seat lag/time fields describe a window that was never extracted
+        b0c = max(0, b0)
+        owin = orig2[b0c:b0c + n]
+        n_eff = len(owin)
+        if n_eff < SR // 2:
+            result["windows"]["%g" % win_s] = {
+                "error": "window does not fit the original at this seat"}
+            continue
+        true_start_s = a_s - win_s / 2 + (b0c - b0) / SR
         curve = exhaustive_sweep(stream, owin)
-        true_lag = int(round(a_s * SR - win_s / 2 * SR)) + n - 1  # window-start lag index
+        true_lag = int(round(true_start_s * SR)) + n_eff - 1
+        in_range = 0 <= true_lag < len(curve)
         lo = int(np.argmin(curve))
         hist, _ = np.histogram(curve, bins=200, range=(0.0, 200.0))
         # min-per-quarter-second envelope: the whole 17M-value curve, viewable --
@@ -324,14 +338,16 @@ def sweep_point(track, label, labels_dir=None, sources_dir="sources_local",
         envelope = usable.reshape(-1, step).min(axis=1)
         result["windows"]["%g" % win_s] = {
             "n_positions": int(len(curve)),
+            "front_clipped_s": float((b0c - b0) / SR) if b0c != b0 else None,
+            "window_clipped_to_s": float(n_eff / SR) if n_eff != n else None,
             "envelope_step_s": 0.25,
-            "envelope_offset_s": float(-(n - 1) / SR),
+            "envelope_offset_s": float(-(n_eff - 1) / SR),
             "envelope": [round(float(v), 2) for v in envelope],
             "min_residual": float(curve.min()),
-            "min_at_s": float((lo - (n - 1)) / SR),
-            "true_at_s": float(a_s - win_s / 2),
-            "true_residual": float(curve[min(true_lag, len(curve) - 1)]),
-            "true_is_min": bool(abs(lo - true_lag) <= 2),
+            "min_at_s": float((lo - (n_eff - 1)) / SR),
+            "true_at_s": true_start_s,
+            "true_residual": float(curve[true_lag]) if in_range else None,
+            "true_is_min": bool(in_range and abs(lo - true_lag) <= 2),
             "below": {str(t): int(np.count_nonzero(curve < t))
                       for t in (90, 100, 110, 120, 125, 130, 135)},
             "hist": hist.tolist(),
