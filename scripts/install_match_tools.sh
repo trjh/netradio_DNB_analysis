@@ -14,13 +14,19 @@ VAMP_DIR="$HOME/Library/Audio/Plug-Ins/Vamp"
 BUILD_DIR="${TMPDIR:-/tmp}/match-tools-build"
 
 echo "== sonic-annotator =="
+# resolve the executable we will USE (PATH first, else the install destination),
+# so a custom BIN_DIR works without also editing PATH
 if command -v sonic-annotator >/dev/null 2>&1; then
-    echo "already installed: $(command -v sonic-annotator) ($(sonic-annotator -v 2>&1))"
+    SA_BIN="$(command -v sonic-annotator)"
+    echo "already installed: $SA_BIN ($("$SA_BIN" -v 2>&1))"
 else
-    mkdir -p "$BUILD_DIR"
-    curl -sL "$SA_URL" | tar xz -C "$BUILD_DIR"
-    install -m 0755 "$BUILD_DIR/sonic-annotator-${SA_VERSION}-macos/sonic-annotator" "$BIN_DIR/"
-    echo "installed $BIN_DIR/sonic-annotator ($(sonic-annotator -v 2>&1))"
+    SA_BIN="$BIN_DIR/sonic-annotator"
+    if [ ! -x "$SA_BIN" ]; then
+        mkdir -p "$BUILD_DIR"
+        curl -sL "$SA_URL" | tar xz -C "$BUILD_DIR"
+        install -m 0755 "$BUILD_DIR/sonic-annotator-${SA_VERSION}-macos/sonic-annotator" "$BIN_DIR/"
+    fi
+    echo "installed $SA_BIN ($("$SA_BIN" -v 2>&1))"
 fi
 
 echo "== match-vamp plugin =="
@@ -47,6 +53,6 @@ else
 fi
 
 echo "== verify =="
-sonic-annotator -l 2>/dev/null | grep -m1 "match-vamp-plugin:match" \
+"$SA_BIN" -l 2>/dev/null | grep -m1 "match-vamp-plugin:match" \
     && echo "OK: MATCH transform visible" \
-    || { echo "FAIL: sonic-annotator cannot see the MATCH plugin"; exit 1; }
+    || { echo "FAIL: $SA_BIN cannot see the MATCH plugin"; exit 1; }
