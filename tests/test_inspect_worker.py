@@ -49,6 +49,19 @@ class TestPairCache(unittest.TestCase):
         cache.get("d356-375", "/src/071.wv", 1.0)          # orig change
         self.assertEqual(len(loader.calls), 4)
 
+    def test_rate_identity_is_exact_not_rounded(self):
+        # two rates that agree to 6 decimals are still DIFFERENT pairs: reusing the
+        # first pair's orig2 for the second request would resample at one ratio and
+        # time at another (review iteration 1 P2)
+        loader = _CountingLoader()
+        cache = iw.PairCache(loader=loader)
+        p1 = cache.get("d376-395", "/src/072.wv", 1.02046001)
+        p2 = cache.get("d376-395", "/src/072.wv", 1.02046049)
+        self.assertEqual(len(loader.calls), 2)
+        self.assertNotEqual(p1, p2)
+        self.assertEqual(loader.calls[0][2], 1.02046001)
+        self.assertEqual(loader.calls[1][2], 1.02046049)
+
     def test_returning_to_a_previous_pair_reloads(self):
         # single-slot by design: the cache holds the CURRENT pair only
         loader = _CountingLoader()

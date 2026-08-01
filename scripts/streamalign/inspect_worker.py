@@ -49,7 +49,10 @@ class PairCache:
         self._pair = None
 
     def get(self, stream_src, orig_src, rate):
-        key = (stream_src, orig_src, round(float(rate), 6))
+        # the EXACT validated rate is the identity: any rounding here would reuse an
+        # orig2 resampled at a slightly different ratio than the request's timing
+        # math assumes, silently diverging from the one-shot path (review iter 1 P2)
+        key = (stream_src, orig_src, float(rate))
         if key != self._key:
             self._pair = self._loader(stream_src, orig_src, float(rate))
             self._key = key
