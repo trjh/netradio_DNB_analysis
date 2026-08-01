@@ -502,6 +502,11 @@ mention any original; put genuine cross-references in the primary track.
 - `track sync: X` / `trackNNN sync: X` — mix-side; `origNNN sync: X` — original-side.
 - `X`: **`A`/`B` are the paired speed anchors** (`(trackB−trackA)/(origB−origA)`); numeric
   `0,1,2,…` are rough/secondary.
+- `track sync: X verified …` / `origNNN sync: X verified …` — the ` verified` token
+  **immediately after the marker** means *machine-checked*: `match-hints` emits it on every
+  anchor pair, `sync-audit` reports it (`--only-unchecked` lists the points without it), and
+  the sheet carries it as the Verified column. It is free text to the grammar, and it is
+  **not** the file-sync `verified <neighbour>` keyword above — the two families never mix.
 
 **Original-track spans**
 

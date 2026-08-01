@@ -112,11 +112,31 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints d376-395 72 --dry
   `STEM` and emit paired hint labels — `<stem>.origNNN.match.hints.tsv` (`track sync:`
   rows at capture-local times, proposed `origNNN start:`/`end:`) and
   `origNNN.<stem>.match.hints.tsv` (`origNNN sync:` rows at original-local seconds; the stem keeps runs against different captures from colliding), every
-  row ` HINT`-marked with a spelled-out confidence, plus the recovered rate and
-  polarity in a summary note. Runs `sonic-annotator` itself (or takes a pre-exported
-  `match:a_b` CSV via `--csv`); emits QUESTION rows instead of silent guesses when
-  coverage is thin or a rival loop-shifted seat scores close. Never writes a
-  `.labels.tsv`.
+  row ` HINT`-marked with the ` verified` token and a spelled-out confidence, plus the
+  recovered rate and polarity in a summary note. Runs `sonic-annotator` itself (or
+  takes a pre-exported `match:a_b` CSV via `--csv`); emits QUESTION rows instead of
+  silent guesses when coverage is thin or a rival loop-shifted seat scores close.
+  Never writes a `.labels.tsv`. Converter-trust behaviour (2026-08):
+  - the stream is **trimmed to the original's expected neighbourhood** before MATCH
+    runs (`--around SECONDS`, else auto-derived from the track's master span minus the
+    capture's resolved master start), making MATCH's forced files-start-together
+    assumption approximately true;
+  - the trimmed MATCH path then **referees** each PHAT anchor: the per-anchor
+    MATCH-vs-PHAT delta is printed, appended to the row text, and a disagreement
+    beyond 0.25 s becomes a `note QUESTION:` row (PHAT stays the only anchor source);
+  - where librosa is available, the **solo-anchor moments** (record playing alone —
+    where PHAT locks best) seed the rate sweep alongside the blind probe fractions;
+  - `--all` batches every track whose master span overlaps the capture (tracks with
+    no original on disk are listed and skipped); an explicit list of track numbers
+    (`match-hints STEM 71 72`) overrides.
+- **`sync-audit`** — grade every hand `origNNN sync:` point against the audio (seat
+  confidence, hand bookkeeping error, inspector residuals; see
+  [SYNC_SWEEP_CALIBRATION.md](./SYNC_SWEEP_CALIBRATION.md)). Each point also reports
+  whether its row text carries the ` verified` token (`--only-unchecked` lists the
+  hand points the system has never touched), and a point that would skip for
+  "no origNNN start: row" gets its seat **derived from a STRONG-audited neighbour
+  capture** sharing the clip seating (master-timeline shift + the neighbours' median
+  hand-error correction — the 066-A method), marked `seat<-<neighbour>` in the table.
 
 ## Status (current)
 

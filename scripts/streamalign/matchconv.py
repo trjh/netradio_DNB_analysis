@@ -17,6 +17,27 @@ does work, verified against a hand-seated pair to ~10 ms: use the path only to s
      lets a window lock onto the wrong loop repetition with respectable confidence);
   5. keep the best spread-out survivors and emit them as paired hint rows.
 
+Converter-trust additions (2026-08, AP-02/03/04/13/16):
+
+  * **Trim before MATCH (AP-02).** MATCH's forced files-start-together assumption is made
+    approximately true by trimming the stream WAV to the expected overlap (`trim_window`)
+    before sonic-annotator runs; `apply_trim_offset` shifts the path back onto the full
+    capture's clock. The expected position auto-derives from the track's master span and
+    the capture's resolved master start (`derive_around`), or comes from `--around`.
+  * **MATCH as referee (AP-03).** PHAT remains the ONLY anchor source; the (trimmed) MATCH
+    path's implied original position is evaluated at each selected anchor
+    (`referee_deltas`) and the delta reported per anchor -- a disagreement beyond
+    REFEREE_TOL_S becomes a `note QUESTION:` row.
+  * **`verified` token (AP-04).** Emitted sync rows read `track sync: 1 verified
+    confidence 5.9/10 HINT` -- the token, immediately after the marker, is what the sheet
+    and `sync-audit` recognise as "machine-checked". Distinct from (and never to be
+    conflated with) the file-sync `verified <neighbour>` keyword.
+  * **Solo-anchor probe seeding (AP-13).** Where librosa is available the rate sweep also
+    probes the record-playing-alone moments (`track_mix.solo_anchors`) -- the instants
+    PHAT locks best -- instead of only blind fractions of the overlap.
+  * **Batch worklist (AP-16).** `tracks_overlapping` lists every track whose master span
+    overlaps a capture, for `match-hints <stem> --all`.
+
 Output is two `.hints.tsv` files in the existing grammar (never `.labels.tsv` -- written
 through `hints.write_hints`, which enforces that): `track sync: <k>` rows at capture-local
 times for the stream, `orig<NNN> sync: <k>` rows at original-local times (native rate) for
@@ -47,6 +68,10 @@ RATE_STEP = 0.005              # coarse sweep step; the anchor refit recovers th
 RATE_PRIOR = (0.90, 1.10)      # a DJ pitches by a few percent; slopes outside this are noise
 MIN_CONF = 0.15                # an anchor below this is a guess, not a hint
 OUTLIER_TOL_S = 0.25           # offset residual vs the local median that marks a loop-skip
+TRIM_MARGIN_S = 60.0           # AP-02: slack either side of the expected overlap when trimming
+REFEREE_TOL_S = 0.25           # AP-03: MATCH-vs-PHAT disagreement that earns a QUESTION row
+REFEREE_GROSS_S = 5.0          # AP-03: a MEDIAN delta beyond this is a globally-off MATCH
+                               # path (its forced-start failure), not 8 separate disputes
 
 
 def parse_ab_csv(path):
@@ -65,6 +90,105 @@ def parse_ab_csv(path):
             a, b = line.split(",")[:2]
             pairs.append((float(a), float(b)))
     return pairs
+
+
+def trim_window(around_s, orig_len_s, stream_len_s, rate_guess=1.0, margin_s=TRIM_MARGIN_S):
+    """(lo_s, hi_s) of the capture worth handing to MATCH, given a rough start (AP-02).
+
+    MATCH's headless online DTW is forced to start the two files together, so on a full
+    20-minute mix its path lands seconds-to-tens-of-seconds off. Trimming the stream to
+    where the original is *expected* makes that forced assumption approximately true:
+    `around_s` is the rough capture-local position of the original's START, and the kept
+    window runs from `margin_s` before it to the original's expected end (its length on
+    the stream clock, `orig_len_s / rate_guess`) plus `margin_s` after. The margins absorb
+    both the roughness of `around_s` (a track's metadata position is where it becomes
+    audible, not where the record's local 0 sits) and a few percent of DJ pitch.
+    """
+    lo = max(0.0, float(around_s) - margin_s)
+    hi = min(float(stream_len_s), float(around_s) + float(orig_len_s) / rate_guess + margin_s)
+    return lo, hi
+
+
+def apply_trim_offset(pairs, lo_s):
+    """Shift a trimmed run's a_b path back onto the FULL capture's clock (AP-02).
+
+    MATCH saw only stream[lo:hi], so its `a` column is seconds into the trimmed WAV;
+    adding `lo_s` restores capture-local time and everything downstream (coarse map,
+    sweep, grid, emission) is unchanged.
+    """
+    lo_s = float(lo_s)
+    return [(a + lo_s, b) for a, b in pairs]
+
+
+def derive_around(orig_num, tracks_meta, capture_master_start):
+    """Auto-derive `--around`: the track's expected capture-local position, or None (AP-02).
+
+    Expected local position = the track's master-timeline position (build_track_metadata's
+    `master_begin_seconds`, itself resolved from the hand `start<NNN>:` label rows) minus
+    the capture's resolved master start (`groundtruth.resolve_starts`). None when either
+    side is unknown -- the caller then runs untrimmed, exactly as before.
+    """
+    if capture_master_start is None:
+        return None
+    entry = (tracks_meta or {}).get(str(int(orig_num))) or {}
+    begin = entry.get("master_begin_seconds")
+    if begin is None:
+        return None
+    return float(begin) - float(capture_master_start)
+
+
+def tracks_overlapping(capture_master_start, capture_len_s, tracks_meta):
+    """[(num, master_begin_s, master_end_s)] for every track overlapping the capture (AP-16).
+
+    Overlap is judged on the master timeline: the track's [master_begin, master_end] span
+    (build_track_metadata output) against [capture_start, capture_start + length]. This is
+    the batch-mode worklist -- the caller still drops tracks with no original on disk.
+    """
+    if capture_master_start is None:
+        return []
+    lo = float(capture_master_start)
+    hi = lo + float(capture_len_s)
+    out = []
+    for num, entry in (tracks_meta or {}).items():
+        if not str(num).isdigit():
+            continue
+        mb = entry.get("master_begin_seconds")
+        me = entry.get("master_end_seconds")
+        if mb is None or me is None:
+            continue
+        if float(me) > lo and float(mb) < hi:
+            out.append((int(num), float(mb), float(me)))
+    return sorted(out)
+
+
+def match_predict(pairs, a_s):
+    """The (trimmed) MATCH path's own implied original-native seconds at stream `a_s`.
+
+    Linear interpolation over the a_b rows; None outside the path's span. This is the
+    quantity AP-03 referees against the PHAT anchors -- MATCH stays a coarse map, never
+    an anchor source, but where the two disagree the labeller should hear about it.
+    """
+    if not pairs:
+        return None
+    xs = np.array([p[0] for p in pairs], dtype=float)
+    ys = np.array([p[1] for p in pairs], dtype=float)
+    if a_s < xs[0] or a_s > xs[-1]:
+        return None
+    return float(np.interp(float(a_s), xs, ys))
+
+
+def referee_deltas(pairs, anchors, rate):
+    """Per selected anchor: MATCH-implied minus PHAT-implied original position (AP-03).
+
+    PHAT's implied original-native position at an anchor is `(a - off) * rate`; MATCH's
+    is `match_predict(a)`. Returns one delta (seconds, or None where the MATCH path does
+    not cover the anchor) per anchor, anchor order preserved.
+    """
+    out = []
+    for a, off, _conf, _inv, _out in anchors:
+        m = match_predict(pairs, a)
+        out.append(None if m is None else float(m - (a - off) * rate))
+    return out
 
 
 def coarse_map(pairs, orig_len_s=None):
@@ -155,8 +279,32 @@ def _refine_both_polarities(stream, orig2, a_s, b2_s, win_s, radius_s):
     return peaks[0] if peaks else None
 
 
+def solo_probe_positions(stream, orig, offset0, top=4):
+    """Capture-local instants where the original plays ALONE, to seed the sweep (AP-13).
+
+    The rate sweep's default probes are blind fractions of the coarse overlap; a probe
+    that lands on heavily layered audio wastes its window. `track_mix.solo_anchors`
+    (chroma+DTW) finds the record-playing-alone moments -- exactly where GCC-PHAT locks
+    best -- so those become additional, preferred probe positions. Best-effort: needs
+    librosa (the .venv), and any failure just returns [] (the blind fractions still run).
+    The search window is the coarse overlap widened by the sweep radius, because the
+    coarse map can be tens of seconds off.
+    """
+    orig_native_len_s = len(orig) / SR
+    lo = max(0.0, -offset0 - SWEEP_RADIUS_S)
+    hi = min(len(stream) / SR, orig_native_len_s - offset0 + SWEEP_RADIUS_S)
+    if hi - lo < DEFAULT_WIN_S * 3:
+        return []
+    try:
+        from . import track_mix as _tm
+        anchors = _tm.solo_anchors(orig, stream, lo, hi, top=top)
+    except Exception:
+        return []
+    return sorted(float(a["mix_s"]) for a in anchors)
+
+
 def sweep_rate(stream, orig, offset0, rate0, span=RATE_SPAN, step=RATE_STEP,
-               win_s=DEFAULT_WIN_S, radius_s=SWEEP_RADIUS_S):
+               win_s=DEFAULT_WIN_S, radius_s=SWEEP_RADIUS_S, probe_positions=None):
     """Find the rate by confidence peak: try candidates, PHAT-probe mid-overlap, keep the best.
 
     `offset0` is the MATCH-convention delta (median of b - a: original-native seconds ahead
@@ -169,6 +317,10 @@ def sweep_rate(stream, orig, offset0, rate0, span=RATE_SPAN, step=RATE_STEP,
     drum & bass) can correlate strongly at a WRONG, loop-shifted position, so a candidate's
     score is the summed confidence of probes that AGREE on an offset -- and the runner-up
     seats are returned too, for the caller to disambiguate by grid coverage.
+
+    `probe_positions` (AP-13): extra capture-local probe instants -- typically the
+    solo-anchor moments from `solo_probe_positions` -- tried IN ADDITION to the blind
+    fractions of the overlap (positions outside the coarse overlap are dropped).
     """
     orig_native_len_s = len(orig) / SR
     # stream instants covered by the original under the coarse map: b = a + offset0
@@ -176,13 +328,14 @@ def sweep_rate(stream, orig, offset0, rate0, span=RATE_SPAN, step=RATE_STEP,
     hi = min(len(stream) / SR, orig_native_len_s - offset0)
     if hi - lo < win_s * 3:
         raise ValueError("rate sweep found no usable probe window (overlap too small?)")
+    positions = [lo + (hi - lo) * frac for frac in (0.25, 0.4, 0.55, 0.7)]
+    positions += [float(p) for p in (probe_positions or []) if lo <= p <= hi]
     probes = []
     for rate in np.arange(rate0 - span, rate0 + span + step / 2, step):
         if rate <= 0.5:
             continue
         orig2 = resample_by_rate(orig, rate)
-        for frac in (0.25, 0.4, 0.55, 0.7):
-            a_s = lo + (hi - lo) * frac
+        for a_s in positions:
             b2_s = (a_s + offset0) / rate       # coarse original position, rate-corrected
             for off_s, conf, inverted in _refine_peaks(
                     stream, orig2, a_s, b2_s, win_s, radius_s, n_peaks=4):
@@ -306,20 +459,50 @@ def select_anchors(marked, count):
 
 
 def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_s,
-               coverage=None, ambiguous=False):
+               coverage=None, ambiguous=False, match_deltas=None):
     """(stream_rows, orig_rows) hint rows for the two files, existing grammar only.
 
     Stream rows are capture-local seconds; orig rows are original-local seconds at the
     original's native rate (b_native = (a - off) * rate -- rate-corrected coordinates map
     back to native seconds by construction, whatever the native sample rate is).
+
+    Sync rows carry the ` verified` token immediately after the marker (AP-04) -- the
+    machine-checked mark the sheet/audit plumbing keys on; it is free text to the sync-row
+    grammar, and deliberately NOT the file-sync `verified <neighbour>` keyword (a different,
+    load-bearing thing). `match_deltas` (AP-03, from `referee_deltas`) appends each anchor's
+    MATCH-vs-PHAT delta to its row text; a disagreement beyond REFEREE_TOL_S earns a
+    `note QUESTION:` row at that anchor -- unless the MEDIAN delta is itself beyond
+    REFEREE_GROSS_S, in which case the MATCH path is globally off (its forced-start
+    failure mode, measured at -40 s on the d376-395/072 gate pair) and ONE question about
+    the whole path replaces a per-anchor pile-up that would all say the same thing.
     """
     tag = "orig%03d" % int(orig_num)
     stream_rows, orig_rows = [], []
+    finite = [d for d in (match_deltas or []) if d is not None]
+    med_delta = float(np.median(finite)) if finite else 0.0
+    grossly_off = abs(med_delta) > REFEREE_GROSS_S
     for k, (a, off, conf, _inv, _out) in enumerate(anchors, start=1):
         b_native = (a - off) * rate
-        stream_rows.append(_hints._row(a, a, "track sync: %d %s" % (k, _hints._conf(conf))))
+        delta = match_deltas[k - 1] if match_deltas and k <= len(match_deltas) else None
+        extra = "" if delta is None else " MATCH %+.3fs" % delta
+        stream_rows.append(_hints._row(
+            a, a, "track sync: %d verified %s%s" % (k, _hints._conf(conf), extra)))
         orig_rows.append(_hints._row(
-            b_native, b_native, "%s sync: %d %s" % (tag, k, _hints._conf(conf))))
+            b_native, b_native,
+            "%s sync: %d verified %s%s" % (tag, k, _hints._conf(conf), extra)))
+        if delta is not None and abs(delta) > REFEREE_TOL_S and not grossly_off:
+            stream_rows.append(_hints._question(
+                a, a,
+                "MATCH and PHAT disagree at sync %d: the MATCH path puts %s %+.3f s away "
+                "from the PHAT anchor's position. PHAT stays primary; check this anchor "
+                "by ear before trusting either." % (k, tag, delta)))
+    if grossly_off and anchors:
+        stream_rows.append(_hints._question(
+            anchors[0][0], anchors[-1][0],
+            "the MATCH path disagrees with the PHAT anchors by a median %+.1f s across "
+            "the whole overlap -- MATCH's forced files-start-together failure mode, not "
+            "%d separate disputes. PHAT stays primary; the per-anchor MATCH deltas are "
+            "relative to that globally-off path." % (med_delta, len(anchors))))
     # proposed head/tail of the original on the capture's timeline, from the nearest anchor
     # (b2 = a - off, so original local 0 sits at a = off; its end at a = off + len/rate)
     if anchors:
@@ -412,13 +595,19 @@ def run_match(stream_wav, orig_wav, out_dir, exe=None):
 
 
 def convert(stream, orig, csv_pairs, anchor_count=8,
-            step_s=DEFAULT_STEP_S, win_s=DEFAULT_WIN_S):
+            step_s=DEFAULT_STEP_S, win_s=DEFAULT_WIN_S, solo_probes=False):
     """Core pipeline on decoded 16 kHz mono arrays. Returns a result dict (no I/O).
 
-    `csv_pairs` is the parsed MATCH a_b path; `stream`/`orig` are float arrays at SR.
+    `csv_pairs` is the parsed MATCH a_b path (already shifted back onto the full
+    capture's clock if the run was trimmed -- see `apply_trim_offset`); `stream`/`orig`
+    are float arrays at SR. `solo_probes=True` (AP-13) seeds the rate sweep with the
+    solo-anchor moments (needs librosa; silently skipped without it). The result carries
+    `match_deltas` (AP-03): the MATCH path's own disagreement with each selected anchor.
     """
     offset0, rate0 = coarse_map(csv_pairs, orig_len_s=len(orig) / SR)
-    candidates = sweep_rate(stream, orig, offset0, rate0, win_s=win_s)
+    probe_positions = solo_probe_positions(stream, orig, offset0) if solo_probes else []
+    candidates = sweep_rate(stream, orig, offset0, rate0, win_s=win_s,
+                            probe_positions=probe_positions)
 
     def _walk(rate, seed):
         marked = []
@@ -473,4 +662,6 @@ def convert(stream, orig, csv_pairs, anchor_count=8,
         "coverage": float(coverage),
         "runner_up_seats": len(walked) - 1,
         "ambiguous": bool(ambiguous),
+        "solo_probes": probe_positions,
+        "match_deltas": referee_deltas(csv_pairs, picked, rate),
     }
