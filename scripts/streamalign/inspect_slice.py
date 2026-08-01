@@ -332,7 +332,7 @@ def _minmax_columns(x, cols):
 
 
 def build_context(stream_src, orig_src, stream_t, orig_t, rate, invert,
-                  context_s=DEFAULT_CONTEXT_S, win_s=6.0, pair=None):
+                  win_s=6.0, context_s=DEFAULT_CONTEXT_S, pair=None):
     """The zoomed-out context strip around one sync point (AP-05). JSON-ready dict.
 
     Emits DECIMATED min/max column pairs (CONTEXT_COLS_PER_S per second, mono) for

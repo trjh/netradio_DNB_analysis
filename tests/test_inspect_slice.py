@@ -176,6 +176,53 @@ class TestBuildContext(TestBuildSlices):
             with self.assertRaises(ValueError, msg=repr(bad)):
                 self._ctx(context_s=bad)
 
+    def test_cli_context_end_to_end(self):
+        # regression: the CLI passes win POSITIONALLY, so build_context's signature
+        # must keep win_s in the shared positional slot -- an argument-order slip
+        # here produced "multiple values for argument 'context_s'" on the real CLI
+        # while every keyword-calling test stayed green
+        import io
+        import shutil as _sh
+        from contextlib import redirect_stdout
+        from unittest import mock
+        from streamalign import audio as _audio
+        from streamalign.__main__ import main
+        _sh.copy(self.orig_path, os.path.join(self.tmp, "072-synth.wav"))
+        buf = io.StringIO()
+        with mock.patch.object(_audio, "AUDIO_DIR", self.tmp):
+            with redirect_stdout(buf):
+                main(["inspect-slice", "stream", "72",
+                      "--stream-t", "14", "--orig-t", "10", "--rate", "1.0",
+                      "--invert", "--win", "6", "--context", "10",
+                      "--sources", self.tmp])
+        out = json.loads(buf.getvalue())
+        self.assertNotIn("error", out)
+        self.assertEqual(out["context_s"], 10.0)
+        self.assertEqual(out["win_s"], 6.0)
+        self.assertEqual(out["n_cols"], int(2 * 10.0 * isl.CONTEXT_COLS_PER_S))
+
+    def test_cli_refine_engine_end_to_end(self):
+        # same boundary for --refine: --engine must reach refine_seat (phat path;
+        # the match engine needs sonic-annotator and is pinned separately)
+        import io
+        import shutil as _sh
+        from contextlib import redirect_stdout
+        from unittest import mock
+        from streamalign import audio as _audio
+        from streamalign.__main__ import main
+        _sh.copy(self.orig_path, os.path.join(self.tmp, "072-synth.wav"))
+        buf = io.StringIO()
+        with mock.patch.object(_audio, "AUDIO_DIR", self.tmp):
+            with redirect_stdout(buf):
+                main(["inspect-slice", "stream", "72",
+                      "--stream-t", "14", "--orig-t", "10", "--rate", "1.0",
+                      "--invert", "--win", "6", "--refine", "--engine", "phat",
+                      "--sources", self.tmp])
+        out = json.loads(buf.getvalue())
+        self.assertNotIn("error", out)
+        self.assertEqual(out["engine"], "phat")
+        self.assertLess(abs(out["offset_ms"]), 2.0)
+
     def test_aligned_context_columns_agree_after_gain_and_polarity(self):
         # at the true seat the two envelopes must roughly coincide over the overlap
         out = self._ctx()
