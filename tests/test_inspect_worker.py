@@ -126,6 +126,29 @@ class TestHandle(unittest.TestCase):
         # one load served all three ops (same trio)
         self.assertEqual(len(cache._loader.calls), 1)
 
+    def test_invalid_params_never_reach_the_loader(self):
+        # the request boundary rejects malformed numerics BEFORE any decode/
+        # resample: the loader must not be called at all (review iteration 2 P2)
+        loader = _CountingLoader()
+        cache = iw.PairCache(loader=loader)
+        self._patched(cache)
+        base = {"stem": "d376-395", "orig": 72, "stream_t": 1.0, "orig_t": 1.0}
+        cases = [
+            (dict(base, op="slice", rate="nan"), "rate out of range"),
+            (dict(base, op="slice", rate=0.0), "rate out of range"),
+            (dict(base, op="slice", stream_t=-1.0), "stream_t out of range"),
+            (dict(base, op="slice", win=-2.0), "win out of range"),
+            (dict(base, op="refine", radius=0.0), "radius out of range"),
+            (dict(base, op="refine", engine="dtw"), "engine out of range"),
+            (dict(base, op="context", context=0.5), "context out of range"),
+            (dict(base, op="context", context="nan"), "context out of range"),
+            (dict(base, op="slice", rate="; rm -rf /"), "could not convert"),
+        ]
+        for req, fragment in cases:
+            out = iw.handle(req, cache, "src")
+            self.assertIn(fragment, out["error"], req)
+        self.assertEqual(loader.calls, [])
+
     def test_dsp_exception_becomes_an_error_dict(self):
         cache = iw.PairCache(loader=_CountingLoader())
         self._patched(cache)

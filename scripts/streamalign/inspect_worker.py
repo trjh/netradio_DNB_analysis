@@ -82,22 +82,33 @@ def handle(req, cache, sources_dir):
     if op not in OPS:
         return {"error": "unknown op %r" % (op,)}
     try:
-        stem, orig_path = _resolve(req.get("stem"), req.get("orig"), sources_dir)
+        # coerce + guard EVERY numeric input at the request boundary, with
+        # inspect_slice's own guards, BEFORE any decode/resample happens: a
+        # malformed rate must answer "rate out of range" promptly, not buy a full
+        # pair load first (review iteration 2 P2)
         rate = float(req.get("rate", 1.0))
+        stream_t = float(req.get("stream_t"))
+        orig_t = float(req.get("orig_t"))
+        win = float(req.get("win", 6.0))
+        radius = float(req.get("radius", 0.05))
+        engine = str(req.get("engine", "phat"))
+        context = float(req.get("context", _isl.DEFAULT_CONTEXT_S))
+        _isl._check_params(stream_t, orig_t, rate, win, radius)
+        if op == "context":
+            _isl._check_context(context)
+        if op == "refine" and engine not in _isl.ENGINES:
+            raise ValueError("engine out of range")
+        stem, orig_path = _resolve(req.get("stem"), req.get("orig"), sources_dir)
         pair = cache.get(stem, orig_path, rate)
         common = dict(stream_src=stem, orig_src=orig_path,
-                      stream_t=float(req.get("stream_t")),
-                      orig_t=float(req.get("orig_t")),
+                      stream_t=stream_t, orig_t=orig_t,
                       rate=rate, invert=bool(req.get("invert")),
-                      win_s=float(req.get("win", 6.0)), pair=pair)
+                      win_s=win, pair=pair)
         if op == "slice":
             return _isl.build_slices(**common)
         if op == "refine":
-            return _isl.refine_seat(radius_s=float(req.get("radius", 0.05)),
-                                    engine=str(req.get("engine", "phat")), **common)
-        return _isl.build_context(context_s=float(req.get("context",
-                                                          _isl.DEFAULT_CONTEXT_S)),
-                                  **common)
+            return _isl.refine_seat(radius_s=radius, engine=engine, **common)
+        return _isl.build_context(context_s=context, **common)
     except Exception as exc:  # noqa: BLE001 -- one bad request must not kill the worker
         return {"error": "%s: %s" % (type(exc).__name__, str(exc)[:300])}
 

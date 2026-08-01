@@ -56,6 +56,7 @@ MAX_REFINE_RADIUS_S = 2.0
 DEFAULT_CONTEXT_S = 45.0  # AP-05: context strip half-width (± seconds around the point)
 MAX_CONTEXT_S = 60.0      # hard cap; the player's endpoint enforces it too
 CONTEXT_COLS_PER_S = 50   # min/max column pairs per second in the context payload
+ENGINES = ("phat", "match")   # AP-14: refine_seat's snap engines
 
 
 def _check_params(stream_t, orig_t, rate, win_s, radius_s=0.05):
@@ -73,6 +74,15 @@ def _check_params(stream_t, orig_t, rate, win_s, radius_s=0.05):
         v = float(v)
         if not np.isfinite(v) or v < lo or (hi is not None and v > hi):
             raise ValueError("%s out of range" % name)
+
+
+def _check_context(context_s):
+    """The context guard: finite, >= 1 s; clamped to the cap. Returns the clamped
+    value. Shared by build_context and the worker's request boundary."""
+    ctx = float(context_s)
+    if not np.isfinite(ctx) or ctx < 1.0:
+        raise ValueError("context out of range")
+    return min(ctx, MAX_CONTEXT_S)
 
 
 def _b64_i16(x):
@@ -245,7 +255,7 @@ def refine_seat(stream_src, orig_src, stream_t, orig_t, rate, invert, win_s,
     mis-seated (MATCH's forced-start failure): that raises ValueError with the
     Phase-B wording rather than snapping onto a wrong path.
     """
-    if engine not in ("phat", "match"):
+    if engine not in ENGINES:
         raise ValueError("engine out of range")
     _check_params(stream_t, orig_t, rate, win_s, radius_s)
     win_s = min(float(win_s), MAX_WIN_S)
@@ -333,10 +343,7 @@ def build_context(stream_src, orig_src, stream_t, orig_t, rate, invert,
     clicks to real audio; `win_s` is echoed so the analysis window can be marked.
     """
     _check_params(stream_t, orig_t, rate, win_s)
-    ctx = float(context_s)
-    if not np.isfinite(ctx) or ctx < 1.0:
-        raise ValueError("context out of range")
-    ctx = min(ctx, MAX_CONTEXT_S)
+    ctx = _check_context(context_s)
     win_s = min(float(win_s), MAX_WIN_S)
     pair = pair or LoadedPair(stream_src, orig_src, rate)
     stream, orig2 = pair.stream, pair.orig2
