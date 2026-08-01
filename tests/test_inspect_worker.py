@@ -149,6 +149,24 @@ class TestHandle(unittest.TestCase):
             self.assertIn(fragment, out["error"], req)
         self.assertEqual(loader.calls, [])
 
+    def test_inactive_mode_fields_are_ignored(self):
+        # a field belonging to a DIFFERENT op must not affect dispatch (a client
+        # carrying a stale radius/context/engine from another inspector mode is
+        # valid), matching the one-shot CLI's per-mode argument handling
+        # (review iteration 3 P2)
+        cache = iw.PairCache(loader=_CountingLoader())
+        self._patched(cache)
+        base = {"stem": "d376-395", "orig": 72, "stream_t": 1.0, "orig_t": 1.0}
+        self.assertEqual(iw.handle(dict(base, op="slice", radius=0.0,
+                                        context="not-a-number", engine="dtw"),
+                                   cache, "src"), {"sr": 16000})
+        self.assertEqual(iw.handle(dict(base, op="context", context=30.0,
+                                        radius=0.0, engine="dtw"),
+                                   cache, "src"), {"n_cols": 10})
+        self.assertEqual(iw.handle(dict(base, op="refine", radius=0.1,
+                                        context="not-a-number"),
+                                   cache, "src"), {"new_orig_t": 1.0})
+
     def test_dsp_exception_becomes_an_error_dict(self):
         cache = iw.PairCache(loader=_CountingLoader())
         self._patched(cache)

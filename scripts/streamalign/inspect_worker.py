@@ -82,22 +82,25 @@ def handle(req, cache, sources_dir):
     if op not in OPS:
         return {"error": "unknown op %r" % (op,)}
     try:
-        # coerce + guard EVERY numeric input at the request boundary, with
-        # inspect_slice's own guards, BEFORE any decode/resample happens: a
+        # coerce + guard the numeric inputs THIS op uses at the request boundary,
+        # with inspect_slice's own guards, BEFORE any decode/resample happens: a
         # malformed rate must answer "rate out of range" promptly, not buy a full
-        # pair load first (review iteration 2 P2)
+        # pair load first (review iteration 2 P2) -- but a field belonging to a
+        # DIFFERENT op (a stale radius on a slice request, say) is ignored, same
+        # as the one-shot CLI's per-mode argument handling (review iteration 3 P2)
         rate = float(req.get("rate", 1.0))
         stream_t = float(req.get("stream_t"))
         orig_t = float(req.get("orig_t"))
         win = float(req.get("win", 6.0))
-        radius = float(req.get("radius", 0.05))
-        engine = str(req.get("engine", "phat"))
-        context = float(req.get("context", _isl.DEFAULT_CONTEXT_S))
+        radius = float(req.get("radius", 0.05)) if op == "refine" else 0.05
         _isl._check_params(stream_t, orig_t, rate, win, radius)
+        if op == "refine":
+            engine = str(req.get("engine", "phat"))
+            if engine not in _isl.ENGINES:
+                raise ValueError("engine out of range")
         if op == "context":
+            context = float(req.get("context", _isl.DEFAULT_CONTEXT_S))
             _isl._check_context(context)
-        if op == "refine" and engine not in _isl.ENGINES:
-            raise ValueError("engine out of range")
         stem, orig_path = _resolve(req.get("stem"), req.get("orig"), sources_dir)
         pair = cache.get(stem, orig_path, rate)
         common = dict(stream_src=stem, orig_src=orig_path,
