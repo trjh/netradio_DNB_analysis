@@ -16,12 +16,15 @@ import wave
 
 import numpy as np
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                "scripts"))
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(_REPO, "scripts"))
+sys.path.insert(0, os.path.join(_REPO, "labels"))
 
+import sort_tsv                                    # noqa: E402
 from streamalign import groundtruth as gt          # noqa: E402
 from streamalign import hints                      # noqa: E402
 from streamalign import matchconv as mc            # noqa: E402
+from streamalign import track_mix as tm            # noqa: E402
 
 SR = mc.SR
 
@@ -291,3 +294,240 @@ class TestHintFilenames(unittest.TestCase):
         for name in mc.hint_filenames("d376-395", 72):
             self.assertTrue(name.endswith(".hints.tsv"), name)
             self.assertFalse(gt.is_pipeline_label_file(name), name)
+
+
+class TestTrim(unittest.TestCase):
+    """AP-02: the pre-MATCH trim -- window math and the path shift back."""
+
+    def test_window_spans_the_expected_overlap_with_margins(self):
+        lo, hi = mc.trim_window(around_s=300.0, orig_len_s=369.31, stream_len_s=2400.0)
+        self.assertAlmostEqual(lo, 300.0 - mc.TRIM_MARGIN_S)
+        self.assertAlmostEqual(hi, 300.0 + 369.31 + mc.TRIM_MARGIN_S)
+
+    def test_window_clamps_to_the_capture(self):
+        lo, hi = mc.trim_window(around_s=14.7, orig_len_s=369.31, stream_len_s=400.0)
+        self.assertEqual(lo, 0.0)                     # 14.7 - 60 clamps to the first sample
+        self.assertEqual(hi, 400.0)                   # and the end clamps to the last
+
+    def test_rate_guess_stretches_the_expected_end(self):
+        # a slowed original (rate < 1: fewer original-seconds per stream-second)
+        # occupies MORE stream time, so the window must reach further
+        _, hi_neutral = mc.trim_window(100.0, 300.0, 10000.0, rate_guess=1.0)
+        _, hi_slow = mc.trim_window(100.0, 300.0, 10000.0, rate_guess=0.9)
+        self.assertGreater(hi_slow, hi_neutral)
+
+    def test_apply_trim_offset_shifts_stream_times_only(self):
+        pairs = [(0.0, 10.0), (1.0, 11.0)]
+        shifted = mc.apply_trim_offset(pairs, 240.0)
+        self.assertEqual(shifted, [(240.0, 10.0), (241.0, 11.0)])
+
+    def test_derive_around_is_master_span_minus_capture_start(self):
+        meta = {"72": {"master_begin_seconds": 22293.0, "master_end_seconds": 22564.0}}
+        self.assertAlmostEqual(mc.derive_around(72, meta, 22278.306), 14.694, places=3)
+
+    def test_derive_around_returns_none_when_unknowable(self):
+        meta = {"72": {"master_begin_seconds": 22293.0}}
+        self.assertIsNone(mc.derive_around(72, meta, None))       # unplaced capture
+        self.assertIsNone(mc.derive_around(99, meta, 22278.306))  # no metadata entry
+        self.assertIsNone(mc.derive_around(72, {"72": {}}, 22278.306))  # no span
+
+
+class TestBatchWorklist(unittest.TestCase):
+    """AP-16: which tracks a capture's master span covers."""
+
+    META = {
+        "70": {"master_begin_seconds": 21500.0, "master_end_seconds": 21900.0},
+        "71": {"master_begin_seconds": 21900.0, "master_end_seconds": 22300.0},
+        "72": {"master_begin_seconds": 22293.0, "master_end_seconds": 22564.0},
+        "90": {"master_begin_seconds": 30000.0, "master_end_seconds": 30300.0},
+        "no-span": {"title": "unplaced"},
+        "not-a-number": {"master_begin_seconds": 0.0, "master_end_seconds": 1.0},
+    }
+
+    def test_overlapping_tracks_are_found_and_sorted(self):
+        # capture d376-395: master 22278.3, ~2400 s long
+        got = mc.tracks_overlapping(22278.306, 2400.0, self.META)
+        self.assertEqual([n for n, _b, _e in got], [71, 72])
+
+    def test_unplaced_capture_yields_nothing(self):
+        self.assertEqual(mc.tracks_overlapping(None, 2400.0, self.META), [])
+
+    def test_touching_spans_do_not_count_as_overlap(self):
+        got = mc.tracks_overlapping(21900.0, 100.0, self.META)   # 70 ends exactly here
+        self.assertEqual([n for n, _b, _e in got], [71])
+
+
+class TestReferee(unittest.TestCase):
+    """AP-03: the (trimmed) MATCH path referees the PHAT anchors."""
+
+    PAIRS = [(a * 1.0, 14.0 + a * 1.02) for a in range(0, 100, 2)]   # b = 14 + 1.02*a
+
+    def test_match_predict_interpolates_and_bounds(self):
+        self.assertAlmostEqual(mc.match_predict(self.PAIRS, 10.0), 14.0 + 10.2, places=6)
+        self.assertAlmostEqual(mc.match_predict(self.PAIRS, 11.0), 14.0 + 11.22, places=6)
+        self.assertIsNone(mc.match_predict(self.PAIRS, -1.0))
+        self.assertIsNone(mc.match_predict(self.PAIRS, 1e9))
+        self.assertIsNone(mc.match_predict([], 10.0))
+
+    def test_deltas_are_match_minus_phat(self):
+        # PHAT anchor agreeing exactly with the path: delta 0; one seated 0.5 s off: 0.5
+        agree = (50.0, 50.0 - (14.0 + 50 * 1.02) / 1.02, 0.9, False, False)
+        offset = (60.0, 60.0 - (14.0 + 60 * 1.02 - 0.51) / 1.02, 0.9, False, False)
+        deltas = mc.referee_deltas(self.PAIRS, [agree, offset], 1.02)
+        self.assertAlmostEqual(deltas[0], 0.0, places=6)
+        self.assertAlmostEqual(deltas[1], 0.51, places=6)
+
+    def test_uncovered_anchor_gets_none(self):
+        outside = (150.0, 0.0, 0.9, False, False)                 # beyond the path's span
+        self.assertEqual(mc.referee_deltas(self.PAIRS, [outside], 1.02), [None])
+
+    def _rows(self, deltas):
+        anchors = [(60.0, -27.5, 0.72, True, False), (200.0, -27.3, 0.65, True, False)]
+        return mc.build_rows(72, anchors, 1.0218, True,
+                             orig_native_len_s=369.31, stream_len_s=1200.0,
+                             match_deltas=deltas)
+
+    def test_delta_is_appended_to_both_sync_rows(self):
+        stream_rows, orig_rows = self._rows([0.031, -0.012])
+        for rows in (stream_rows, orig_rows):
+            syncs = [t for _, _, t in rows if " sync:" in t]
+            self.assertIn("MATCH +0.031s", syncs[0])
+            self.assertIn("MATCH -0.012s", syncs[1])
+
+    def test_small_delta_earns_no_question(self):
+        stream_rows, _ = self._rows([0.1, -0.2])
+        self.assertFalse([t for _, _, t in stream_rows if "disagree" in t])
+
+    def test_big_delta_earns_a_question_at_that_anchor(self):
+        stream_rows, _ = self._rows([0.05, 0.9])
+        questions = [(a, t) for a, _, t in stream_rows
+                     if "QUESTION" in t and "disagree" in t]
+        self.assertEqual(len(questions), 1)
+        self.assertEqual(questions[0][0], 200.0)                  # at the offending anchor
+        self.assertIn("+0.900", questions[0][1])
+
+    def test_globally_off_path_yields_one_question_not_a_pile(self):
+        # both anchors "disagree", but the MEDIAN delta says the whole MATCH path is
+        # seated wrong (its forced-start failure): one global question, no per-anchor pile
+        stream_rows, _ = self._rows([-40.1, -40.6])
+        questions = [t for _, _, t in stream_rows if "QUESTION" in t and "disagree" in t]
+        self.assertEqual(len(questions), 1)
+        self.assertIn("median", questions[0])
+        self.assertIn("-40.", questions[0])
+        # the raw per-anchor deltas still ride the sync rows
+        syncs = [t for _, _, t in stream_rows if " sync:" in t]
+        self.assertIn("MATCH -40.100s", syncs[0])
+
+    def test_none_delta_appends_nothing(self):
+        stream_rows, _ = self._rows([None, None])
+        for _, _, t in stream_rows:
+            self.assertNotIn("MATCH ", t)
+
+    def test_end_to_end_result_carries_the_deltas(self):
+        result = getattr(TestEndToEnd, "result", None)
+        if result is None:                       # run standalone: build the world once
+            result = mc.convert(STREAM, ORIG, _fake_match_pairs(), anchor_count=5)
+        self.assertEqual(len(result["match_deltas"]), len(result["anchors"]))
+
+
+class TestVerifiedToken(unittest.TestCase):
+    """AP-04: every emitted sync row carries ` verified` right after its marker, and the
+    token is exactly what the Python-side rule (labels/sort_tsv.sync_verified) and the
+    audit (track_mix.sync_row_verified) recognise -- while the FILE-sync `verified`
+    keyword family stays a stranger to it in both directions."""
+
+    def _rows(self):
+        anchors = [(60.0, -27.5, 0.59, True, False)]
+        return mc.build_rows(72, anchors, 1.0218, True,
+                             orig_native_len_s=369.31, stream_len_s=1200.0)
+
+    def test_token_sits_immediately_after_the_marker(self):
+        stream_rows, orig_rows = self._rows()
+        s = [t for _, _, t in stream_rows if " sync:" in t][0]
+        o = [t for _, _, t in orig_rows if " sync:" in t][0]
+        self.assertRegex(s, r"^track sync: 1 verified confidence \d")
+        self.assertRegex(o, r"^orig072 sync: 1 verified confidence \d")
+
+    def test_emitted_rows_satisfy_both_recognisers(self):
+        for rows in self._rows():
+            for _, _, text in rows:
+                if " sync:" not in text:
+                    continue
+                bare = text[:-len(" HINT")]
+                self.assertTrue(sort_tsv.sync_verified(bare), bare)
+                self.assertTrue(tm.sync_row_verified(bare), bare)
+                self.assertTrue(sort_tsv.parses(bare), bare)      # grammar-safe as folded
+
+    def test_file_sync_verified_is_not_this_token(self):
+        for text in ("file start sync: d336-355.wav 19637.763 verified d328-342",
+                     "file sync: d356-375.wav 1203.135 verified by 067"):
+            self.assertFalse(sort_tsv.sync_verified(text), text)
+            self.assertFalse(tm.sync_row_verified(text), text)
+
+    def test_hand_free_text_after_marker_is_not_the_token(self):
+        for text in ("orig015 sync: C start of d065",
+                     "track sync: A first four-note",
+                     "orig066 sync: B end in mix"):
+            self.assertFalse(sort_tsv.sync_verified(text), text)
+            self.assertFalse(tm.sync_row_verified(text), text)
+
+
+class TestSoloProbeSeeding(unittest.TestCase):
+    """AP-13: solo-anchor moments become preferred rate-sweep probe positions."""
+
+    def test_positions_come_from_solo_anchors_sorted(self):
+        real = tm.solo_anchors
+        tm.solo_anchors = lambda orig, cap, lo, hi, top=3: [
+            {"mix_s": 44.0, "orig_s": 30.0, "score": 0.9, "run_s": 10.0},
+            {"mix_s": 21.0, "orig_s": 7.0, "score": 0.8, "run_s": 8.0}]
+        try:
+            got = mc.solo_probe_positions(STREAM, ORIG, offset0=TRUE_DELTA)
+        finally:
+            tm.solo_anchors = real
+        self.assertEqual(got, [21.0, 44.0])
+
+    def test_failure_degrades_to_no_positions(self):
+        real = tm.solo_anchors
+        tm.solo_anchors = lambda *a, **k: (_ for _ in ()).throw(ImportError("no librosa"))
+        try:
+            got = mc.solo_probe_positions(STREAM, ORIG, offset0=TRUE_DELTA)
+        finally:
+            tm.solo_anchors = real
+        self.assertEqual(got, [])
+
+    def test_sweep_probes_the_seeded_positions(self):
+        seen = []
+        real = mc._refine_peaks
+
+        def spy(stream, orig2, a_s, b2_s, win_s, radius_s, n_peaks=1):
+            seen.append(round(a_s, 3))
+            return real(stream, orig2, a_s, b2_s, win_s, radius_s, n_peaks=n_peaks)
+
+        mc._refine_peaks = spy
+        try:
+            mc.sweep_rate(STREAM, ORIG, TRUE_DELTA, 1.0, span=0.0, step=0.01,
+                          probe_positions=[33.25])
+        except ValueError:
+            pass                # only the probe *positions* are under test here
+        finally:
+            mc._refine_peaks = real
+        self.assertIn(33.25, seen)
+
+    def test_out_of_overlap_positions_are_dropped(self):
+        seen = []
+        real = mc._refine_peaks
+
+        def spy(stream, orig2, a_s, b2_s, win_s, radius_s, n_peaks=1):
+            seen.append(round(a_s, 3))
+            return real(stream, orig2, a_s, b2_s, win_s, radius_s, n_peaks=n_peaks)
+
+        mc._refine_peaks = spy
+        try:
+            mc.sweep_rate(STREAM, ORIG, TRUE_DELTA, 1.0, span=0.0, step=0.01,
+                          probe_positions=[-50.0, 1e6])
+        except ValueError:
+            pass                # only the probe *positions* are under test here
+        finally:
+            mc._refine_peaks = real
+        self.assertNotIn(-50.0, seen)
+        self.assertNotIn(1e6, seen)

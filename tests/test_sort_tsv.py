@@ -313,6 +313,18 @@ class ValidationTests(unittest.TestCase):
         # timestamps shift by the 10.0 file start; the row keeps its file_ prefix
         self.assertEqual(starts["file_d376-395: track sync: A"], 1190.0)
 
+    def test_track_sync_verified_never_trips_the_file_sync_notice(self):
+        # the file-sync sanity NOTICE keys on the FILE sync grammar; a track/orig sync
+        # row's AP-04 `verified` token (or its absence) is none of its business
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            run([line(0.000, "file start sync: d336-355.wav 0.0 verified d328-342"),
+                 line(10.000, "track sync: 1 verified confidence 5.9/10"),
+                 line(20.000, "orig066 sync: 2")], PRIMARY)
+        self.assertNotIn("without 'verified' tag", err.getvalue())
+
     def test_legacy_no_markers_processes_unchanged(self):
         legacy = [
             line(0.000, "file start sync: d336-355.wav 19637.763 verified d328-342"),
@@ -323,6 +335,71 @@ class ValidationTests(unittest.TestCase):
         self.assertEqual(missing, 0)  # no convention in use -> not held to it
         self.assertIn("orig069 sync: 0", texts)  # labels untouched
         self.assertIn("track sync: A", texts)
+
+
+class VerifiedTokenTests(unittest.TestCase):
+    """AP-04: the track/orig-sync `verified` token -- recognised, preserved, and kept
+    strictly apart from the load-bearing FILE-sync `verified <neighbour>` keyword."""
+
+    def setUp(self):
+        sort_tsv.reset_state()
+
+    def test_recogniser_truth_table(self):
+        for text in ("track sync: 1 verified confidence 5.9/10",
+                     "track015 sync: B verified confidence 9.8/10",
+                     "orig072 sync: 3 verified confidence 5.9/10",
+                     "ORIG072 SYNC: 3 VERIFIED"):
+            self.assertTrue(sort_tsv.sync_verified(text), text)
+        for text in ("track sync: 1 confidence 5.9/10",          # no token
+                     "track sync: A first four-note verified",   # not after the marker
+                     "orig015 sync: C start of d065",
+                     # the OTHER family: file-sync verified is a different keyword
+                     "file start sync: d336-355.wav 19637.763 verified d328-342",
+                     "file sync: d356-375.wav 1203.135 verified by 067",
+                     "orig070 start: A verified",                # not a sync row
+                     ""):
+            self.assertFalse(sort_tsv.sync_verified(text), text)
+
+    def test_token_rows_parse_as_grammar(self):
+        self.assertTrue(sort_tsv.parses("track sync: 1 verified confidence 5.9/10"))
+        self.assertTrue(sort_tsv.parses("orig072 sync: 1 verified confidence 5.9/10"))
+
+    def test_token_survives_labeltrack_expansion(self):
+        # a bare `sync: 1 verified …` inside LABELTRACK 072 qualifies and keeps the token
+        got = sort_tsv.scope_label("072.labels", "d376-395",
+                                   "sync: 1 verified confidence 5.9/10")
+        self.assertEqual(got, "orig072 sync: 1 verified confidence 5.9/10")
+        self.assertTrue(sort_tsv.sync_verified(got))
+        self.assertEqual(sort_tsv.keyword_errors, [])
+        # and an already-qualified row is emitted as written
+        self.assertEqual(
+            sort_tsv.scope_label("072.labels", "d376-395",
+                                 "orig072 sync: 1 verified confidence 5.9/10"),
+            "orig072 sync: 1 verified confidence 5.9/10")
+
+    def test_token_survives_a_full_sort(self):
+        rows = [
+            line(0.000, "LABELTRACK d376-395"),
+            line(0.000, "file start sync: d376-395.wav 22278.306 verified 071"),
+            line(194.315, "track sync: 1 verified confidence 5.9/10"),
+            line(0.000, "LABELTRACK 072.labels"),
+            line(226.699, "sync: 1 verified confidence 5.9/10"),
+        ]
+        texts, _sf, missing = run(rows, "d376-395")
+        self.assertEqual(missing, 0)
+        self.assertIn("track sync: 1 verified confidence 5.9/10", texts)
+        self.assertIn("orig072 sync: 1 verified confidence 5.9/10", texts)
+
+    def test_track_sync_token_cannot_stand_in_for_file_sync_verified(self):
+        # cross-contamination, direction 2: an unverified FILE sync row still draws its
+        # NOTICE even when a token-carrying track sync row sits next to it
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            run([line(0.000, "file start sync: d336-355.wav 19637.763"),
+                 line(10.000, "track sync: 1 verified confidence 5.9/10")], PRIMARY)
+        self.assertIn("without 'verified' tag", err.getvalue())
 
 
 if __name__ == "__main__":

@@ -25,6 +25,12 @@ true-seat numbers, calibrates the inspector's residual colors (they cannot be
 absolute: verified seats range ~28%..~110% whole-window depending on how exposed the
 record is in the mix).
 
+Converter-trust additions (2026-08): every point reports whether its row text carries
+the AP-04 `verified` token (`--only-unchecked` lists the points the system has never
+touched), and points that used to skip for "no origNNN start: row" get their seat
+derived from a STRONG-audited neighbour capture that shares the clip seating (AP-17,
+`derive_seat` -- the 066-A method), marked `seat<-<neighbour>` in the output.
+
 Read-only: writes nothing but the optional --json report.
 """
 
@@ -33,6 +39,7 @@ import json
 import numpy as np
 
 from . import audio as _audio
+from . import groundtruth as _gt
 from . import matchconv as _mc
 from . import track_mix as _tm
 
@@ -116,17 +123,119 @@ def _inside(a_s, b2_s, stream_len_s, orig2_len_s, win_s=WIN_S, search_s=SEARCH_S
     return a_s, b2_s
 
 
+def derive_seat(num, stem, label, orig_ts, starts, masters, graded_points):
+    """AP-17: reconstruct a missing clip seat from a neighbour capture's bookkeeping.
+
+    A capture with `origNNN sync:` rows but no `origNNN start:` row cannot be audited
+    directly -- those points were SKIPPED. But the labeller works with adjacent captures
+    overlaid in one Audacity project, so a neighbour capture's clip seating for the SAME
+    original is the same physical seating seen through a master-timeline shift:
+    `local_here = local_there - (master_here - master_there)`. Where the neighbour's own
+    points audited STRONG, its `start:` row is corroborated bookkeeping: shifted here it
+    yields the missing seat, and the neighbours' median hand error is applied as a
+    correction on top (the 066-A method: the stale-bookkeeping offset a clip seating
+    carries is shared by every point that uses it, so the STRONG neighbours measure it).
+
+    Returns ({start_t, b_native, ref_stem, correction_s, n_strong}, None) on success,
+    else (None, why).
+    """
+    num = int(num)
+    if stem not in masters:
+        return None, "no origNNN start: row (capture not master-placed, cannot derive)"
+    cands = []
+    for (s2, n2) in starts:
+        if n2 != num or s2 == stem or s2 not in masters:
+            continue
+        strong = [p for p in graded_points
+                  if p["track"] == num and p["stem"] == s2 and p["verdict"] == "STRONG"]
+        if strong:
+            cands.append((len(strong), -abs(masters[s2] - masters[stem]), s2, strong))
+    if not cands:
+        return None, ("no origNNN start: row (and no STRONG neighbour shares a "
+                      "clip seating to derive one from)")
+    cands.sort(key=lambda c: (c[0], c[1]), reverse=True)
+    _n, _d, s2, strong = cands[0]
+    shift = masters[stem] - masters[s2]          # local_here = local_there - shift
+    orig_ts2 = orig_ts + shift                   # this sync row on the neighbour's clock
+    start2 = start_for(starts, s2, num, label, orig_ts2)
+    correction_s = float(np.median([p["hand_err_ms"] for p in strong])) / 1000.0
+    return {"start_t": start2 - shift, "b_native": orig_ts2 - start2,
+            "ref_stem": s2, "correction_s": correction_s, "n_strong": len(strong)}, None
+
+
 def audit(labels_dir=None, sources_dir="sources_local", audio_dir=None,
           tracks=None, background=0, search_s=SEARCH_S):
     """Grade every hand sync pair. Returns {"points": [...], "background": [...]}.
 
     `tracks`: optional iterable of track numbers to limit to. `background`: mismatch
     samples per audited point (0 = skip; they cost one metrics() each).
+
+    Each point also reports `verified` (does its row text carry the AP-04 `verified`
+    token -- i.e. has the system already touched it). Points that would skip for
+    "no origNNN start: row" get a second chance (AP-17): where a STRONG-audited
+    neighbour capture shares the clip seating, the seat is derived from it (see
+    `derive_seat`) and the point is graded with `seat_source` marking the derivation
+    instead of being skipped.
     """
     gt = _tm.track_sync_groundtruth(labels_dir)
     starts = parse_orig_starts(labels_dir)
+    masters = _gt.resolve_starts(labels_dir)
     streams, origs = {}, {}
-    points, bg = [], []
+    points, bg, deferred = [], [], []
+
+    def _grade(rec, num, pr, rate_mc, b_native):
+        """Load audio, refine the reconstructed seat, fill `rec`. Returns graded?"""
+        stem = rec["stem"]
+        if not _audio.find_audio_file(stem, audio_dir):
+            rec["why"] = "capture audio missing"
+            return False
+        orig_path = _tm.find_original(num, sources_dir)
+        if not orig_path:
+            rec["why"] = "original missing"
+            return False
+        if stem not in streams:
+            streams[stem] = _audio.load_audio(stem, audio_dir=audio_dir)
+        if num not in origs:
+            origs[num] = _audio.load_audio(orig_path, use_cache=False)
+        stream = streams[stem]
+        orig2 = _mc.resample_by_rate(origs[num], rate_mc)
+        b2_seed = b_native / rate_mc + rec.get("seat_correction_ms", 0.0) / 1000.0
+        placed = _inside(pr["track_ts"], b2_seed,
+                         len(stream) / SR, len(orig2) / SR, search_s=search_s)
+        if placed is None:
+            rec["why"] = "window does not fit (clip edge)"
+            return False
+        a_s, b2_hand = placed
+        got = _mc._refine_peaks(stream, orig2, a_s, b2_hand, WIN_S, search_s,
+                                n_peaks=1)
+        if not got:
+            rec["why"] = "refine window out of bounds"
+            return False
+        off_s, seat_conf, _ = got[0]
+        b2 = a_s - off_s
+        m = seat_metrics(stream, orig2, a_s, b2)
+        if m is None:
+            rec["why"] = "metrics window out of bounds"
+            return False
+        rec.update({
+            "seat_conf": float(seat_conf),
+            "hand_err_ms": float((b2 - b2_hand) * 1000.0),
+            "whole": m[0], "point": m[1], "inverted": m[2],
+            "verdict": ("STRONG" if seat_conf >= STRONG_CONF
+                        else "ok" if seat_conf >= FOUND_CONF else "NOT-FOUND"),
+            "why": None,
+        })
+        if background:
+            a, made = WIN_S, 0
+            while made < background and a < len(stream) / SR - WIN_S:
+                if abs(a - a_s) > 3.0:
+                    mm = seat_metrics(stream, orig2, a, b2)
+                    if mm:
+                        bg.append(mm[0])
+                        made += 1
+                a += BG_STEP_S
+        return True
+
     for num in sorted(gt):
         if tracks and num not in set(int(t) for t in tracks):
             continue
@@ -137,82 +246,66 @@ def audit(labels_dir=None, sources_dir="sources_local", audio_dir=None,
         for pr in info["pairs"]:
             stem = pr["file"].replace(".labels.tsv", "")
             rec = {"track": num, "label": pr["label"], "stem": stem,
-                   "stream_t": pr["track_ts"], "verdict": "SKIPPED", "why": None}
+                   "stream_t": pr["track_ts"], "verdict": "SKIPPED", "why": None,
+                   "verified": bool(pr.get("verified"))}
             points.append(rec)
             start_t = start_for(starts, stem, num, pr["label"], pr["orig_ts"])
             if start_t is None:
                 rec["why"] = "no origNNN start: row"
+                deferred.append((rec, num, pr, rate_mc))     # AP-17 second chance below
                 continue
             b_native = pr["orig_ts"] - start_t
             if b_native < 0:
                 rec["why"] = "sync before clip head"
                 continue
-            if not _audio.find_audio_file(stem, audio_dir):
-                rec["why"] = "capture audio missing"
-                continue
-            orig_path = _tm.find_original(num, sources_dir)
-            if not orig_path:
-                rec["why"] = "original missing"
-                continue
-            if stem not in streams:
-                streams[stem] = _audio.load_audio(stem, audio_dir=audio_dir)
-            if num not in origs:
-                origs[num] = _audio.load_audio(orig_path, use_cache=False)
-            stream = streams[stem]
-            orig2 = _mc.resample_by_rate(origs[num], rate_mc)
-            placed = _inside(pr["track_ts"], b_native / rate_mc,
-                             len(stream) / SR, len(orig2) / SR, search_s=search_s)
-            if placed is None:
-                rec["why"] = "window does not fit (clip edge)"
-                continue
-            a_s, b2_hand = placed
-            got = _mc._refine_peaks(stream, orig2, a_s, b2_hand, WIN_S, search_s,
-                                    n_peaks=1)
-            if not got:
-                rec["why"] = "refine window out of bounds"
-                continue
-            off_s, seat_conf, _ = got[0]
-            b2 = a_s - off_s
-            m = seat_metrics(stream, orig2, a_s, b2)
-            if m is None:
-                rec["why"] = "metrics window out of bounds"
-                continue
-            rec.update({
-                "seat_conf": float(seat_conf),
-                "hand_err_ms": float((b2 - b2_hand) * 1000.0),
-                "whole": m[0], "point": m[1], "inverted": m[2],
-                "verdict": ("STRONG" if seat_conf >= STRONG_CONF
-                            else "ok" if seat_conf >= FOUND_CONF else "NOT-FOUND"),
-                "why": None,
-            })
-            if background:
-                a, made = WIN_S, 0
-                while made < background and a < len(stream) / SR - WIN_S:
-                    if abs(a - a_s) > 3.0:
-                        mm = seat_metrics(stream, orig2, a, b2)
-                        if mm:
-                            bg.append(mm[0])
-                            made += 1
-                    a += BG_STEP_S
+            _grade(rec, num, pr, rate_mc, b_native)
+
+    # AP-17 pass 2: the "no origNNN start: row" points, seats derived from the STRONG
+    # neighbours graded above (never from other derived seats -- one hop only).
+    graded_now = [p for p in points if p["verdict"] != "SKIPPED"]
+    for rec, num, pr, rate_mc in deferred:
+        derived, why = derive_seat(num, rec["stem"], pr["label"], pr["orig_ts"],
+                                   starts, masters, graded_now)
+        if derived is None:
+            rec["why"] = why
+            continue
+        if derived["b_native"] < 0:
+            rec["why"] = "sync before clip head (seat derived from %s)" % derived["ref_stem"]
+            continue
+        rec.update({"seat_source": "derived-from-neighbours",
+                    "seat_ref": derived["ref_stem"],
+                    "seat_correction_ms": derived["correction_s"] * 1000.0,
+                    "seat_neighbours": derived["n_strong"]})
+        _grade(rec, num, pr, rate_mc, derived["b_native"])
     return {"points": points, "background": bg}
 
 
 def render(result):
-    """The human-readable table (one line per point) + summary counts."""
+    """The human-readable table (one line per point) + summary counts.
+
+    The `vfd` column is AP-04: `verified` when the row text carries the token (the
+    system has touched this point), `unchecked` otherwise. Seat-derived points (AP-17)
+    carry a trailing `seat<-<neighbour>` marker instead of being SKIPPED.
+    """
     lines = []
     counts = {}
     for p in result["points"]:
         counts[p["verdict"]] = counts.get(p["verdict"], 0) + 1
+        vfd = "verified " if p.get("verified") else "unchecked"
+        derived = ("  seat<-%s (%d STRONG, corr %+dms)"
+                   % (p["seat_ref"], p["seat_neighbours"],
+                      round(p["seat_correction_ms"]))
+                   if p.get("seat_source") else "")
         if p["verdict"] == "SKIPPED":
-            lines.append("track %03d %-2s %-14s SKIPPED: %s"
-                         % (p["track"], p["label"], p["stem"], p["why"]))
+            lines.append("track %03d %-2s %-14s %s SKIPPED: %s"
+                         % (p["track"], p["label"], p["stem"], vfd, p["why"]))
         else:
             lines.append(
-                "track %03d %-2s %-14s @%8.1fs  %-9s conf %.2f  hand_err %+8.1fms  "
-                "whole %5.1f%%  point %5.1f%%  %s"
-                % (p["track"], p["label"], p["stem"], p["stream_t"], p["verdict"],
+                "track %03d %-2s %-14s %s @%8.1fs  %-9s conf %.2f  hand_err %+8.1fms  "
+                "whole %5.1f%%  point %5.1f%%  %s%s"
+                % (p["track"], p["label"], p["stem"], vfd, p["stream_t"], p["verdict"],
                    p["seat_conf"], p["hand_err_ms"], p["whole"], p["point"],
-                   "inv" if p["inverted"] else "   "))
+                   "inv" if p["inverted"] else "   ", derived))
     lines.append("# " + "  ".join("%s: %d" % kv for kv in sorted(counts.items())))
     if result["background"]:
         b = np.array(result["background"])

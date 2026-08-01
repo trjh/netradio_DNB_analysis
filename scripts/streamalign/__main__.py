@@ -28,9 +28,14 @@
       Align-tool Pass 1: seat original 072 inside capture d376-395 (MATCH coarse
       map via sonic-annotator, then rate-swept + rate-corrected GCC-PHAT anchors,
       loop-shift disambiguation by whole-overlap anchor mass) and emit the paired
-      *.match.hints.tsv files for Audacity import. Needs numpy + ffmpeg (venv);
-      needs sonic-annotator + the match-vamp plugin unless --csv provides a
-      pre-exported match:a_b path CSV.
+      *.match.hints.tsv files for Audacity import. The stream is trimmed to the
+      original's expected neighbourhood before MATCH runs (--around, else derived
+      from the track's master span; AP-02); the MATCH path then referees each PHAT
+      anchor (per-anchor delta, QUESTION on disagreement; AP-03); solo-anchor
+      moments seed the rate sweep where librosa is available (AP-13). `--all` (or
+      an explicit list of track numbers) batches every overlapping track (AP-16).
+      Needs numpy + ffmpeg (venv); needs sonic-annotator + the match-vamp plugin
+      unless --csv provides a pre-exported match:a_b path CSV.
 
 Run from the repo's scripts/ dir or with scripts/ on PYTHONPATH.
 """
@@ -68,31 +73,46 @@ def _cmd_starter(args):
     print("# %d starter file(s) (seed-only; excluded from import/solve/build)" % len(written))
 
 
-def _cmd_match_hints(args):
+def _match_hints_one(stem, stream, orig_num, args, meta, master):
+    """One capture+original run: trim -> MATCH -> convert -> referee -> emit."""
     import tempfile
 
     from . import hints as _hints
     from . import matchconv as _mc
     from . import track_mix as _tm
 
-    stem = _audio.stem_of(args.stem)
-    if not _audio.find_audio_file(stem):
-        print("no audio for capture %s" % stem)
-        return
-    orig_path = _tm.find_original(args.orig, args.sources)
+    orig_path = _tm.find_original(orig_num, args.sources)
     if not orig_path:
-        print("no original %03d-* under %s" % (int(args.orig), args.sources))
+        print("no original %03d-* under %s" % (int(orig_num), args.sources))
         return
-    stream = _audio.load_audio(stem)
     orig = _audio.load_audio(orig_path, use_cache=False)
+    stream_len_s = len(stream) / _audio.SR
     if args.csv:
         pairs = _mc.parse_ab_csv(args.csv)
     else:
+        # AP-02: make MATCH's forced files-start-together assumption approximately true
+        # by handing it only the slice of the capture where the original is expected.
+        around = args.around
+        if around is None:
+            around = _mc.derive_around(orig_num, meta, master)
+            if around is not None:
+                print("orig %03d: expected near capture-local %.1fs (master span - "
+                      "capture start)" % (int(orig_num), around))
+        if around is None:
+            lo, hi = 0.0, stream_len_s
+            print("orig %03d: no expected position (no --around, no metadata span, or "
+                  "unplaced capture) -- MATCH runs on the whole capture" % int(orig_num))
+        else:
+            lo, hi = _mc.trim_window(around, len(orig) / _audio.SR, stream_len_s)
+            print("orig %03d: MATCH runs on the trimmed %.1f-%.1fs slice"
+                  % (int(orig_num), lo, hi))
         with tempfile.TemporaryDirectory(prefix="matchconv-") as tmp:
-            s_wav = _mc.write_wav16(os.path.join(tmp, stem + ".wav"), stream)
-            o_wav = _mc.write_wav16(os.path.join(tmp, "orig%03d.wav" % int(args.orig)), orig)
-            pairs = _mc.parse_ab_csv(_mc.run_match(s_wav, o_wav, tmp))
-    result = _mc.convert(stream, orig, pairs, anchor_count=args.anchors)
+            s_wav = _mc.write_wav16(os.path.join(tmp, stem + ".wav"),
+                                    stream[int(lo * _audio.SR):int(hi * _audio.SR)])
+            o_wav = _mc.write_wav16(os.path.join(tmp, "orig%03d.wav" % int(orig_num)), orig)
+            pairs = _mc.apply_trim_offset(_mc.parse_ab_csv(_mc.run_match(s_wav, o_wav, tmp)),
+                                          lo)
+    result = _mc.convert(stream, orig, pairs, anchor_count=args.anchors, solo_probes=True)
     rate, anchors = result["rate"], result["anchors"]
     print("rate %.5f (original runs %+.2f%% vs stream)   polarity %s   sweep score %.2f"
           % (rate, (rate - 1.0) * 100.0,
@@ -103,30 +123,88 @@ def _cmd_match_hints(args):
                   round(result["coverage"] * 100),
                   " (LOW -- possible loop-shift, verify by ear)"
                   if result["coverage"] < 0.5 else ""))
+    if result["solo_probes"]:
+        print("# solo-anchor probes seeded the sweep at: %s"
+              % "  ".join("%.1fs" % p for p in result["solo_probes"]))
     if result["ambiguous"]:
         print("!! a rival seat scored nearly as high -- likely whole-bar loop shift; "
               "verify a structurally unique moment by ear")
+    deltas = result["match_deltas"]
     for k, (a, off, conf, _inv, _out) in enumerate(anchors, start=1):
-        print("  sync %d  stream %9.3fs  <->  orig %9.3fs  confidence %.1f/10"
-              % (k, a, (a - off) * rate, 10.0 * conf))
+        d = deltas[k - 1] if k <= len(deltas) else None
+        print("  sync %d  stream %9.3fs  <->  orig %9.3fs  confidence %.1f/10  MATCH %s"
+              % (k, a, (a - off) * rate, 10.0 * conf,
+                 ("%+.3fs" % d) if d is not None else "n/a"))
     if not anchors:
         print("no anchors above confidence %.2f -- nothing to emit" % _mc.MIN_CONF)
         return
     stream_rows, orig_rows = _mc.build_rows(
-        args.orig, anchors, rate, result["inverted"],
-        orig_native_len_s=len(orig) / _audio.SR, stream_len_s=len(stream) / _audio.SR,
-        coverage=result["coverage"], ambiguous=result["ambiguous"])
+        orig_num, anchors, rate, result["inverted"],
+        orig_native_len_s=len(orig) / _audio.SR, stream_len_s=stream_len_s,
+        coverage=result["coverage"], ambiguous=result["ambiguous"],
+        match_deltas=deltas)
     if args.dry_run:
         for a, b, text in sorted(stream_rows + orig_rows, key=lambda r: (r[0], r[1])):
             print("%10.3f %10.3f  %s" % (a, b, text))
         return
     out_dir = args.out or (args.labels or _gt.LABELS_DIR)
     os.makedirs(out_dir, exist_ok=True)
-    s_name, o_name = _mc.hint_filenames(stem, args.orig)
+    s_name, o_name = _mc.hint_filenames(stem, orig_num)
     for rows, name in ((stream_rows, s_name), (orig_rows, o_name)):
         print("wrote %s" % _hints.write_hints(rows, os.path.join(out_dir, name)))
     print("Import each in Audacity: File > Import > Labels -- they land as their OWN "
           "tracks, beside your labels. Nothing you have is touched.")
+
+
+def _cmd_match_hints(args):
+    from . import hints as _hints
+    from . import matchconv as _mc
+    from . import track_mix as _tm
+
+    stem = _audio.stem_of(args.stem)
+    if not _audio.find_audio_file(stem):
+        print("no audio for capture %s" % stem)
+        return
+    stream = _audio.load_audio(stem)
+    meta = _hints._load_track_metadata()
+    starts = _gt.resolve_starts(args.labels)
+    master = starts.get(stem)
+
+    if args.orig:                      # an explicit list always wins (with or without --all)
+        nums = [int(n) for n in args.orig]
+    elif args.all:                     # AP-16: every overlapping track with an original
+        if master is None:
+            print("capture %s has no resolved master start -- cannot derive its overlap "
+                  "worklist; give explicit track numbers instead" % stem)
+            return
+        overlapping = _mc.tracks_overlapping(master, len(stream) / _audio.SR, meta)
+        if not overlapping:
+            print("no track's master span overlaps capture %s" % stem)
+            return
+        nums, skipped = [], []
+        for num, _mb, _me in overlapping:
+            (nums if _tm.find_original(num, args.sources) else skipped).append(num)
+        if skipped:
+            print("skipping %d overlapping track(s) with no original under %s: %s"
+                  % (len(skipped), args.sources, " ".join("%03d" % n for n in skipped)))
+        if not nums:
+            print("no overlapping track has an original under %s" % args.sources)
+            return
+        print("capture %s: running %d overlapping track(s): %s"
+              % (stem, len(nums), " ".join("%03d" % n for n in nums)))
+    else:
+        print("give a track number (or a list), or --all for every overlapping track")
+        return
+    if args.around is not None and len(nums) > 1:
+        print("--around describes ONE original's position; drop it for batch runs")
+        return
+    if args.csv and len(nums) > 1:
+        print("--csv is a single pre-exported pair run; drop it for batch runs")
+        return
+    for num in nums:
+        if len(nums) > 1:
+            print("\n== %s x orig %03d ==" % (stem, num))
+        _match_hints_one(stem, stream, num, args, meta, master)
 
 
 def _cmd_sync_audit(args):
@@ -134,6 +212,9 @@ def _cmd_sync_audit(args):
     result = _sa.audit(labels_dir=args.labels, sources_dir=args.sources,
                        tracks=args.tracks, background=args.background,
                        search_s=args.search)
+    if args.only_unchecked:
+        # AP-04: the hand points the system has never touched (no `verified` token)
+        result = dict(result, points=[p for p in result["points"] if not p.get("verified")])
     print(_sa.render(result))
     if args.json:
         with open(args.json, "w", encoding="utf-8") as handle:
@@ -437,7 +518,16 @@ def main(argv=None):
                              "a capture; emit paired <stem>.origNNN.match.hints.tsv / "
                              "origNNN.<stem>.match.hints.tsv (never labels)")
     pm.add_argument("stem", help="capture stem the original plays inside, e.g. d376-395")
-    pm.add_argument("orig", type=int, help="original track number (NNN, per sources_local)")
+    pm.add_argument("orig", type=int, nargs="*",
+                    help="original track number(s) (NNN, per sources_local); an explicit "
+                         "list overrides --all")
+    pm.add_argument("--all", action="store_true",
+                    help="AP-16: run every track whose master span overlaps the capture "
+                         "(tracks with no original on disk are listed and skipped)")
+    pm.add_argument("--around", type=float, default=None,
+                    help="AP-02: rough capture-local seconds of the original's start; the "
+                         "stream is trimmed to that neighbourhood before MATCH runs "
+                         "(auto-derived from the track's master span when omitted)")
     pm.add_argument("--csv", default=None,
                     help="pre-exported match:a_b CSV (else sonic-annotator is run)")
     pm.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
@@ -456,6 +546,9 @@ def main(argv=None):
                      help="wrong-place samples per audited point (default 0)")
     psa.add_argument("--search", type=float, default=1.5,
                      help="seat search radius seconds around the reconstructed seat")
+    psa.add_argument("--only-unchecked", action="store_true",
+                     help="AP-04: list only the hand points that do NOT carry the "
+                          "`verified` token (never touched by the system)")
     psa.add_argument("--json", default=None, help="write the full results JSON here")
 
     psw = sub.add_parser("sync-sweep",

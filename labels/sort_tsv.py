@@ -49,6 +49,24 @@ keyword_patterns = [
 # Compile regular expressions
 keyword_regexes = [re.compile(pattern, flags=re.IGNORECASE) for pattern in keyword_patterns]
 
+# AP-04: the machine-checked `verified` token on a mix<->original sync row -- it sits
+# IMMEDIATELY after the sync marker (`track sync: 1 verified confidence 5.9/10`), where
+# it is free text to the sync-row grammar above (marker then free text), so it parses and
+# survives LABELTRACK expansion untouched. Deliberately anchored on the track/orig sync
+# head: the FILE-sync `file [start] sync: ... verified <neighbour>` keyword is a
+# different, load-bearing thing (file-position authority + the alignment-graph edge
+# record) and the two families must never be read as one another. This regex is the
+# canonical Python-side rule; sheetscript/Code.js mirrors it for the sheet's Verified
+# column (pinned against each other in tests/test_sheet_import.py).
+sync_verified_regex = re.compile(r"^(?:orig|track)\d*\s+sync:\s*\S+\s+verified\b",
+                                 flags=re.IGNORECASE)
+
+
+def sync_verified(label):
+    """True if a track/orig sync row carries the AP-04 `verified` token (never file sync)."""
+    return bool(sync_verified_regex.match((label or "").strip()))
+
+
 # LABELTRACK <name> (Proposal A, PLAN_labelling_process.md): the first (earliest) label of
 # each Audacity label track names that track. sort_tsv.py scopes every following label to
 # <name> until the next LABELTRACK; the marker itself is stripped from the emitted .tsv.

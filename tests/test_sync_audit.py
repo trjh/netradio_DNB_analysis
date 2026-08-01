@@ -18,7 +18,9 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "scripts"))
 
+from streamalign import groundtruth as gt          # noqa: E402
 from streamalign import sync_audit as sa           # noqa: E402
+from streamalign import track_mix as tm            # noqa: E402
 
 SR = sa.SR
 HAVE_FFMPEG = shutil.which("ffmpeg") is not None
@@ -107,6 +109,170 @@ class TestAuditEndToEnd(unittest.TestCase):
         self.assertIn("STRONG", text)
         self.assertIn("NOT-FOUND", text)
         self.assertIn("background", text)
+
+
+class TestVerifiedFlag(unittest.TestCase):
+    """AP-04: the audit reports whether a point's row text carries the token, and the
+    token never leaks into (or out of) the FILE-sync `verified` family."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="sync-verified-")
+        self.labels = os.path.join(self.tmp, "labels")
+        os.makedirs(self.labels)
+        rows = [
+            (0.0, "file start sync: dV-000.wav 100.0 verified d998-999"),
+            (30.0, "orig042 sync: A verified confidence 5.9/10"),
+            (30.0, "track sync: A verified confidence 5.9/10"),
+            (55.0, "orig042 sync: B"),
+            (55.0, "track sync: B"),
+        ]
+        with open(os.path.join(self.labels, "dV-000.labels.tsv"), "w") as f:
+            for t, text in rows:
+                f.write("%.6f\t%.6f\t%s\n" % (t, t, text))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_parse_sync_points_carries_the_flag(self):
+        pairs = tm.parse_sync_points(self.labels)[42]
+        by_label = {p["label"]: p for p in pairs}
+        self.assertTrue(by_label["A"]["verified"])
+        self.assertFalse(by_label["B"]["verified"])
+
+    def test_audit_reports_the_flag_even_on_skipped_points(self):
+        # no start rows, no audio: both points skip -- but the flag is still there,
+        # which is exactly what --only-unchecked filters on
+        result = sa.audit(labels_dir=self.labels, sources_dir=self.tmp)
+        by_label = {p["label"]: p for p in result["points"]}
+        self.assertTrue(by_label["A"]["verified"])
+        self.assertFalse(by_label["B"]["verified"])
+        text = sa.render(result)
+        self.assertIn("verified ", text)
+        self.assertIn("unchecked", text)
+
+    def test_token_rows_never_reach_the_file_sync_family(self):
+        # direction 1: the token does not create a placement or an alignment edge
+        starts = gt.resolve_starts(self.labels)
+        self.assertEqual(list(starts), ["dV-000"])              # only the file sync row
+        self.assertEqual(gt.alignment_edges(self.labels), [("dV-000", "d998-999")])
+
+    def test_file_sync_verified_never_marks_a_point(self):
+        # direction 2: a file row's `verified <neighbour>` is not a sync-point token
+        self.assertFalse(tm.sync_row_verified(
+            "file start sync: dV-000.wav 100.0 verified d998-999"))
+
+
+class TestDeriveSeat(unittest.TestCase):
+    """AP-17 seat derivation: the pure master-timeline shift + neighbour-correction math."""
+
+    STARTS = {("dA-000", 42): [("A", 20.0), ("B", 20.03)]}
+    MASTERS = {"dA-000": 0.0, "dB-001": 40.0}
+
+    def _strong(self, errs):
+        return [{"track": 42, "stem": "dA-000", "verdict": "STRONG", "hand_err_ms": e}
+                for e in errs]
+
+    def test_seat_is_the_neighbours_bookkeeping_shifted_onto_this_clock(self):
+        got, why = sa.derive_seat(42, "dB-001", "D", 30.0, self.STARTS, self.MASTERS,
+                                  self._strong([0.0, 30.0, 10.0]))
+        self.assertIsNone(why)
+        # nearest start row to the shifted sync (70.0 on dA's clock) is B at 20.03;
+        # shifted here: 20.03 - 40 = -19.97, so b_native = 30 - (-19.97) = 49.97
+        self.assertEqual(got["ref_stem"], "dA-000")
+        self.assertAlmostEqual(got["start_t"], -19.97, places=3)
+        self.assertAlmostEqual(got["b_native"], 49.97, places=3)
+        # the correction is the STRONG neighbours' MEDIAN hand error (the 066-A method)
+        self.assertAlmostEqual(got["correction_s"], 0.010, places=6)
+        self.assertEqual(got["n_strong"], 3)
+
+    def test_no_strong_neighbours_stays_skipped_with_a_reason(self):
+        got, why = sa.derive_seat(42, "dB-001", "D", 30.0, self.STARTS, self.MASTERS, [])
+        self.assertIsNone(got)
+        self.assertIn("no STRONG neighbour", why)
+        # NOT-FOUND neighbours don't count either
+        weak = [dict(p, verdict="NOT-FOUND") for p in self._strong([0.0])]
+        got, why = sa.derive_seat(42, "dB-001", "D", 30.0, self.STARTS, self.MASTERS, weak)
+        self.assertIsNone(got)
+
+    def test_unplaced_capture_cannot_derive(self):
+        got, why = sa.derive_seat(42, "dZ-999", "D", 30.0, self.STARTS, self.MASTERS,
+                                  self._strong([0.0]))
+        self.assertIsNone(got)
+        self.assertIn("not master-placed", why)
+
+    def test_other_tracks_seatings_are_never_borrowed(self):
+        starts = {("dA-000", 66): [("A", 20.0)]}                 # a DIFFERENT original
+        got, why = sa.derive_seat(42, "dB-001", "D", 30.0, starts, self.MASTERS,
+                                  self._strong([0.0]))
+        self.assertIsNone(got)
+
+
+@unittest.skipUnless(HAVE_FFMPEG, "ffmpeg not on PATH")
+class TestSeatDerivationEndToEnd(unittest.TestCase):
+    """AP-17 end to end: a capture whose sync points have NO `origNNN start:` row is
+    graded anyway, its seat derived from the STRONG-audited neighbour capture that
+    shares the clip seating -- marked, never silently equal to a bookkept seat."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="seat-derive-")
+        labels = os.path.join(cls.tmp, "labels")
+        audio = os.path.join(cls.tmp, "audio")
+        sources = os.path.join(cls.tmp, "sources")
+        for d in (labels, audio, sources):
+            os.makedirs(d)
+        rng = np.random.default_rng(11)
+        raw = rng.standard_normal(SR * 60).astype(np.float32)
+        k = np.hanning(33).astype(np.float32)
+        k /= k.sum()
+        orig = (np.convolve(raw, k, "same") + 0.1 * raw) * 0.4
+        # master timeline: capture dA at master 0 (100 s), dB at master 40 (60 s);
+        # the original plays from master 20, so dB carries its 20..60 s stretch
+        cap = 0.01 * rng.standard_normal(SR * 100).astype(np.float32)
+        cap[20 * SR:20 * SR + len(orig)] += 0.5 * orig
+        _wav(os.path.join(audio, "dA-000.wav"), cap)
+        _wav(os.path.join(audio, "dB-001.wav"), cap[40 * SR:])
+        _wav(os.path.join(sources, "042-Synthetic Test.wav"), orig)
+        # dA: seated bookkeeping + A/B sync pairs (the STRONG neighbours-to-be)
+        with open(os.path.join(labels, "dA-000.labels.tsv"), "w") as f:
+            for t, text in [
+                    (0.0, "file start sync: dA-000.wav 0.0 verified x"),
+                    (20.0, "orig042 start: A"),
+                    (30.0, "orig042 sync: A"), (30.0, "track sync: A"),
+                    (55.0, "orig042 sync: B"), (55.0, "track sync: B")]:
+                f.write("%.6f\t%.6f\t%s\n" % (t, t, text))
+        # dB: sync pair only -- NO orig042 start: row anywhere in this file
+        with open(os.path.join(labels, "dB-001.labels.tsv"), "w") as f:
+            for t, text in [
+                    (0.0, "file start sync: dB-001.wav 40.0 verified dA-000"),
+                    (30.0, "orig042 sync: D"), (30.0, "track sync: D")]:
+                f.write("%.6f\t%.6f\t%s\n" % (t, t, text))
+        cls.result = sa.audit(labels_dir=labels, sources_dir=sources, audio_dir=audio)
+        cls.by_key = {(p["stem"], p["label"]): p for p in cls.result["points"]}
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_neighbour_points_still_grade_normally(self):
+        for label in ("A", "B"):
+            p = self.by_key[("dA-000", label)]
+            self.assertEqual(p["verdict"], "STRONG", p)
+            self.assertNotIn("seat_source", p)
+
+    def test_startless_point_is_graded_not_skipped(self):
+        p = self.by_key[("dB-001", "D")]
+        self.assertEqual(p["verdict"], "STRONG", p)
+        # dB local 30 is master 70 = orig-native 50; the derived seat must land there
+        self.assertLess(abs(p["hand_err_ms"]), 45.0)
+
+    def test_derived_seat_is_marked_with_its_provenance(self):
+        p = self.by_key[("dB-001", "D")]
+        self.assertEqual(p.get("seat_source"), "derived-from-neighbours")
+        self.assertEqual(p.get("seat_ref"), "dA-000")
+        self.assertEqual(p.get("seat_neighbours"), 2)
+        text = sa.render(self.result)
+        self.assertIn("seat<-dA-000", text)
 
 
 class TestHelpers(unittest.TestCase):

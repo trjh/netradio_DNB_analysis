@@ -35,6 +35,18 @@ from . import groundtruth as _gt
 _SYNC_RE = re.compile(r"^(orig|track)(\d*)\s+sync:\s*(\S+)", re.I)
 _MAX_PAIR_GAP_S = 30.0   # an orig/track pair must sit within this in the same file
 
+# AP-04: the machine-checked mark on a mix<->original sync row -- `verified` immediately
+# after the marker (`track sync: 1 verified confidence 5.9/10`). Anchored on the
+# track/orig sync head so the FILE-sync `file start sync: ... verified <neighbour>`
+# keyword (a different, load-bearing thing -- groundtruth's alignment edges) can never
+# be read as this token, nor vice versa.
+_SYNC_VERIFIED_RE = re.compile(r"^(?:orig|track)\d*\s+sync:\s*\S+\s+verified\b", re.I)
+
+
+def sync_row_verified(text):
+    """True if a track/orig sync row carries the AP-04 `verified` token."""
+    return bool(_SYNC_VERIFIED_RE.match((text or "").strip()))
+
 
 def _read_rows(labels_dir):
     rows = []
@@ -73,7 +85,8 @@ def parse_sync_points(labels_dir=None):
             continue
         kind = m.group(1).lower()
         num = int(m.group(2)) if m.group(2) else None
-        rec = {"num": num, "label": m.group(3), "t": r["t"], "file": r["file"]}
+        rec = {"num": num, "label": m.group(3), "t": r["t"], "file": r["file"],
+               "verified": sync_row_verified(r["text"])}
         if kind == "orig":
             if num is not None:   # an orig sync must name its track
                 origs.append(rec)
@@ -93,7 +106,10 @@ def parse_sync_points(labels_dir=None):
             continue
         out.setdefault(o["num"], []).append({
             "label": o["label"], "orig_ts": o["t"], "track_ts": best["t"],
-            "file": o["file"]})
+            "file": o["file"],
+            # AP-04: a point counts as machine-checked when either of its two rows
+            # carries the token (the system emits both; a hand fold may keep one)
+            "verified": bool(o["verified"] or best["verified"])})
     return out
 
 

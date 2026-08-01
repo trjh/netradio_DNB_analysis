@@ -82,7 +82,13 @@ function ParseTSV(fileContent) {
     var syncDiff = '';
     var syncNum = undefined;
     var match = '';
-    
+    // AP-04: 'Y' only for a track/orig sync row whose `verified` token sits immediately
+    // after the marker (machine-checked point). NEVER set from a file sync row's
+    // `verified <neighbour>` keyword -- that is the file-position/alignment-edge record,
+    // a different family (mirror of labels/sort_tsv.py sync_verified; the two are pinned
+    // against each other in tests/test_sheet_import.py).
+    var syncVerified = '';
+
 
     // Log data
     console.log('DEBUG: Processing line ' + j + ' ts ' + timestamp + ' entry ' + label)
@@ -105,7 +111,8 @@ function ParseTSV(fileContent) {
     }
 
     if (label == '') {
-      var rowData = ['', '', '', '', '', '', '', '', '', ''];
+      // 12 columns, same width as the full rows below (setValues needs a rectangle)
+      var rowData = ['', '', '', '', '', '', '', '', '', '', '', ''];
       data.push(rowData);
       continue;
     }
@@ -144,6 +151,9 @@ function ParseTSV(fileContent) {
       syncLabel = (match[2] || match[4]) + match[6];
       syncNum = (match[5] || match[3] || trackNum)
       note = syncNum + " " + match[6] + match[7]
+      if (/^(orig|track)\d*\s+sync:\s*\S+\s+verified\b/i.test(label)) {
+        syncVerified = 'Y';
+      }
 
       // only calculate using track points A and B
       if (match[6] == "A" || match[6] == "B") {
@@ -206,6 +216,7 @@ function ParseTSV(fileContent) {
       (syncNum == undefined) ? trackName : "",
       (syncNum == undefined) ? trackArtist : "",
       (syncNum == undefined) ? "" : syncDiff,
+      syncVerified,
     ];
 
     // Push the row data into the data array

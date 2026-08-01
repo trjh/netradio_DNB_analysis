@@ -20,7 +20,9 @@ import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "scripts"))
+sys.path.insert(0, os.path.join(REPO, "labels"))
 
+import sort_tsv  # noqa: E402
 from streamalign import groundtruth as gt  # noqa: E402
 
 
@@ -71,6 +73,36 @@ class CodeJsStillHasTheRule(unittest.TestCase):
             re.search(r"endsWith\('\.labels\.tsv'\)\s*&&\s*!file\.name\.endsWith\('\.starter"
                       r"\.labels\.tsv'\)\)\s*\|\|\s*file\.name\s*===\s*'remainder\.tsv'", src),
             "Code.js import filter no longer matches tests/test_sheet_import.sheet_imports")
+
+
+# AP-04: the sheet's Verified column keys on the same rule as labels/sort_tsv.sync_verified
+# -- `verified` immediately after a track/orig sync marker, NEVER a file-sync row's
+# `verified <neighbour>` keyword. Code.js is Apps Script with no test harness, so (same
+# pattern as above) the Python side is the mirror and the JS source is pinned against it.
+_JS_VERIFIED_RE = r"/\^\(orig\|track\)\\d\*\\s\+sync:\\s\*\\S\+\\s\+verified\\b/i"
+
+
+class VerifiedColumnMatchesTheLabelRule(unittest.TestCase):
+    def test_code_js_still_has_the_verified_regex(self):
+        src = open(os.path.join(REPO, "sheetscript", "Code.js"), encoding="utf-8").read()
+        self.assertTrue(
+            re.search(_JS_VERIFIED_RE, src),
+            "Code.js Verified-column regex no longer mirrors labels/sort_tsv.sync_verified")
+        # and the flag rides every emitted row (12th column)
+        self.assertIn("syncVerified,", src)
+
+    def test_python_mirror_agrees_with_sort_tsv(self):
+        # the JS regex, transliterated; parity with the canonical Python rule
+        js_mirror = re.compile(r"^(orig|track)\d*\s+sync:\s*\S+\s+verified\b", re.I)
+        for label, expect in (
+                ("track sync: 1 verified confidence 5.9/10", True),
+                ("orig072 sync: 3 verified confidence 5.9/10", True),
+                ("track sync: A first four-note", False),
+                ("track sync: A first four-note verified", False),
+                ("file start sync: d336-355.wav 19637.763 verified d328-342", False),
+                ("file sync: d356-375.wav 1203.135 verified by 067", False)):
+            self.assertEqual(bool(js_mirror.match(label)), expect, label)
+            self.assertEqual(sort_tsv.sync_verified(label), expect, label)
 
 
 if __name__ == "__main__":
