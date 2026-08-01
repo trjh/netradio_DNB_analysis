@@ -225,6 +225,14 @@ function ParseTSV(fileContent) {
 }
 
 function updatesheet() {
+  // AP-04 migration: the Verified column (12) is new, so name it -- otherwise every
+  // import would fill a blank-headed column and the machine-checked state would not be
+  // an identifiable spreadsheet field. Only the NEW column's header is written (and only
+  // when it isn't already right); columns 1-11 stay owner-maintained.
+  var header = sheet.getRange(1, 12);
+  if (header.getValue() !== 'Verified') {
+    header.setValue('Verified');
+  }
   // Set the values in the sheet in one batch operation
   sheet.getRange(2, 1, data.length, data[0].length).setValues(data);
 }
