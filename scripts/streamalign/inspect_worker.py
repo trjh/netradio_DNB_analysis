@@ -19,6 +19,10 @@ Protocol (JSON lines):
      "context": ...,              # context only (AP-05)
      "id": anything}              -> the same dict inspect_slice returns
                                      (or {"error": ...}), "id" echoed when present
+    {"op": "overview",
+     "stem": ..., "orig": N, "rate": ..., "invert": ...,
+     "points": [[stream_s, orig_s], ...],              # AP-10 (capped list)
+     "id": anything}              -> the build_overview dict (or {"error": ...})
 
 All parameter guards are inspect_slice's own (`_check_params` + the per-mode
 clamps) -- the DSP is never duplicated here, and a bad request answers
@@ -32,7 +36,7 @@ import sys
 from . import audio as _audio
 from . import inspect_slice as _isl
 
-OPS = ("ping", "slice", "refine", "context")
+OPS = ("ping", "slice", "refine", "context", "overview")
 
 
 class PairCache:
@@ -89,6 +93,16 @@ def handle(req, cache, sources_dir):
         # DIFFERENT op (a stale radius on a slice request, say) is ignored, same
         # as the one-shot CLI's per-mode argument handling (review iteration 3 P2)
         rate = float(req.get("rate", 1.0))
+        if op == "overview":
+            # AP-10: no per-point times/window -- guard the rate + the points
+            # list (count cap + finiteness) before the pair loads, then hand off
+            points = _isl._check_points(req.get("points"))
+            _isl._check_params(0.0, 0.0, rate, 6.0)
+            stem, orig_path = _resolve(req.get("stem"), req.get("orig"), sources_dir)
+            pair = cache.get(stem, orig_path, rate)
+            return _isl.build_overview(stream_src=stem, orig_src=orig_path,
+                                       points=points, rate=rate,
+                                       invert=bool(req.get("invert")), pair=pair)
         stream_t = float(req.get("stream_t"))
         orig_t = float(req.get("orig_t"))
         win = float(req.get("win", 6.0))

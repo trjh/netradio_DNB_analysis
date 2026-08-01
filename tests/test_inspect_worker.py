@@ -103,6 +103,8 @@ class TestHandle(unittest.TestCase):
             mock.patch.object(iw._isl, "build_slices", side_effect=_rec("slice", {"sr": 16000})),
             mock.patch.object(iw._isl, "refine_seat", side_effect=_rec("refine", {"new_orig_t": 1.0})),
             mock.patch.object(iw._isl, "build_context", side_effect=_rec("context", {"n_cols": 10})),
+            mock.patch.object(iw._isl, "build_overview",
+                              side_effect=_rec("overview", {"segments": []})),
         ]
         for p in patches:
             p.start()
@@ -119,11 +121,18 @@ class TestHandle(unittest.TestCase):
                                    cache, "src"), {"new_orig_t": 1.0})
         self.assertEqual(iw.handle(dict(req, op="context", context=30.0), cache, "src"),
                          {"n_cols": 10})
+        self.assertEqual(iw.handle(dict(req, op="overview",
+                                        points=[[24.0, 20.0], [14.0, 10.0]]),
+                                   cache, "src"), {"segments": []})
         self.assertEqual(calls["slice"]["pair"][0], "pair")   # the cached pair is passed
         self.assertEqual(calls["refine"]["engine"], "match")
         self.assertEqual(calls["refine"]["radius_s"], 0.1)
         self.assertEqual(calls["context"]["context_s"], 30.0)
-        # one load served all three ops (same trio)
+        # AP-10: the points reach build_overview cleaned (sorted) with the pair
+        self.assertEqual(calls["overview"]["points"], [(14.0, 10.0), (24.0, 20.0)])
+        self.assertEqual(calls["overview"]["pair"][0], "pair")
+        self.assertTrue(calls["overview"]["invert"])
+        # one load served all four ops (same trio)
         self.assertEqual(len(cache._loader.calls), 1)
 
     def test_invalid_params_never_reach_the_loader(self):
@@ -143,6 +152,13 @@ class TestHandle(unittest.TestCase):
             (dict(base, op="context", context=0.5), "context out of range"),
             (dict(base, op="context", context="nan"), "context out of range"),
             (dict(base, op="slice", rate="; rm -rf /"), "could not convert"),
+            (dict(base, op="overview"), "points out of range"),
+            (dict(base, op="overview", points=[[1.0, float("nan")]]),
+             "points out of range"),
+            (dict(base, op="overview", points=[[1.0, 2.0]] * 999),
+             "points out of range"),
+            (dict(base, op="overview", points=[[1.0, 2.0]], rate=0.0),
+             "rate out of range"),
         ]
         for req, fragment in cases:
             out = iw.handle(req, cache, "src")

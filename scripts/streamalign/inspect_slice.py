@@ -35,6 +35,16 @@ min/max column pairs (COLS_PER_S per second, mono) for the stream and the
 rate-corrected original around the point -- a small payload for the player's context
 lane, NOT full audio (playback slices are fetched separately on click).
 
+With --overview (AP-10) it emits the WHOLE-CAPTURE overview instead: one coarse
+min/max envelope for the full stream (OVERVIEW_COLS_PER_S per second) plus the
+original's envelope PIECEWISE-LINEARLY stretched between the given sync points --
+each inter-point segment of the native original is decimated into exactly the
+columns its stream span covers, which IS the linear stretch at envelope
+resolution. The head (before the first point, back to original local 0) and tail
+(after the last point, to the original's end) extrapolate along the given rate,
+clamped to the capture. Column counts are capped (MAX_OVERVIEW_COLS) so a request
+can never buy an unbounded payload.
+
 `LoadedPair` is the keep-warm seam (AP-08): the decode + rate-correction that
 dominates a one-shot run's latency is bundled into one cacheable object, and every
 entry point accepts `pair=` so the `inspect-worker` process can reuse it across
@@ -56,6 +66,9 @@ MAX_REFINE_RADIUS_S = 2.0
 DEFAULT_CONTEXT_S = 45.0  # AP-05: context strip half-width (± seconds around the point)
 MAX_CONTEXT_S = 60.0      # hard cap; the player's endpoint enforces it too
 CONTEXT_COLS_PER_S = 50   # min/max column pairs per second in the context payload
+OVERVIEW_COLS_PER_S = 6.0     # AP-10: whole-capture envelope resolution (coarse)
+MAX_OVERVIEW_COLS = 20000     # AP-10: hard cap on the overview payload's columns
+MAX_OVERVIEW_POINTS = 64      # AP-10: hard cap on client-supplied sync points
 ENGINES = ("phat", "match")   # AP-14: refine_seat's snap engines
 
 
@@ -83,6 +96,30 @@ def _check_context(context_s):
     if not np.isfinite(ctx) or ctx < 1.0:
         raise ValueError("context out of range")
     return min(ctx, MAX_CONTEXT_S)
+
+
+def _check_points(points):
+    """AP-10's sync-point guard: a bounded list of finite (stream_s, orig_s) pairs.
+
+    Shared by build_overview and the worker's request boundary, mirroring
+    _check_params' role: nonsense answers ValueError (JSON at the CLI boundary),
+    never a numpy traceback, and the count cap bounds the work a request can buy.
+    Returns the cleaned pairs sorted by stream time.
+    """
+    if not isinstance(points, (list, tuple)) or not points:
+        raise ValueError("points out of range (need 1..%d pairs)" % MAX_OVERVIEW_POINTS)
+    if len(points) > MAX_OVERVIEW_POINTS:
+        raise ValueError("points out of range (need 1..%d pairs)" % MAX_OVERVIEW_POINTS)
+    clean = []
+    for p in points:
+        if not isinstance(p, (list, tuple)) or len(p) != 2:
+            raise ValueError("points out of range (each entry is [stream_s, orig_s])")
+        a, b = float(p[0]), float(p[1])
+        if not (np.isfinite(a) and np.isfinite(b)
+                and 0.0 <= a <= 24 * 3600.0 and 0.0 <= b <= 24 * 3600.0):
+            raise ValueError("points out of range (times must be finite seconds)")
+        clean.append((a, b))
+    return sorted(clean)
 
 
 def _b64_i16(x):
@@ -375,4 +412,93 @@ def build_context(stream_src, orig_src, stream_t, orig_t, rate, invert,
         "n_cols": cols,
         "stream": {"min": s_min, "max": s_max},
         "orig": {"min": o_min, "max": o_max},
+    }
+
+
+def _seg_env(x, lo_s, hi_s, cols):
+    """Min/max columns of x[lo_s:hi_s) (seconds), zero-padded at the edges.
+
+    The zero-pad matters: a hint's orig time can sit (slightly) outside the
+    original's real audio, and the overview must show silence there, not shift
+    content. Returns None when the span is too short to fill `cols` columns.
+    """
+    n0 = int(round(lo_s * SR))
+    n1 = int(round(hi_s * SR))
+    if cols < 1 or n1 - n0 < cols:
+        return None
+    out = np.zeros(n1 - n0, dtype=np.float32)
+    lo, hi = max(0, n0), min(len(x), n1)
+    if hi > lo:
+        out[lo - n0:hi - n0] = x[lo:hi]
+    return _minmax_columns(out, cols)
+
+
+def build_overview(stream_src, orig_src, points, rate, invert, pair=None):
+    """The whole-capture overview (AP-10). JSON-ready dict.
+
+    One coarse min/max envelope for the FULL stream, plus the original's envelope
+    piecewise-linearly stretched between the sync `points` ([(stream_s, orig_s)]
+    pairs, original-NATIVE seconds): each inter-point segment of the native
+    original is decimated into exactly the columns its stream span covers --
+    equal native span per equal stream span, i.e. the linear stretch, at envelope
+    resolution. Head/tail segments extrapolate along `rate` to the original's own
+    ends, clamped to the capture. The original is polarity-applied and RMS-matched
+    (whole-file, mono) so the two envelopes read on one scale.
+
+    NOT audio, NOT per-point: the player fetches this once per pair and draws sync
+    flags itself (it owns the per-point residual state the flag colors encode).
+    """
+    _check_params(0.0, 0.0, rate, 6.0)
+    points = _check_points(points)
+    pair = pair or LoadedPair(stream_src, orig_src, rate)
+    rate = float(rate)
+
+    stream_mono = pair.stream.mean(axis=1)
+    orig_mono = pair.orig.mean(axis=1)
+    if invert:
+        orig_mono = -orig_mono
+    rms_s = float(np.sqrt(np.mean(stream_mono ** 2)))
+    rms_o = float(np.sqrt(np.mean(orig_mono ** 2)))
+    gain = (rms_s / rms_o) if rms_o > 1e-9 else 1.0
+    orig_mono = orig_mono * gain
+
+    stream_len_s = len(stream_mono) / SR
+    orig_len_s = len(orig_mono) / SR
+    cols = min(int(stream_len_s * OVERVIEW_COLS_PER_S), MAX_OVERVIEW_COLS)
+    if cols < 1:
+        raise ValueError("stream too short for an overview")
+    cps = cols / stream_len_s
+    s_min, s_max = _minmax_columns(stream_mono, cols)
+
+    # piecewise knots: head (original local 0) + the points + tail (original end),
+    # extrapolated along `rate` and clamped to the capture's own span
+    first, last = points[0], points[-1]
+    head_a = max(0.0, first[0] - first[1] / rate)
+    head = (head_a, first[1] - (first[0] - head_a) * rate)
+    tail_a = min(stream_len_s, last[0] + (orig_len_s - last[1]) / rate)
+    tail = (tail_a, last[1] + (tail_a - last[0]) * rate)
+    knots = [head] + points + [tail]
+    segments = []
+    for (a0, b0), (a1, b1) in zip(knots, knots[1:]):
+        if a1 - a0 <= 0 or b1 - b0 <= 0:
+            continue        # degenerate/mis-ordered pair: nothing to stretch
+        c0, c1 = int(round(a0 * cps)), int(round(a1 * cps))
+        env = _seg_env(orig_mono, b0, b1, c1 - c0)
+        if env is None:
+            continue
+        segments.append({"a0": round(a0, 3), "a1": round(a1, 3),
+                         "min": env[0], "max": env[1]})
+
+    return {
+        "sr": SR,
+        "cols_per_s": cps,
+        "n_cols": cols,
+        "stream_len_s": stream_len_s,
+        "orig_len_s": orig_len_s,
+        "rate": rate,
+        "invert": bool(invert),
+        "rms_gain": float(gain),
+        "points": [[round(a, 3), round(b, 3)] for a, b in points],
+        "stream": {"min": s_min, "max": s_max},
+        "segments": segments,
     }

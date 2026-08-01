@@ -138,8 +138,12 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints d376-395 72 --dry
   globally mis-seated path returned as an error, never a snap). `--context
   SECONDS` emits the zoomed-out **context strip** instead: decimated min/max
   columns (50/s, mono) over ±SECONDS (cap 60) — a small payload, not audio.
+  `--overview --point STREAM_S:ORIG_S …` emits the **whole-capture overview**
+  instead (AP-10): one coarse envelope (6 cols/s, capped) for the full stream plus
+  the original's envelope piecewise-linearly stretched between the given sync
+  points (head/tail extrapolated along `--rate`, clamped to the capture).
 - **`inspect-worker`** — the keep-warm form of `inspect-slice`: a long-lived
-  process reading JSON-lines requests on stdin (`op: slice|refine|context`, same
+  process reading JSON-lines requests on stdin (`op: slice|refine|context|overview`, same
   fields and guards) and writing one JSON response line each, holding the decoded
   stream + rate-corrected original for the current (stem, orig, rate) pair so
   repeat requests skip the decode/resample cost. The player spawns it and falls
