@@ -129,6 +129,21 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints d376-395 72 --dry
   - `--all` batches every track whose master span overlaps the capture (tracks with
     no original on disk are listed and skipped); an explicit list of track numbers
     (`match-hints STEM 71 72`) overrides.
+- **`inspect-slice STEM NNN --stream-t S --orig-t S`** — align-tool Pass 2 slice
+  provider for the player's `/align` inspector (JSON on stdout; all DSP happens
+  here, in the venv). Default: base64 int16 stereo slices of the stream and the
+  rate-corrected original around one sync point. `--refine` runs the GCC-PHAT
+  snap-to-best instead; `--refine --engine match` snaps to the **trimmed MATCH
+  path's** implied instant (with the PHAT-vs-MATCH delta reported, and a
+  globally mis-seated path returned as an error, never a snap). `--context
+  SECONDS` emits the zoomed-out **context strip** instead: decimated min/max
+  columns (50/s, mono) over ±SECONDS (cap 60) — a small payload, not audio.
+- **`inspect-worker`** — the keep-warm form of `inspect-slice`: a long-lived
+  process reading JSON-lines requests on stdin (`op: slice|refine|context`, same
+  fields and guards) and writing one JSON response line each, holding the decoded
+  stream + rate-corrected original for the current (stem, orig, rate) pair so
+  repeat requests skip the decode/resample cost. The player spawns it and falls
+  back to one-shot `inspect-slice` subprocesses when it can't start.
 - **`sync-audit`** — grade every hand `origNNN sync:` point against the audio (seat
   confidence, hand bookkeeping error, inspector residuals; see
   [SYNC_SWEEP_CALIBRATION.md](./SYNC_SWEEP_CALIBRATION.md)). Each point also reports
