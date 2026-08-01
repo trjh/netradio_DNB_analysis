@@ -420,17 +420,32 @@ def _seg_env(x, lo_s, hi_s, cols):
 
     The zero-pad matters: a hint's orig time can sit (slightly) outside the
     original's real audio, and the overview must show silence there, not shift
-    content. Returns None when the span is too short to fill `cols` columns.
+    content. Computed AT COLUMN RESOLUTION, never by materialising the padded
+    interval: an accepted-but-absurd point span (out-of-file times are valid up
+    to 24 h) would otherwise allocate gigabytes of zeros before decimation and
+    kill the worker (review iteration 1 P1). Memory here is O(cols); work is
+    O(len(x) + cols). Returns None when the span is too short to fill `cols`.
     """
     n0 = int(round(lo_s * SR))
     n1 = int(round(hi_s * SR))
-    if cols < 1 or n1 - n0 < cols:
+    total = n1 - n0
+    if cols < 1 or total < cols:
         return None
-    out = np.zeros(n1 - n0, dtype=np.float32)
-    lo, hi = max(0, n0), min(len(x), n1)
-    if hi > lo:
-        out[lo - n0:hi - n0] = x[lo:hi]
-    return _minmax_columns(out, cols)
+    mins, maxs = [], []
+    for c in range(cols):
+        a = n0 + (total * c) // cols
+        b = n0 + (total * (c + 1)) // cols
+        lo_i, hi_i = max(0, a), min(len(x), b)
+        if hi_i > lo_i:
+            seg = x[lo_i:hi_i]
+            m_lo, m_hi = float(seg.min()), float(seg.max())
+            if lo_i > a or b > hi_i:    # the zero-pad intrudes into this column
+                m_lo, m_hi = min(m_lo, 0.0), max(m_hi, 0.0)
+        else:                           # column is entirely outside the audio
+            m_lo = m_hi = 0.0
+        mins.append(round(m_lo, 3))
+        maxs.append(round(m_hi, 3))
+    return mins, maxs
 
 
 def build_overview(stream_src, orig_src, points, rate, invert, pair=None):

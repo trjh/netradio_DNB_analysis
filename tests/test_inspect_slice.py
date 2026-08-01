@@ -308,6 +308,25 @@ class TestBuildOverview(TestBuildSlices):
         self.assertEqual(out["n_cols"], 50)
         self.assertEqual(len(out["stream"]["min"]), 50)
 
+    def test_out_of_file_point_spans_stay_memory_bounded(self):
+        # review iteration 1 P1: points are individually valid up to 24 h, so a
+        # span like 10 s -> 86 000 s used to materialise a ~5 GiB zero-pad buffer
+        # inside _seg_env before decimation. The envelope is now computed at
+        # column resolution: O(cols) memory, and the padded region reads 0.
+        env = isl._seg_env(np.ones(100, dtype=np.float32), 0.0, 86400.0, 10)
+        self.assertIsNotNone(env)
+        self.assertEqual(len(env[0]), 10)
+        self.assertEqual(env[1][0], 1.0)                  # the in-file samples
+        self.assertEqual(env[0][0], 0.0)                  # padded within col 0 too
+        self.assertEqual(env[1][1:], [0.0] * 9)           # pure padding beyond
+        # and through build_overview: a far-out-of-file orig time yields a
+        # normal-sized payload whose padded columns are silent
+        out = self._ov(points=[(14.0, 10.0), (30.0, 86000.0)])
+        seg = out["segments"][1]
+        self.assertLessEqual(len(seg["max"]),
+                             int(out["stream_len_s"] * out["cols_per_s"]) + 1)
+        self.assertEqual(max(abs(v) for v in seg["max"][len(seg["max"]) // 2:]), 0.0)
+
     def test_cli_overview_end_to_end(self):
         import io
         import shutil as _sh
