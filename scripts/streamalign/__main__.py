@@ -37,6 +37,16 @@
       Needs numpy + ffmpeg (venv); needs sonic-annotator + the match-vamp plugin
       unless --csv provides a pre-exported match:a_b path CSV.
 
+  .venv/bin/python -m streamalign inspect-slice d376-395 72 --stream-t 196 --orig-t 228.4
+      Align-tool Pass 2: JSON slices (or --refine snap-to-best, --refine --engine
+      match for the MATCH-path snap target, --context SECONDS for the zoomed-out
+      context strip) for the player's /align inspector; all DSP happens here.
+
+  .venv/bin/python -m streamalign inspect-worker --sources sources_local
+      AP-08 keep-warm worker: JSON-lines requests on stdin (op: slice|refine|
+      context, same fields/guards as inspect-slice), one JSON response line each;
+      holds the current (stem, orig, rate) pair's decoded audio between requests.
+
 Run from the repo's scripts/ dir or with scripts/ on PYTHONPATH.
 """
 
@@ -260,13 +270,20 @@ def _cmd_inspect_slice(args):
     stem = _audio.stem_of(args.stem)
     orig_path = _tm.find_original(args.orig, args.sources)
     out = None
-    if not _audio.find_audio_file(stem):
+    if args.refine and args.context is not None:
+        out = {"error": "--refine and --context are mutually exclusive"}
+    elif not _audio.find_audio_file(stem):
         out = {"error": "no audio for capture %s" % stem}
     elif not orig_path:
         out = {"error": "no original %03d-* under %s" % (int(args.orig), args.sources)}
     if out is None:
-        fn = _isl.refine_seat if args.refine else _isl.build_slices
-        kwargs = {"radius_s": args.radius} if args.refine else {}
+        if args.refine:
+            fn, kwargs = _isl.refine_seat, {"radius_s": args.radius,
+                                            "engine": args.engine}
+        elif args.context is not None:
+            fn, kwargs = _isl.build_context, {"context_s": args.context}
+        else:
+            fn, kwargs = _isl.build_slices, {}
         try:
             out = fn(stem, orig_path, args.stream_t, args.orig_t, args.rate,
                      args.invert, args.win, **kwargs)
@@ -275,6 +292,11 @@ def _cmd_inspect_slice(args):
     print(json.dumps(out))
     if "error" in out:
         raise SystemExit(1)
+
+
+def _cmd_inspect_worker(args):
+    from . import inspect_worker as _iw
+    _iw.serve(args.sources)
 
 
 def _cmd_hints(args):
@@ -576,6 +598,21 @@ def main(argv=None):
     pi.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
     pi.add_argument("--refine", action="store_true", help="snap-to-best instead of slices")
     pi.add_argument("--radius", type=float, default=0.05, help="refine radius seconds (cap 2)")
+    pi.add_argument("--engine", choices=("phat", "match"), default="phat",
+                    help="AP-14: --refine's snap engine -- phat (GCC-PHAT residual, the "
+                         "default) or match (the trimmed MATCH path's implied instant; "
+                         "needs sonic-annotator)")
+    pi.add_argument("--context", type=float, default=None,
+                    help="AP-05: emit the zoomed-out context strip instead -- decimated "
+                         "min/max columns over +/-SECONDS around the point (default "
+                         "45 when the player asks, cap 60); not full audio")
+
+    pw = sub.add_parser("inspect-worker",
+                        help="AP-08: keep-warm DSP worker -- JSON-lines requests on stdin "
+                             "(op: slice|refine|context, same fields as inspect-slice), one "
+                             "JSON response line each; caches the current (stem, orig, "
+                             "rate) pair's decoded audio between requests")
+    pw.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
 
     ph = sub.add_parser("hints",
                         help="emit <stem>.hints.tsv: suggested sync/start/end/skips + questions "
@@ -593,6 +630,7 @@ def main(argv=None):
      "starter": _cmd_starter, "hints": _cmd_hints,
      "match-hints": _cmd_match_hints,
      "inspect-slice": _cmd_inspect_slice,
+     "inspect-worker": _cmd_inspect_worker,
      "sync-audit": _cmd_sync_audit,
      "sync-sweep": _cmd_sync_sweep}[args.cmd](args)
 
