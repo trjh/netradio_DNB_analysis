@@ -14,6 +14,7 @@ import sys
 import tempfile
 import unittest
 import wave
+from unittest import mock
 
 import numpy as np
 
@@ -233,6 +234,130 @@ class TestBuildContext(TestBuildSlices):
         self.assertGreater(keep.sum(), 100)
         rel = np.abs(s[keep] - o[keep]) / s[keep]
         self.assertLess(float(np.median(rel)), 0.25)
+
+
+@unittest.skipUnless(HAVE_FFMPEG, "ffmpeg not on PATH")
+class TestBuildOverview(TestBuildSlices):
+    """AP-10: the whole-capture overview -- coarse stream envelope + the original
+    piecewise-linearly stretched between sync points. Fixture geometry: the
+    original (30 s) sits in the 40 s stream starting at 4.0 s, rate 1.0."""
+
+    def _ov(self, **kw):
+        args = dict(stream_src=self.stream_path, orig_src=self.orig_path,
+                    points=[(14.0, 10.0), (24.0, 20.0)], rate=1.0, invert=True)
+        args.update(kw)
+        return isl.build_overview(**args)
+
+    def test_payload_shape_and_geometry(self):
+        out = self._ov()
+        cols = int(40.0 * isl.OVERVIEW_COLS_PER_S)
+        self.assertEqual(out["n_cols"], cols)
+        self.assertEqual(len(out["stream"]["min"]), cols)
+        self.assertEqual(len(out["stream"]["max"]), cols)
+        self.assertAlmostEqual(out["stream_len_s"], 40.0, delta=0.1)
+        self.assertAlmostEqual(out["orig_len_s"], 30.0, delta=0.1)
+        self.assertEqual(out["points"], [[14.0, 10.0], [24.0, 20.0]])
+        # head (orig local 0 at stream 4.0), inter-point, tail (orig end at 34.0)
+        self.assertEqual(len(out["segments"]), 3)
+        self.assertAlmostEqual(out["segments"][0]["a0"], 4.0, delta=0.1)
+        self.assertAlmostEqual(out["segments"][1]["a0"], 14.0, delta=0.01)
+        self.assertAlmostEqual(out["segments"][1]["a1"], 24.0, delta=0.01)
+        self.assertAlmostEqual(out["segments"][2]["a1"], 34.0, delta=0.1)
+        for seg in out["segments"]:
+            span_cols = (round(seg["a1"] * out["cols_per_s"])
+                         - round(seg["a0"] * out["cols_per_s"]))
+            self.assertEqual(len(seg["min"]), span_cols)
+            for lo, hi in zip(seg["min"], seg["max"]):
+                self.assertLessEqual(lo, hi)
+
+    def test_segment_envelope_matches_the_stream_where_aligned(self):
+        # at the true seat (points ARE the true mapping) the stretched original's
+        # envelope must roughly coincide with the stream's over the same columns
+        out = self._ov()
+        seg = out["segments"][1]
+        c0 = round(seg["a0"] * out["cols_per_s"])
+        s = np.array(out["stream"]["max"][c0:c0 + len(seg["max"])])
+        o = np.array(seg["max"])
+        keep = s > 0.01
+        self.assertGreater(int(keep.sum()), 20)
+        rel = np.abs(s[keep] - o[keep]) / s[keep]
+        self.assertLess(float(np.median(rel)), 0.25)
+
+    def test_single_point_still_yields_head_and_tail(self):
+        out = self._ov(points=[(14.0, 10.0)])
+        self.assertEqual(len(out["segments"]), 2)
+
+    def test_points_guards(self):
+        for bad in (None, [], "x", [(1.0,)], [(1.0, float("nan"))],
+                    [(-1.0, 2.0)], [(1.0, 2.0)] * (isl.MAX_OVERVIEW_POINTS + 1)):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                self._ov(points=bad)
+
+    def test_rate_guard(self):
+        with self.assertRaises(ValueError):
+            self._ov(rate=0.0)
+
+    def test_points_are_sorted_by_stream_time(self):
+        out = self._ov(points=[(24.0, 20.0), (14.0, 10.0)])
+        self.assertEqual(out["points"], [[14.0, 10.0], [24.0, 20.0]])
+        self.assertEqual(len(out["segments"]), 3)
+
+    def test_column_cap_bounds_the_payload(self):
+        with mock.patch.object(isl, "MAX_OVERVIEW_COLS", 50):
+            out = self._ov()
+        self.assertEqual(out["n_cols"], 50)
+        self.assertEqual(len(out["stream"]["min"]), 50)
+
+    def test_out_of_file_point_spans_stay_memory_bounded(self):
+        # review iteration 1 P1: points are individually valid up to 24 h, so a
+        # span like 10 s -> 86 000 s used to materialise a ~5 GiB zero-pad buffer
+        # inside _seg_env before decimation. The envelope is now computed at
+        # column resolution: O(cols) memory, and the padded region reads 0.
+        env = isl._seg_env(np.ones(100, dtype=np.float32), 0.0, 86400.0, 10)
+        self.assertIsNotNone(env)
+        self.assertEqual(len(env[0]), 10)
+        self.assertEqual(env[1][0], 1.0)                  # the in-file samples
+        self.assertEqual(env[0][0], 0.0)                  # padded within col 0 too
+        self.assertEqual(env[1][1:], [0.0] * 9)           # pure padding beyond
+        # and through build_overview: a far-out-of-file orig time yields a
+        # normal-sized payload whose padded columns are silent
+        out = self._ov(points=[(14.0, 10.0), (30.0, 86000.0)])
+        seg = out["segments"][1]
+        self.assertLessEqual(len(seg["max"]),
+                             int(out["stream_len_s"] * out["cols_per_s"]) + 1)
+        self.assertEqual(max(abs(v) for v in seg["max"][len(seg["max"]) // 2:]), 0.0)
+
+    def test_cli_overview_end_to_end(self):
+        import io
+        import shutil as _sh
+        from contextlib import redirect_stdout
+        from streamalign import audio as _audio
+        from streamalign.__main__ import main
+        _sh.copy(self.orig_path, os.path.join(self.tmp, "072-synth.wav"))
+        buf = io.StringIO()
+        with mock.patch.object(_audio, "AUDIO_DIR", self.tmp):
+            with redirect_stdout(buf):
+                main(["inspect-slice", "stream", "72",
+                      "--stream-t", "14", "--orig-t", "10", "--rate", "1.0",
+                      "--invert", "--overview",
+                      "--point", "14:10", "--point", "24:20",
+                      "--sources", self.tmp])
+        out = json.loads(buf.getvalue())
+        self.assertNotIn("error", out)
+        self.assertEqual(out["n_cols"], int(40.0 * isl.OVERVIEW_COLS_PER_S))
+        self.assertEqual(len(out["segments"]), 3)
+
+    def test_cli_overview_excludes_other_modes(self):
+        import io
+        from contextlib import redirect_stdout
+        from streamalign.__main__ import main
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            with self.assertRaises(SystemExit):
+                main(["inspect-slice", "stream", "72",
+                      "--stream-t", "14", "--orig-t", "10",
+                      "--overview", "--context", "10", "--sources", self.tmp])
+        self.assertIn("mutually exclusive", json.loads(buf.getvalue())["error"])
 
 
 @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg not on PATH")

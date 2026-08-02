@@ -40,11 +40,12 @@
   .venv/bin/python -m streamalign inspect-slice d376-395 72 --stream-t 196 --orig-t 228.4
       Align-tool Pass 2: JSON slices (or --refine snap-to-best, --refine --engine
       match for the MATCH-path snap target, --context SECONDS for the zoomed-out
-      context strip) for the player's /align inspector; all DSP happens here.
+      context strip, --overview --point A:B ... for the whole-capture overview)
+      for the player's /align inspector; all DSP happens here.
 
   .venv/bin/python -m streamalign inspect-worker --sources sources_local
       AP-08 keep-warm worker: JSON-lines requests on stdin (op: slice|refine|
-      context, same fields/guards as inspect-slice), one JSON response line each;
+      context|overview, same fields/guards as inspect-slice), one JSON response line each;
       holds the current (stem, orig, rate) pair's decoded audio between requests.
 
 Run from the repo's scripts/ dir or with scripts/ on PYTHONPATH.
@@ -270,13 +271,21 @@ def _cmd_inspect_slice(args):
     stem = _audio.stem_of(args.stem)
     orig_path = _tm.find_original(args.orig, args.sources)
     out = None
-    if args.refine and args.context is not None:
-        out = {"error": "--refine and --context are mutually exclusive"}
+    if sum([bool(args.refine), args.context is not None, bool(args.overview)]) > 1:
+        out = {"error": "--refine, --context and --overview are mutually exclusive"}
     elif not _audio.find_audio_file(stem):
         out = {"error": "no audio for capture %s" % stem}
     elif not orig_path:
         out = {"error": "no original %03d-* under %s" % (int(args.orig), args.sources)}
-    if out is None:
+    if out is None and args.overview:
+        # AP-10: the whole-capture overview takes the sync points, not one seat
+        try:
+            points = [tuple(float(v) for v in p.split(":", 1))
+                      for p in (args.point or [])]
+            out = _isl.build_overview(stem, orig_path, points, args.rate, args.invert)
+        except Exception as exc:   # stdout must stay JSON: the player relays it
+            out = {"error": "%s: %s" % (type(exc).__name__, str(exc)[:200])}
+    elif out is None:
         if args.refine:
             fn, kwargs = _isl.refine_seat, {"radius_s": args.radius,
                                             "engine": args.engine}
@@ -606,6 +615,14 @@ def main(argv=None):
                     help="AP-05: emit the zoomed-out context strip instead -- decimated "
                          "min/max columns over +/-SECONDS around the point (default "
                          "45 when the player asks, cap 60); not full audio")
+    pi.add_argument("--overview", action="store_true",
+                    help="AP-10: emit the whole-capture overview instead -- one coarse "
+                         "envelope for the full stream plus the original's envelope "
+                         "piecewise-linearly stretched between the --point sync points; "
+                         "not full audio")
+    pi.add_argument("--point", action="append", default=None, metavar="STREAM_S:ORIG_S",
+                    help="AP-10: one sync point for --overview (repeatable; stream "
+                         "seconds : original-native seconds)")
 
     pw = sub.add_parser("inspect-worker",
                         help="AP-08: keep-warm DSP worker -- JSON-lines requests on stdin "
