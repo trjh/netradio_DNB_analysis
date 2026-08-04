@@ -29,9 +29,14 @@ Converter-trust additions (2026-08, AP-02/03/04/13/16):
     (`referee_deltas`) and the delta reported per anchor -- a disagreement beyond
     REFEREE_TOL_S becomes a `note QUESTION:` row.
   * **`verified` token (AP-04).** Emitted sync rows read `track sync: 1 verified
-    confidence 5.9/10 HINT` -- the token, immediately after the marker, is what the sheet
+    confidence 5.9/10` -- the token, immediately after the marker, is what the sheet
     and `sync-audit` recognise as "machine-checked". Distinct from (and never to be
-    conflated with) the file-sync `verified <neighbour>` keyword.
+    conflated with) the file-sync `verified <neighbour>` keyword. Anchor rows
+    (sync/start/end) carry NO trailing ` HINT` (RC-1): they arrive on their own imported
+    hints track, and ` verified` carries the provenance role the suffix used to; readers
+    accept both forms, since files in the wild still hold suffixed rows. The
+    `note HINT:`/`note QUESTION:` prose rows are unchanged -- there HINT/QUESTION is the
+    row-type prefix, not a provenance suffix.
   * **Solo-anchor probe seeding (AP-13).** Where librosa is available the rate sweep also
     probes the record-playing-alone moments (`track_mix.solo_anchors`) -- the instants
     PHAT locks best -- instead of only blind fractions of the overlap.
@@ -469,7 +474,11 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
     Sync rows carry the ` verified` token immediately after the marker (AP-04) -- the
     machine-checked mark the sheet/audit plumbing keys on; it is free text to the sync-row
     grammar, and deliberately NOT the file-sync `verified <neighbour>` keyword (a different,
-    load-bearing thing). `match_deltas` (AP-03, from `referee_deltas`) appends each anchor's
+    load-bearing thing). Anchor rows (the sync pairs and the proposed `origNNN start:`/
+    `end:`) go out through `hints._anchor`, i.e. WITHOUT the trailing ` HINT` suffix
+    (RC-1: redundant on rows that arrive on their own imported track, with ` verified`
+    carrying the provenance role); the prose rows keep their `note HINT:`/`note QUESTION:`
+    grammar. `match_deltas` (AP-03, from `referee_deltas`) appends each anchor's
     MATCH-vs-PHAT delta to its row text; a disagreement beyond REFEREE_TOL_S earns a
     `note QUESTION:` row at that anchor -- unless the MEDIAN delta is itself beyond
     REFEREE_GROSS_S, in which case the MATCH path is globally off (its forced-start
@@ -485,9 +494,9 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
         b_native = (a - off) * rate
         delta = match_deltas[k - 1] if match_deltas and k <= len(match_deltas) else None
         extra = "" if delta is None else " MATCH %+.3fs" % delta
-        stream_rows.append(_hints._row(
+        stream_rows.append(_hints._anchor(
             a, a, "track sync: %d verified %s%s" % (k, _hints._conf(conf), extra)))
-        orig_rows.append(_hints._row(
+        orig_rows.append(_hints._anchor(
             b_native, b_native,
             "%s sync: %d verified %s%s" % (tag, k, _hints._conf(conf), extra)))
         if delta is not None and abs(delta) > REFEREE_TOL_S and not grossly_off:
@@ -509,14 +518,14 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
         start_s = anchors[0][1]
         end_s = anchors[-1][1] + orig_native_len_s / rate
         if start_s >= 0:
-            stream_rows.append(_hints._row(start_s, start_s, "%s start: ? %s" % (
+            stream_rows.append(_hints._anchor(start_s, start_s, "%s start: ? %s" % (
                 tag, _hints._conf(anchors[0][2]))))
         else:
             stream_rows.append(_hints._question(
                 0.0, 0.0, "%s starts %.3f s BEFORE this capture's first sample" % (
                     tag, -start_s)))
         if end_s <= stream_len_s:
-            stream_rows.append(_hints._row(end_s, end_s, "%s end: ? %s" % (
+            stream_rows.append(_hints._anchor(end_s, end_s, "%s end: ? %s" % (
                 tag, _hints._conf(anchors[-1][2]))))
         else:
             stream_rows.append(_hints._question(

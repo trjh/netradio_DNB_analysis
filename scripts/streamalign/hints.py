@@ -13,9 +13,17 @@ Three hard rules
    mistaken for a fact or leak into the player's metadata. ``write_hints`` refuses to write
    any ``*.labels.tsv`` path at all, so this cannot be undone by a stray ``--out``.
    Hints only ever *add*: import them as their own track and copy across what you accept.
-2. **Every row is marked.** Each line ends in ``HINT`` (mirroring the engine's existing
-   ``AUTO GENERATED`` convention), so a hint is obvious in Audacity and stays obvious if a
-   row is ever pasted into a hand file by accident.
+2. **Every row is marked.** Each line this module emits ends in ``HINT`` (mirroring the
+   engine's existing ``AUTO GENERATED`` convention), so a hint is obvious in Audacity and
+   stays obvious if a row is ever pasted into a hand file by accident. One deliberate
+   exception (RC-1): the match-hints converter's ANCHOR rows (``track sync:`` /
+   ``origNNN sync:`` / ``origNNN start:``/``end:``, built via ``_anchor``) carry no
+   trailing ``HINT`` -- they arrive on their own imported hints track anyway, and their
+   paste provenance is already spelled out by the `` verified confidence n/10`` token,
+   so the suffix was redundant there. ``note HINT:`` / ``note QUESTION:`` prose rows are
+   untouched by that exception: there HINT/QUESTION is the row-TYPE prefix (grammar), not
+   a provenance suffix. Every reader accepts BOTH anchor forms -- label files in the wild
+   still contain suffixed rows.
 3. **Every claim carries its confidence, spelled out** -- ``confidence 9.8/10`` -- so you can
    see at a glance how much to trust a row. A hint the engine cannot corroborate does not
    quietly vanish: it degrades into a ``note QUESTION:`` row saying *why* it could not.
@@ -67,6 +75,17 @@ def _conf(confidence):
 
 def _row(start, end, text):
     return (float(start), float(end), text + SUFFIX)
+
+
+def _anchor(start, end, text):
+    """An anchor row (sync/start/end) -- emitted WITHOUT the trailing ``HINT`` (RC-1).
+
+    Anchor rows arrive on their own imported hints track, and on sync rows the machine
+    provenance is already carried by the `` verified confidence n/10`` token, so the
+    paste-provenance suffix was redundant. Readers must (and do) still accept the old
+    suffixed form: files in the wild carry it.
+    """
+    return (float(start), float(end), text)
 
 
 def _question(start, end, text):
