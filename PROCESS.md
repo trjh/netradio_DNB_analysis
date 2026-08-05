@@ -232,15 +232,18 @@ isn't placed yet.
 **Pass 2 — verify (the align inspector):** open each point in the companion player
 project's **/align inspector** — stream fixed, original shiftable, a live **subtraction
 lane** (the null test, no Invert/un-Invert dance), snap-to-best under either engine
-(**PHAT | MATCH**). Accept or nudge every point; the export writes the adjusted rows,
-still carrying their ` verified` mark.
+(**PHAT | MATCH**). Accept or nudge each point, and **snap after any hand move** — the
+snap *is* the machine check, and a snapped row's exported confidence is the snap's own
+measurement (a never-snapped point keeps its Pass-1 score). The export writes the
+adjusted rows, ` verified` mark and per-point confidence included.
 
-**Then fold in and grade:** import the rows into Audacity (**File ▸ Import ▸ Labels** —
-they land as their **own** label tracks beside yours; nothing you have is touched), keep
-what you accept in your hand labels, export/sort via step 6 as usual, and grade:
+**Then fold in, audit, grade:** import the rows into Audacity (**File ▸ Import ▸ Labels**
+— they land as their **own** label tracks beside yours; nothing you have is touched), keep
+what you accept in your hand labels, export/sort via step 6 as usual, then:
 
 ```bash
-PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix --tracks <n> [<n> …]
+PYTHONPATH=scripts .venv/bin/python -m streamalign sync-audit --tracks <n> [<n> …]  # re-grade every point
+PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix  --tracks <n> [<n> …]  # grade the rate
 ```
 
 Warnings:
@@ -265,6 +268,13 @@ Need-to-know:
   only anchor source, and a MATCH-vs-PHAT disagreement beyond 0.25 s becomes a
   `note QUESTION:` row. You never open Sonic Visualiser (see
   [the optional cross-check](#optional-cross-check-sonic-visualiser--match) below).
+- **The ` verified` token is machine provenance, not a human vouch** — it records that a
+  machine *measured* the seat (Pass 1's converter, or the inspector's snap). The audit
+  that keeps it honest lives here: `sync-audit` re-grades every hand `origNNN sync:` point
+  against the audio (seat confidence + hand bookkeeping error) and reports the token per
+  point (`--only-unchecked` lists the points no machine has touched). Run it after folding
+  rows in — it, not the token, is what catches a hand-moved point that no longer sits
+  where the audio says.
 - Step 2's `solo_anchors` still matter: they are the record-playing-alone moments Pass 1
   probes when seeding the rate sweep, and they remain the right seats for any point you
   place fully by hand (technique below).
@@ -280,14 +290,17 @@ Need-to-know:
 
 #### Optional cross-check: Sonic Visualiser + MATCH
 
-**Not a pipeline step.** Sonic Visualiser with the MATCH plugin used to be the manual way to
-get a rate-aware coarse map of an original inside a capture; the pipeline now covers that
-role (recorded 2026-08-04): `match-hints` runs MATCH headless as seed + referee — on the
-calibration gate pair the seat-anchored MATCH referee agrees with GCC-PHAT to **0.13 ms**,
-and the pipeline lands within **+7 ms** of the Sonic Visualiser hand-read it was graded
-against. Keep SV around only if you want a second, independent eyeball on a stubborn seat —
-load capture + original as two panes and run the MATCH aligner interactively — but nothing
-downstream needs it, and no step of the loop asks for it.
+**Not a pipeline step** (call recorded 2026-08-04). Sonic Visualiser with the MATCH plugin
+used to be the manual way to get a rate-aware coarse map of an original inside a capture;
+the pipeline now covers that role. `match-hints` runs MATCH headless as seed + referee, and
+before the switch its output was gated against a hand-seated alignment: the converter
+reproduces that read to **~10 ms** (the gate-0 verification pinned in `matchconv.py`'s
+docstring and asserted by `tests/test_matchconv.py`). The cross-check SV provided by eye now
+happens numerically on **every run** — the per-anchor MATCH-vs-PHAT delta is printed and
+appended to each row, and a disagreement beyond 0.25 s becomes a `note QUESTION:` row. Keep
+SV around only if you want a second, independent eyeball on a stubborn seat — load capture +
+original as two panes and run the MATCH aligner interactively — but nothing downstream needs
+it, and no step of the loop asks for it.
 
 ### 10. Build + validate
 

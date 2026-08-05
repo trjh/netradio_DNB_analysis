@@ -191,8 +191,10 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> --all   # 
 `origNNN start:`/`end:` rows (marked `? confidence n/10`), and `note QUESTION:` rows wherever
 the engine cannot tell. **What to do next (Pass 2):** verify/hand-tune every point in the
 companion player project's **/align** inspector (live subtraction null test, snap-to-best,
-PHAT|MATCH engines) — its export writes the adjusted rows; import them into Audacity as their
-own label track, fold what you accept into your hand labels, and `sort_tsv.py` as usual.
+PHAT|MATCH engines) — snap after any hand move (the snap *is* the machine check) and its
+export writes the adjusted rows; import them into Audacity as their own label track, fold
+what you accept into your hand labels, `sort_tsv.py` as usual, then
+`streamalign sync-audit` to re-grade every folded-in point against the audio.
 Sonic Visualiser is **not** part of this: MATCH runs headless inside Pass 1 (via
 `sonic-annotator`; no `sonic-annotator` on PATH → pass `--csv` with a pre-exported
 `match:a_b` CSV), and SV+MATCH survives only as an optional manual cross-check.
