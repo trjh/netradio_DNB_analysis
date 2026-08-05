@@ -64,7 +64,9 @@ off with the wrong rate), then a rate sweep scored by GCC-PHAT confidence finds 
 true rate, a rate-corrected anchor grid walks the overlap at both polarities, and
 whole-overlap **anchor mass** picks between loop-shifted rival seats (drum & bass
 self-correlates at whole-bar shifts; the true seat is the one that explains the
-WHOLE overlap, not just the looped stretch).
+WHOLE overlap, not just the looped stretch). The Sonic Visualiser GUI itself is not
+part of the flow — SV+MATCH remains only an optional manual cross-check
+([PROCESS.md step 9](../../PROCESS.md#optional-cross-check-sonic-visualiser--match)).
 
 **3. Score (measure the finding vs the answer key).** `score.py` — pairwise and
 absolute error vs ground truth, plus redundant-overlap self-consistency.

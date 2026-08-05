@@ -176,6 +176,27 @@ PYTHONPATH=scripts python3 -m streamalign skip-reject  <id> --note …  # reject
 (or the rejections file), **not** `track-metadata.json` — if a confirmed skip changed a file's
 span, rebuild the JSON afterwards.
 
+**Q:** Seat an original track inside a capture — where do the paired sync points come from?
+
+**A:** Two passes ([PROCESS.md step 9](./PROCESS.md#9-align-the-originals)):
+
+```bash
+PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> <NNN>   # Pass 1: propose
+PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> --all   # batch: every overlapping track with an original
+```
+
+**What you get:** a paired hints file per track — `<stem>.origNNN.match.hints.tsv` +
+`origNNN.<stem>.match.hints.tsv` (gitignored hints, **never** labels): `track sync:` /
+`origNNN sync:` anchor pairs carrying ` verified confidence n/10`, proposed
+`origNNN start:`/`end:` rows (marked `? confidence n/10`), and `note QUESTION:` rows wherever
+the engine cannot tell. **What to do next (Pass 2):** verify/hand-tune every point in the
+companion player project's **/align** inspector (live subtraction null test, snap-to-best,
+PHAT|MATCH engines) — its export writes the adjusted rows; import them into Audacity as their
+own label track, fold what you accept into your hand labels, and `sort_tsv.py` as usual.
+Sonic Visualiser is **not** part of this: MATCH runs headless inside Pass 1 (via
+`sonic-annotator`; no `sonic-annotator` on PATH → pass `--csv` with a pre-exported
+`match:a_b` CSV), and SV+MATCH survives only as an optional manual cross-check.
+
 **Q:** Map an original track's speed/offset onto the mix.
 
 **A:**
@@ -272,6 +293,7 @@ runs `GithubImport()`), else it prints the **Reload Data** reminder.
 | re-place captures / score the engine | `streamalign groundtruth \| validate \| align` | notate | — (read-only) |
 | place the unlabelled tail (loop-wrap anchor) | `streamalign tail-solve` (`--emit` to write labels) | notate | — (read-only; `--emit` → `<stem>.auto.labels.tsv`) |
 | resolve skips | `streamalign skip-clips \| skip-confirm \| skip-reject` | notate | clips / hand `.labels.tsv` / rejections |
+| seat an original in a capture (paired sync points) | `streamalign match-hints` → verify in the player's `/align` | notate | `*.match.hints.tsv` (gitignored) |
 | original↔mix rate | `streamalign track-mix` | notate | — (read-only) |
 | **rebuild `track-metadata.json`** | `build_track_metadata.py` | **build** | **`track-metadata.json`** |
 | refresh missing-originals inventory | `g4_missing_sources.py` | build/sourcing | inventory |
