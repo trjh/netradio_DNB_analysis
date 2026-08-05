@@ -222,6 +222,16 @@ class TestEmission(unittest.TestCase):
         self.assertEqual(len(starts), 1)
         self.assertAlmostEqual(starts[0][0], 12.0, places=4)
 
+    def test_start_end_rows_keep_the_question_mark_proposal_argument(self):
+        # The `? confidence n/10` argument is the proposed-boundary mark (no hand
+        # row carries it) -- with the HINT suffix gone (RC-1) it must stay put.
+        stream_rows, _ = self._rows(off0=12.0)
+        boundaries = [t for _, _, t in stream_rows
+                      if t.startswith(("orig072 start:", "orig072 end:"))]
+        self.assertEqual(len(boundaries), 2)
+        for text in boundaries:
+            self.assertRegex(text, r"^orig072 (start|end): \? confidence \d")
+
     def test_emitted_names_are_invisible_to_the_pipeline(self):
         self.assertFalse(gt.is_pipeline_label_file("d376-395.orig072.match.hints.tsv"))
         self.assertFalse(gt.is_pipeline_label_file("orig072.match.hints.tsv"))
