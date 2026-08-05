@@ -33,7 +33,8 @@ Converter-trust additions (2026-08, AP-02/03/04/13/16):
     and `sync-audit` recognise as "machine-checked". Distinct from (and never to be
     conflated with) the file-sync `verified <neighbour>` keyword. Anchor rows
     (sync/start/end) carry NO trailing ` HINT` (RC-1): they arrive on their own imported
-    hints track, and ` verified` carries the provenance role the suffix used to; readers
+    hints track, and each keeps its own in-row machine mark -- ` verified` on sync rows,
+    the `? confidence n/10` proposal argument on start/end rows; readers
     accept both forms, since files in the wild still hold suffixed rows. The
     `note HINT:`/`note QUESTION:` prose rows are unchanged -- there HINT/QUESTION is the
     row-type prefix, not a provenance suffix.
@@ -476,8 +477,9 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
     grammar, and deliberately NOT the file-sync `verified <neighbour>` keyword (a different,
     load-bearing thing). Anchor rows (the sync pairs and the proposed `origNNN start:`/
     `end:`) go out through `hints._anchor`, i.e. WITHOUT the trailing ` HINT` suffix
-    (RC-1: redundant on rows that arrive on their own imported track, with ` verified`
-    carrying the provenance role); the prose rows keep their `note HINT:`/`note QUESTION:`
+    (RC-1: redundant on rows that arrive on their own imported track; the sync rows'
+    machine mark is ` verified`, the start/end rows' their `? confidence n/10` proposal
+    argument); the prose rows keep their `note HINT:`/`note QUESTION:`
     grammar. `match_deltas` (AP-03, from `referee_deltas`) appends each anchor's
     MATCH-vs-PHAT delta to its row text; a disagreement beyond REFEREE_TOL_S earns a
     `note QUESTION:` row at that anchor -- unless the MEDIAN delta is itself beyond

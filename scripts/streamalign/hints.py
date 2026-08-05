@@ -18,9 +18,11 @@ Three hard rules
    stays obvious if a row is ever pasted into a hand file by accident. One deliberate
    exception (RC-1): the match-hints converter's ANCHOR rows (``track sync:`` /
    ``origNNN sync:`` / ``origNNN start:``/``end:``, built via ``_anchor``) carry no
-   trailing ``HINT`` -- they arrive on their own imported hints track anyway, and their
-   paste provenance is already spelled out by the `` verified confidence n/10`` token,
-   so the suffix was redundant there. ``note HINT:`` / ``note QUESTION:`` prose rows are
+   trailing ``HINT`` -- they arrive on their own imported hints track anyway, and each
+   still carries an in-row machine mark: sync rows the `` verified confidence n/10``
+   token, start/end rows their ``? confidence n/10`` proposal argument (no hand row
+   carries either), so the suffix was redundant there.
+   ``note HINT:`` / ``note QUESTION:`` prose rows are
    untouched by that exception: there HINT/QUESTION is the row-TYPE prefix (grammar), not
    a provenance suffix. Every reader accepts BOTH anchor forms -- label files in the wild
    still contain suffixed rows.
@@ -80,10 +82,12 @@ def _row(start, end, text):
 def _anchor(start, end, text):
     """An anchor row (sync/start/end) -- emitted WITHOUT the trailing ``HINT`` (RC-1).
 
-    Anchor rows arrive on their own imported hints track, and on sync rows the machine
-    provenance is already carried by the `` verified confidence n/10`` token, so the
-    paste-provenance suffix was redundant. Readers must (and do) still accept the old
-    suffixed form: files in the wild carry it.
+    Anchor rows arrive on their own imported hints track, and each kind already carries
+    its machine mark in-row -- sync rows the `` verified confidence n/10`` token,
+    start/end rows their ``? confidence n/10`` proposal argument (a hand boundary row is
+    ``orig070 start:`` or ``orig070 start: A``, never that) -- so the paste-provenance
+    suffix was redundant. Readers must (and do) still accept the old suffixed form:
+    files in the wild carry it.
     """
     return (float(start), float(end), text)
 

@@ -158,8 +158,9 @@ class TestOutlierMarking(unittest.TestCase):
 
 class TestEmission(unittest.TestCase):
     """Rows are existing grammar and can never masquerade as labels. Anchor rows
-    (sync/start/end) carry NO trailing ` HINT` (RC-1: the ` verified` token carries
-    the provenance role there); prose rows keep the `note HINT:`/`note QUESTION:`
+    (sync/start/end) carry NO trailing ` HINT` (RC-1) but keep their in-row machine
+    marks -- ` verified confidence` on sync rows, the `? confidence` proposal
+    argument on start/end rows; prose rows keep the `note HINT:`/`note QUESTION:`
     row-type grammar and stay suffix-marked."""
 
     def _rows(self, off0=-27.5):
