@@ -1,0 +1,42 @@
+# CI for the label-grammar / streamalign paths (added with RC-1, at review's request).
+#
+# Scope: the HERMETIC suites — synthetic audio, no capture files, no originals, no
+# ffmpeg/librosa/sonic-annotator, no network. Tests that need the real corpus or the
+# full `make align-env` venv skip themselves (they are written to); the suites below
+# run green on a bare numpy/scipy/pyflakes interpreter and cover the converter row
+# grammar (matchconv/hints), every label-row reader (sort_tsv, track_mix via
+# test_streamalign/test_sync_audit, sheetscript's Verified recogniser), and the
+# undefined-name lint guard. The FULL suite (incl. the git-worktree publish tests)
+# remains the documented local gate: `make test` / PROCESS.md.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  hermetic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the hermetic-suite dependencies
+        run: python -m pip install numpy scipy pyflakes
+      - name: Run the hermetic suites
+        env:
+          PYTHONPATH: scripts
+        run: >
+          python -m unittest -v
+          tests.test_hints
+          tests.test_matchconv
+          tests.test_sheet_import
+          tests.test_sort_tsv
+          tests.test_streamalign
+          tests.test_sync_audit
+          tests.test_skip_review
+          tests.test_tracklist2017
+          tests.test_inspect_slice
+          tests.test_harvest_runtime
