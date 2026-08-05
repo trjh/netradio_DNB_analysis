@@ -233,9 +233,11 @@ isn't placed yet.
 project's **/align inspector** — stream fixed, original shiftable, a live **subtraction
 lane** (the null test, no Invert/un-Invert dance), snap-to-best under either engine
 (**PHAT | MATCH**). Accept or nudge each point, and **snap after any hand move** — the
-snap *is* the machine check, and a snapped row's exported confidence is the snap's own
-measurement (a never-snapped point keeps its Pass-1 score). The export writes the
-adjusted rows, ` verified` mark and per-point confidence included.
+snap *is* the machine check. Export the adjusted rows when done. The rule that keeps the
+grammar honest is yours to apply: a row's ` verified` token is only as good as its **last
+machine measurement** — a point you moved by hand and did not re-snap has none, so strip
+the token from that row when folding in (it then reads as unchecked, which is the truth,
+and `sync-audit --only-unchecked` will keep listing it).
 
 **Then fold in, audit, grade:** import the rows into Audacity (**File ▸ Import ▸ Labels**
 — they land as their **own** label tracks beside yours; nothing you have is touched), keep
@@ -269,12 +271,13 @@ Need-to-know:
   `note QUESTION:` row. You never open Sonic Visualiser (see
   [the optional cross-check](#optional-cross-check-sonic-visualiser--match) below).
 - **The ` verified` token is machine provenance, not a human vouch** — it records that a
-  machine *measured* the seat (Pass 1's converter, or the inspector's snap). The audit
-  that keeps it honest lives here: `sync-audit` re-grades every hand `origNNN sync:` point
-  against the audio (seat confidence + hand bookkeeping error) and reports the token per
-  point (`--only-unchecked` lists the points no machine has touched). Run it after folding
-  rows in — it, not the token, is what catches a hand-moved point that no longer sits
-  where the audio says.
+  machine *measured* the seat (Pass 1's converter, or the inspector's snap). `sync-audit`
+  is the check on it: it re-grades every hand `origNNN sync:` point against the audio
+  (seat confidence + hand bookkeeping error) and reports the token per point
+  (`--only-unchecked` lists the points no machine has touched). It is a **report, not a
+  gate** — nothing downstream refuses a bad point for you — so resolve everything it
+  flags (re-snap the point in the inspector, or strip its token) **before** step 11
+  publishes the file.
 - Step 2's `solo_anchors` still matter: they are the record-playing-alone moments Pass 1
   probes when seeding the rate sweep, and they remain the right seats for any point you
   place fully by hand (technique below).
@@ -292,15 +295,15 @@ Need-to-know:
 
 **Not a pipeline step** (call recorded 2026-08-04). Sonic Visualiser with the MATCH plugin
 used to be the manual way to get a rate-aware coarse map of an original inside a capture;
-the pipeline now covers that role. `match-hints` runs MATCH headless as seed + referee, and
-before the switch its output was gated against a hand-seated alignment: the converter
-reproduces that read to **~10 ms** (the gate-0 verification pinned in `matchconv.py`'s
-docstring and asserted by `tests/test_matchconv.py`). The cross-check SV provided by eye now
-happens numerically on **every run** — the per-anchor MATCH-vs-PHAT delta is printed and
-appended to each row, and a disagreement beyond 0.25 s becomes a `note QUESTION:` row. Keep
-SV around only if you want a second, independent eyeball on a stubborn seat — load capture +
-original as two panes and run the MATCH aligner interactively — but nothing downstream needs
-it, and no step of the loop asks for it.
+the pipeline now covers that role. What backs that up in this repo: the regression suite
+pins the converter's precision — `tests/test_matchconv.py` requires every selected anchor
+to land within **10 ms** of its fixture's known truth — and the cross-check SV provided by
+eye now happens numerically on **every run**: the per-anchor MATCH-vs-PHAT delta is printed
+and appended to each row, and a disagreement beyond 0.25 s becomes a `note QUESTION:` row.
+(The converter's design-time gating against a hand-seated alignment is recorded in
+`matchconv.py`'s docstring.) Keep SV around only if you want a second, independent eyeball
+on a stubborn seat — load capture + original as two panes and run the MATCH aligner
+interactively — but nothing downstream needs it, and no step of the loop asks for it.
 
 ### 10. Build + validate
 
