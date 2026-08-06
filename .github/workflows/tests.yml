@@ -1,42 +1,32 @@
-# CI for the label-grammar / streamalign paths (added with RC-1, at review's request).
+# The offline regression suite, on every PR and every push to main.
 #
-# Scope: the HERMETIC suites — synthetic audio, no capture files, no originals, no
-# ffmpeg/librosa/sonic-annotator, no network. Tests that need the real corpus or the
-# full `make align-env` venv skip themselves (they are written to); the suites below
-# run green on a bare numpy/scipy/pyflakes interpreter and cover the converter row
-# grammar (matchconv/hints), every label-row reader (sort_tsv, track_mix via
-# test_streamalign/test_sync_audit, sheetscript's Verified recogniser), and the
-# undefined-name lint guard. The FULL suite (incl. the git-worktree publish tests)
-# remains the documented local gate: `make test` / PROCESS.md.
+# The suite is designed for exactly this: audio-dependent tests self-skip when
+# ffmpeg / librosa / soundfile are absent, the git-based tests build their own
+# tmp repos with their own identity, and the only hard non-stdlib needs are
+# numpy (the label/engine math) and pyflakes — the undefined-name guard in
+# tests/test_harvest_runtime.py FAILS (never skips) without a linter, by design.
+# ffmpeg is installed so the cheap synthetic-audio tests (sync-audit, hints,
+# inspect-slice) actually run; the librosa/chroma tests keep self-skipping
+# (numba wheels lag new Pythons — see requirements-streamalign.txt).
 name: tests
 
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
 
 jobs:
-  hermetic:
+  unittest:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install the hermetic-suite dependencies
-        run: python -m pip install numpy scipy pyflakes
-      - name: Run the hermetic suites
-        env:
-          PYTHONPATH: scripts
-        run: >
-          python -m unittest -v
-          tests.test_hints
-          tests.test_matchconv
-          tests.test_sheet_import
-          tests.test_sort_tsv
-          tests.test_streamalign
-          tests.test_sync_audit
-          tests.test_skip_review
-          tests.test_tracklist2017
-          tests.test_inspect_slice
-          tests.test_harvest_runtime
+          python-version: "3.13"
+      - name: Install ffmpeg (the synthetic-audio tests decode real WAVs)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install numpy + pyflakes (the guard fails, never skips, without a linter)
+        run: python -m pip install "numpy>=2" pyflakes
+      - name: Run the full suite
+        run: python -m unittest discover -s tests -v
