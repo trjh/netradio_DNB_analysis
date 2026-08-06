@@ -75,6 +75,10 @@ __pycache__/
 # F1 skip-check clip output (default dir when NETRADIO_CLIPS_DIR unset)
 clips_out/
 
+# Saved sync-audit report (`streamalign sync-audit --json sync-audit.json`) -- machine-local,
+# regenerable; the `placed` op reads it for its grades when present.
+/sync-audit.json
+
 # pre-sync safety backups written by scripts/tracklist_sync.sh before overwriting a working copy
 *.presync-bak
 .worktree
