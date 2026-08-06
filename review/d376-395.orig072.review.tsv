@@ -1,4 +1,4 @@
-0.000000	0.000000	note REVIEW session s1: constant-rate rate 1.020399 from 8 pairs 2026-08-06
+0.000000	0.000000	note REVIEW session s1: re-anchor rate 1.020399 from 8 pairs 2026-08-06
 76.000000	76.000000	note REVIEW anchor s1: 1 orig072 105.992413
 106.000000	106.000000	note REVIEW anchor s1: 2 orig072 136.600683
 116.000000	116.000000	note REVIEW anchor s1: 3 orig072 146.803487
@@ -7,9 +7,4 @@
 226.000000	226.000000	note REVIEW anchor s1: 6 orig072 259.038722
 286.000000	286.000000	note REVIEW anchor s1: 7 orig072 320.267591
 296.000000	296.000000	note REVIEW anchor s1: 8 orig072 330.487253
-25.000000	25.000000	note REVIEW s1: orig072 53.944377 | AP-26 mac POC live self-test note (will be removed)
-25.000000	25.000000	note REVIEW s1: orig072 53.944377 | AP-26 mac POC live self-test note (will be removed)
-25.000000	25.000000	note REVIEW s1: orig072 53.944377 | AP-26 mac POC live self-test note (will be removed)
-25.000000	25.000000	note REVIEW s1: orig072 53.944377 | AP-26 mac POC live self-test note (will be removed)
-25.000000	25.000000	note REVIEW s1: orig072 53.944377 | AP-26 mac POC live self-test note (will be removed)
-25.000000	25.000000	note REVIEW s1: orig072 53.944377 | AP-26 mac POC live self-test note (will be removed)
+65.927854	65.927854	note REVIEW s1: orig072 95.714806 | Your Sound
