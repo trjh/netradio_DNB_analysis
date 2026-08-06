@@ -644,9 +644,10 @@ def main(argv=None):
 
     pw = sub.add_parser("inspect-worker",
                         help="AP-08: keep-warm DSP worker -- JSON-lines requests on stdin "
-                             "(op: slice|refine|context, same fields as inspect-slice), one "
-                             "JSON response line each; caches the current (stem, orig, "
-                             "rate) pair's decoded audio between requests")
+                             "(op: slice|refine|context|overview|placed, same fields as "
+                             "inspect-slice/placed), one JSON response line each; caches "
+                             "the current (stem, orig, rate) pair's decoded audio between "
+                             "requests")
     pw.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
 
     pp = sub.add_parser("placed",
