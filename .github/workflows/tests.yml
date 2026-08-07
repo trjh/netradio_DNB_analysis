@@ -1,0 +1,32 @@
+# The offline regression suite, on every PR and every push to main.
+#
+# The suite is designed for exactly this: audio-dependent tests self-skip when
+# ffmpeg / librosa / soundfile are absent, the git-based tests build their own
+# tmp repos with their own identity, and the only hard non-stdlib needs are
+# numpy (the label/engine math) and pyflakes — the undefined-name guard in
+# tests/test_harvest_runtime.py FAILS (never skips) without a linter, by design.
+# ffmpeg is installed so the cheap synthetic-audio tests (sync-audit, hints,
+# inspect-slice) actually run; the librosa/chroma tests keep self-skipping
+# (numba wheels lag new Pythons — see requirements-streamalign.txt).
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install ffmpeg (the synthetic-audio tests decode real WAVs)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install numpy + pyflakes (the guard fails, never skips, without a linter)
+        run: python -m pip install "numpy>=2" pyflakes
+      - name: Run the full suite
+        run: python -m unittest discover -s tests -v

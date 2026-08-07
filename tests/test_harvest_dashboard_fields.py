@@ -97,6 +97,35 @@ class PoolStamp(unittest.TestCase):
         self.assertFalse(harvest.stamp_pool(state))
         self.assertEqual(state["pool"]["count"], 4244)      # the honest last stamp stands
 
+    def _breakdown_world(self):
+        """Four sigs in the bucket: two live candidates, one retired, the canary. A fifth
+        retired URL was never fetched -- it must not count (its sig is in no bucket)."""
+        urls = ("https://y/active1", "https://y/active2", "https://y/ruled", "https://y/canary")
+        harvest._remote_keys = lambda max_age_s=900: {harvest._sig_key(u) for u in urls}
+        self.addCleanup(setattr, harvest, "listen_queue_split", harvest.listen_queue_split)
+        harvest.listen_queue_split = lambda: ([], {"https://y/ruled", "https://y/neverfetched"})
+        self.addCleanup(os.environ.pop, "NETRADIO_CANARY_URL", None)
+        os.environ["NETRADIO_CANARY_URL"] = "https://y/canary"
+
+    def test_stamps_the_breakdown_not_just_the_count(self):
+        # The bare count confused exactly the person it was for (bucket > scored ledger read
+        # as loss; it was retired-candidates + canary). The stamp now says so itself.
+        self._breakdown_world()
+        state = {}
+        self.assertTrue(harvest.stamp_pool(state))
+        p = state["pool"]
+        self.assertEqual((p["count"], p["active"], p["retired"], p["canary"]), (4, 2, 1, 1))
+
+    def test_a_breakdown_change_alone_is_worth_a_save(self):
+        # Same COUNT, one candidate newly ruled out -> the stamp changed and must persist.
+        self._breakdown_world()
+        state = {}
+        harvest.stamp_pool(state)
+        harvest.listen_queue_split = lambda: ([], {"https://y/ruled", "https://y/active1"})
+        self.assertTrue(harvest.stamp_pool(state))
+        self.assertEqual((state["pool"]["active"], state["pool"]["retired"]), (1, 2))
+        self.assertFalse(harvest.stamp_pool(state))         # and settles once recorded
+
 
 @unittest.skipUnless(harvest and HAVE_LIBROSA,
                      "librosa unavailable -- see requirements-streamalign.txt")

@@ -351,14 +351,30 @@ def stamp_pool(state):
     working cache holds work-in-progress, ~1 file). Rides `_remote_keys()`'s ≤15-min session
     cache -- no extra bucket listing, and the player never needs AWS creds; when the store is
     dark or the listing failed, the previous stamp (with its honest `at`) is left standing.
-    Returns True when the stamped COUNT changed, so a caller with no other reason to save
-    knows this one is worth persisting."""
+    Returns True when the stamp changed, so a caller with no other reason to save knows this
+    one is worth persisting.
+
+    Also stamps the count's BREAKDOWN, because the bare number confused exactly the person it
+    was for (a bucket bigger than the scored ledger read as loss; it was the opposite):
+      * `retired`  -- signatures whose candidate the search is permanently done with (the
+                      RULED_ON flags + own-clips, the same retirement `unscored_pairs` honours:
+                      heard, discarded, ignored, duplicate, not_a_match);
+      * `canary`   -- the live self-test's known record, uploaded like any other but never a
+                      candidate;
+      * `active`   -- the rest: signatures still in play for every future mystery.
+    Sig keys are content-addressed from the URL, so membership is a hash, not a fetch."""
     remote = _remote_keys()
     if remote is None:
         return False
-    prev = (state.get("pool") or {}).get("count")
-    state["pool"] = {"count": len(remote), "at": _now()}
-    return state["pool"]["count"] != prev
+    prev = state.get("pool") or {}
+    _, retired_urls = listen_queue_split()
+    retired = sum(1 for u in retired_urls if _sig_key(u) in remote)
+    canary_url = (os.environ.get("NETRADIO_CANARY_URL") or "").strip()
+    canary = 1 if canary_url and _sig_key(canary_url) in remote else 0
+    state["pool"] = {"count": len(remote), "at": _now(), "retired": retired,
+                     "canary": canary, "active": len(remote) - retired - canary}
+    return any(state["pool"][k] != prev.get(k)
+               for k in ("count", "retired", "canary", "active"))
 
 
 def _load_sig(url):
