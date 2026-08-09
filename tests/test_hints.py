@@ -54,6 +54,14 @@ class TestEveryRowIsMarkedAndScored(unittest.TestCase):
         for row in (hints._row(0, 0, "a"), hints._hint(0, 0, "b"), hints._question(0, 0, "c")):
             self.assertTrue(row[2].endswith(hints.SUFFIX), row[2])
 
+    def test_anchor_rows_carry_no_suffix(self):
+        # RC-1: matchconv's sync/start/end anchor rows go out through _anchor -- no
+        # trailing HINT (the ` verified` token carries the provenance role there).
+        a, b, text = hints._anchor(1.0, 2.0, "track sync: 1 verified confidence 5.9/10")
+        self.assertEqual((a, b), (1.0, 2.0))
+        self.assertEqual(text, "track sync: 1 verified confidence 5.9/10")
+        self.assertFalse(text.endswith(hints.SUFFIX))
+
     def test_questions_and_hints_use_the_existing_note_grammar(self):
         # `note <TAG>: ...` already parses in labels/sort_tsv.py -- no grammar change needed.
         self.assertTrue(hints._question(0, 0, "why?")[2].startswith("note QUESTION: "))

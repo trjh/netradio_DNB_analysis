@@ -157,7 +157,11 @@ class TestOutlierMarking(unittest.TestCase):
 
 
 class TestEmission(unittest.TestCase):
-    """Rows are existing grammar, marked HINT, and can never masquerade as labels."""
+    """Rows are existing grammar and can never masquerade as labels. Anchor rows
+    (sync/start/end) carry NO trailing ` HINT` (RC-1) but keep their in-row machine
+    marks -- ` verified confidence` on sync rows, the `? confidence` proposal
+    argument on start/end rows; prose rows keep the `note HINT:`/`note QUESTION:`
+    row-type grammar and stay suffix-marked."""
 
     def _rows(self, off0=-27.5):
         anchors = [(60.0, off0, 0.72, True, False), (200.0, off0 + 0.2, 0.65, True, False)]
@@ -179,11 +183,16 @@ class TestEmission(unittest.TestCase):
             self.assertIsNotNone(m, text)
             self.assertEqual(m.group(5), "072")
 
-    def test_every_row_is_marked_hint_with_confidence_on_syncs(self):
+    def test_anchor_rows_carry_no_hint_suffix_and_syncs_their_confidence(self):
+        # RC-1: sync/start/end anchor rows end at the confidence (or MATCH delta) --
+        # never at ` HINT`; every other emitted row is a marked note row, unchanged.
         for rows in self._rows():
             for _, _, text in rows:
-                self.assertTrue(text.endswith(" HINT"), text)
-            for _, _, text in rows:
+                if SYNC_RE.match(text) or ORIG_ROW_RE.match(text):
+                    self.assertFalse(text.endswith(" HINT"), text)
+                else:
+                    self.assertRegex(text, r"^note (HINT|QUESTION): ")
+                    self.assertTrue(text.endswith(" HINT"), text)
                 if " sync:" in text:
                     self.assertIn("confidence", text)
 
@@ -213,6 +222,16 @@ class TestEmission(unittest.TestCase):
                   and t.startswith("orig072 start:")]
         self.assertEqual(len(starts), 1)
         self.assertAlmostEqual(starts[0][0], 12.0, places=4)
+
+    def test_start_end_rows_keep_the_question_mark_proposal_argument(self):
+        # The `? confidence n/10` argument is the proposed-boundary mark (no hand
+        # row carries it) -- with the HINT suffix gone (RC-1) it must stay put.
+        stream_rows, _ = self._rows(off0=12.0)
+        boundaries = [t for _, _, t in stream_rows
+                      if t.startswith(("orig072 start:", "orig072 end:"))]
+        self.assertEqual(len(boundaries), 2)
+        for text in boundaries:
+            self.assertRegex(text, r"^orig072 (start|end): \? confidence \d")
 
     def test_emitted_names_are_invisible_to_the_pipeline(self):
         self.assertFalse(gt.is_pipeline_label_file("d376-395.orig072.match.hints.tsv"))
@@ -449,14 +468,15 @@ class TestVerifiedToken(unittest.TestCase):
         self.assertRegex(o, r"^orig072 sync: 1 verified confidence \d")
 
     def test_emitted_rows_satisfy_both_recognisers(self):
+        # RC-1: the anchor rows go out suffix-free, so they satisfy the recognisers
+        # exactly as emitted -- no strip needed before folding into a hand file.
         for rows in self._rows():
             for _, _, text in rows:
                 if " sync:" not in text:
                     continue
-                bare = text[:-len(" HINT")]
-                self.assertTrue(sort_tsv.sync_verified(bare), bare)
-                self.assertTrue(tm.sync_row_verified(bare), bare)
-                self.assertTrue(sort_tsv.parses(bare), bare)      # grammar-safe as folded
+                self.assertTrue(sort_tsv.sync_verified(text), text)
+                self.assertTrue(tm.sync_row_verified(text), text)
+                self.assertTrue(sort_tsv.parses(text), text)      # grammar-safe as folded
 
     def test_file_sync_verified_is_not_this_token(self):
         for text in ("file start sync: d336-355.wav 19637.763 verified d328-342",
@@ -531,3 +551,43 @@ class TestSoloProbeSeeding(unittest.TestCase):
             mc._refine_peaks = real
         self.assertNotIn(-50.0, seen)
         self.assertNotIn(1e6, seen)
+
+
+class TestBothAnchorFormsParse(unittest.TestCase):
+    """RC-1 back-compat: every reader accepts anchor rows WITH and WITHOUT the trailing
+    ` HINT`. Label files in the wild still carry suffixed rows (pasted from pre-RC-1
+    hints), so the old form must keep parsing exactly like the new one."""
+
+    BARE = ["track sync: 1 verified confidence 5.9/10",
+            "orig072 sync: 1 verified confidence 5.9/10",
+            "track sync: 2 verified confidence 4.1/10 MATCH +0.031s",
+            "orig072 start: ? confidence 5.9/10",
+            "orig072 end: ? confidence 4.1/10"]
+
+    def test_grammar_accepts_both_forms(self):
+        for bare in self.BARE:
+            for text in (bare, bare + " HINT"):
+                self.assertTrue(sort_tsv.parses(text), text)
+
+    def test_verified_recognisers_accept_both_forms(self):
+        for bare in self.BARE:
+            if " sync:" not in bare:
+                continue
+            for text in (bare, bare + " HINT"):
+                self.assertTrue(sort_tsv.sync_verified(text), text)
+                self.assertTrue(tm.sync_row_verified(text), text)
+
+    def test_sync_pairing_accepts_both_forms(self):
+        # A hand label file holding one pre-RC-1 (suffixed) pair and one new (bare)
+        # pair: track_mix must pair and mark BOTH as machine-checked.
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "d376-395.labels.tsv"), "w",
+                      encoding="utf-8") as f:
+                f.write("60.0\t60.0\ttrack sync: 1 verified confidence 5.9/10 HINT\n"
+                        "60.0\t60.0\torig072 sync: 1 verified confidence 5.9/10 HINT\n"
+                        "200.0\t200.0\ttrack sync: 2 verified confidence 4.1/10\n"
+                        "200.0\t200.0\torig072 sync: 2 verified confidence 4.1/10\n")
+            points = tm.parse_sync_points(tmp)
+        self.assertEqual(len(points.get(72, [])), 2)
+        self.assertEqual(sorted(p["label"] for p in points[72]), ["1", "2"])
+        self.assertTrue(all(p["verified"] for p in points[72]))

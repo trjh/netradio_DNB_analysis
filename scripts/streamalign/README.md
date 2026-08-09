@@ -111,9 +111,16 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints d376-395 72 --dry
 - **`match-hints STEM NNN`** — align-tool Pass 1: seat original `NNN` inside capture
   `STEM` and emit paired hint labels — `<stem>.origNNN.match.hints.tsv` (`track sync:`
   rows at capture-local times, proposed `origNNN start:`/`end:`) and
-  `origNNN.<stem>.match.hints.tsv` (`origNNN sync:` rows at original-local seconds; the stem keeps runs against different captures from colliding), every
-  row ` HINT`-marked with the ` verified` token and a spelled-out confidence, plus the
-  recovered rate and polarity in a summary note. Runs `sonic-annotator` itself (or
+  `origNNN.<stem>.match.hints.tsv` (`origNNN sync:` rows at original-local seconds; the stem keeps runs against different captures from colliding). Anchor rows
+  (sync/start/end) carry **no trailing ` HINT`** (RC-1: they arrive on their own
+  imported hints track, so the suffix was redundant there — readers still accept the
+  old suffixed form found in files in the wild): sync rows read
+  `track sync: 1 verified confidence 5.9/10` (the ` verified` token is the
+  machine-checked provenance mark), and the proposed `origNNN start:`/`end:` rows
+  read `orig072 start: ? confidence 5.9/10` — their `?` argument plus the spelled-out
+  confidence is the proposal mark (no hand row carries it). Prose rows are unchanged
+  and stay ` HINT`-suffixed `note HINT:`/`note QUESTION:` rows, including the summary
+  note carrying the recovered rate and polarity. Runs `sonic-annotator` itself (or
   takes a pre-exported `match:a_b` CSV via `--csv`); emits QUESTION rows instead of
   silent guesses when coverage is thin or a rival loop-shifted seat scores close.
   Never writes a `.labels.tsv`. Converter-trust behaviour (2026-08):
