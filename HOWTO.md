@@ -195,9 +195,12 @@ PHAT|MATCH engines) — snap after any hand move (the snap *is* the machine chec
 export writes the adjusted rows; import them into Audacity as their own label track, fold
 what you accept into your hand labels, `sort_tsv.py` as usual, then
 `streamalign sync-audit` to re-grade every folded-in point against the audio.
-Sonic Visualiser is **not** part of this: MATCH runs headless inside Pass 1 (via
-`sonic-annotator`; no `sonic-annotator` on PATH → pass `--csv` with a pre-exported
-`match:a_b` CSV), and SV+MATCH survives only as an optional manual cross-check.
+A historical note on the method: the sync-point algorithm was informed by some initial
+hand work in Sonic Visualiser with the MATCH plugin. SV+MATCH does a good job of finding
+match points, but it is not easily integrated into this flow — so Pass 1 runs the same
+MATCH engine headless instead (via `sonic-annotator`; no `sonic-annotator` on PATH → pass
+`--csv` with a pre-exported `match:a_b` CSV), and opening SV by hand survives only as an
+optional manual cross-check.
 
 **Q:** Map an original track's speed/offset onto the mix.
 
