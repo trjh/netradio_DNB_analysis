@@ -525,11 +525,16 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
     # sync point: a point with id X is well-defined by `track sync: X` +
     # `origNNN sync: X` + its own boundary row(s), ideally both. The spelled-out
     # `confidence n/10` remains the machine mark; `verified` never appears here — a
-    # derived boundary is a proposal, not a measurement. A boundary an anchor would
-    # place outside the capture is skipped per-anchor; only if EVERY anchor places it
-    # outside does the single explanatory QUESTION row appear instead.
+    # derived boundary is a proposal, not a measurement. Bounds (owner rule,
+    # 2026-08-16): a START an anchor would place before the capture's first sample is
+    # omitted per-anchor (the single explanatory QUESTION row appears when EVERY
+    # anchor places it there); an END row is ALWAYS emitted, even past the capture's
+    # last sample — the end position is what seats the record's continuation in the
+    # next capture, so throwing it away loses exactly the cross-file information the
+    # rows exist to carry (an out-of-capture end also gets the QUESTION note as a
+    # heads-up, but the row itself is never dropped).
     if anchors:
-        emitted_start = emitted_end = False
+        emitted_start = False
         for k, (_a, off, conf, _inv, _out) in enumerate(anchors, start=1):
             start_s = off
             end_s = off + orig_native_len_s / rate
@@ -537,19 +542,18 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
                 stream_rows.append(_hints._anchor(start_s, start_s, "%s start: %d %s" % (
                     tag, k, _hints._conf(conf))))
                 emitted_start = True
-            if end_s <= stream_len_s:
-                stream_rows.append(_hints._anchor(end_s, end_s, "%s end: %d %s" % (
-                    tag, k, _hints._conf(conf))))
-                emitted_end = True
+            stream_rows.append(_hints._anchor(end_s, end_s, "%s end: %d %s" % (
+                tag, k, _hints._conf(conf))))
         if not emitted_start:
             stream_rows.append(_hints._question(
                 0.0, 0.0, "%s starts %.3f s BEFORE this capture's first sample" % (
                     tag, -anchors[0][1])))
-        if not emitted_end:
+        last_end_s = anchors[-1][1] + orig_native_len_s / rate
+        if last_end_s > stream_len_s:
             stream_rows.append(_hints._question(
                 stream_len_s, stream_len_s,
                 "%s ends %.3f s AFTER this capture's last sample" % (
-                    tag, anchors[-1][1] + orig_native_len_s / rate - stream_len_s)))
+                    tag, last_end_s - stream_len_s)))
     pol = "INVERTED (flip the original before a null test)" if inverted else "not inverted"
     summary = ("%s via MATCH+PHAT: rate %.5f (original runs %+.2f%% vs stream), polarity %s, "
                "%d anchors" % (tag, rate, (rate - 1.0) * 100.0, pol, len(anchors)))

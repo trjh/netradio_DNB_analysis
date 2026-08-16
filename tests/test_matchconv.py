@@ -226,6 +226,20 @@ class TestEmission(unittest.TestCase):
         self.assertAlmostEqual(starts[0][0], 12.0, places=4)
         self.assertAlmostEqual(starts[1][0], 12.2, places=4)   # anchor 2 shifts it
 
+    def test_end_rows_always_emit_even_past_the_capture_edge(self):
+        # Owner rule 2026-08-16: a start before the capture may be omitted, but an
+        # END row is ALWAYS emitted, even beyond the last sample — the end position
+        # is what seats the record's continuation in the NEXT capture. The overhang
+        # still gets the explanatory QUESTION note, but the rows themselves survive.
+        stream_rows, _ = self._rows(off0=1100.0)   # end ~= 1461 s > 1200 s capture
+        ends = [(a, t) for a, _, t in stream_rows
+                if t.startswith("orig072 end:")]
+        self.assertEqual(len(ends), 2)             # one per sync point, none dropped
+        for a, _t in ends:
+            self.assertGreater(a, 1200.0)
+        notes = [t for _, _, t in stream_rows if "AFTER this capture" in t]
+        self.assertEqual(len(notes), 1)
+
     def test_every_sync_point_has_its_own_boundary_rows(self):
         # Owner rule 2026-08-16 (refined): EACH sync point gets its own start and
         # end row, named with that point's marker number, at that anchor's own
