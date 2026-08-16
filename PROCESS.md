@@ -266,7 +266,8 @@ Need-to-know:
 - **Anchor-row grammar** (full spec: [label grammar](#label-grammar)): sync rows read
   `track sync: 1 verified confidence 5.9/10` — the ` verified` token immediately after the
   marker is the *machine-checked* provenance mark; proposed start/end rows read
-  `orig072 start: ? confidence 5.9/10` — the `?` argument plus spelled-out confidence is the
+  `orig072 start: 1 confidence 5.9/10` — the identifier names the sync point the boundary
+  is derived from (start → the first anchor, end → the last), and the spelled-out confidence is the
   *proposal* mark (no hand row carries it). Anchor rows carry **no trailing ` HINT`**; only
   the prose `note HINT:`/`note QUESTION:` rows keep that prefix. Readers still accept the
   old ` HINT`-suffixed anchor rows found in files in the wild.
