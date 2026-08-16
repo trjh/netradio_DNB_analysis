@@ -119,12 +119,13 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints d376-395 72 --dry
   old suffixed form found in files in the wild): sync rows read
   `track sync: 1 verified confidence 5.9/10` (the ` verified` token is the
   machine-checked provenance mark), and the proposed `origNNN start:`/`end:` rows
-  read `orig072 start: 1 confidence 5.9/10` — the identifier names the sync point each
-  boundary is derived from (start → the first anchor, end → the last), and the spelled-out
+  read `orig072 start: 1 confidence 5.9/10` — **one start/end pair per sync point**, the
+  identifier naming that point (the implied starts shift anchor-to-anchor; the spread is
+  the drift made visible), and the spelled-out
   confidence is the proposal mark (no hand row carries it). **The well-definedness rule:**
-  a point with identifier X is fully defined by three rows — `track sync: X` on the
-  stream side, `origNNN sync: X` on the original side, and a boundary row on the stream
-  side naming an anchor of the same set. Prose rows are unchanged
+  a point with identifier X is fully defined by `track sync: X` on the stream side,
+  `origNNN sync: X` on the original side, and **its own** stream-side boundary row(s)
+  naming X — ideally both start and end. Prose rows are unchanged
   and stay ` HINT`-suffixed `note HINT:`/`note QUESTION:` rows, including the summary
   note carrying the recovered rate and polarity. Runs `sonic-annotator` itself (or
   takes a pre-exported `match:a_b` CSV via `--csv`); emits QUESTION rows instead of
