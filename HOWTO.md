@@ -188,7 +188,9 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> --all   # 
 **What you get:** a paired hints file per track — `<stem>.origNNN.match.hints.tsv` +
 `origNNN.<stem>.match.hints.tsv` (gitignored hints, **never** labels): `track sync:` /
 `origNNN sync:` anchor pairs carrying ` verified confidence n/10`, proposed
-`origNNN start:`/`end:` rows (marked `? confidence n/10`), and `note QUESTION:` rows wherever
+proposed `origNNN start:`/`end:` rows — **one pair per sync point**, each naming its
+point's marker number plus `confidence n/10`; the anchor-to-anchor shift of the implied
+starts is the drift, made visible — and `note QUESTION:` rows wherever
 the engine cannot tell. **What to do next (Pass 2):** verify/hand-tune every point in the
 companion player project's **/align** inspector (live subtraction null test, snap-to-best,
 PHAT|MATCH engines) — snap after any hand move (the snap *is* the machine check) and its
