@@ -34,7 +34,7 @@ Converter-trust additions (2026-08, AP-02/03/04/13/16):
     conflated with) the file-sync `verified <neighbour>` keyword. Anchor rows
     (sync/start/end) carry NO trailing ` HINT` (RC-1): they arrive on their own imported
     hints track, and each keeps its own in-row machine mark -- ` verified` on sync rows,
-    the derived-from anchor number + `confidence n/10` on start/end rows; readers
+    per-sync-point start/end rows (each naming its anchor, `confidence n/10`); readers
     accept both forms, since files in the wild still hold suffixed rows. The
     `note HINT:`/`note QUESTION:` prose rows are unchanged -- there HINT/QUESTION is the
     row-type prefix, not a provenance suffix.
@@ -478,8 +478,9 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
     load-bearing thing). Anchor rows (the sync pairs and the proposed `origNNN start:`/
     `end:`) go out through `hints._anchor`, i.e. WITHOUT the trailing ` HINT` suffix
     (RC-1: redundant on rows that arrive on their own imported track; the sync rows'
-    machine mark is ` verified`; start/end rows carry the marker number of the anchor
-    they are derived from + `confidence n/10` (the machine mark; never ` verified`)
+    machine mark is ` verified`; every sync point gets its own start/end rows, each
+    naming its anchor + `confidence n/10` (the machine mark; never ` verified`) — the
+    anchor-to-anchor spread of the implied starts is the drift, made visible
     argument); the prose rows keep their `note HINT:`/`note QUESTION:`
     grammar. `match_deltas` (AP-03, from `referee_deltas`) appends each anchor's
     MATCH-vs-PHAT delta to its row text; a disagreement beyond REFEREE_TOL_S earns a
@@ -515,32 +516,40 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
             "the whole overlap -- MATCH's forced files-start-together failure mode, not "
             "%d separate disputes. PHAT stays primary; the per-anchor MATCH deltas are "
             "relative to that globally-off path." % (med_delta, len(anchors))))
-    # proposed head/tail of the original on the capture's timeline, from the nearest anchor
-    # (b2 = a - off, so original local 0 sits at a = off; its end at a = off + len/rate).
-    # Each boundary row NAMES the sync point it is derived from (its marker number — the
-    # first anchor for start, the last for end), so a boundary is linked to a specific
-    # identified point, never free-floating (owner rule, 2026-08-16: a point with id X is
-    # well-defined by `track sync: X` + `origNNN sync: X` + a boundary row naming an
-    # anchor of the same set). The spelled-out `confidence n/10` remains the machine mark;
-    # `verified` never appears here — a derived boundary is a proposal, not a measurement.
+    # proposed head/tail of the original on the capture's timeline — ONE PAIR PER SYNC
+    # POINT (owner rule, 2026-08-16): each anchor k implies its own placement of the
+    # original's local 0 (b2 = a - off, so local 0 sits at a = off_k; the end at
+    # off_k + len/rate), and those implied starts SHIFT anchor-to-anchor whenever the
+    # single rate does not perfectly explain the record — the spread of the emitted
+    # boundary rows IS the drift made visible on the label track. Every row names its
+    # sync point: a point with id X is well-defined by `track sync: X` +
+    # `origNNN sync: X` + its own boundary row(s), ideally both. The spelled-out
+    # `confidence n/10` remains the machine mark; `verified` never appears here — a
+    # derived boundary is a proposal, not a measurement. A boundary an anchor would
+    # place outside the capture is skipped per-anchor; only if EVERY anchor places it
+    # outside does the single explanatory QUESTION row appear instead.
     if anchors:
-        start_s = anchors[0][1]
-        end_s = anchors[-1][1] + orig_native_len_s / rate
-        start_k, end_k = 1, len(anchors)
-        if start_s >= 0:
-            stream_rows.append(_hints._anchor(start_s, start_s, "%s start: %d %s" % (
-                tag, start_k, _hints._conf(anchors[0][2]))))
-        else:
+        emitted_start = emitted_end = False
+        for k, (_a, off, conf, _inv, _out) in enumerate(anchors, start=1):
+            start_s = off
+            end_s = off + orig_native_len_s / rate
+            if start_s >= 0:
+                stream_rows.append(_hints._anchor(start_s, start_s, "%s start: %d %s" % (
+                    tag, k, _hints._conf(conf))))
+                emitted_start = True
+            if end_s <= stream_len_s:
+                stream_rows.append(_hints._anchor(end_s, end_s, "%s end: %d %s" % (
+                    tag, k, _hints._conf(conf))))
+                emitted_end = True
+        if not emitted_start:
             stream_rows.append(_hints._question(
                 0.0, 0.0, "%s starts %.3f s BEFORE this capture's first sample" % (
-                    tag, -start_s)))
-        if end_s <= stream_len_s:
-            stream_rows.append(_hints._anchor(end_s, end_s, "%s end: %d %s" % (
-                tag, end_k, _hints._conf(anchors[-1][2]))))
-        else:
+                    tag, -anchors[0][1])))
+        if not emitted_end:
             stream_rows.append(_hints._question(
                 stream_len_s, stream_len_s,
-                "%s ends %.3f s AFTER this capture's last sample" % (tag, end_s - stream_len_s)))
+                "%s ends %.3f s AFTER this capture's last sample" % (
+                    tag, anchors[-1][1] + orig_native_len_s / rate - stream_len_s)))
     pol = "INVERTED (flip the original before a null test)" if inverted else "not inverted"
     summary = ("%s via MATCH+PHAT: rate %.5f (original runs %+.2f%% vs stream), polarity %s, "
                "%d anchors" % (tag, rate, (rate - 1.0) * 100.0, pol, len(anchors)))

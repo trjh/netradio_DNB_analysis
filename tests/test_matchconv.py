@@ -159,8 +159,8 @@ class TestOutlierMarking(unittest.TestCase):
 class TestEmission(unittest.TestCase):
     """Rows are existing grammar and can never masquerade as labels. Anchor rows
     (sync/start/end) carry NO trailing ` HINT` (RC-1) but keep their in-row machine
-    marks -- ` verified confidence` on sync rows, the `? confidence` proposal
-    argument on start/end rows; prose rows keep the `note HINT:`/`note QUESTION:`
+    marks -- ` verified confidence` on sync rows; per-point start/end rows naming
+    their anchor with `confidence n/10`; prose rows keep the `note HINT:`/`note QUESTION:`
     row-type grammar and stay suffix-marked."""
 
     def _rows(self, off0=-27.5):
@@ -217,29 +217,35 @@ class TestEmission(unittest.TestCase):
         self.assertFalse([t for _, _, t in stream_rows if re.match(r"orig072 start:", t)])
 
     def test_start_inside_capture_is_a_native_shape_row(self):
+        # per-point boundaries (owner rule 2026-08-16): one start row PER ANCHOR,
+        # each at that anchor's own implied original-zero — the spread is the drift
         stream_rows, _ = self._rows(off0=12.0)
         starts = [(a, t) for a, _, t in stream_rows if ORIG_ROW_RE.match(t)
                   and t.startswith("orig072 start:")]
-        self.assertEqual(len(starts), 1)
+        self.assertEqual(len(starts), 2)
         self.assertAlmostEqual(starts[0][0], 12.0, places=4)
+        self.assertAlmostEqual(starts[1][0], 12.2, places=4)   # anchor 2 shifts it
 
-    def test_start_end_rows_name_their_derived_from_anchor(self):
-        # Owner rule 2026-08-16: a boundary row names the sync point it is derived
-        # from (start -> the FIRST marker, end -> the LAST), so it is linked to an
-        # identified point, never free-floating. The spelled-out `confidence n/10`
-        # stays as the machine mark (no hand row carries it); `verified` never
-        # appears on a derived boundary.
+    def test_every_sync_point_has_its_own_boundary_rows(self):
+        # Owner rule 2026-08-16 (refined): EACH sync point gets its own start and
+        # end row, named with that point's marker number, at that anchor's own
+        # implied placement — the anchor-to-anchor shift of the implied starts is
+        # the drift, made visible on the label track. `confidence n/10` stays the
+        # machine mark; `verified` and `?` never appear on a boundary.
         stream_rows, _ = self._rows(off0=12.0)
-        boundaries = {t.split(":")[0].split()[-1]: t for _, _, t in stream_rows
-                      if t.startswith(("orig072 start:", "orig072 end:"))}
-        self.assertEqual(len(boundaries), 2)
         anchor_count = sum(1 for _, _, t in stream_rows
                            if t.startswith("track sync: "))
-        start = [t for _, _, t in stream_rows if t.startswith("orig072 start:")][0]
-        end = [t for _, _, t in stream_rows if t.startswith("orig072 end:")][0]
-        self.assertRegex(start, r"^orig072 start: 1 confidence \d")
-        self.assertRegex(end, r"^orig072 end: %d confidence \d" % anchor_count)
-        for text in (start, end):
+        starts = [t for _, _, t in stream_rows if t.startswith("orig072 start:")]
+        ends = [t for _, _, t in stream_rows if t.startswith("orig072 end:")]
+        self.assertEqual(len(starts), anchor_count)
+        self.assertEqual(len(ends), anchor_count)
+        for k in range(1, anchor_count + 1):
+            self.assertTrue(any(t.startswith("orig072 start: %d " % k)
+                                for t in starts), k)
+            self.assertTrue(any(t.startswith("orig072 end: %d " % k)
+                                for t in ends), k)
+        for text in starts + ends:
+            self.assertRegex(text, r"^orig072 (start|end): \d+ confidence \d")
             self.assertNotIn("verified", text)
             self.assertNotIn("?", text)
 
