@@ -34,7 +34,7 @@ Converter-trust additions (2026-08, AP-02/03/04/13/16):
     conflated with) the file-sync `verified <neighbour>` keyword. Anchor rows
     (sync/start/end) carry NO trailing ` HINT` (RC-1): they arrive on their own imported
     hints track, and each keeps its own in-row machine mark -- ` verified` on sync rows,
-    the `? confidence n/10` proposal argument on start/end rows; readers
+    the derived-from anchor number + `confidence n/10` on start/end rows; readers
     accept both forms, since files in the wild still hold suffixed rows. The
     `note HINT:`/`note QUESTION:` prose rows are unchanged -- there HINT/QUESTION is the
     row-type prefix, not a provenance suffix.
@@ -478,7 +478,8 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
     load-bearing thing). Anchor rows (the sync pairs and the proposed `origNNN start:`/
     `end:`) go out through `hints._anchor`, i.e. WITHOUT the trailing ` HINT` suffix
     (RC-1: redundant on rows that arrive on their own imported track; the sync rows'
-    machine mark is ` verified`, the start/end rows' their `? confidence n/10` proposal
+    machine mark is ` verified`; start/end rows carry the marker number of the anchor
+    they are derived from + `confidence n/10` (the machine mark; never ` verified`)
     argument); the prose rows keep their `note HINT:`/`note QUESTION:`
     grammar. `match_deltas` (AP-03, from `referee_deltas`) appends each anchor's
     MATCH-vs-PHAT delta to its row text; a disagreement beyond REFEREE_TOL_S earns a
@@ -515,20 +516,27 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
             "%d separate disputes. PHAT stays primary; the per-anchor MATCH deltas are "
             "relative to that globally-off path." % (med_delta, len(anchors))))
     # proposed head/tail of the original on the capture's timeline, from the nearest anchor
-    # (b2 = a - off, so original local 0 sits at a = off; its end at a = off + len/rate)
+    # (b2 = a - off, so original local 0 sits at a = off; its end at a = off + len/rate).
+    # Each boundary row NAMES the sync point it is derived from (its marker number — the
+    # first anchor for start, the last for end), so a boundary is linked to a specific
+    # identified point, never free-floating (owner rule, 2026-08-16: a point with id X is
+    # well-defined by `track sync: X` + `origNNN sync: X` + a boundary row naming an
+    # anchor of the same set). The spelled-out `confidence n/10` remains the machine mark;
+    # `verified` never appears here — a derived boundary is a proposal, not a measurement.
     if anchors:
         start_s = anchors[0][1]
         end_s = anchors[-1][1] + orig_native_len_s / rate
+        start_k, end_k = 1, len(anchors)
         if start_s >= 0:
-            stream_rows.append(_hints._anchor(start_s, start_s, "%s start: ? %s" % (
-                tag, _hints._conf(anchors[0][2]))))
+            stream_rows.append(_hints._anchor(start_s, start_s, "%s start: %d %s" % (
+                tag, start_k, _hints._conf(anchors[0][2]))))
         else:
             stream_rows.append(_hints._question(
                 0.0, 0.0, "%s starts %.3f s BEFORE this capture's first sample" % (
                     tag, -start_s)))
         if end_s <= stream_len_s:
-            stream_rows.append(_hints._anchor(end_s, end_s, "%s end: ? %s" % (
-                tag, _hints._conf(anchors[-1][2]))))
+            stream_rows.append(_hints._anchor(end_s, end_s, "%s end: %d %s" % (
+                tag, end_k, _hints._conf(anchors[-1][2]))))
         else:
             stream_rows.append(_hints._question(
                 stream_len_s, stream_len_s,

@@ -223,15 +223,25 @@ class TestEmission(unittest.TestCase):
         self.assertEqual(len(starts), 1)
         self.assertAlmostEqual(starts[0][0], 12.0, places=4)
 
-    def test_start_end_rows_keep_the_question_mark_proposal_argument(self):
-        # The `? confidence n/10` argument is the proposed-boundary mark (no hand
-        # row carries it) -- with the HINT suffix gone (RC-1) it must stay put.
+    def test_start_end_rows_name_their_derived_from_anchor(self):
+        # Owner rule 2026-08-16: a boundary row names the sync point it is derived
+        # from (start -> the FIRST marker, end -> the LAST), so it is linked to an
+        # identified point, never free-floating. The spelled-out `confidence n/10`
+        # stays as the machine mark (no hand row carries it); `verified` never
+        # appears on a derived boundary.
         stream_rows, _ = self._rows(off0=12.0)
-        boundaries = [t for _, _, t in stream_rows
-                      if t.startswith(("orig072 start:", "orig072 end:"))]
+        boundaries = {t.split(":")[0].split()[-1]: t for _, _, t in stream_rows
+                      if t.startswith(("orig072 start:", "orig072 end:"))}
         self.assertEqual(len(boundaries), 2)
-        for text in boundaries:
-            self.assertRegex(text, r"^orig072 (start|end): \? confidence \d")
+        anchor_count = sum(1 for _, _, t in stream_rows
+                           if t.startswith("track sync: "))
+        start = [t for _, _, t in stream_rows if t.startswith("orig072 start:")][0]
+        end = [t for _, _, t in stream_rows if t.startswith("orig072 end:")][0]
+        self.assertRegex(start, r"^orig072 start: 1 confidence \d")
+        self.assertRegex(end, r"^orig072 end: %d confidence \d" % anchor_count)
+        for text in (start, end):
+            self.assertNotIn("verified", text)
+            self.assertNotIn("?", text)
 
     def test_emitted_names_are_invisible_to_the_pipeline(self):
         self.assertFalse(gt.is_pipeline_label_file("d376-395.orig072.match.hints.tsv"))
@@ -561,8 +571,8 @@ class TestBothAnchorFormsParse(unittest.TestCase):
     BARE = ["track sync: 1 verified confidence 5.9/10",
             "orig072 sync: 1 verified confidence 5.9/10",
             "track sync: 2 verified confidence 4.1/10 MATCH +0.031s",
-            "orig072 start: ? confidence 5.9/10",
-            "orig072 end: ? confidence 4.1/10"]
+            "orig072 start: 1 confidence 5.9/10",
+            "orig072 end: 2 confidence 4.1/10"]
 
     def test_grammar_accepts_both_forms(self):
         for bare in self.BARE:
