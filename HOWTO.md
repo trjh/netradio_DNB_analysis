@@ -189,10 +189,12 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> --all   # 
 `origNNN.<stem>.match.hints.tsv` (gitignored hints, **never** labels): `track sync:` /
 `origNNN sync:` anchor pairs carrying ` verified confidence n/10`, proposed
 `origNNN start:`/`end:` rows — one pair per sync point, each naming its point's marker
-number plus `confidence n/10` (a start an anchor would place before the capture's first
-sample is omitted; **end rows always emit**, even past the last sample — the end is what
-seats the record's continuation in the next capture); the anchor-to-anchor shift of the
-implied starts is the drift, made visible — and `note QUESTION:` rows wherever
+number plus `confidence n/10`. These are **native clip seats** (where the unstretched
+original sits in Audacity to line up at that point), so they shift point-to-point whenever
+the rate is not exactly 1.000 — and they double as hand-alignment handles for comparing
+stream and original signals at any chosen point. A start before the capture's first sample
+is omitted; **end rows always emit**, even past the last sample — the end is what seats
+the record's continuation in the next capture — and `note QUESTION:` rows wherever
 the engine cannot tell. **What to do next (Pass 2):** verify/hand-tune every point in the
 companion player project's **/align** inspector (live subtraction null test, snap-to-best,
 PHAT|MATCH engines) — snap after any hand move (the snap *is* the machine check) and its

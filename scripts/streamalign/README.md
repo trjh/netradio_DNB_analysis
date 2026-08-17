@@ -120,8 +120,11 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints d376-395 72 --dry
   `track sync: 1 verified confidence 5.9/10` (the ` verified` token is the
   machine-checked provenance mark), and the proposed `origNNN start:`/`end:` rows
   read `orig072 start: 1 confidence 5.9/10` — **one start/end pair per sync point**, the
-  identifier naming that point (the implied starts shift anchor-to-anchor; the spread is
-  the drift made visible), and the spelled-out
+  identifier naming that point. They are **native clip seats** (seat the unstretched
+  original here to line up at this point; clip end = seat + native length), so they shift
+  anchor-to-anchor whenever the rate is not exactly 1.000, even held constant — pitch and
+  drift made visible, and ready-made handles for hand-aligning the two signals at any
+  point. The spelled-out
   confidence is the proposal mark (no hand row carries it). **The well-definedness rule:**
   a point with identifier X is fully defined by `track sync: X` on the stream side,
   `origNNN sync: X` on the original side, and **its own** stream-side boundary row(s)

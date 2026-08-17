@@ -267,8 +267,13 @@ Need-to-know:
   `track sync: 1 verified confidence 5.9/10` — the ` verified` token immediately after the
   marker is the *machine-checked* provenance mark; proposed start/end rows read
   `orig072 start: 1 confidence 5.9/10` — **every sync point gets its own start/end pair**,
-  the identifier naming that point; the implied starts shift anchor-to-anchor whenever one
-  rate does not perfectly explain the record (that spread IS the drift). Bounds: a start an
+  the identifier naming that point. These are **native clip seats**: where the unstretched
+  original must sit in Audacity to line up at that point — so the seats shift
+  anchor-to-anchor whenever the record was not played at **exactly rate 1.000**, even when
+  the rate is perfectly constant (fit error adds ms-level scatter on top). The rows serve
+  two purposes: an out-of-capture end seats the record's continuation in the next capture,
+  and the start/end labels make it easy to hand-align stream and original for comparing
+  the signals at the align point. Bounds: a start an
   anchor would place before the capture's first sample is omitted (a QUESTION note appears
   when every anchor places it there); **end rows always emit**, even past the capture's
   last sample — the end is what seats the record's continuation in the next capture. The
