@@ -268,7 +268,11 @@ Need-to-know:
   marker is the *machine-checked* provenance mark; proposed start/end rows read
   `orig072 start: 1 confidence 5.9/10` — **every sync point gets its own start/end pair**,
   the identifier naming that point; the implied starts shift anchor-to-anchor whenever one
-  rate does not perfectly explain the record (that spread IS the drift), and the spelled-out confidence is the
+  rate does not perfectly explain the record (that spread IS the drift). Bounds: a start an
+  anchor would place before the capture's first sample is omitted (a QUESTION note appears
+  when every anchor places it there); **end rows always emit**, even past the capture's
+  last sample — the end is what seats the record's continuation in the next capture. The
+  spelled-out confidence is the
   *proposal* mark (no hand row carries it). Anchor rows carry **no trailing ` HINT`**; only
   the prose `note HINT:`/`note QUESTION:` rows keep that prefix. Readers still accept the
   old ` HINT`-suffixed anchor rows found in files in the wild.
@@ -588,6 +592,9 @@ mention any original; put genuine cross-references in the primary track.
 
 - `origNNN start:|end:|note: …` — colon **required**, argument optional (`orig070 start:`
   alone = "begins here"). No colon / misplaced colon errors out (see shape rules).
+  *Machine-emitted* hints boundary rows additionally carry a per-point identifier +
+  `confidence n/10` (one pair per sync point; starts may be omitted at the capture head,
+  ends always emit) — see `scripts/streamalign/README.md` for that grammar.
 - Shorthand `NNNs…`/`NNNe…` (3 digits first: `069s0`, `067eB`, `071e1` — never `s71e1`).
 
 **Generic notes & skips**
