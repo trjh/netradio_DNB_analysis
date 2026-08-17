@@ -64,7 +64,9 @@ off with the wrong rate), then a rate sweep scored by GCC-PHAT confidence finds 
 true rate, a rate-corrected anchor grid walks the overlap at both polarities, and
 whole-overlap **anchor mass** picks between loop-shifted rival seats (drum & bass
 self-correlates at whole-bar shifts; the true seat is the one that explains the
-WHOLE overlap, not just the looped stretch).
+WHOLE overlap, not just the looped stretch). The Sonic Visualiser GUI itself is not
+part of the flow — SV+MATCH remains only an optional manual cross-check
+([PROCESS.md step 9](../../PROCESS.md#optional-cross-check-sonic-visualiser--match)).
 
 **3. Score (measure the finding vs the answer key).** `score.py` — pairwise and
 absolute error vs ground truth, plus redundant-overlap self-consistency.
@@ -117,8 +119,16 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints d376-395 72 --dry
   old suffixed form found in files in the wild): sync rows read
   `track sync: 1 verified confidence 5.9/10` (the ` verified` token is the
   machine-checked provenance mark), and the proposed `origNNN start:`/`end:` rows
-  read `orig072 start: ? confidence 5.9/10` — their `?` argument plus the spelled-out
-  confidence is the proposal mark (no hand row carries it). Prose rows are unchanged
+  read `orig072 start: 1 confidence 5.9/10` — **one start/end pair per sync point**, the
+  identifier naming that point. They are **native clip seats** (seat the unstretched
+  original here to line up at this point; clip end = seat + native length), so they shift
+  anchor-to-anchor whenever the rate is not exactly 1.000, even held constant — pitch and
+  drift made visible, and ready-made handles for hand-aligning the two signals at any
+  point. The spelled-out
+  confidence is the proposal mark (no hand row carries it). **The well-definedness rule:**
+  a point with identifier X is fully defined by `track sync: X` on the stream side,
+  `origNNN sync: X` on the original side, and **its own** stream-side boundary row(s)
+  naming X — ideally both start and end. Prose rows are unchanged
   and stay ` HINT`-suffixed `note HINT:`/`note QUESTION:` rows, including the summary
   note carrying the recovered rate and polarity. Runs `sonic-annotator` itself (or
   takes a pre-exported `match:a_b` CSV via `--csv`); emits QUESTION rows instead of

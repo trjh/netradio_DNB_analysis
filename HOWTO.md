@@ -176,6 +176,38 @@ PYTHONPATH=scripts python3 -m streamalign skip-reject  <id> --note …  # reject
 (or the rejections file), **not** `track-metadata.json` — if a confirmed skip changed a file's
 span, rebuild the JSON afterwards.
 
+**Q:** Seat an original track inside a capture — where do the paired sync points come from?
+
+**A:** Two passes ([PROCESS.md step 9](./PROCESS.md#9-align-the-originals)):
+
+```bash
+PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> <NNN>   # Pass 1: propose
+PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> --all   # batch: every overlapping track with an original
+```
+
+**What you get:** a paired hints file per track — `<stem>.origNNN.match.hints.tsv` +
+`origNNN.<stem>.match.hints.tsv` (gitignored hints, **never** labels): `track sync:` /
+`origNNN sync:` anchor pairs carrying ` verified confidence n/10`, proposed
+`origNNN start:`/`end:` rows — one pair per sync point, each naming its point's marker
+number plus `confidence n/10`. These are **native clip seats** (where the unstretched
+original sits in Audacity to line up at that point), so they shift point-to-point whenever
+the rate is not exactly 1.000 — and they double as hand-alignment handles for comparing
+stream and original signals at any chosen point. A start before the capture's first sample
+is omitted; **end rows always emit**, even past the last sample — the end is what seats
+the record's continuation in the next capture — and `note QUESTION:` rows wherever
+the engine cannot tell. **What to do next (Pass 2):** verify/hand-tune every point in the
+companion player project's **/align** inspector (live subtraction null test, snap-to-best,
+PHAT|MATCH engines) — snap after any hand move (the snap *is* the machine check) and its
+export writes the adjusted rows; import them into Audacity as their own label track, fold
+what you accept into your hand labels, `sort_tsv.py` as usual, then
+`streamalign sync-audit` to re-grade every folded-in point against the audio.
+A historical note on the method: the sync-point algorithm was informed by some initial
+hand work in Sonic Visualiser with the MATCH plugin. SV+MATCH does a good job of finding
+match points, but it is not easily integrated into this flow — so Pass 1 runs the same
+MATCH engine headless instead (via `sonic-annotator`; no `sonic-annotator` on PATH → pass
+`--csv` with a pre-exported `match:a_b` CSV), and opening SV by hand survives only as an
+optional manual cross-check.
+
 **Q:** Map an original track's speed/offset onto the mix.
 
 **A:**
@@ -272,6 +304,7 @@ runs `GithubImport()`), else it prints the **Reload Data** reminder.
 | re-place captures / score the engine | `streamalign groundtruth \| validate \| align` | notate | — (read-only) |
 | place the unlabelled tail (loop-wrap anchor) | `streamalign tail-solve` (`--emit` to write labels) | notate | — (read-only; `--emit` → `<stem>.auto.labels.tsv`) |
 | resolve skips | `streamalign skip-clips \| skip-confirm \| skip-reject` | notate | clips / hand `.labels.tsv` / rejections |
+| seat an original in a capture (paired sync points) | `streamalign match-hints` → verify in the player's `/align` | notate | `*.match.hints.tsv` (gitignored) |
 | original↔mix rate | `streamalign track-mix` | notate | — (read-only) |
 | **rebuild `track-metadata.json`** | `build_track_metadata.py` | **build** | **`track-metadata.json`** |
 | refresh missing-originals inventory | `g4_missing_sources.py` | build/sourcing | inventory |

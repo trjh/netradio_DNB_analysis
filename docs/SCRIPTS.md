@@ -43,6 +43,7 @@ audio-dependent tests need the align venv (`make align-env`).
 | `labels/sort_tsv.py` | the **only** txt→tsv tool: sort, scope, validate the grammar | every time you export labels from Audacity |
 | `labels/publish.py` | hard-gated publish: validate → sort → push → refresh the sheet | when a capture is finished |
 | `streamalign hints <stem>` | the engine's opinion as a **separate** label track — proposed anchors, skips, sync-anchor pairs, and questions | before labelling a capture |
+| `streamalign match-hints <stem> <NNN>`/`--all` | seat an original inside a capture: paired sync-point proposals (Pass 1), verified in the companion player project's `/align` inspector (Pass 2). MATCH runs headless — no Sonic Visualiser step | when a capture's tracks have originals on disk (PROCESS step 9) |
 | `streamalign starter <owner>` | carry a finished file's labels forward to seed the next | after finishing a capture |
 | `streamalign align/validate/groundtruth` | measure an offset; grade the engine against your hand work | placing a file; checking the engine |
 | `streamalign skip-clips / skip-confirm / skip-reject` | find and rule on skips | after placing, before chaining onward |

@@ -213,29 +213,113 @@ Need-to-know:
 
 ### 9. Align the originals
 
-Seat the A/B anchors (accept/confirm the `solo_anchors` from step 2's hints — each gives the
-mix instant *and* the original instant; seat one early, one late; confirm by ear, technique
-below). Then grade:
+Two passes: the engine **proposes** the paired sync points; you **verify** every one.
+
+> **End-to-end walkthrough.** This step is the analysis half. For the whole loop in one
+> place — prerequisites, opening the inspector, verifying and exporting, folding back into
+> Audacity, and returning here for the audit — see `docs/RUNBOOK_align_workflow.md` in the
+> player repo, which is where the inspector lives.
+
+**Pass 1 — propose (`match-hints`):**
 
 ```bash
-PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix --tracks <n> [<n> …]
+PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> <NNN> [<NNN> …]
+PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> --all   # batch: every overlapping track with an original
+```
+
+Each track gets a **paired** hints file: `<stem>.origNNN.match.hints.tsv` (`track sync:`
+rows at capture-local times + proposed `origNNN start:`/`end:`) and
+`origNNN.<stem>.match.hints.tsv` (`origNNN sync:` rows at original-local seconds). The
+stream is trimmed to the original's expected neighbourhood first — auto-derived from the
+track's master span and the capture's placement, or `--around <seconds>` when the track
+isn't placed yet.
+
+**Pass 2 — verify (the align inspector):** open each point in the companion player
+project's **/align inspector** — stream fixed, original shiftable, a live **subtraction
+lane** (the null test, no Invert/un-Invert dance), snap-to-best under either engine
+(**PHAT | MATCH**). Accept or nudge each point, and **snap after any hand move** — the
+snap *is* the machine check. Export the adjusted rows when done. The rule that keeps the
+grammar honest is yours to apply: a row's ` verified` token is only as good as its **last
+machine measurement** — a point you moved by hand and did not re-snap has none, so strip
+the token from that row when folding in (it then reads as unchecked, which is the truth,
+and `sync-audit --only-unchecked` will keep listing it).
+
+**Then fold in, audit, grade:** import the rows into Audacity (**File ▸ Import ▸ Labels**
+— they land as their **own** label tracks beside yours; nothing you have is touched), keep
+what you accept in your hand labels, export/sort via step 6 as usual, then:
+
+```bash
+PYTHONPATH=scripts .venv/bin/python -m streamalign sync-audit --tracks <n> [<n> …]  # re-grade every point
+PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix  --tracks <n> [<n> …]  # grade the rate
 ```
 
 Warnings:
 - `PYTHONPATH=scripts` is required — without it: `No module named streamalign`.
 - `--sources` is a **flag** (default `sources_local`); `NETRADIO_SOURCES_DIR` is not read by
-  this subcommand.
+  these subcommands.
 - **Don't chase the track's start/end** — records are blended; there is no objective "begins"
-  frame. Anchor on moments the record plays **alone**.
+  frame. Anchor on moments the record plays **alone** (Pass 1 already prefers those moments).
+- Pass 1 shells out to **`sonic-annotator`** (the MATCH plugin, headless) — with it missing,
+  pass `--csv` with a pre-exported `match:a_b` CSV instead.
 
 Need-to-know:
-- Defaults: `--meta track-metadata.json`, `--sources sources_local`. `--tracks` limits to
-  this file's tracks; omit = re-grade all synced originals.
+- **Anchor-row grammar** (full spec: [label grammar](#label-grammar)): sync rows read
+  `track sync: 1 verified confidence 5.9/10` — the ` verified` token immediately after the
+  marker is the *machine-checked* provenance mark; proposed start/end rows read
+  `orig072 start: 1 confidence 5.9/10` — **every sync point gets its own start/end pair**,
+  the identifier naming that point. These are **native clip seats**: where the unstretched
+  original must sit in Audacity to line up at that point — so the seats shift
+  anchor-to-anchor whenever the record was not played at **exactly rate 1.000**, even when
+  the rate is perfectly constant (fit error adds ms-level scatter on top). The rows serve
+  two purposes: an out-of-capture end seats the record's continuation in the next capture,
+  and the start/end labels make it easy to hand-align stream and original for comparing
+  the signals at the align point. Bounds: a start an
+  anchor would place before the capture's first sample is omitted (a QUESTION note appears
+  when every anchor places it there); **end rows always emit**, even past the capture's
+  last sample — the end is what seats the record's continuation in the next capture. The
+  spelled-out confidence is the
+  *proposal* mark (no hand row carries it). Anchor rows carry **no trailing ` HINT`**; only
+  the prose `note HINT:`/`note QUESTION:` rows keep that prefix. Readers still accept the
+  old ` HINT`-suffixed anchor rows found in files in the wild.
+- **MATCH is a component here, not a step.** Inside Pass 1 the (trimmed) MATCH path seeds
+  the coarse (offset, rate) guess and then **referees** each anchor — GCC-PHAT stays the
+  only anchor source, and a MATCH-vs-PHAT disagreement beyond 0.25 s becomes a
+  `note QUESTION:` row. You never open Sonic Visualiser (see
+  [the optional cross-check](#optional-cross-check-sonic-visualiser--match) below).
+- **The ` verified` token is machine provenance, not a human vouch** — it records that a
+  machine *measured* the seat (Pass 1's converter, or the inspector's snap). `sync-audit`
+  is the check on it: it re-grades every hand `origNNN sync:` point against the audio
+  (seat confidence + hand bookkeeping error) and reports the token per point
+  (`--only-unchecked` lists the points no machine has touched). It is a **report, not a
+  gate** — nothing downstream refuses a bad point for you — so resolve everything it
+  flags (re-snap the point in the inspector, or strip its token) **before** step 11
+  publishes the file.
+- Step 2's `solo_anchors` still matter: they are the record-playing-alone moments Pass 1
+  probes when seeding the rate sweep, and they remain the right seats for any point you
+  place fully by hand (technique below).
+- Coverage too thin, or a rival loop-shifted seat scoring close, produces `note QUESTION:`
+  rows instead of silent guesses. Answer the questions before trusting the anchors.
+- Defaults: `--meta track-metadata.json`, `--sources sources_local`. For `track-mix`,
+  `--tracks` limits to this file's tracks; omit = re-grade all synced originals.
 - **`sort_tsv.py` does not do this step** (it covers 6–7 + the next-file offer). 8–9 are
   manual and conditional; 9 only where you have the original.
 - `track-mix` recovers mix/original rate + offset (chroma + DTW) and reports whether it's
   trustworthy. Free sanity check: a DJ pitches by a few percent — anchors implying a rate far
   from 1.0 are not both on the record (the engine gates on this).
+
+#### Optional cross-check: Sonic Visualiser + MATCH
+
+**Not a pipeline step** (call recorded 2026-08-04). Sonic Visualiser with the MATCH plugin
+used to be the manual way to get a rate-aware coarse map of an original inside a capture;
+the pipeline now covers that role. What backs that up in this repo: the regression suite
+pins the converter's precision — `tests/test_matchconv.py` requires every selected anchor
+to land within **10 ms** of its fixture's known truth — and the cross-check SV provided by
+eye now happens numerically on **every run**: the per-anchor MATCH-vs-PHAT delta is printed
+and appended to each row, and a disagreement beyond 0.25 s becomes a `note QUESTION:` row.
+(The converter's design-time gating against a hand-seated alignment is recorded in
+`matchconv.py`'s docstring.) Keep SV around only if you want a second, independent eyeball
+on a stubborn seat — load capture + original as two panes and run the MATCH aligner
+interactively — but nothing downstream needs it, and no step of the loop asks for it.
 
 ### 10. Build + validate
 
@@ -314,9 +398,10 @@ Need-to-know:
 
 ## Aligning an original to the mix (by ear + by eye)
 
-How to *find* the seat for the paired sync points of steps 5/9. The mix and the original are
-rarely at the same clock rate (the DJ beatmatches) — the A/B pair *captures* that drift, you
-don't fight it.
+How to *find* the seat for the paired sync points of steps 5/9 — the technique behind the
+align inspector's subtraction lane, in raw Audacity. Reach for it when seating a point fully
+by hand, or when a point resists the inspector. The mix and the original are rarely at the
+same clock rate (the DJ beatmatches) — the A/B pair *captures* that drift, you don't fight it.
 
 **Pick the cue:**
 - A sharp **transient**, never a sustained sound: consonant plosive, word onset, snare/rim,
@@ -512,6 +597,9 @@ mention any original; put genuine cross-references in the primary track.
 
 - `origNNN start:|end:|note: …` — colon **required**, argument optional (`orig070 start:`
   alone = "begins here"). No colon / misplaced colon errors out (see shape rules).
+  *Machine-emitted* hints boundary rows additionally carry a per-point identifier +
+  `confidence n/10` (one pair per sync point; starts may be omitted at the capture head,
+  ends always emit) — see `scripts/streamalign/README.md` for that grammar.
 - Shorthand `NNNs…`/`NNNe…` (3 digits first: `069s0`, `067eB`, `071e1` — never `s71e1`).
 
 **Generic notes & skips**
@@ -530,6 +618,7 @@ mention any original; put genuine cross-references in the primary track.
 | `<stem>.auto.labels.tsv` | engine (`tail-solve --emit`) | yes | regenerable; consumed by solve/build. Reaches the sheet. |
 | `<stem>.starter.labels.tsv` | `sort_tsv.py` / `starter` | gitignored | seed only; excluded everywhere |
 | `<stem>.hints.tsv` | `streamalign hints` | gitignored | suggestions + questions; invisible to solve/build/sheet |
+| `<stem>.origNNN.match.hints.tsv` + `origNNN.<stem>.match.hints.tsv` | `streamalign match-hints` (step 9 Pass 1) | gitignored | paired sync-point proposals; invisible to solve/build/sheet |
 
 The sheet importer (`sheetscript/Code.js`) reads **only** `*.labels.tsv` (incl. `.auto.`) +
 the hand-kept `remainder.tsv` — mirroring `groundtruth.is_pipeline_label_file`. A bare
