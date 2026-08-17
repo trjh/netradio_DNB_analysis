@@ -480,7 +480,8 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
     (RC-1: redundant on rows that arrive on their own imported track; the sync rows'
     machine mark is ` verified`; every sync point gets its own start/end rows, each
     naming its anchor + `confidence n/10` (the machine mark; never ` verified`) — the
-    anchor-to-anchor spread of the implied starts is the drift, made visible
+    anchor-to-anchor spread of the native clip seats is pitch + drift made visible
+    (rate != 1.000 shifts the seat even when perfectly constant)
     argument); the prose rows keep their `note HINT:`/`note QUESTION:`
     grammar. `match_deltas` (AP-03, from `referee_deltas`) appends each anchor's
     MATCH-vs-PHAT delta to its row text; a disagreement beyond REFEREE_TOL_S earns a
@@ -525,30 +526,46 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
     # sync point: a point with id X is well-defined by `track sync: X` +
     # `origNNN sync: X` + its own boundary row(s), ideally both. The spelled-out
     # `confidence n/10` remains the machine mark; `verified` never appears here — a
-    # derived boundary is a proposal, not a measurement. Bounds (owner rule,
-    # 2026-08-16): a START an anchor would place before the capture's first sample is
-    # omitted per-anchor (the single explanatory QUESTION row appears when EVERY
-    # anchor places it there); an END row is ALWAYS emitted, even past the capture's
-    # last sample — the end position is what seats the record's continuation in the
-    # next capture, so throwing it away loses exactly the cross-file information the
-    # rows exist to carry (an out-of-capture end also gets the QUESTION note as a
-    # heads-up, but the row itself is never dropped).
+    # derived boundary is a proposal, not a measurement.
+    #
+    # FRAME (owner correction, 2026-08-17): these are NATIVE CLIP SEATS — where the
+    # original, imported into Audacity at its own rate (never varispeeded), must be
+    # placed so it lines up at THIS sync point: seat_k = a_k − b_native_k, and the
+    # clip's end on the timeline is seat_k + the original's native length. That is
+    # the hand `origNNN start:` convention these rows feed. The seats shift
+    # anchor-to-anchor whenever the record was not played at exactly rate 1.000 —
+    # EVEN when the rate is perfectly constant (slope = 1 − rate); fit error adds
+    # ms-level scatter on top. (The rate-corrected zero `off` — identical at every
+    # anchor under a perfect fit — is the wrong frame here: it is where the record's
+    # local 0 sounds in the BROADCAST, not where the clip goes.)
+    #
+    # Bounds (owner rule, 2026-08-16): a START an anchor would place before the
+    # capture's first sample is omitted per-anchor (the single explanatory QUESTION
+    # row appears when EVERY anchor places it there); an END row is ALWAYS emitted,
+    # even past the capture's last sample — the end position is what seats the
+    # record's continuation in the next capture (an out-of-capture end also gets the
+    # QUESTION note as a heads-up, but the row itself is never dropped).
     if anchors:
         emitted_start = False
-        for k, (_a, off, conf, _inv, _out) in enumerate(anchors, start=1):
-            start_s = off
-            end_s = off + orig_native_len_s / rate
-            if start_s >= 0:
-                stream_rows.append(_hints._anchor(start_s, start_s, "%s start: %d %s" % (
+        last_seat_s = None
+        for k, (a, off, conf, _inv, _out) in enumerate(anchors, start=1):
+            b_native = (a - off) * rate
+            seat_s = a - b_native                    # native clip seat for point k
+            end_s = seat_s + orig_native_len_s       # native clip end on the timeline
+            last_seat_s = seat_s
+            if seat_s >= 0:
+                stream_rows.append(_hints._anchor(seat_s, seat_s, "%s start: %d %s" % (
                     tag, k, _hints._conf(conf))))
                 emitted_start = True
             stream_rows.append(_hints._anchor(end_s, end_s, "%s end: %d %s" % (
                 tag, k, _hints._conf(conf))))
         if not emitted_start:
+            first = anchors[0]
+            first_seat = first[0] - (first[0] - first[1]) * rate
             stream_rows.append(_hints._question(
                 0.0, 0.0, "%s starts %.3f s BEFORE this capture's first sample" % (
-                    tag, -anchors[0][1])))
-        last_end_s = anchors[-1][1] + orig_native_len_s / rate
+                    tag, -first_seat)))
+        last_end_s = last_seat_s + orig_native_len_s
         if last_end_s > stream_len_s:
             stream_rows.append(_hints._question(
                 stream_len_s, stream_len_s,

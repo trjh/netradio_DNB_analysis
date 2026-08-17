@@ -217,21 +217,25 @@ class TestEmission(unittest.TestCase):
         self.assertFalse([t for _, _, t in stream_rows if re.match(r"orig072 start:", t)])
 
     def test_start_inside_capture_is_a_native_shape_row(self):
-        # per-point boundaries (owner rule 2026-08-16): one start row PER ANCHOR,
-        # each at that anchor's own implied original-zero — the spread is the drift
+        # Per-point boundaries in the NATIVE CLIP FRAME (owner corrections
+        # 2026-08-16/17): each start row is where the unstretched clip must be
+        # SEATED to line up at that sync point — seat_k = a_k − b_native_k — so a
+        # constant rate != 1.000 shifts the seat between points all by itself.
+        # Fixture: rate 1.0218 → seats 10.9536 and 8.1060, a 2.85 s spread from
+        # pure pitch (the rate-corrected zeros would sit ~0.2 s apart).
         stream_rows, _ = self._rows(off0=12.0)
         starts = [(a, t) for a, _, t in stream_rows if ORIG_ROW_RE.match(t)
                   and t.startswith("orig072 start:")]
         self.assertEqual(len(starts), 2)
-        self.assertAlmostEqual(starts[0][0], 12.0, places=4)
-        self.assertAlmostEqual(starts[1][0], 12.2, places=4)   # anchor 2 shifts it
+        self.assertAlmostEqual(starts[0][0], 60.0 - (60.0 - 12.0) * 1.0218, places=4)
+        self.assertAlmostEqual(starts[1][0], 200.0 - (200.0 - 12.2) * 1.0218, places=4)
 
     def test_end_rows_always_emit_even_past_the_capture_edge(self):
         # Owner rule 2026-08-16: a start before the capture may be omitted, but an
         # END row is ALWAYS emitted, even beyond the last sample — the end position
         # is what seats the record's continuation in the NEXT capture. The overhang
         # still gets the explanatory QUESTION note, but the rows themselves survive.
-        stream_rows, _ = self._rows(off0=1100.0)   # end ~= 1461 s > 1200 s capture
+        stream_rows, _ = self._rows(off0=1100.0)   # native ends ~= 1489-1492 s > 1200 s
         ends = [(a, t) for a, _, t in stream_rows
                 if t.startswith("orig072 end:")]
         self.assertEqual(len(ends), 2)             # one per sync point, none dropped
