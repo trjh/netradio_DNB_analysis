@@ -243,6 +243,13 @@ class TestEmission(unittest.TestCase):
             self.assertGreater(a, 1200.0)
         notes = [t for _, _, t in stream_rows if "AFTER this capture" in t]
         self.assertEqual(len(notes), 1)
+        # the reported overhang keys on the MAXIMUM end across anchors — under
+        # rate > 1 that is the FIRST anchor's end, not the last's (review finding)
+        import re as _re
+        overhang = float(_re.search(r"ends (\d+\.\d+) s AFTER", notes[0]).group(1))
+        ends_calc = [60.0 - (60.0 - 1100.0) * 1.0218 + 369.31,
+                     200.0 - (200.0 - 1100.2) * 1.0218 + 369.31]
+        self.assertAlmostEqual(overhang, max(ends_calc) - 1200.0, places=3)
 
     def test_every_sync_point_has_its_own_boundary_rows(self):
         # Owner rule 2026-08-16 (refined): EACH sync point gets its own start and
