@@ -20,7 +20,8 @@ Three hard rules
    ``origNNN sync:`` / ``origNNN start:``/``end:``, built via ``_anchor``) carry no
    trailing ``HINT`` -- they arrive on their own imported hints track anyway, and each
    still carries an in-row machine mark: sync rows the `` verified confidence n/10``
-   token, start/end rows their ``? confidence n/10`` proposal argument (no hand row
+   token, start/end rows the marker number of the anchor they are derived from plus
+   ``confidence n/10`` (no hand row
    carries either), so the suffix was redundant there.
    ``note HINT:`` / ``note QUESTION:`` prose rows are
    untouched by that exception: there HINT/QUESTION is the row-TYPE prefix (grammar), not
@@ -84,7 +85,7 @@ def _anchor(start, end, text):
 
     Anchor rows arrive on their own imported hints track, and each kind already carries
     its machine mark in-row -- sync rows the `` verified confidence n/10`` token,
-    start/end rows their ``? confidence n/10`` proposal argument (a hand boundary row is
+    start/end rows the derived-from anchor number plus ``confidence n/10`` (a hand boundary row is
     ``orig070 start:`` or ``orig070 start: A``, never that) -- so the paste-provenance
     suffix was redundant. Readers must (and do) still accept the old suffixed form:
     files in the wild carry it.

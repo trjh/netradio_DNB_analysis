@@ -34,7 +34,7 @@ Converter-trust additions (2026-08, AP-02/03/04/13/16):
     conflated with) the file-sync `verified <neighbour>` keyword. Anchor rows
     (sync/start/end) carry NO trailing ` HINT` (RC-1): they arrive on their own imported
     hints track, and each keeps its own in-row machine mark -- ` verified` on sync rows,
-    the `? confidence n/10` proposal argument on start/end rows; readers
+    per-sync-point start/end rows (each naming its anchor, `confidence n/10`); readers
     accept both forms, since files in the wild still hold suffixed rows. The
     `note HINT:`/`note QUESTION:` prose rows are unchanged -- there HINT/QUESTION is the
     row-type prefix, not a provenance suffix.
@@ -478,8 +478,11 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
     load-bearing thing). Anchor rows (the sync pairs and the proposed `origNNN start:`/
     `end:`) go out through `hints._anchor`, i.e. WITHOUT the trailing ` HINT` suffix
     (RC-1: redundant on rows that arrive on their own imported track; the sync rows'
-    machine mark is ` verified`, the start/end rows' their `? confidence n/10` proposal
-    argument); the prose rows keep their `note HINT:`/`note QUESTION:`
+    machine mark is ` verified`; every sync point gets its own start/end rows, each
+    naming its anchor + `confidence n/10` (the machine mark; never ` verified`) — the
+    anchor-to-anchor spread of the native clip seats is pitch + drift made visible
+    (rate != 1.000 shifts the seat even when perfectly constant)
+    the prose rows keep their `note HINT:`/`note QUESTION:`
     grammar. `match_deltas` (AP-03, from `referee_deltas`) appends each anchor's
     MATCH-vs-PHAT delta to its row text; a disagreement beyond REFEREE_TOL_S earns a
     `note QUESTION:` row at that anchor -- unless the MEDIAN delta is itself beyond
@@ -514,25 +517,58 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
             "the whole overlap -- MATCH's forced files-start-together failure mode, not "
             "%d separate disputes. PHAT stays primary; the per-anchor MATCH deltas are "
             "relative to that globally-off path." % (med_delta, len(anchors))))
-    # proposed head/tail of the original on the capture's timeline, from the nearest anchor
-    # (b2 = a - off, so original local 0 sits at a = off; its end at a = off + len/rate)
+    # proposed head/tail of the original on the capture's timeline — ONE PAIR PER SYNC
+    # POINT (owner rule, 2026-08-16). Every row names its sync point: a point with id X
+    # is well-defined by `track sync: X` + `origNNN sync: X` + its own boundary row(s),
+    # ideally both. The spelled-out `confidence n/10` remains the machine mark;
+    # `verified` never appears here — a derived boundary is a proposal, not a
+    # measurement.
+    #
+    # FRAME (owner correction, 2026-08-17): these are NATIVE CLIP SEATS — where the
+    # original, imported into Audacity at its own rate (never varispeeded), must be
+    # placed so it lines up at THIS sync point: seat_k = a_k − b_native_k, and the
+    # clip's end on the timeline is seat_k + the original's native length. That is
+    # the hand `origNNN start:` convention these rows feed. The seats shift
+    # anchor-to-anchor whenever the record was not played at exactly rate 1.000 —
+    # EVEN when the rate is perfectly constant (slope = 1 − rate); fit error adds
+    # ms-level scatter on top. (The rate-corrected zero `off` — identical at every
+    # anchor under a perfect fit — is the wrong frame here: it is where the record's
+    # local 0 sounds in the BROADCAST, not where the clip goes.)
+    #
+    # Bounds (owner rule, 2026-08-16): a START an anchor would place before the
+    # capture's first sample is omitted per-anchor (the single explanatory QUESTION
+    # row appears when EVERY anchor places it there); an END row is ALWAYS emitted,
+    # even past the capture's last sample — the end position is what seats the
+    # record's continuation in the next capture (an out-of-capture end also gets the
+    # QUESTION note as a heads-up, but the row itself is never dropped).
     if anchors:
-        start_s = anchors[0][1]
-        end_s = anchors[-1][1] + orig_native_len_s / rate
-        if start_s >= 0:
-            stream_rows.append(_hints._anchor(start_s, start_s, "%s start: ? %s" % (
-                tag, _hints._conf(anchors[0][2]))))
-        else:
+        emitted_start = False
+        for k, (a, off, conf, _inv, _out) in enumerate(anchors, start=1):
+            b_native = (a - off) * rate
+            seat_s = a - b_native                    # native clip seat for point k
+            end_s = seat_s + orig_native_len_s       # native clip end on the timeline
+            if seat_s >= 0:
+                stream_rows.append(_hints._anchor(seat_s, seat_s, "%s start: %d %s" % (
+                    tag, k, _hints._conf(conf))))
+                emitted_start = True
+            stream_rows.append(_hints._anchor(end_s, end_s, "%s end: %d %s" % (
+                tag, k, _hints._conf(conf))))
+        if not emitted_start:
+            first = anchors[0]
+            first_seat = first[0] - (first[0] - first[1]) * rate
             stream_rows.append(_hints._question(
                 0.0, 0.0, "%s starts %.3f s BEFORE this capture's first sample" % (
-                    tag, -start_s)))
-        if end_s <= stream_len_s:
-            stream_rows.append(_hints._anchor(end_s, end_s, "%s end: ? %s" % (
-                tag, _hints._conf(anchors[-1][2]))))
-        else:
+                    tag, -first_seat)))
+        # under rate > 1 the seats DECREASE with stream time, so the rightmost end
+        # belongs to the FIRST anchor, not the last — key the heads-up (and the
+        # reported overhang) on the maximum end across anchors (review finding,
+        # 2026-08-17)
+        max_end_s = max(a - (a - off) * rate for a, off, _c, _i, _o in anchors)             + orig_native_len_s
+        if max_end_s > stream_len_s:
             stream_rows.append(_hints._question(
                 stream_len_s, stream_len_s,
-                "%s ends %.3f s AFTER this capture's last sample" % (tag, end_s - stream_len_s)))
+                "%s ends %.3f s AFTER this capture's last sample" % (
+                    tag, max_end_s - stream_len_s)))
     pol = "INVERTED (flip the original before a null test)" if inverted else "not inverted"
     summary = ("%s via MATCH+PHAT: rate %.5f (original runs %+.2f%% vs stream), polarity %s, "
                "%d anchors" % (tag, rate, (rate - 1.0) * 100.0, pol, len(anchors)))

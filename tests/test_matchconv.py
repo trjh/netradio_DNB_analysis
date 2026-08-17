@@ -159,8 +159,8 @@ class TestOutlierMarking(unittest.TestCase):
 class TestEmission(unittest.TestCase):
     """Rows are existing grammar and can never masquerade as labels. Anchor rows
     (sync/start/end) carry NO trailing ` HINT` (RC-1) but keep their in-row machine
-    marks -- ` verified confidence` on sync rows, the `? confidence` proposal
-    argument on start/end rows; prose rows keep the `note HINT:`/`note QUESTION:`
+    marks -- ` verified confidence` on sync rows; per-point start/end rows naming
+    their anchor with `confidence n/10`; prose rows keep the `note HINT:`/`note QUESTION:`
     row-type grammar and stay suffix-marked."""
 
     def _rows(self, off0=-27.5):
@@ -217,21 +217,62 @@ class TestEmission(unittest.TestCase):
         self.assertFalse([t for _, _, t in stream_rows if re.match(r"orig072 start:", t)])
 
     def test_start_inside_capture_is_a_native_shape_row(self):
+        # Per-point boundaries in the NATIVE CLIP FRAME (owner corrections
+        # 2026-08-16/17): each start row is where the unstretched clip must be
+        # SEATED to line up at that sync point — seat_k = a_k − b_native_k — so a
+        # constant rate != 1.000 shifts the seat between points all by itself.
+        # Fixture: rate 1.0218 → seats 10.9536 and 8.1060, a 2.85 s spread from
+        # pure pitch (the rate-corrected zeros would sit ~0.2 s apart).
         stream_rows, _ = self._rows(off0=12.0)
         starts = [(a, t) for a, _, t in stream_rows if ORIG_ROW_RE.match(t)
                   and t.startswith("orig072 start:")]
-        self.assertEqual(len(starts), 1)
-        self.assertAlmostEqual(starts[0][0], 12.0, places=4)
+        self.assertEqual(len(starts), 2)
+        self.assertAlmostEqual(starts[0][0], 60.0 - (60.0 - 12.0) * 1.0218, places=4)
+        self.assertAlmostEqual(starts[1][0], 200.0 - (200.0 - 12.2) * 1.0218, places=4)
 
-    def test_start_end_rows_keep_the_question_mark_proposal_argument(self):
-        # The `? confidence n/10` argument is the proposed-boundary mark (no hand
-        # row carries it) -- with the HINT suffix gone (RC-1) it must stay put.
+    def test_end_rows_always_emit_even_past_the_capture_edge(self):
+        # Owner rule 2026-08-16: a start before the capture may be omitted, but an
+        # END row is ALWAYS emitted, even beyond the last sample — the end position
+        # is what seats the record's continuation in the NEXT capture. The overhang
+        # still gets the explanatory QUESTION note, but the rows themselves survive.
+        stream_rows, _ = self._rows(off0=1100.0)   # native ends ~= 1489-1492 s > 1200 s
+        ends = [(a, t) for a, _, t in stream_rows
+                if t.startswith("orig072 end:")]
+        self.assertEqual(len(ends), 2)             # one per sync point, none dropped
+        for a, _t in ends:
+            self.assertGreater(a, 1200.0)
+        notes = [t for _, _, t in stream_rows if "AFTER this capture" in t]
+        self.assertEqual(len(notes), 1)
+        # the reported overhang keys on the MAXIMUM end across anchors — under
+        # rate > 1 that is the FIRST anchor's end, not the last's (review finding)
+        import re as _re
+        overhang = float(_re.search(r"ends (\d+\.\d+) s AFTER", notes[0]).group(1))
+        ends_calc = [60.0 - (60.0 - 1100.0) * 1.0218 + 369.31,
+                     200.0 - (200.0 - 1100.2) * 1.0218 + 369.31]
+        self.assertAlmostEqual(overhang, max(ends_calc) - 1200.0, places=3)
+
+    def test_every_sync_point_has_its_own_boundary_rows(self):
+        # Owner rule 2026-08-16 (refined): EACH sync point gets its own start and
+        # end row, named with that point's marker number, at that anchor's own
+        # implied placement — the anchor-to-anchor shift of the implied starts is
+        # the drift, made visible on the label track. `confidence n/10` stays the
+        # machine mark; `verified` and `?` never appear on a boundary.
         stream_rows, _ = self._rows(off0=12.0)
-        boundaries = [t for _, _, t in stream_rows
-                      if t.startswith(("orig072 start:", "orig072 end:"))]
-        self.assertEqual(len(boundaries), 2)
-        for text in boundaries:
-            self.assertRegex(text, r"^orig072 (start|end): \? confidence \d")
+        anchor_count = sum(1 for _, _, t in stream_rows
+                           if t.startswith("track sync: "))
+        starts = [t for _, _, t in stream_rows if t.startswith("orig072 start:")]
+        ends = [t for _, _, t in stream_rows if t.startswith("orig072 end:")]
+        self.assertEqual(len(starts), anchor_count)
+        self.assertEqual(len(ends), anchor_count)
+        for k in range(1, anchor_count + 1):
+            self.assertTrue(any(t.startswith("orig072 start: %d " % k)
+                                for t in starts), k)
+            self.assertTrue(any(t.startswith("orig072 end: %d " % k)
+                                for t in ends), k)
+        for text in starts + ends:
+            self.assertRegex(text, r"^orig072 (start|end): \d+ confidence \d")
+            self.assertNotIn("verified", text)
+            self.assertNotIn("?", text)
 
     def test_emitted_names_are_invisible_to_the_pipeline(self):
         self.assertFalse(gt.is_pipeline_label_file("d376-395.orig072.match.hints.tsv"))
@@ -561,8 +602,8 @@ class TestBothAnchorFormsParse(unittest.TestCase):
     BARE = ["track sync: 1 verified confidence 5.9/10",
             "orig072 sync: 1 verified confidence 5.9/10",
             "track sync: 2 verified confidence 4.1/10 MATCH +0.031s",
-            "orig072 start: ? confidence 5.9/10",
-            "orig072 end: ? confidence 4.1/10"]
+            "orig072 start: 1 confidence 5.9/10",
+            "orig072 end: 2 confidence 4.1/10"]
 
     def test_grammar_accepts_both_forms(self):
         for bare in self.BARE:
