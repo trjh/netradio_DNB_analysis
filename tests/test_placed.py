@@ -195,6 +195,66 @@ class TestPointCap(unittest.TestCase):
         self.assertEqual(pair["points"][0]["k"], "p0")
 
 
+class TestOwnerRateRules(unittest.TestCase):
+    """Owner rules 2026-08-18: multi-capture A/B pairs use the FIRST rate with a
+    note (never a silent median); duplicate designated letters in one capture
+    are surfaced in the note."""
+
+    def _tmp(self):
+        tmp = tempfile.mkdtemp(prefix="placed-rules-")
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        return tmp
+
+    def test_multi_capture_pairs_use_first_rate_with_note(self):
+        tmp = self._tmp()
+        # capture 1: A/B span 10 orig-s over 10 track-s -> sheet rate 1.0
+        _write_labels(os.path.join(tmp, "dX-000.labels.tsv"), [
+            (5.0, "orig050 start: A"),
+            (10.0, "orig050 sync: A"), (10.0, "track sync: A"),
+            (20.0, "orig050 sync: B"), (20.0, "track sync: B"),
+        ])
+        # capture 2: A/B span 10 orig-s over 20 track-s -> sheet rate 2.0
+        _write_labels(os.path.join(tmp, "dY-001.labels.tsv"), [
+            (5.0, "orig050 start: A"),
+            (30.0, "orig050 sync: A"), (30.0, "track sync: A"),
+            (40.0, "orig050 sync: B"), (60.0, "track sync: B"),
+        ])
+        out = placed.list_placed(labels_dir=tmp)
+        by = {(p["stem"], p["orig"]): p for p in out["pairs"]}
+        for key, pair in by.items():
+            # FIRST pair in original-time order is dX's (orig 10-20 before 30-40):
+            # sheet rate 1.0 -> emitted rate 1/1.0; NEVER the median of 1.0 and 2.0
+            self.assertEqual(pair["rate_method"], "AB-first", key)
+            self.assertAlmostEqual(pair["rate"], 1.0, places=9)
+            self.assertIn("A/B pairs in 2 captures", pair["rate_note"])
+            self.assertIn("using the first (dX-000)", pair["rate_note"])
+
+    def test_duplicate_designated_letter_is_surfaced(self):
+        tmp = self._tmp()
+        _write_labels(os.path.join(tmp, "dZ-000.labels.tsv"), [
+            (5.0, "orig051 start: A"),
+            (10.0, "orig051 sync: A"), (10.0, "track sync: A"),
+            (12.0, "orig051 sync: A"), (12.0, "track sync: A"),   # duplicate A
+            (20.0, "orig051 sync: B"), (20.0, "track sync: B"),
+        ])
+        out = placed.list_placed(labels_dir=tmp)
+        pair = out["pairs"][0]
+        self.assertIn("2x A rows in dZ-000", pair["rate_note"])
+        self.assertIn("last by original time wins", pair["rate_note"])
+
+    def test_single_pair_has_no_note(self):
+        tmp = self._tmp()
+        _write_labels(os.path.join(tmp, "dW-000.labels.tsv"), [
+            (5.0, "orig052 start: A"),
+            (10.0, "orig052 sync: A"), (10.0, "track sync: A"),
+            (20.0, "orig052 sync: B"), (20.0, "track sync: B"),
+        ])
+        out = placed.list_placed(labels_dir=tmp)
+        pair = out["pairs"][0]
+        self.assertEqual(pair["rate_method"], "AB")
+        self.assertNotIn("rate_note", pair)
+
+
 class TestCLI(PlacedFixture):
 
     def _run(self, argv):

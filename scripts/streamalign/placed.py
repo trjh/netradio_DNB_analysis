@@ -100,9 +100,14 @@ def _point(num, pr, stem, starts, grades):
 def list_placed(stem=None, labels_dir=None, audit_json=None):
     """The op: {"pairs": [...]} for every capture (stem=None) or one capture stem.
 
-    Each pair entry: {stem, orig, rate, rate_method, points, [truncated]} -- rate is
+    Each pair entry: {stem, orig, rate, rate_method, points, [rate_note],
+    [truncated]} -- rate is
     original-native seconds per stream second (1 / the sheet speed), None when the
-    labels give no rate. Points ride in stream order. An unknown stem answers
+    labels give no rate. With complete A/B pairs in several captures the FIRST
+    pair's rate is used (never a blend) and rate_method reads "AB-first";
+    rate_note tells the operator about the multiplicity, and about any duplicate
+    designated A/B letters inside one capture (owner rules, 2026-08-18). Points
+    ride in stream order. An unknown stem answers
     {"error": ...} (the stem namespace is the committed `<stem>.labels.tsv` files).
     """
     labels_dir = labels_dir or _gt.LABELS_DIR
@@ -117,7 +122,34 @@ def list_placed(stem=None, labels_dir=None, audit_json=None):
     by_pair = {}
     for num in sorted(gt):
         info = gt[num]
+        notes = []
         sheet_rate = info["rate"]
+        rate_method = info["rate_method"]
+        # Owner rule (2026-08-18): with complete A/B pairs in SEVERAL captures,
+        # do not blend them -- use the FIRST pair's rate (first in the original's
+        # own time order, which is how groundtruth builds segment_rates) and say
+        # so in a note, so the operator sees the multiplicity instead of a
+        # silent median.
+        if rate_method == "AB-multi" and info["segment_rates"]:
+            first = info["segment_rates"][0]
+            sheet_rate = first["rate"]
+            rate_method = "AB-first"
+            allfiles = ", ".join(s2["file"].replace(".labels.tsv", "")
+                                 for s2 in info["segment_rates"])
+            notes.append("A/B pairs in %d captures (%s); using the first (%s)"
+                         % (len(info["segment_rates"]), allfiles,
+                            first["file"].replace(".labels.tsv", "")))
+        # Owner rule (2026-08-18): duplicate designated letters inside ONE
+        # capture are a data problem to surface, not silently last-wins.
+        dup_counts = {}
+        for pr in info["pairs"]:
+            if pr["label"] in ("A", "B"):
+                key = (pr["file"], pr["label"])
+                dup_counts[key] = dup_counts.get(key, 0) + 1
+        for (fn, lab), n in sorted(dup_counts.items()):
+            if n > 1:
+                notes.append("%dx %s rows in %s (last by original time wins)"
+                             % (n, lab, fn.replace(".labels.tsv", "")))
         rate = (1.0 / float(sheet_rate)) if sheet_rate and sheet_rate > 0 else None
         for pr in info["pairs"]:
             pr_stem = pr["file"].replace(".labels.tsv", "")
@@ -125,7 +157,9 @@ def list_placed(stem=None, labels_dir=None, audit_json=None):
                 continue
             entry = by_pair.setdefault((pr_stem, num), {
                 "stem": pr_stem, "orig": num, "rate": rate,
-                "rate_method": info["rate_method"], "points": []})
+                "rate_method": rate_method, "points": []})
+            if notes and "rate_note" not in entry:
+                entry["rate_note"] = "; ".join(notes)
             entry["points"].append(_point(num, pr, pr_stem, starts, grades))
     pairs = []
     for key in sorted(by_pair):
