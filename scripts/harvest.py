@@ -351,14 +351,41 @@ def stamp_pool(state):
     working cache holds work-in-progress, ~1 file). Rides `_remote_keys()`'s ≤15-min session
     cache -- no extra bucket listing, and the player never needs AWS creds; when the store is
     dark or the listing failed, the previous stamp (with its honest `at`) is left standing.
-    Returns True when the stamped COUNT changed, so a caller with no other reason to save
-    knows this one is worth persisting."""
+    Returns True when the stamp changed, so a caller with no other reason to save knows this
+    one is worth persisting.
+
+    Also stamps the count's BREAKDOWN, because the bare number confused exactly the person it
+    was for (a bucket bigger than the scored ledger read as loss; it was the opposite):
+      * `retired`  -- signatures whose candidate the search is permanently done with (the
+                      RULED_ON flags + own-clips, the same retirement `unscored_pairs` honours:
+                      heard, discarded, ignored, duplicate, not_a_match);
+      * `canary`   -- the live self-test's known record, uploaded like any other but never a
+                      candidate;
+      * `active`   -- the rest: signatures still in play for every future mystery.
+    Sig keys are content-addressed from the URL, so membership is a hash, not a fetch.
+    The three always partition `count` (the canary is excluded from `retired` even when its
+    URL is also in the queue). If the QUEUE cannot be read, the breakdown is omitted rather
+    than fabricated -- and when the count did not move either, the prior stamp stands whole."""
     remote = _remote_keys()
     if remote is None:
         return False
-    prev = (state.get("pool") or {}).get("count")
-    state["pool"] = {"count": len(remote), "at": _now()}
-    return state["pool"]["count"] != prev
+    prev = state.get("pool") or {}
+    pool = {"count": len(remote), "at": _now()}
+    _, retired_urls, queue_ok = listen_queue_split_checked()
+    if queue_ok:
+        canary_url = (os.environ.get("NETRADIO_CANARY_URL") or "").strip()
+        canary_key = _sig_key(canary_url) if canary_url else None
+        canary = 1 if canary_key and canary_key in remote else 0
+        retired_keys = {_sig_key(u) for u in retired_urls}
+        retired_keys.discard(canary_key)
+        retired = len(retired_keys & remote)
+        pool.update(retired=retired, canary=canary,
+                    active=pool["count"] - retired - canary)
+    elif prev.get("count") == pool["count"]:
+        return False              # queue dark, count unmoved: the honest prior stamp stands
+    state["pool"] = pool
+    return any(pool.get(k) != prev.get(k)
+               for k in ("count", "retired", "canary", "active"))
 
 
 def _load_sig(url):
@@ -914,8 +941,20 @@ def listen_queue_split():
     Reads whichever layout NETRADIO_LISTEN_QUEUE names (single file, merged view, or sharded
     dir/manifest -- see _load_queue_items).
     """
+    candidates, retired, _ = listen_queue_split_checked()
+    return candidates, retired
+
+
+def listen_queue_split_checked():
+    """(candidates, retired, ok) -- listen_queue_split plus an honesty bit. ok=False means the
+    queue is MISSING or UNREADABLE; an empty queue reads ok=True with empty results.
+
+    Empty-on-failure is the right contract for the search loop (a weird queue is "try again
+    next pass", not a dead harvester) -- but a publisher of DERIVED facts must not mistake
+    "could not read" for "nothing there": stamp_pool uses the bit so a torn queue read can't
+    republish every ruled-out signature as active."""
     if not LISTEN_QUEUE or not os.path.exists(LISTEN_QUEUE):
-        return [], set()
+        return [], set(), False
     try:
         items = _load_queue_items()
     except (OSError, ValueError, TypeError, AttributeError):
@@ -923,7 +962,7 @@ def listen_queue_split():
         # _load_queue_items raise ValueError). TypeError/AttributeError = the final net for any
         # shape this code did not think of -- the docstring says NEVER raises, so make it true;
         # a weird queue is "empty, try again next pass", not a dead harvester.
-        return [], set()
+        return [], set(), False
 
     candidates, retired = [], set()
     for it in items:
@@ -941,7 +980,7 @@ def listen_queue_split():
                                          # passes, so nothing here drops it from pending.
         else:
             candidates.append(url)
-    return candidates, retired
+    return candidates, retired, True
 
 
 def sync_listen_queue(q):

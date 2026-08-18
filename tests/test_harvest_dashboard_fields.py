@@ -97,6 +97,66 @@ class PoolStamp(unittest.TestCase):
         self.assertFalse(harvest.stamp_pool(state))
         self.assertEqual(state["pool"]["count"], 4244)      # the honest last stamp stands
 
+    def _breakdown_world(self, retired=("https://y/ruled", "https://y/neverfetched")):
+        """Four sigs in the bucket: two live candidates, one retired, the canary. A fifth
+        retired URL was never fetched -- it must not count (its sig is in no bucket)."""
+        urls = ("https://y/active1", "https://y/active2", "https://y/ruled", "https://y/canary")
+        harvest._remote_keys = lambda max_age_s=900: {harvest._sig_key(u) for u in urls}
+        self.addCleanup(setattr, harvest, "listen_queue_split_checked",
+                        harvest.listen_queue_split_checked)
+        harvest.listen_queue_split_checked = lambda: ([], set(retired), True)
+        self.addCleanup(os.environ.pop, "NETRADIO_CANARY_URL", None)
+        os.environ["NETRADIO_CANARY_URL"] = "https://y/canary"
+
+    def test_stamps_the_breakdown_not_just_the_count(self):
+        # The bare count confused exactly the person it was for (bucket > scored ledger read
+        # as loss; it was retired-candidates + canary). The stamp now says so itself.
+        self._breakdown_world()
+        state = {}
+        self.assertTrue(harvest.stamp_pool(state))
+        p = state["pool"]
+        self.assertEqual((p["count"], p["active"], p["retired"], p["canary"]), (4, 2, 1, 1))
+
+    def test_a_breakdown_change_alone_is_worth_a_save(self):
+        # Same COUNT, one candidate newly ruled out -> the stamp changed and must persist.
+        self._breakdown_world()
+        state = {}
+        harvest.stamp_pool(state)
+        harvest.listen_queue_split_checked = \
+            lambda: ([], {"https://y/ruled", "https://y/active1"}, True)
+        self.assertTrue(harvest.stamp_pool(state))
+        self.assertEqual((state["pool"]["active"], state["pool"]["retired"]), (1, 2))
+        self.assertFalse(harvest.stamp_pool(state))         # and settles once recorded
+
+    def test_a_retired_canary_still_partitions_the_count(self):
+        # The canary's URL can sit in the queue (heard, own-clip) -- counting it in BOTH
+        # buckets once produced active=-1. The categories must partition, whatever overlaps.
+        self._breakdown_world(retired=("https://y/ruled", "https://y/canary"))
+        state = {}
+        self.assertTrue(harvest.stamp_pool(state))
+        p = state["pool"]
+        self.assertEqual((p["count"], p["active"], p["retired"], p["canary"]), (4, 2, 1, 1))
+        self.assertEqual(p["active"] + p["retired"] + p["canary"], p["count"])
+        self.assertGreaterEqual(p["active"], 0)
+
+    def test_an_unreadable_queue_never_fabricates_a_breakdown(self):
+        # A torn queue read is "could not read", not "nothing retired" -- republishing every
+        # ruled-out signature as active would overwrite the last honest stamp.
+        self._breakdown_world()
+        state = {}
+        harvest.stamp_pool(state)
+        before = dict(state["pool"])
+        harvest.listen_queue_split_checked = lambda: ([], set(), False)
+        self.assertFalse(harvest.stamp_pool(state))          # count unmoved: stamp stands whole
+        self.assertEqual(state["pool"], before)
+        # count moved while the queue is dark: fresh count, breakdown honestly ABSENT
+        harvest._remote_keys = lambda max_age_s=900: before and {
+            harvest._sig_key(u) for u in ("https://y/active1", "https://y/active2")}
+        self.assertTrue(harvest.stamp_pool(state))
+        self.assertEqual(state["pool"]["count"], 2)
+        for k in ("active", "retired", "canary"):
+            self.assertNotIn(k, state["pool"])
+
 
 @unittest.skipUnless(harvest and HAVE_LIBROSA,
                      "librosa unavailable -- see requirements-streamalign.txt")
