@@ -23,6 +23,11 @@ Protocol (JSON lines):
      "stem": ..., "orig": N, "rate": ..., "invert": ...,
      "points": [[stream_s, orig_s], ...],              # AP-10 (capped list)
      "id": anything}              -> the build_overview dict (or {"error": ...})
+    {"op": "placed",
+     "stem": optional capture stem (omit for every capture),
+     "id": anything}              -> placed.list_placed's dict (AP-26; label
+                                     bookkeeping only -- touches no audio and
+                                     leaves the pair cache alone)
 
 All parameter guards are inspect_slice's own (`_check_params` + the per-mode
 clamps) -- the DSP is never duplicated here, and a bad request answers
@@ -36,7 +41,7 @@ import sys
 from . import audio as _audio
 from . import inspect_slice as _isl
 
-OPS = ("ping", "slice", "refine", "context", "overview")
+OPS = ("ping", "slice", "refine", "context", "overview", "placed")
 
 
 class PairCache:
@@ -86,6 +91,12 @@ def handle(req, cache, sources_dir):
     if op not in OPS:
         return {"error": "unknown op %r" % (op,)}
     try:
+        if op == "placed":
+            # AP-26: pure label bookkeeping -- no audio, no pair cache, and the
+            # grades come from the server-side default report (never a client path)
+            from . import placed as _placed
+            return _placed.list_placed(req.get("stem"),
+                                       audit_json=_placed.default_audit_json())
         # coerce + guard the numeric inputs THIS op uses at the request boundary,
         # with inspect_slice's own guards, BEFORE any decode/resample happens: a
         # malformed rate must answer "rate out of range" promptly, not buy a full

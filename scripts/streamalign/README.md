@@ -160,11 +160,23 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints d376-395 72 --dry
   the original's envelope piecewise-linearly stretched between the given sync
   points (head/tail extrapolated along `--rate`, clamped to the capture).
 - **`inspect-worker`** — the keep-warm form of `inspect-slice`: a long-lived
-  process reading JSON-lines requests on stdin (`op: slice|refine|context|overview`, same
-  fields and guards) and writing one JSON response line each, holding the decoded
-  stream + rate-corrected original for the current (stem, orig, rate) pair so
-  repeat requests skip the decode/resample cost. The player spawns it and falls
-  back to one-shot `inspect-slice` subprocesses when it can't start.
+  process reading JSON-lines requests on stdin
+  (`op: slice|refine|context|overview|placed`, same fields and guards) and writing
+  one JSON response line each, holding the decoded stream + rate-corrected
+  original for the current (stem, orig, rate) pair so repeat requests skip the
+  decode/resample cost (`placed` is label bookkeeping only — it touches no audio
+  and leaves the pair cache alone). The player spawns it and falls back to
+  one-shot subprocesses when it can't start.
+- **`placed [STEM]`** — AP-26 review-tool data source: the hand-placed
+  `origNNN sync:`/`track sync:` marker pairs as JSON, per capture stem ×
+  original — marker key, capture-local stream instant, original-native instant
+  reconstructed from the `origNNN start:` bookkeeping (exactly `sync-audit`'s
+  seat math), a per-point `derivable` flag with the reason when false, the
+  ` verified` token, and the audited verdict/confidence where a saved repo-root
+  `sync-audit.json` (`sync-audit --json sync-audit.json`; gitignored) knows the
+  point. The reported rate is original-seconds-per-stream-second (1 / the sheet
+  speed — the match-hints summary / `inspect-slice --rate` convention).
+  Read-only and DSP-free; no audio is opened.
 - **`sync-audit`** — grade every hand `origNNN sync:` point against the audio (seat
   confidence, hand bookkeeping error, inspector residuals; see
   [SYNC_SWEEP_CALIBRATION.md](./SYNC_SWEEP_CALIBRATION.md)). Each point also reports

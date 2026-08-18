@@ -45,8 +45,16 @@
 
   .venv/bin/python -m streamalign inspect-worker --sources sources_local
       AP-08 keep-warm worker: JSON-lines requests on stdin (op: slice|refine|
-      context|overview, same fields/guards as inspect-slice), one JSON response line each;
-      holds the current (stem, orig, rate) pair's decoded audio between requests.
+      context|overview|placed, same fields/guards as inspect-slice/placed), one JSON
+      response line each; holds the current (stem, orig, rate) pair's decoded audio
+      between requests.
+
+  python3 -m streamalign placed [d376-395]
+      AP-26 review-tool data source: the hand-placed original<->capture sync pairs
+      (the `origNNN sync:`/`track sync:` marker pairs sync-audit grades) as JSON --
+      per stem x original: rate + per-point stream/original-native instants, a
+      derivable flag, and the saved sync-audit grade where sync-audit.json exists
+      (--audit-json overrides). Label bookkeeping only: read-only, no audio opened.
 
 Run from the repo's scripts/ dir or with scripts/ on PYTHONPATH.
 """
@@ -306,6 +314,16 @@ def _cmd_inspect_slice(args):
 def _cmd_inspect_worker(args):
     from . import inspect_worker as _iw
     _iw.serve(args.sources)
+
+
+def _cmd_placed(args):
+    from . import placed as _placed
+    audit = args.audit_json if args.audit_json is not None \
+        else _placed.default_audit_json()
+    out = _placed.list_placed(args.stem, labels_dir=args.labels, audit_json=audit)
+    print(json.dumps(out))
+    if "error" in out:
+        raise SystemExit(1)
 
 
 def _cmd_hints(args):
@@ -626,10 +644,22 @@ def main(argv=None):
 
     pw = sub.add_parser("inspect-worker",
                         help="AP-08: keep-warm DSP worker -- JSON-lines requests on stdin "
-                             "(op: slice|refine|context, same fields as inspect-slice), one "
-                             "JSON response line each; caches the current (stem, orig, "
-                             "rate) pair's decoded audio between requests")
+                             "(op: slice|refine|context|overview|placed, same fields as "
+                             "inspect-slice/placed), one JSON response line each; caches "
+                             "the current (stem, orig, rate) pair's decoded audio between "
+                             "requests")
     pw.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
+
+    pp = sub.add_parser("placed",
+                        help="AP-26: list the hand-placed original<->capture sync pairs "
+                             "as JSON (per stem x original: rate, per-point stream/"
+                             "original-native instants, derivable flag, sync-audit grade "
+                             "where a saved report exists). Read-only; no audio opened")
+    pp.add_argument("stem", nargs="?", default=None,
+                    help="limit to one capture stem (default: every capture)")
+    pp.add_argument("--audit-json", default=None,
+                    help="saved `sync-audit --json` report for the grades "
+                         "(default: sync-audit.json at the repo root, when present)")
 
     ph = sub.add_parser("hints",
                         help="emit <stem>.hints.tsv: suggested sync/start/end/skips + questions "
@@ -648,6 +678,7 @@ def main(argv=None):
      "match-hints": _cmd_match_hints,
      "inspect-slice": _cmd_inspect_slice,
      "inspect-worker": _cmd_inspect_worker,
+     "placed": _cmd_placed,
      "sync-audit": _cmd_sync_audit,
      "sync-sweep": _cmd_sync_sweep}[args.cmd](args)
 
