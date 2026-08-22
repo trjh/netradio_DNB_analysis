@@ -619,7 +619,7 @@ The `labels/` tree is layered by **who may write where** (the AP-30 layout):
 | Path | Holds | Written by | Regenerable? |
 |---|---|---|---|
 | `labels/` (root) | the authoritative `<stem>.labels.tsv` (+ `sort_tsv.py`, `publish.py`) | **you**, by hand, via Audacity + the fold | **no — the record of truth** |
-| `labels/automated/` | every script's label emissions — the `match-hints` pairs, `hints`, future tools | the analysis scripts; freely overwritten on re-run | yes — pure machine output |
+| `labels/automated/` | script suggestion output — the `match-hints` pairs, `hints`, future tools (NOT `.auto.labels.tsv`, which reaches the sheet and stays at the root) | the analysis scripts; freely overwritten on re-run | yes — pure machine output |
 | `labels/review/` | `<stem>.origNNN.review.tsv` — machine context + hand notations from the align review surfaces | the companion player's review-note route (auto-committed via its `review_sync`) | **no — hand judgement; the reason it is in git** |
 | `labels/summary/` | ONE importable label set per audio file (`<stem>.summary.tsv` / `origNNN.summary.tsv`), compiled from `automated/` + `review/` | the export compile (companion player project) | yes — derived; committed for phone visibility + DR |
 

@@ -583,7 +583,8 @@ def main(argv=None):
                     help="pre-exported match:a_b CSV (else sonic-annotator is run)")
     pm.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
     pm.add_argument("--anchors", type=int, default=8, help="sync points to emit")
-    pm.add_argument("--out", default=None, help="output dir (default: labels dir)")
+    pm.add_argument("--out", default=None,
+                    help="output dir (default: labels/automated/)")
     pm.add_argument("--dry-run", action="store_true",
                     help="print the hint rows instead of writing files")
 
@@ -667,7 +668,8 @@ def main(argv=None):
                         help="emit <stem>.hints.tsv: suggested sync/start/end/skips + questions "
                              "to import alongside your hand labels (never overwrites them)")
     ph.add_argument("stem", help="capture stem to hint, e.g. d356-375")
-    ph.add_argument("--out", default=None, help="output dir (default: labels dir)")
+    ph.add_argument("--out", default=None,
+                    help="output dir (default: labels/automated/)")
     ph.add_argument("--dry-run", action="store_true",
                     help="print the hint rows instead of writing the file")
 
