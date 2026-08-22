@@ -66,7 +66,7 @@ make align-env        # ONCE per machine: the librosa venv (python3.13)
 
 set -a && . ./.env_vars && set +a
 PYTHONPATH=scripts .venv/bin/python -m streamalign hints <stem>
-# -> labels/<stem>.hints.tsv    Audacity: File ▸ Import ▸ Labels
+# -> labels/automated/<stem>.hints.tsv    Audacity: File ▸ Import ▸ Labels
 ```
 
 Warnings:
@@ -81,8 +81,9 @@ Need-to-know:
   candidates** (moments an original plays *alone* — a ready-made `track sync:`/`origNNN sync:`
   pair, see step 9); `note QUESTION:` wherever it cannot corroborate.
 - Every row carries confidence (`confidence 9.8/10`) and is marked `HINT`.
-- **Hints never touch your labels.** `<stem>.hints.tsv` is gitignored scratch, invisible to
-  solve/build/sheet. Import, copy what you accept, delete the rest.
+- **Hints never touch your labels.** `labels/automated/<stem>.hints.tsv` is machine output
+  (committed since AP-30, freely overwritten on re-run), invisible to solve/build/sheet.
+  Import, copy what you accept — a re-run replaces the file.
 - Three sources, three trust levels: **audio cross-correlation** (measured — strongest);
   **your own previous labels** (as good as that label); **the 1998/2017 notes** (approximate —
   always confirm). Hints for file N+1 get better once you finish file N; just re-run.
@@ -227,9 +228,10 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> <NNN> [<NN
 PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> --all   # batch: every overlapping track with an original
 ```
 
-Each track gets a **paired** hints file: `<stem>.origNNN.match.hints.tsv` (`track sync:`
-rows at capture-local times + proposed `origNNN start:`/`end:`) and
-`origNNN.<stem>.match.hints.tsv` (`origNNN sync:` rows at original-local seconds). The
+Each track gets a **paired** hints file in `labels/automated/`:
+`<stem>.origNNN.match.hints.tsv` (`track sync:` rows at capture-local times + proposed
+per-sync-point `origNNN start:`/`end:` seats) and `origNNN.<stem>.match.hints.tsv`
+(`origNNN sync:` rows at original-local seconds). The
 stream is trimmed to the original's expected neighbourhood first — auto-derived from the
 track's master span and the capture's placement, or `--around <seconds>` when the track
 isn't placed yet.
@@ -612,17 +614,29 @@ mention any original; put genuine cross-references in the primary track.
 
 ## File-naming: who owns what
 
+The `labels/` tree is layered by **who may write where** (the AP-30 layout):
+
+| Path | Holds | Written by | Regenerable? |
+|---|---|---|---|
+| `labels/` (root) | the authoritative `<stem>.labels.tsv` (+ `sort_tsv.py`, `publish.py`) | **you**, by hand, via Audacity + the fold | **no — the record of truth** |
+| `labels/automated/` | every script's label emissions — the `match-hints` pairs, `hints`, future tools | the analysis scripts; freely overwritten on re-run | yes — pure machine output |
+| `labels/review/` | `<stem>.origNNN.review.tsv` — machine context + hand notations from the align review surfaces | the companion player's review-note route (auto-committed via its `review_sync`) | **no — hand judgement; the reason it is in git** |
+| `labels/summary/` | ONE importable label set per audio file (`<stem>.summary.tsv` / `origNNN.summary.tsv`), compiled from `automated/` + `review/` | the export compile (companion player project) | yes — derived; committed for phone visibility + DR |
+
 | File | Written by | Committed? | Authority |
 |---|---|---|---|
 | `<stem>.labels.tsv` | **you**, by hand | **yes** | authoritative; nothing may overwrite it. Reaches the sheet. |
 | `<stem>.auto.labels.tsv` | engine (`tail-solve --emit`) | yes | regenerable; consumed by solve/build. Reaches the sheet. |
 | `<stem>.starter.labels.tsv` | `sort_tsv.py` / `starter` | gitignored | seed only; excluded everywhere |
-| `<stem>.hints.tsv` | `streamalign hints` | gitignored | suggestions + questions; invisible to solve/build/sheet |
-| `<stem>.origNNN.match.hints.tsv` + `origNNN.<stem>.match.hints.tsv` | `streamalign match-hints` (step 9 Pass 1) | gitignored | paired sync-point proposals; invisible to solve/build/sheet |
+| `automated/<stem>.hints.tsv` | `streamalign hints` | **yes** | suggestions + questions; invisible to solve/build/sheet |
+| `automated/<stem>.origNNN.match.hints.tsv` + `automated/origNNN.<stem>.match.hints.tsv` | `streamalign match-hints` (step 9 Pass 1) | **yes** | paired sync-point proposals; invisible to solve/build/sheet |
+| `review/<stem>.origNNN.review.tsv` | the align review surfaces (player) | **yes** | hand notations; folded into the hand labels manually |
+| `summary/<stem>.summary.tsv` / `summary/origNNN.summary.tsv` | the export compile (player) | **yes** | derived; the one label set the Audacity review imports |
 
-The sheet importer (`sheetscript/Code.js`) reads **only** `*.labels.tsv` (incl. `.auto.`) +
-the hand-kept `remainder.tsv` — mirroring `groundtruth.is_pipeline_label_file`. A bare
-`<stem>.tsv`, starters and hints are all excluded.
+The sheet importer (`sheetscript/Code.js`) reads **only** the root's `*.labels.tsv` (incl.
+`.auto.`) + the hand-kept `remainder.tsv` — mirroring `groundtruth.is_pipeline_label_file`;
+it never descends into the subdirectories. A bare `<stem>.tsv`, starters, hints, review and
+summary files are all excluded.
 
 ---
 

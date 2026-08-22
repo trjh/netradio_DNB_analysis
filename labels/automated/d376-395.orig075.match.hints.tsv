@@ -1,0 +1,27 @@
+0.000000	0.000000	note HINT: orig075 via MATCH+PHAT: rate 0.99885 (original runs -0.12% vs stream), polarity INVERTED (flip the original before a null test), 6 anchors HINT
+765.157166	765.157166	orig075 start: 1 confidence 2.3/10
+765.166491	765.166491	orig075 start: 2 confidence 1.8/10
+765.176194	765.176194	orig075 start: 3 confidence 2.2/10
+765.191305	765.191305	orig075 start: 4 confidence 1.9/10
+765.205316	765.205316	orig075 start: 5 confidence 2.2/10
+765.218589	765.218589	orig075 start: 6 confidence 2.1/10
+851.063310	851.063310	track sync: 1 verified confidence 2.3/10 MATCH -3.077s
+851.063310	851.063310	note QUESTION: MATCH and PHAT disagree at sync 1: the MATCH path puts orig075 -3.077 s away from the PHAT anchor's position. PHAT stays primary; check this anchor by ear before trusting either. HINT
+851.063310	901.063310	note QUESTION: orig075 anchors cover only 7% of the possible overlap -- on loop-heavy material this can be a loop-shifted (wrong-repetition) alignment; verify one anchor at a structurally unique moment (intro/breakdown) by ear HINT
+861.063310	861.063310	track sync: 2 verified confidence 1.8/10 MATCH +2.973s
+861.063310	861.063310	note QUESTION: MATCH and PHAT disagree at sync 2: the MATCH path puts orig075 +2.973 s away from the PHAT anchor's position. PHAT stays primary; check this anchor by ear before trusting either. HINT
+871.063310	871.063310	track sync: 3 verified confidence 2.2/10 MATCH +2.973s
+871.063310	871.063310	note QUESTION: MATCH and PHAT disagree at sync 3: the MATCH path puts orig075 +2.973 s away from the PHAT anchor's position. PHAT stays primary; check this anchor by ear before trusting either. HINT
+881.063310	881.063310	track sync: 4 verified confidence 1.9/10 MATCH +2.988s
+881.063310	881.063310	note QUESTION: MATCH and PHAT disagree at sync 4: the MATCH path puts orig075 +2.988 s away from the PHAT anchor's position. PHAT stays primary; check this anchor by ear before trusting either. HINT
+891.063310	891.063310	track sync: 5 verified confidence 2.2/10 MATCH +3.031s
+891.063310	891.063310	note QUESTION: MATCH and PHAT disagree at sync 5: the MATCH path puts orig075 +3.031 s away from the PHAT anchor's position. PHAT stays primary; check this anchor by ear before trusting either. HINT
+901.063310	901.063310	track sync: 6 verified confidence 2.1/10 MATCH +6.025s
+901.063310	901.063310	note QUESTION: MATCH and PHAT disagree at sync 6: the MATCH path puts orig075 +6.025 s away from the PHAT anchor's position. PHAT stays primary; check this anchor by ear before trusting either. HINT
+1200.000000	1200.000000	note QUESTION: orig075 ends 285.914 s AFTER this capture's last sample HINT
+1485.852166	1485.852166	orig075 end: 1 confidence 2.3/10
+1485.861491	1485.861491	orig075 end: 2 confidence 1.8/10
+1485.871194	1485.871194	orig075 end: 3 confidence 2.2/10
+1485.886305	1485.886305	orig075 end: 4 confidence 1.9/10
+1485.900316	1485.900316	orig075 end: 5 confidence 2.2/10
+1485.913589	1485.913589	orig075 end: 6 confidence 2.1/10

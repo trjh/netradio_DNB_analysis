@@ -1,0 +1,17 @@
+0.000000	0.000000	note HINT: orig073 via MATCH+PHAT: rate 0.99246 (original runs -0.75% vs stream), polarity not inverted, 5 anchors HINT
+214.047249	214.047249	orig073 start: 1 confidence 2.4/10
+214.357788	214.357788	orig073 start: 2 confidence 2.6/10
+214.949959	214.949959	orig073 start: 3 confidence 6.1/10
+215.483022	215.483022	orig073 start: 4 confidence 4.3/10
+215.948189	215.948189	orig073 start: 5 confidence 2.7/10
+309.243832	309.243832	track sync: 1 verified confidence 2.4/10 MATCH -40.937s
+309.243832	569.243832	note QUESTION: the MATCH path disagrees with the PHAT anchors by a median -39.2 s across the whole overlap -- MATCH's forced files-start-together failure mode, not 5 separate disputes. PHAT stays primary; the per-anchor MATCH deltas are relative to that globally-off path. HINT
+359.243832	359.243832	track sync: 2 verified confidence 2.6/10 MATCH -40.396s
+439.243832	439.243832	track sync: 3 verified confidence 6.1/10 MATCH -39.244s
+509.243832	509.243832	track sync: 4 verified confidence 4.3/10 MATCH -38.181s
+569.243832	569.243832	track sync: 5 verified confidence 2.7/10 MATCH -37.246s
+604.492249	604.492249	orig073 end: 1 confidence 2.4/10
+604.802788	604.802788	orig073 end: 2 confidence 2.6/10
+605.394959	605.394959	orig073 end: 3 confidence 6.1/10
+605.928022	605.928022	orig073 end: 4 confidence 4.3/10
+606.393189	606.393189	orig073 end: 5 confidence 2.7/10

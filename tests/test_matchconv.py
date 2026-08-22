@@ -343,6 +343,15 @@ class TestHintFilenames(unittest.TestCase):
     original-side name meant run 2 silently destroyed run 1's original-side
     hints (review finding, 2026-07-31)."""
 
+    def test_default_out_dir_is_labels_automated(self):
+        # AP-30: script emissions land in labels/automated/ (committed); the
+        # labels/ root stays hand-authoritative. --labels moves the whole
+        # root and automated/ rides along; --out still overrides outright.
+        self.assertEqual(gt.automated_dir("/x/labels"),
+                         os.path.join("/x/labels", "automated"))
+        self.assertTrue(gt.automated_dir().endswith(
+            os.path.join("labels", "automated")))
+
     def test_orig_side_is_capture_specific(self):
         s1, o1 = mc.hint_filenames("d376-395", 72)
         s2, o2 = mc.hint_filenames("d356-375", 72)

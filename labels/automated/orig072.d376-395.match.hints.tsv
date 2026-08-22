@@ -1,0 +1,9 @@
+0.000000	0.000000	note HINT: orig072 via MATCH+PHAT: rate 1.02046 (original runs +2.05% vs stream), polarity INVERTED (flip the original before a null test), 8 anchors; times are original-local seconds HINT
+105.992413	105.992413	orig072 sync: 1 verified confidence 5.9/10 MATCH -35.372s
+136.600683	136.600683	orig072 sync: 2 verified confidence 6.8/10 MATCH -37.061s
+146.803487	146.803487	orig072 sync: 3 verified confidence 6.6/10 MATCH -37.463s
+208.009668	208.009668	orig072 sync: 4 verified confidence 6.7/10 MATCH -39.850s
+228.425122	228.425122	orig072 sync: 5 verified confidence 6.1/10 MATCH -40.665s
+259.038722	259.038722	orig072 sync: 6 verified confidence 4.5/10 MATCH -51.739s
+320.267591	320.267591	orig072 sync: 7 verified confidence 5.1/10 MATCH -56.108s
+330.487253	330.487253	orig072 sync: 8 verified confidence 4.9/10 MATCH -56.507s
