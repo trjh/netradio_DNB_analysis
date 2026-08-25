@@ -185,8 +185,9 @@ PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> <NNN>   # 
 PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> --all   # batch: every overlapping track with an original
 ```
 
-**What you get:** a paired hints file per track — `<stem>.origNNN.match.hints.tsv` +
-`origNNN.<stem>.match.hints.tsv` (gitignored hints, **never** labels): `track sync:` /
+**What you get:** a paired hints file per track in `labels/automated/` —
+`<stem>.origNNN.match.hints.tsv` + `origNNN.<stem>.match.hints.tsv` (committed machine
+output since AP-30, freely overwritten on re-run — hints, **never** labels): `track sync:` /
 `origNNN sync:` anchor pairs carrying ` verified confidence n/10`, proposed
 `origNNN start:`/`end:` rows — one pair per sync point, each naming its point's marker
 number plus `confidence n/10`. These are **native clip seats** (where the unstretched
@@ -304,7 +305,7 @@ runs `GithubImport()`), else it prints the **Reload Data** reminder.
 | re-place captures / score the engine | `streamalign groundtruth \| validate \| align` | notate | — (read-only) |
 | place the unlabelled tail (loop-wrap anchor) | `streamalign tail-solve` (`--emit` to write labels) | notate | — (read-only; `--emit` → `<stem>.auto.labels.tsv`) |
 | resolve skips | `streamalign skip-clips \| skip-confirm \| skip-reject` | notate | clips / hand `.labels.tsv` / rejections |
-| seat an original in a capture (paired sync points) | `streamalign match-hints` → verify in the player's `/align` | notate | `*.match.hints.tsv` (gitignored) |
+| seat an original in a capture (paired sync points) | `streamalign match-hints` → verify in the player's `/align` | notate | `labels/automated/*.match.hints.tsv` |
 | original↔mix rate | `streamalign track-mix` | notate | — (read-only) |
 | **rebuild `track-metadata.json`** | `build_track_metadata.py` | **build** | **`track-metadata.json`** |
 | refresh missing-originals inventory | `g4_missing_sources.py` | build/sourcing | inventory |

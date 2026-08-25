@@ -17,6 +17,17 @@ import re
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 LABELS_DIR = os.environ.get("NETRADIO_LABELS_DIR", os.path.join(REPO_ROOT, "labels"))
+AUTOMATED_DIRNAME = "automated"
+
+
+def automated_dir(labels_dir=None):
+    """AP-30: where script-emitted label files land — labels/automated/.
+
+    The labels/ root keeps only the hand-authoritative *.labels.tsv (plus the
+    two human tools); machine emissions live one level down where they may be
+    freely overwritten and are COMMITTED (no longer gitignored scratch).
+    """
+    return os.path.join(labels_dir or LABELS_DIR, AUTOMATED_DIRNAME)
 
 # A file-start sync row: `file [start] sync: NAME MASTER_OR_OFFSET [verified ...]`.
 # The trailing number after a row that sits at local 0.0 in its own file IS that

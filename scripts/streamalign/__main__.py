@@ -166,7 +166,9 @@ def _match_hints_one(stem, stream, orig_num, args, meta, master):
         for a, b, text in sorted(stream_rows + orig_rows, key=lambda r: (r[0], r[1])):
             print("%10.3f %10.3f  %s" % (a, b, text))
         return
-    out_dir = args.out or (args.labels or _gt.LABELS_DIR)
+    # AP-30: hints are script output -> labels/automated/ (committed), unless
+    # --out says otherwise. --labels moves the whole labels root, automated/ rides it.
+    out_dir = args.out or _gt.automated_dir(args.labels)
     os.makedirs(out_dir, exist_ok=True)
     s_name, o_name = _mc.hint_filenames(stem, orig_num)
     for rows, name in ((stream_rows, s_name), (orig_rows, o_name)):
@@ -333,7 +335,7 @@ def _cmd_hints(args):
         for a, b, text in sorted(rows, key=lambda r: (r[0], r[1])):
             print("%10.3f %10.3f  %s" % (a, b, text))
     else:
-        out_dir = args.out or (args.labels or _gt.LABELS_DIR)
+        out_dir = args.out or _gt.automated_dir(args.labels)   # AP-30
         os.makedirs(out_dir, exist_ok=True)
         path = _hints.write_hints(
             rows, os.path.join(out_dir, _audio.stem_of(args.stem) + ".hints.tsv"))
@@ -581,7 +583,8 @@ def main(argv=None):
                     help="pre-exported match:a_b CSV (else sonic-annotator is run)")
     pm.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
     pm.add_argument("--anchors", type=int, default=8, help="sync points to emit")
-    pm.add_argument("--out", default=None, help="output dir (default: labels dir)")
+    pm.add_argument("--out", default=None,
+                    help="output dir (default: labels/automated/)")
     pm.add_argument("--dry-run", action="store_true",
                     help="print the hint rows instead of writing files")
 
@@ -665,7 +668,8 @@ def main(argv=None):
                         help="emit <stem>.hints.tsv: suggested sync/start/end/skips + questions "
                              "to import alongside your hand labels (never overwrites them)")
     ph.add_argument("stem", help="capture stem to hint, e.g. d356-375")
-    ph.add_argument("--out", default=None, help="output dir (default: labels dir)")
+    ph.add_argument("--out", default=None,
+                    help="output dir (default: labels/automated/)")
     ph.add_argument("--dry-run", action="store_true",
                     help="print the hint rows instead of writing the file")
 
