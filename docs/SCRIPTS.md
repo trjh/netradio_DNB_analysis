@@ -95,9 +95,11 @@ own original, the change is wrong.
 ## The harvester
 
 ```bash
+make harvest-run                                                      # runs for weeks
+
 set -a && . ./.env_vars && set +a
 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --status
-PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --run          # runs for weeks
+MallocLargeCache=0 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --run
 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --pause        # / --resume
 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --purge-audio  # throw every retained excerpt away
 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --forget 7     # drop MT7's leads + pairings
@@ -213,6 +215,42 @@ process**, so a restarting harvester will ask for your password endlessly.
 *not* searching for, and the ruling buttons. The player **supervises** it — it adopts a
 hand-started harvester rather than spawning a second, and a watchdog revives it if it dies.
 `scripts/run_player.sh status` in the player repo reports it too.
+
+### How much memory it uses, and why
+
+Two `harvest.py` processes exist while a candidate is being fetched: the long-running parent
+(`--run`) and a **fetch child** (`--fetch-one URL --job DIR`), plus that child's `yt-dlp` and
+`ffmpeg`. The child does the whole fetch — download, decode, chroma, cache, upload — and exits.
+The parent, which holds the state, the queue and the matching board, never touches a track's
+audio, so its footprint stays flat across candidates rather than climbing to a high-water mark
+and staying there.
+
+Three things put the memory back:
+
+| What | Why it was needed |
+|---|---|
+| The tuning estimate runs 300 seconds at a time (`chroma_recipe.estimate_tuning_blockwise`) | `chroma_cqt` estimated the recording's distance from concert pitch over the **whole file** first, holding several copies of a 1025-row spectrogram with one column per 512 samples. Profiled on the development Mac, that one call accounted for about 9.8 GB of a 10.2 GB peak on a 117-minute candidate; the CQT itself cost about a tenth of it. The estimate returns the same float either way, so **every signature is byte-identical** and `RECIPE_VERSION` stays 1 — `tests/test_chroma_tuning.py` compares both against librosa's own whole-file path with `==` and `np.array_equal`. |
+| `MallocLargeCache=0` | macOS libmalloc keeps freed large blocks inside the process instead of returning them to the kernel. Python frees everything and the footprint does not move; under pressure those dirty pages get compressed and swapped. Measured on macOS 26.5.2 by allocating and freeing 800 MB of float32: 764 MB still held afterwards by default, 0 MB with the variable set. The variable is **undocumented**, which is why the harvester re-measures it on every start. |
+| ffmpeg writes the decoded PCM to a **file** in the job directory | The old path piped it through `communicate()`, which builds a chunk list and then joins it — two full copies of the audio at the moment of the join (1,034 MB held for 451 MB of PCM, measured). The parent reads the spool back as a memory map, and the file is unlinked as soon as it is mapped. Disk cost is 64 KB per second of audio, for as long as the candidate is being scored. |
+
+`make harvest-run` sets `MallocLargeCache=0` for you; the player's supervisor sets it too. It is
+read at process start, so setting it from inside a running harvester does nothing. On every start
+the harvester allocates and frees 800 MB and prints what the allocator kept — if that number goes
+back up after an OS upgrade, the variable has stopped working and an `issues` row says so.
+
+Each candidate leaves a row in `state["mem"]` (and the last 50 in `state["mem_log"]`): the
+parent's footprint, the parent's lifetime peak, and the fetch child's peak and final footprint.
+Set `NETRADIO_HARVEST_MEM_CEILING_MB` to have the **parent** stand down when it goes over that
+number — the player's watchdog then restarts it. It is **off by default**, because the right
+number depends on what a long candidate actually costs and that measurement has not been taken
+yet. A child over the ceiling only earns an `issues` row: its memory left with it.
+
+**Stopping it.** `Ctrl-C`, or `SIGTERM` to the parent's pid, now stops cleanly: the state is
+saved with phase `stopped (SIGTERM)`, the interrupted URL stays `pending`, and the fetch child
+stops **ffmpeg before yt-dlp**. That order matters — kill yt-dlp first and ffmpeg sees a clean
+EOF, exits 0 on a truncated stream, and a partial decode starts to look like a complete one. No
+signature is ever written unless yt-dlp exited 0, ffmpeg exited 0, the decode is long enough, and
+no stop was asked for. The player's `stop()` signals the whole process group and still works.
 
 ### The canary: does the matcher still WORK?
 
