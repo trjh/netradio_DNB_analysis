@@ -219,8 +219,8 @@ hand-started harvester rather than spawning a second, and a watchdog revives it 
 ### How much memory it uses, and why
 
 Two `harvest.py` processes exist while a candidate is being fetched: the long-running parent
-(`--run`) and a **fetch child** (`--fetch-one URL --job DIR`), plus that child's `yt-dlp` and
-`ffmpeg`. The child does the whole fetch — download, decode, chroma, cache, upload — and exits.
+(`--run`) and a **fetch child** (`--fetch-job DIR`), plus that child's `yt-dlp` and `ffmpeg`.
+The child does the whole fetch — download, decode, chroma, cache, upload — and exits.
 The parent, which holds the state, the queue and the matching board, never touches a track's
 audio, so its footprint stays flat across candidates rather than climbing to a high-water mark
 and staying there.
