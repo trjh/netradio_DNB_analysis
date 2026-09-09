@@ -233,6 +233,16 @@ Three things put the memory back:
 | `MallocLargeCache=0` | macOS libmalloc keeps freed large blocks inside the process instead of returning them to the kernel. Python frees everything and the footprint does not move; under pressure those dirty pages get compressed and swapped. Measured on macOS 26.5.2 by allocating and freeing 800 MB of float32: 764 MB still held afterwards by default, 0 MB with the variable set. The variable is **undocumented**, which is why the harvester re-measures it on every start. |
 | ffmpeg writes the decoded PCM to a **file** in the job directory | The old path piped it through `communicate()`, which builds a chunk list and then joins it — two full copies of the audio at the moment of the join (1,034 MB held for 451 MB of PCM, measured). The parent reads the spool back as a memory map, and the file is unlinked as soon as it is mapped. Disk cost is 64 KB per second of audio, for as long as the candidate is being scored. |
 
+The child's command line is `harvest.py --fetch-job <dir>` and the URL is **not on it** — it is
+handed over in the job directory. The player's supervisor finds a live harvester by matching
+`--run` as a substring of the whole `ps` line, and a YouTube id may legally contain `--run`, so a
+URL on the argv would be a way for a process that lives for one track to be adopted as the
+harvester. To run one fetch by hand, `--fetch-one URL --job DIR` still works.
+
+`NETRADIO_HARVEST_CHILD=0` runs the fetch in the harvester's own process instead of a child. It is
+for diagnosing a venv or environment problem in the child; it brings the memory back with it, so
+it is not for normal use.
+
 `make harvest-run` sets `MallocLargeCache=0` for you; the player's supervisor sets it too. It is
 read at process start, so setting it from inside a running harvester does nothing. On every start
 the harvester allocates and frees 800 MB and prints what the allocator kept — if that number goes

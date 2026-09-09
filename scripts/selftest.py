@@ -125,7 +125,9 @@ def was_stopped(err):
     """True when a fetch came back because it was interrupted, not because anything failed.
 
     Matched exactly, or as the tail of `establish_canary`'s "could not fetch <url>: <err>", so a
-    real error that happens to contain the word is not mistaken for a stop.
+    real error that happens to contain the word is not mistaken for a stop. `harvest.was_stopped`
+    is the same predicate; it is duplicated rather than imported because this module must never
+    import the harvester -- that is why `fetch` is injected.
     """
     e = (err or "").strip().lower()
     return e == STOPPED or e.endswith(": " + STOPPED)
