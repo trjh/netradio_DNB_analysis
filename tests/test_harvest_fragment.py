@@ -169,6 +169,43 @@ class TheFfmpegLeg(unittest.TestCase):
         yt = [a for a in seen if "yt-dlp" in a[0]][0]
         self.assertEqual(yt[-1], url)
 
+    def test_an_overlong_span_never_reaches_ffmpeg(self):
+        """The decode is the LAST door, and it refuses on the same terms as the queue door.
+
+        The queue never offers such a URL, but it is not the only way one arrives here -- a
+        hand-run `--fetch-one`, or a working queue written before this rule existed. Nothing is
+        spawned, so there is nothing to stop and nothing to clean up."""
+        spawned = []
+
+        def _popen(argv, **kwargs):
+            spawned.append(argv)
+            return _FakeProc(argv)
+
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            result = harvest._fetch_and_sign("https://y/watch?v=a#t=0,21600", self.job)
+        self.assertEqual(spawned, [])
+        self.assertFalse(result["ok"])
+        self.assertIn("too long", result["error"])
+        self.assertIn("6.0 h", result["error"])
+        self.assertFalse(os.path.exists(os.path.join(self.job, "pcm.f32le.part")))
+
+    def test_both_doors_ask_the_same_question(self):
+        """Not two thresholds that happen to agree today: one predicate, called twice. A URL the
+        queue refuses is refused by the decode, and one it admits is decoded."""
+        for url in ("https://y/a#t=0,21600", "https://y/a#t=0,14401", "https://y/a#t=0,600",
+                    "https://y/a#t=0,14400", "https://y/a", "https://y/a#t=x,y"):
+            with self.subTest(url=url):
+                refused_at_the_queue = harvest.too_long(url)
+                spawned = []
+
+                def _popen(argv, **kwargs):
+                    spawned.append(argv)
+                    return _FakeProc(argv)
+
+                with mock.patch.object(harvest.subprocess, "Popen", _popen):
+                    harvest._fetch_and_sign(url, self.job)
+                self.assertEqual(refused_at_the_queue, spawned == [])
+
 
 @unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
 class TheTooLongBackstop(unittest.TestCase):
@@ -191,13 +228,56 @@ class TheTooLongBackstop(unittest.TestCase):
         self.assertEqual(issues, [{"url": "https://y/master", "reason": "too_long"}])
 
     def test_a_chunk_of_that_same_master_is_accepted(self):
-        """Same audio, same length, split: the chunk is what the backstop exists to make happen."""
+        """Same audio, same length, split: the chunk is what the backstop exists to make happen.
+
+        Note the entry still declares the WHOLE master's duration, as a real one does. What will
+        be decoded is the span, so the span is what decides."""
         self._queue([{"url": "https://y/master#t=0,7200", "title": "6 HOUR SET [1/3]",
                       "duration": 21600}])
         issues = []
         cand, _ = harvest.listen_queue_split(issues)
         self.assertEqual(cand, ["https://y/master#t=0,7200"])
         self.assertEqual(issues, [])
+
+    def test_an_overlong_fragment_is_refused_like_any_other_long_audio(self):
+        """A fragment is a CLAIM made upstream, not proof that the entry is short.
+
+        `#t=0,21600` is six hours wearing a chunk's punctuation. Reading "it has a fragment" as
+        "it is a chunk, so it is short" is exactly the assumption a backstop exists to survive:
+        chunks are short *by construction*, and the construction lives upstream of here, where
+        it can be wrong, stale or hand-written."""
+        self._queue([{"url": "https://y/master#t=0,21600", "duration": 21600}])
+        issues = []
+        cand, retired = harvest.listen_queue_split(issues)
+        self.assertEqual(cand, [])
+        self.assertEqual(retired, set())
+        self.assertEqual(issues, [{"url": "https://y/master#t=0,21600", "reason": "too_long"}])
+
+    def test_a_late_chunk_is_measured_by_its_span_not_its_end(self):
+        """A slice near the end of a long master has big numbers on both ends and a modest span."""
+        self._queue([{"url": "https://y/m#t=18000,21600", "duration": 21600}])
+        cand, _ = harvest.listen_queue_split()
+        self.assertEqual(cand, ["https://y/m#t=18000,21600"])
+
+    def test_the_span_governs_when_the_two_disagree(self):
+        """An entry can carry both a declared duration and a span, and they can disagree. The
+        span is what ffmpeg is told to decode, so the span is what the refusal weighs; the
+        declared duration decides only when there is no fragment at all."""
+        # A short slice of a long master: accepted, despite the six-hour duration.
+        self.assertFalse(harvest.too_long("https://y/m#t=0,600", 21600))
+        # A long slice of something that claims to be short: refused, despite the duration.
+        self.assertTrue(harvest.too_long("https://y/m#t=0,21600", 60))
+        # No fragment: the declared duration is all there is, so it decides.
+        self.assertTrue(harvest.too_long("https://y/m", 21600))
+        self.assertFalse(harvest.too_long("https://y/m", 600))
+
+    def test_the_boundary_holds_at_exactly_four_hours(self):
+        """Four hours passes, a second more does not -- pinned so the comparison cannot drift
+        between `>` and `>=` unnoticed."""
+        self.assertFalse(harvest.too_long("https://y/m#t=0,14400"))
+        self.assertTrue(harvest.too_long("https://y/m#t=0,14401"))
+        self.assertFalse(harvest.too_long("https://y/m#t=600,15000"))
+        self.assertTrue(harvest.too_long("https://y/m#t=600,15001"))
 
     def test_a_long_mix_under_the_backstop_is_still_searched(self):
         """The rule is still that length is not a filter -- a record hides inside a DJ set, and

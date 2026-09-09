@@ -215,6 +215,47 @@ def media_fragment(url):
     return (start, end) if start < end else None
 
 
+# THE BACKSTOP, not the rule. The player splits audio longer than TWO hours into chunks; the
+# harvester refuses anything that would decode more than FOUR hours in one go. The two numbers are
+# deliberately different, because they answer different questions: two hours is where a set is
+# long enough that splitting it pays, four is where one decode costs more time, more memory and
+# more of a session than any single lead can be worth.
+MAX_DURATION_S = 4 * 3600
+
+
+def too_long(url, duration=None):
+    """True when analysing this URL would decode more than MAX_DURATION_S of audio.
+
+    WHICH LENGTH GOVERNS. A queue entry can carry both a declared `duration` and a fragment, and
+    they can disagree -- a chunk's entry may well repeat the whole master's duration. The
+    fragment's SPAN wins whenever there is one, because the span is what ffmpeg is actually told
+    to decode and therefore what this run will cost. A declared duration decides only when there
+    is no fragment, and a duration that is missing, non-numeric or a bool is no evidence of
+    length at all, so it never refuses.
+
+    A FRAGMENT IS A CLAIM, NOT A GUARANTEE. It would be easy to read "it has a fragment" as "it
+    is a chunk, so it is short" and stop there. That is exactly the assumption a backstop exists
+    to survive: chunks are short *by construction*, and the construction is upstream of here,
+    where it can be wrong, stale or hand-written. So the span is measured, never assumed --
+    `#t=0,21600` is six hours and is refused precisely like the unsplit master it was cut from.
+
+    ONE PREDICATE, TWO DOORS. This is called at the queue door (`listen_queue_split`, which never
+    offers a refused entry as a candidate) and again at the decode door (`_decode_and_sign`, the
+    last thing before ffmpeg is handed `-ss`/`-t`). Same function both times, so the two cannot
+    drift into disagreeing about what is acceptable -- a URL that reaches the decode by some
+    other route (a hand-run `--fetch-one`, a queue file written before this rule existed) is
+    refused there on identical terms.
+    """
+    cut = media_fragment(url)
+    if cut is not None:
+        seconds = cut[1] - cut[0]
+    elif isinstance(duration, bool) or not isinstance(duration, (int, float)):
+        return False
+    else:
+        seconds = duration
+    return seconds > MAX_DURATION_S
+
+
 # --- the signature ----------------------------------------------------------------------------
 
 def sig_path(url):
@@ -458,6 +499,17 @@ def _fetch_and_sign(url, job):
 
 def _decode_and_sign(url, job):
     """`_fetch_and_sign`'s body -- see there. Split out only so the stop state is always reset."""
+    # THE SECOND DOOR, and the last one before ffmpeg. `listen_queue_split` already refuses an
+    # entry this long, but it is not the only way a URL arrives here -- a hand-run `--fetch-one`,
+    # a working queue written before this rule existed, a caller yet to be written. Both doors
+    # call the SAME predicate, so neither can quietly decide that something the other refuses is
+    # fine after all. Refused before anything is spawned: nothing to stop, nothing to clean up.
+    if too_long(url):
+        # Only a fragment span can be judged here: this side sees a URL, never the queue entry's
+        # declared duration. A span is self-describing, which is what makes the check portable.
+        span = media_fragment(url)
+        return {"ok": False, "error": "too long: %.1f h in one slice -- refused, not truncated"
+                                      % ((span[1] - span[0]) / 3600.0)}
     os.makedirs(job, exist_ok=True)
     part = os.path.join(job, "pcm.f32le.part")
     pcm = os.path.join(job, "pcm.f32le")
@@ -1200,20 +1252,6 @@ LISTEN_QUEUE = os.environ.get("NETRADIO_LISTEN_QUEUE", "")
 RULED_ON = ("listened", "discarded", "ignored", "duplicate", "not_a_match")
 
 
-# THE BACKSTOP, not the rule. The player splits audio longer than TWO hours into chunk entries
-# (see `media_fragment`); the harvester refuses an unsplit master longer than FOUR. The two
-# numbers are deliberately different, because they answer different questions: two hours is where
-# a set is long enough that splitting it pays, four is where one entry costs more decode, more
-# memory and more of a session than any single lead can be worth. Every chunk is under this by
-# construction, so this only ever catches a long entry that arrived UNSPLIT -- an older queue
-# entry, or a duration the player could not read.
-#
-# The answer is to refuse the entry whole, never to analyse the first four hours of it and file
-# the result under the URL: a partial answer that looks like a complete one is the one outcome
-# this project cannot afford.
-MAX_DURATION_S = 4 * 3600
-
-
 # Tim's own channel, as it appears in a listen-queue entry's `origin`.
 OWN_ORIGINS = ("tim hunter", "trjh", "UCuYTatE2k5dOV8J8Bi3rK0g")
 
@@ -1318,19 +1356,6 @@ def _is_cooling(item):
     return ra_date > datetime.now(timezone.utc).date()
 
 
-def _too_long(item, url):
-    """True when this entry is an UNSPLIT master past MAX_DURATION_S -- refuse it, don't cut it.
-
-    A chunk carries its slice in the URL and is short by construction, so it never lands here.
-    A duration that is missing, unreadable or not a number is not evidence of length, so it is
-    not grounds for refusal either -- the entry goes to the matcher as it always did.
-    """
-    dur = item.get("duration")
-    if isinstance(dur, bool) or not isinstance(dur, (int, float)):
-        return False
-    return dur > MAX_DURATION_S and media_fragment(url) is None
-
-
 def listen_queue_split(issues=None):
     """(candidates, retired) from the player's listen queue. Read-only; never raises.
 
@@ -1378,7 +1403,10 @@ def listen_queue_split_checked(issues=None):
             continue                     # cooling gates the network only -- hold the URL back, but
                                          # do NOT retire it: it rejoins on its own once the date
                                          # passes, so nothing here drops it from pending.
-        elif _too_long(it, url):
+        elif too_long(url, it.get("duration")):
+            # Refused whole, never truncated: analysing the first four hours of a six-hour set
+            # and filing the result under the URL is a partial answer wearing a complete one's
+            # clothes. Not `retired` either -- no human ruled on it; the machine did.
             if issues is not None:
                 issues.append({"url": url, "reason": "too_long"})
         else:
@@ -1391,7 +1419,7 @@ def sync_listen_queue(q, issues=None):
 
     Length is deliberately NOT a filter: a record can hide inside an hour-long DJ mix, and the
     match reports WHERE it hit (`at`), so a long mix is a feature, not a cost. The one exception
-    is the MAX_DURATION_S backstop -- see `_too_long`; those rows land in `issues` if a list is
+    is the MAX_DURATION_S backstop -- see `too_long`; those rows land in `issues` if a list is
     passed.
     """
     refused = []
@@ -1703,8 +1731,9 @@ def run(args):
             print("# skipped %s -- %s" % (row["url"], row["reason"]))
             state["issues"] = ((state.get("issues") or []) + [
                 {"at": _now(), "url": row["url"],
-                 "issue": "skipped: over %d h and not split into chunks -- refused whole, never "
-                          "analysed in part" % (MAX_DURATION_S // 3600)}])[-50:]
+                 "issue": "skipped: over %d h to decode in one go (unsplit, or a chunk whose "
+                          "own span is that long) -- refused whole, never analysed in part"
+                          % (MAX_DURATION_S // 3600)}])[-50:]
             _save(STATE, state)
 
         # Score cached signatures against any mystery they have not met yet -- a bounded chunk per

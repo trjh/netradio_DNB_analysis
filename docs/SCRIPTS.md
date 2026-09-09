@@ -185,11 +185,19 @@ keeps it — the single `listen_queue.json`, or the sharded `listen_queue/` dire
 **Long audio arrives in chunks.** An entry for audio longer than two hours comes split: the same
 URL once per slice, each carrying a `#t=<start>,<end>` media fragment in whole seconds. yt-dlp
 ignores URL fragments, so the harvester reads the fragment itself and hands ffmpeg `-ss`/`-t` —
-each chunk is decoded, signed and cached on its own, under its own key. An entry longer than
-**four** hours with *no* fragment is refused outright, with a `too_long` row in the issue list:
-analysing its first four hours and filing that under the URL would be a partial answer wearing a
-complete one's clothes. (Two hours is where splitting starts to pay; four is where one unsplit
-entry costs more than any single lead can be worth — different numbers for different questions.)
+each chunk is decoded, signed and cached on its own, under its own key.
+
+Anything that would decode more than **four** hours in one go is refused outright, with a
+`too_long` row in the issue list — analysing its first four hours and filing that under the URL
+would be a partial answer wearing a complete one's clothes. What counts as "how long" is the
+**fragment's span** whenever there is a fragment, since the span is what ffmpeg is told to decode;
+the entry's declared duration decides only when there is no fragment. So a `#t=0,21600` slice is
+refused exactly like the six-hour master it was cut from: a fragment is a *claim* made upstream,
+not proof that an entry is short, and a backstop that trusted the claim would not be one. The same
+check runs again at the decode itself, so a URL that arrives by another route — a hand-run
+`--fetch-one`, an old working queue — is refused on identical terms. (Two hours is where splitting
+starts to pay; four is where one decode costs more than any single lead can be worth — different
+numbers for different questions.)
 
 For each candidate: streams the audio (never to disk), reduces it to a **chroma signature** (12×N
 float16, ~55 KB against ~8 MB), throws the audio away, and scores the signature against every
