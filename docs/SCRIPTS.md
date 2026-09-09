@@ -181,6 +181,16 @@ fetch failed on: a `retry_after` date in the future keeps the URL off the networ
 and keeps its own working queue in `.harvest/`. It reads the queue in whatever layout the player
 keeps it — the single `listen_queue.json`, or the sharded `listen_queue/` directory (its
 `index.json` manifest + `shard-NNNN.json` files) — read-only, never writing.
+
+**Long audio arrives in chunks.** An entry for audio longer than two hours comes split: the same
+URL once per slice, each carrying a `#t=<start>,<end>` media fragment in whole seconds. yt-dlp
+ignores URL fragments, so the harvester reads the fragment itself and hands ffmpeg `-ss`/`-t` —
+each chunk is decoded, signed and cached on its own, under its own key. An entry longer than
+**four** hours with *no* fragment is refused outright, with a `too_long` row in the issue list:
+analysing its first four hours and filing that under the URL would be a partial answer wearing a
+complete one's clothes. (Two hours is where splitting starts to pay; four is where one unsplit
+entry costs more than any single lead can be worth — different numbers for different questions.)
+
 For each candidate: streams the audio (never to disk), reduces it to a **chroma signature** (12×N
 float16, ~55 KB against ~8 MB), throws the audio away, and scores the signature against every
 unsolved Mystery Track — **but only the mysteries it holds a clip of** (see

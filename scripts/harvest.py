@@ -182,9 +182,44 @@ def blank_state():
             "session": {"phase": "idle", "until": 0}, "current": None}
 
 
+# --- chunks: a URL that means "this slice of that audio" ----------------------------------------
+#
+# A queue entry for audio longer than two hours arrives split into CHUNKS: the same URL, once per
+# slice, each carrying a W3C media fragment -- `#t=<start>,<end>`, in whole seconds. It is the
+# fragment, and only the fragment, that makes one chunk different from another.
+#
+# yt-dlp ignores URL fragments. So a harvester that does not read them here would fetch, decode
+# and sign the WHOLE multi-hour master once per chunk -- the exact cost splitting exists to
+# prevent -- and would then store that one signature under every chunk's key, so each chunk would
+# claim to be the master. Wrong answers, cached, never fetched again.
+
+_FRAGMENT = re.compile(r"t=(\d+),(\d+)", re.ASCII)
+
+
+def media_fragment(url):
+    """`(start_s, end_s)` from a URL's `#t=<a>,<b>` fragment, or None if it has no valid one.
+
+    Strict on purpose: two non-negative whole seconds with a < b, and nothing else in the
+    fragment. Anything that does not match is not a media fragment, so the URL is treated as an
+    ordinary one and the whole audio is signed -- the same as before chunks existed. The one
+    thing that must never happen is a HALF-applied fragment: audio cut somewhere we did not mean,
+    signed under a key that says exactly where it should have been cut.
+    """
+    _, sep, frag = url.partition("#")
+    if not sep:
+        return None
+    m = _FRAGMENT.fullmatch(frag)
+    if not m:
+        return None
+    start, end = int(m.group(1)), int(m.group(2))
+    return (start, end) if start < end else None
+
+
 # --- the signature ----------------------------------------------------------------------------
 
 def sig_path(url):
+    # The fragment stays IN the url here, and that is the point: it is what gives each chunk of one
+    # master its own key, its own cached signature and its own job directory.
     return os.path.join(CACHE, "u" + hashlib.sha1(url.encode()).hexdigest()[:20] + ".npy")
 
 
@@ -429,12 +464,26 @@ def _decode_and_sign(url, job):
     _STOP["part"] = part
     started = time.time()
 
+    # A chunk URL asks for one slice of the audio (see `media_fragment`). `-ss` goes BEFORE `-i`
+    # and `-t` after it: ffmpeg then reads and discards the head of the pipe and stops at the
+    # slice's end, so the PCM this process ends up holding is the chunk's alone -- which is what
+    # splitting is for. yt-dlp still fetches the whole master, because it ignores the fragment;
+    # the network cost is the same until a cache can hand over the cut file, but MEMORY, the
+    # constraint that made chunks necessary, is bounded either way.
+    cut = media_fragment(url)
+    ff_argv = ["ffmpeg", "-v", "error"]
+    if cut:
+        ff_argv += ["-ss", str(cut[0])]
+    ff_argv += ["-i", "pipe:0"]
+    if cut:
+        ff_argv += ["-t", str(cut[1] - cut[0])]
+    ff_argv += ["-ac", "1", "-ar", str(_audio.SR), "-f", "f32le", "pipe:1"]
+
     with open(part, "wb") as spool:
         yt = subprocess.Popen(["yt-dlp", "-q", "--no-warnings", "--no-playlist"] + cookie_args()
                               + ["-f", "bestaudio", "-o", "-", url],
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        ff = subprocess.Popen(["ffmpeg", "-v", "error", "-i", "pipe:0",
-                               "-ac", "1", "-ar", str(_audio.SR), "-f", "f32le", "pipe:1"],
+        ff = subprocess.Popen(ff_argv,
                               stdin=yt.stdout, stdout=spool, stderr=subprocess.PIPE)
         yt.stdout.close()
         _STOP["procs"] = [ff, yt]              # the handler stops them in THIS order
@@ -1151,6 +1200,20 @@ LISTEN_QUEUE = os.environ.get("NETRADIO_LISTEN_QUEUE", "")
 RULED_ON = ("listened", "discarded", "ignored", "duplicate", "not_a_match")
 
 
+# THE BACKSTOP, not the rule. The player splits audio longer than TWO hours into chunk entries
+# (see `media_fragment`); the harvester refuses an unsplit master longer than FOUR. The two
+# numbers are deliberately different, because they answer different questions: two hours is where
+# a set is long enough that splitting it pays, four is where one entry costs more decode, more
+# memory and more of a session than any single lead can be worth. Every chunk is under this by
+# construction, so this only ever catches a long entry that arrived UNSPLIT -- an older queue
+# entry, or a duration the player could not read.
+#
+# The answer is to refuse the entry whole, never to analyse the first four hours of it and file
+# the result under the URL: a partial answer that looks like a complete one is the one outcome
+# this project cannot afford.
+MAX_DURATION_S = 4 * 3600
+
+
 # Tim's own channel, as it appears in a listen-queue entry's `origin`.
 OWN_ORIGINS = ("tim hunter", "trjh", "UCuYTatE2k5dOV8J8Bi3rK0g")
 
@@ -1255,24 +1318,41 @@ def _is_cooling(item):
     return ra_date > datetime.now(timezone.utc).date()
 
 
-def listen_queue_split():
+def _too_long(item, url):
+    """True when this entry is an UNSPLIT master past MAX_DURATION_S -- refuse it, don't cut it.
+
+    A chunk carries its slice in the URL and is short by construction, so it never lands here.
+    A duration that is missing, unreadable or not a number is not evidence of length, so it is
+    not grounds for refusal either -- the entry goes to the matcher as it always did.
+    """
+    dur = item.get("duration")
+    if isinstance(dur, bool) or not isinstance(dur, (int, float)):
+        return False
+    return dur > MAX_DURATION_S and media_fragment(url) is None
+
+
+def listen_queue_split(issues=None):
     """(candidates, retired) from the player's listen queue. Read-only; never raises.
 
     Reads whichever layout NETRADIO_LISTEN_QUEUE names (single file, merged view, or sharded
     dir/manifest -- see _load_queue_items).
     """
-    candidates, retired, _ = listen_queue_split_checked()
+    candidates, retired, _ = listen_queue_split_checked(issues)
     return candidates, retired
 
 
-def listen_queue_split_checked():
+def listen_queue_split_checked(issues=None):
     """(candidates, retired, ok) -- listen_queue_split plus an honesty bit. ok=False means the
     queue is MISSING or UNREADABLE; an empty queue reads ok=True with empty results.
 
     Empty-on-failure is the right contract for the search loop (a weird queue is "try again
     next pass", not a dead harvester) -- but a publisher of DERIVED facts must not mistake
     "could not read" for "nothing there": stamp_pool uses the bit so a torn queue read can't
-    republish every ruled-out signature as active."""
+    republish every ruled-out signature as active.
+
+    `issues`, when a list is passed, collects one `{"url": ..., "reason": ...}` row per entry
+    refused here. A refusal is silent otherwise, and a silent refusal is indistinguishable from
+    a queue that simply had nothing in it."""
     if not LISTEN_QUEUE or not os.path.exists(LISTEN_QUEUE):
         return [], set(), False
     try:
@@ -1298,19 +1378,27 @@ def listen_queue_split_checked():
             continue                     # cooling gates the network only -- hold the URL back, but
                                          # do NOT retire it: it rejoins on its own once the date
                                          # passes, so nothing here drops it from pending.
+        elif _too_long(it, url):
+            if issues is not None:
+                issues.append({"url": url, "reason": "too_long"})
         else:
             candidates.append(url)
     return candidates, retired, True
 
 
-def sync_listen_queue(q):
+def sync_listen_queue(q, issues=None):
     """Fold the player's queue into ours. Returns (added, dropped); mutates `q` in place.
 
     Length is deliberately NOT a filter: a record can hide inside an hour-long DJ mix, and the
-    match reports WHERE it hit (`at`), so a long mix is a feature, not a cost.
+    match reports WHERE it hit (`at`), so a long mix is a feature, not a cost. The one exception
+    is the MAX_DURATION_S backstop -- see `_too_long`; those rows land in `issues` if a list is
+    passed.
     """
-    candidates, retired = listen_queue_split()
-    if not candidates and not retired:
+    refused = []
+    candidates, retired = listen_queue_split(refused)
+    if issues is not None:
+        issues.extend(refused)
+    if not candidates and not retired and not refused:
         return 0, 0
 
     seen = set(q["pending"]) | set(q["done"])
@@ -1319,8 +1407,13 @@ def sync_listen_queue(q):
 
     # Drop anything a human ruled on while it sat in our pending list. Not from `done` -- that is
     # our record of work completed, and re-adding a URL later must not re-analyse it.
+    #
+    # A refused entry leaves pending by the same door. A backstop that only stopped NEW arrivals
+    # would still let a master that was queued before the split rule existed be fetched whole,
+    # which is the one thing it is here to prevent. It cannot come back: it is not a candidate.
+    gone = set(retired) | {r["url"] for r in refused}
     before = len(q["pending"])
-    q["pending"] = [u for u in q["pending"] if u not in retired]
+    q["pending"] = [u for u in q["pending"] if u not in gone]
     return len(fresh), before - len(q["pending"])
 
 
@@ -1561,6 +1654,7 @@ def run(args):
     recover_missing_sigs_at_start(state)
 
     session_end = time.time() + random.uniform(*SESSION_S)
+    said_refused = set()                # queue entries this run has already refused out loud
     while True:
         if _stop_requested():
             return _stopped(state)
@@ -1594,10 +1688,24 @@ def run(args):
         q = _load(QUEUE, {"pending": [], "done": []})
         # Re-read the player's queue every pass: a subscription that fired an hour ago should feed
         # this search without a restart, and a candidate ruled on at /harvest should leave it.
-        added, dropped = sync_listen_queue(q)
+        refused = []
+        added, dropped = sync_listen_queue(q, refused)
         if added or dropped:
             _save(QUEUE, q)
             print("listen queue: +%d new, -%d ruled on" % (added, dropped))
+        # Say so ONCE per URL per run. The queue is re-read every pass, so the same refusal comes
+        # back every few minutes for as long as the entry sits there; a row per pass would bury
+        # the issue list under the one thing about it that is not news.
+        for row in refused:
+            if row["url"] in said_refused:
+                continue
+            said_refused.add(row["url"])
+            print("# skipped %s -- %s" % (row["url"], row["reason"]))
+            state["issues"] = ((state.get("issues") or []) + [
+                {"at": _now(), "url": row["url"],
+                 "issue": "skipped: over %d h and not split into chunks -- refused whole, never "
+                          "analysed in part" % (MAX_DURATION_S // 3600)}])[-50:]
+            _save(STATE, state)
 
         # Score cached signatures against any mystery they have not met yet -- a bounded chunk per
         # pass, so it rides along with the fetching instead of blocking it. This is CPU only
