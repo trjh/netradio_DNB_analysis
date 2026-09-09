@@ -587,8 +587,20 @@ class Footprint(unittest.TestCase):
         self.assertLess(abs(current - cli) / max(cli, 1.0), 0.10)
 
     def test_a_broken_probe_returns_nothing_rather_than_raising(self):
-        with mock.patch.object(memwatch.ctypes, "CDLL", side_effect=OSError("no")):
+        """A watchdog is optional; the run is not.
+
+        Both platform probes are broken here, and the platform is pinned for each -- the suite
+        runs on Linux in CI and on macOS on the development machine, and a test that only breaks
+        the probe of whichever platform it happens to be on proves half of what it claims.
+        """
+        with mock.patch.object(memwatch.sys, "platform", "darwin"), \
+                mock.patch.object(memwatch.ctypes, "CDLL", side_effect=OSError("no")):
             self.assertEqual(memwatch.footprint_mb(), (None, None))
+        with mock.patch.object(memwatch.sys, "platform", "linux"), \
+                mock.patch("builtins.open", side_effect=OSError("no")):
+            self.assertEqual(memwatch.footprint_mb(), (None, None))
+        with mock.patch.object(memwatch.sys, "platform", "sunos5"):
+            self.assertEqual(memwatch.footprint_mb(), (None, None))   # no probe at all
 
     def test_the_allocator_canary_flags_retention(self):
         readings = iter([(20.0, 20.0), (800.0, 800.0)])
