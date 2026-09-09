@@ -47,6 +47,14 @@ def _pcm(n_samples):
     return (np.arange(n_samples, dtype="float32") % 7.0 - 3.0).tobytes()
 
 
+def _job_of(argv):
+    """The job directory from a spawned child's argv, however the flag is spelled."""
+    for flag in ("--fetch-job", "--job"):
+        if flag in argv:
+            return argv[argv.index(flag) + 1]
+    raise AssertionError("no job directory on %r" % (argv,))
+
+
 class _FakeProc:
     """Just enough of `Popen` for the decode path: exit code, stderr, and a stop record."""
 
@@ -123,7 +131,7 @@ class ChildBoundary(unittest.TestCase):
     def _child_writes(self, result, chroma=None, pcm=b""):
         """A fake fetch child: it drops the files a real one leaves, then exits."""
         def _popen(argv, **kwargs):
-            job = argv[argv.index("--job") + 1]
+            job = _job_of(argv)
             os.makedirs(job, exist_ok=True)
             if chroma is not None:
                 np.save(os.path.join(job, "chroma32.npy"), chroma)
@@ -142,8 +150,10 @@ class ChildBoundary(unittest.TestCase):
 
         def _popen(argv, **kwargs):
             seen["argv"], seen["kwargs"] = argv, kwargs
-            job = argv[argv.index("--job") + 1]
-            os.makedirs(job, exist_ok=True)
+            job = _job_of(argv)
+            # Read it here: the job directory is unlinked the moment stream_chroma returns.
+            with open(os.path.join(job, "url.json")) as fh:
+                seen["handoff"] = json.load(fh)
             with open(os.path.join(job, "result.json"), "w") as fh:
                 json.dump({"ok": False, "error": "nope"}, fh)
             return _FakeChild(argv)
@@ -153,29 +163,63 @@ class ChildBoundary(unittest.TestCase):
 
         self.assertEqual(seen["argv"][0], sys.executable)
         self.assertTrue(seen["argv"][1].endswith("harvest.py"))
-        self.assertEqual(seen["argv"][2:4], ["--fetch-one", self.url])
-        self.assertEqual(seen["argv"][4], "--job")
-        self.assertTrue(seen["argv"][5].startswith(self.jobs))
+        self.assertEqual(seen["argv"][2], "--fetch-job")
+        self.assertTrue(seen["argv"][3].startswith(self.jobs))
+        # The URL is NOT on the command line -- it travels in the job directory.
+        self.assertNotIn(self.url, " ".join(seen["argv"]))
+        self.assertEqual(seen["handoff"]["url"], self.url)
         self.assertEqual(seen["kwargs"]["cwd"], harvest.HOME)
         self.assertEqual(seen["kwargs"]["env"]["MallocLargeCache"], "0")
         # Same process group as the parent, so the supervisor's killpg reaches the whole family.
         self.assertNotIn("start_new_session", seen["kwargs"])
 
-    def test_the_child_argv_never_says_run(self):
-        """`--run` in the child's argv would make the player's supervisor adopt it."""
+    def _spawned_command_line(self, url):
+        """What `ps -axo command=` would show for the child -- which is what `_discover` reads."""
         seen = {}
 
         def _popen(argv, **kwargs):
             seen["argv"] = argv
-            job = argv[argv.index("--job") + 1]
+            job = _job_of(argv)
             os.makedirs(job, exist_ok=True)
             with open(os.path.join(job, "result.json"), "w") as fh:
                 json.dump({"ok": False, "error": "nope"}, fh)
             return _FakeChild(argv)
 
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
-            harvest.stream_chroma(self.url)
-        self.assertNotIn("--run", seen["argv"])
+            harvest.stream_chroma(url)
+        return " ".join(seen["argv"])
+
+    def test_the_child_command_line_never_says_run(self):
+        """The supervisor matches `--run` as a SUBSTRING of the whole ps line, so that is how
+        this has to be checked. Asserting `"--run" not in argv` on the LIST tests element
+        membership, which no command line ever satisfies -- it passes while the invariant it
+        claims to protect is broken."""
+        self.assertNotIn("--run", self._spawned_command_line(self.url))
+
+    def test_a_url_that_contains_the_flag_cannot_be_read_as_it(self):
+        """A YouTube id's alphabet includes `-`, so `--run` is a legal substring of one. With the
+        URL on the argv the supervisor would adopt a process that lives for one track, refuse to
+        start the real harvester, and later signal the wrong process group."""
+        hostile = "https://www.youtube.com/watch?v=a--runXY9zQ"
+        line = self._spawned_command_line(hostile)
+        self.assertNotIn("--run", line)
+        self.assertNotIn(hostile, line)
+
+    def test_a_command_line_that_would_be_misread_is_never_spawned(self):
+        """The interpreter path and the repo path are not ours to promise. If either carried the
+        flag, the fetch runs in this process rather than as a child that will be misread."""
+        called = []
+        with mock.patch.object(harvest, "_spawn_argv",
+                               lambda job: ["/opt/py--run/bin/python", "harvest.py",
+                                            "--fetch-job", job]), \
+                mock.patch.object(harvest.subprocess, "Popen",
+                                  lambda *a, **k: called.append(a)), \
+                mock.patch.object(harvest, "_fetch_and_sign",
+                                  return_value={"ok": False, "error": "ran in process"}) as fetch:
+            err = harvest.stream_chroma(self.url)[2]
+        self.assertEqual(err, "ran in process")
+        self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(called, [])
 
     def test_an_existing_malloc_setting_is_not_overridden(self):
         """`setdefault`, so an operator can run an experiment without editing the code."""
@@ -183,7 +227,7 @@ class ChildBoundary(unittest.TestCase):
 
         def _popen(argv, **kwargs):
             seen["env"] = kwargs["env"]
-            job = argv[argv.index("--job") + 1]
+            job = _job_of(argv)
             os.makedirs(job, exist_ok=True)
             with open(os.path.join(job, "result.json"), "w") as fh:
                 json.dump({"ok": False, "error": "nope"}, fh)
@@ -264,7 +308,64 @@ class ChildBoundary(unittest.TestCase):
         def _popen(argv, **kwargs):
             return _FakeChild(argv, returncode=143)
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
-            self.assertEqual(harvest.stream_chroma(self.url)[2], "stopped")
+            self.assertEqual(harvest.stream_chroma(self.url)[2], harvest.STOPPED)
+
+    def test_a_child_signalled_ALONE_still_raises_the_parents_flag(self):
+        """The flag and the exit code are two routes for the same event, and the callers' guards
+        read the flag. The supervisor signals the whole group, so normally both fire -- but a
+        `kill` aimed at the child alone, or our own handler not having run yet, would leave the
+        flag down and the stop looking like an ordinary failure."""
+        self.assertFalse(harvest._stop_requested())
+        with mock.patch.object(harvest.subprocess, "Popen",
+                               lambda argv, **k: _FakeChild(argv, returncode=143)):
+            err = harvest.stream_chroma(self.url)[2]
+        self.assertEqual(err, harvest.STOPPED)
+        self.assertTrue(harvest._stop_requested())
+        self.assertEqual(harvest._stop_name(), "SIGTERM")
+
+    def test_a_stop_before_the_spawn_starts_no_fetch(self):
+        called = []
+        harvest._STOP["signum"] = signal.SIGTERM
+        with mock.patch.object(harvest.subprocess, "Popen",
+                               lambda *a, **k: called.append(a)):
+            self.assertEqual(harvest.stream_chroma(self.url)[2], harvest.STOPPED)
+        self.assertEqual(called, [])
+
+    def test_a_signal_between_the_spawn_and_the_registration_still_reaches_the_child(self):
+        """The handler passes a signal to `_STOP["child"]`, which is assigned after `Popen`
+        returns. A signal in that window found nothing to pass itself to, and a whole fetch then
+        ran unwatched while this process sat in `communicate()`."""
+        terminated = []
+
+        class _Racing(_FakeChild):
+            """Still running when the parent looks, so `_end` has something to terminate."""
+
+            def __init__(self, argv):
+                super().__init__(argv, returncode=130)
+                self.alive = True
+
+            def poll(self):
+                return None if self.alive else self.returncode
+
+            def terminate(self):
+                terminated.append(True)
+                self.alive = False
+
+            def wait(self, timeout=None):
+                self.alive = False
+                return self.returncode
+
+            def communicate(self, timeout=None):
+                self.alive = False
+                return b"", b""
+
+        def _popen(argv, **kwargs):
+            harvest._STOP["signum"] = signal.SIGINT      # the handler ran during the spawn
+            return _Racing(argv)
+
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            self.assertEqual(harvest.stream_chroma(self.url)[2], harvest.STOPPED)
+        self.assertEqual(terminated, [True])
 
     def test_a_missing_result_file_is_a_failure_not_a_success(self):
         def _popen(argv, **kwargs):
@@ -754,6 +855,24 @@ class AStopIsNeverAVerdict(unittest.TestCase):
         self.assertEqual(hstate["session"]["phase"], "stopped (SIGTERM)")
         self.assertIsNone(hstate["current"])
 
+    def test_a_child_signalled_alone_is_also_not_a_verdict(self):
+        """The third door. When only the fetch child is signalled, this process's flag stays
+        down -- so a guard that reads only the flag lets the stop through to
+        `submit_result(ok=False)` and the candidate is retired to `done` for good. The guard has
+        to read the route the danger actually travels on, which here is the error string.
+        """
+        q = {"pending": [self.url], "done": []}
+        hstate = harvester.blank_hstate()
+        self.assertFalse(harvest._stop_requested())
+        with mock.patch.object(harvest, "stream_chroma",
+                               lambda u, d=None: (None, None, harvest.STOPPED)):
+            outcome = harvester.work_once(hstate, q)
+        self.assertEqual(outcome, "stopped")
+        self.assertEqual(self._spooled(), [])
+        self.assertEqual(q["pending"], [self.url])
+        self.assertEqual(q["done"], [])
+        self.assertEqual(hstate["errors"], 0)
+
     def test_an_ordinary_failure_is_still_a_verdict(self):
         """The guard must not swallow a real per-URL failure, which the collector needs."""
         q = {"pending": [self.url], "done": []}
@@ -764,6 +883,27 @@ class AStopIsNeverAVerdict(unittest.TestCase):
         self.assertEqual(outcome, "fetched")
         self.assertEqual(len(self._spooled()), 1)
         self.assertEqual(hstate["errors"], 1)
+
+
+@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+class TheInProcessEscapeHatchAlsoStops(unittest.TestCase):
+    """NETRADIO_HARVEST_CHILD=0 runs yt-dlp and ffmpeg from THIS process, and the parent handler
+    has to stop them. Leaving them pulling bandwidth from someone else's server against a parent
+    that has gone is the exact behaviour the handlers were added to end."""
+
+    def setUp(self):
+        self.addCleanup(lambda: harvest._STOP.update(
+            {"signum": 0, "child": None, "procs": [], "part": None}))
+
+    def test_the_parent_handler_stops_ffmpeg_before_ytdlp(self):
+        order = []
+        ff = _FakeProc(["ffmpeg"], alive=True, order=order)
+        yt = _FakeProc(["yt-dlp"], alive=True, order=order)
+        harvest._STOP["procs"] = [ff, yt]
+        harvest._parent_stop(signal.SIGTERM, None)
+        self.assertTrue(harvest._stop_requested())
+        self.assertEqual(order, ["ffmpeg", "yt-dlp"])
+        self.assertEqual(harvest._STOP["procs"], [])
 
 
 if __name__ == "__main__":

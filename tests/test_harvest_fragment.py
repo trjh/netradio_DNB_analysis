@@ -511,8 +511,13 @@ class TheTooLongBackstop(unittest.TestCase):
 
 @unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
 class TheChildBoundary(unittest.TestCase):
-    """What the parent tells the child. A boundary that drops an input turns a real check into a
-    decorative one, so the duration has to be ON the argv -- the child has nothing else."""
+    """What the parent tells the child, and where it tells it.
+
+    The child is a separate process, so it knows only what the job hands it. Both halves of one
+    fact -- fetch THIS, and it is THIS long -- therefore live in the same place, the job file:
+    the URL is off the command line because another process pattern-matches that line, and a job
+    described half in a file and half on an argv is how the two halves drift apart.
+    """
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -522,40 +527,68 @@ class TheChildBoundary(unittest.TestCase):
         self.addCleanup(harvest._STOP.update,
                         {"signum": 0, "child": None, "procs": [], "part": None})
 
-    def _child_argv(self, url, *args):
+    def _spawn(self, url, *args):
+        """Drive one spawn and return (argv, the job file the child would read)."""
         seen = {}
 
         def _popen(argv, **kwargs):
             seen["argv"] = argv
-            job = argv[argv.index("--job") + 1]
-            os.makedirs(job, exist_ok=True)
+            job = argv[argv.index("--fetch-job") + 1]
+            seen["spec"] = json.load(open(os.path.join(job, "url.json")))
             with open(os.path.join(job, "result.json"), "w") as fh:
                 json.dump({"ok": False, "error": "nope"}, fh)
             return _FakeChild(argv)
 
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
             harvest.stream_chroma(url, *args)
-        return seen["argv"]
+        return seen["argv"], seen["spec"]
 
-    def test_the_duration_travels_with_the_url(self):
-        argv = self._child_argv("https://y/a", 21600)
-        self.assertEqual(argv[argv.index("--duration") + 1], "21600")
-        self.assertEqual(argv[2:4], ["--fetch-one", "https://y/a"])   # and the URL is untouched
+    def test_the_duration_rides_in_the_job_file_beside_the_url(self):
+        argv, spec = self._spawn("https://y/a", 21600)
+        self.assertEqual(spec, {"url": "https://y/a", "duration": 21600})
+        self.assertNotIn("--duration", argv)
 
-    def test_no_duration_means_no_argument_at_all(self):
-        """Rather than a `None` or a `0` the child would then have to interpret."""
-        self.assertNotIn("--duration", self._child_argv("https://y/a"))
+    def test_nothing_about_the_job_is_on_the_command_line(self):
+        """The supervisor matches `--run` as a substring of the whole line, so the argv carries
+        the job path and nothing anybody else chose -- not the URL, and not its length either."""
+        argv, _ = self._spawn("https://y/watch?v=--run-in-the-id", 21600)
+        self.assertEqual(argv[2], "--fetch-job")
+        self.assertNotIn("https://y/watch?v=--run-in-the-id", argv)
+        self.assertNotIn("21600", " ".join(argv))
 
-    def test_the_child_reads_back_the_same_verdict_that_was_sent(self):
-        """The round trip through argv is where a number can quietly change meaning. What has to
+    def test_no_duration_is_recorded_as_no_duration(self):
+        """Written as null rather than omitted or zeroed: the child reads "not known", which is
+        what `too_long` treats as no evidence of length."""
+        _, spec = self._spawn("https://y/a")
+        self.assertEqual(spec, {"url": "https://y/a", "duration": None})
+
+    def test_the_child_reads_back_the_same_verdict_that_was_written(self):
+        """The round trip through JSON is where a number can quietly change meaning. What has to
         survive it is not the digits but the ANSWER: refused stays refused."""
         for duration in (21600, 600.5, 14400, 14401, 10 ** 20, float("inf")):
             with self.subTest(duration=duration):
-                argv = self._child_argv("https://y/a", duration)
-                # `--duration` is declared `type=float`, so this is what the child will hold.
-                as_parsed = float(argv[argv.index("--duration") + 1])
-                self.assertEqual(harvest.too_long("https://y/a", as_parsed),
+                _, spec = self._spawn("https://y/a", duration)
+                self.assertEqual(harvest.too_long("https://y/a", spec["duration"]),
                                  harvest.too_long("https://y/a", duration))
+
+    def test_the_job_file_is_what_the_child_actually_refuses_on(self):
+        """End to end through the real child entry point: a job file the parent wrote for a
+        six-hour master is refused by `main()` without spawning yt-dlp or ffmpeg."""
+        job = os.path.join(self.tmp, "job")
+        os.makedirs(job, exist_ok=True)
+        with open(os.path.join(job, "url.json"), "w") as fh:
+            json.dump({"url": "https://y/six-hour-master", "duration": 21600}, fh)
+        spawned = []
+        argv = ["harvest.py", "--fetch-job", job]
+        with mock.patch.object(sys, "argv", argv), \
+                mock.patch.object(harvest.subprocess, "Popen",
+                                  lambda *a, **k: spawned.append(a) or _FakeProc(a[0])):
+            self.assertEqual(harvest.main(), 0)
+        self.assertEqual(spawned, [])
+        with open(os.path.join(job, "result.json")) as fh:
+            result = json.load(fh)
+        self.assertFalse(result["ok"])
+        self.assertIn("too long", result["error"])
 
     def test_the_escape_hatch_is_told_too(self):
         """NETRADIO_HARVEST_CHILD=0 runs the fetch in-process; it must not lose the check."""

@@ -198,12 +198,13 @@ hours is where splitting starts to pay; four is where one decode costs more than
 can be worth — different numbers for different questions.)
 
 The same check runs again inside the fetch child, immediately before ffmpeg. A fetch driven from
-the queue is refused there on the queue's terms, because the declared duration is passed across to
-the child (`--duration`) along with the URL — a check is only as good as what it is told, and the
-child knows only what its argv carries. A **hand-run `--fetch-one <url>` with no `--duration` is
-not length-checked**, and that is deliberate: someone typing a URL is deliberately asking for that
-URL, there is no trustworthy length to judge it by, and inventing one would be worse than going
-without. A `#t=` span is enforced in every case, since it needs nothing from outside the URL.
+the queue is refused there on the queue's terms, because the declared duration is written into the
+job file beside the URL (see below) and the child reads both — a check is only as good as what it
+is told, and the child knows only what the job hands it. A **hand-run `--fetch-one <url>` with no
+`--duration` is not length-checked**, and that is deliberate: someone typing a URL is deliberately
+asking for that URL, there is no trustworthy length to judge it by, and inventing one would be
+worse than going without. A `#t=` span is enforced in every case, since it needs nothing from
+outside the URL.
 
 For each candidate: streams the audio (never to disk), reduces it to a **chroma signature** (12×N
 float16, ~55 KB against ~8 MB), throws the audio away, and scores the signature against every
@@ -243,7 +244,7 @@ hand-started harvester rather than spawning a second, and a watchdog revives it 
 ### How much memory it uses, and why
 
 Two `harvest.py` processes exist while a candidate is being fetched: the long-running parent
-(`--run`) and a **fetch child** (`--fetch-one URL --job DIR`), plus that child's `yt-dlp` and
+(`--run`) and a **fetch child** (`--fetch-job DIR`, see below), plus that child's `yt-dlp` and
 `ffmpeg`. The child does the whole fetch — download, decode, chroma, cache, upload — and exits.
 The parent, which holds the state, the queue and the matching board, never touches a track's
 audio, so its footprint stays flat across candidates rather than climbing to a high-water mark
@@ -256,6 +257,19 @@ Three things put the memory back:
 | The tuning estimate runs 300 seconds at a time (`chroma_recipe.estimate_tuning_blockwise`) | `chroma_cqt` estimated the recording's distance from concert pitch over the **whole file** first, holding several copies of a 1025-row spectrogram with one column per 512 samples. Profiled on the development Mac, that one call accounted for about 9.8 GB of a 10.2 GB peak on a 117-minute candidate; the CQT itself cost about a tenth of it. The estimate returns the same float either way, so **every signature is byte-identical** and `RECIPE_VERSION` stays 1 — `tests/test_chroma_tuning.py` compares both against librosa's own whole-file path with `==` and `np.array_equal`. |
 | `MallocLargeCache=0` | macOS libmalloc keeps freed large blocks inside the process instead of returning them to the kernel. Python frees everything and the footprint does not move; under pressure those dirty pages get compressed and swapped. Measured on macOS 26.5.2 by allocating and freeing 800 MB of float32: 764 MB still held afterwards by default, 0 MB with the variable set. The variable is **undocumented**, which is why the harvester re-measures it on every start. |
 | ffmpeg writes the decoded PCM to a **file** in the job directory | The old path piped it through `communicate()`, which builds a chunk list and then joins it — two full copies of the audio at the moment of the join (1,034 MB held for 451 MB of PCM, measured). The parent reads the spool back as a memory map, and the file is unlinked as soon as it is mapped. Disk cost is 64 KB per second of audio, for as long as the candidate is being scored. |
+
+The child's command line is `harvest.py --fetch-job <dir>` and the URL is **not on it** — it is
+handed over in the job directory. The player's supervisor finds a live harvester by matching
+`--run` as a substring of the whole `ps` line, and a YouTube id may legally contain `--run`, so a
+URL on the argv would be a way for a process that lives for one track to be adopted as the
+harvester. The job file (`url.json`) carries the URL **and** the queue's declared duration for it,
+so the child's length check weighs the same facts the queue did; describing half the job there and
+half on a command line is how the two would drift apart. To run one fetch by hand,
+`--fetch-one URL --job DIR` still works, with `--duration SECONDS` if you want it length-checked.
+
+`NETRADIO_HARVEST_CHILD=0` runs the fetch in the harvester's own process instead of a child. It is
+for diagnosing a venv or environment problem in the child; it brings the memory back with it, so
+it is not for normal use.
 
 `make harvest-run` sets `MallocLargeCache=0` for you; the player's supervisor sets it too. It is
 read at process start, so setting it from inside a running harvester does nothing. On every start

@@ -151,7 +151,11 @@ def work_once(hstate, q):
     #
     # If the child actually finished before the signal, its signature is already in the cache and
     # `already_held` submits the success on the next start. Nothing is lost either way.
-    if harvest._stop_requested():
+    # BOTH routes. A stop reaches here either because this process was signalled (the flag) or
+    # because only the fetch child was, which comes back as the sentinel error. Reading one and
+    # not the other is not a guard: the door left open is a `kill` aimed at the child, and it ends
+    # in submit_result(ok=False) and a candidate retired to `done` for good.
+    if harvest._stop_requested() or harvest.was_stopped(err):
         hstate["session"] = {"phase": "stopped (%s)" % harvest._stop_name(), "until": 0}
         hstate["current"] = None
         hstate["updated"] = _now()

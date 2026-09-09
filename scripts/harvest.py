@@ -266,7 +266,8 @@ def too_long(url, duration=None):
     The decode runs in a child process, which knows only what its argv carries, and while the
     declared duration stayed behind in the parent the second call quietly answered a DIFFERENT
     question -- fragment-only -- and waved through six-hour masters the first call had refused.
-    So the duration travels with the URL now (`--duration`, see `_run_fetch_child`).
+    So the duration travels with the URL now, in the job file the child reads (see
+    `_run_fetch_child`).
 
     Where genuinely no duration is known -- someone typing `--fetch-one <url>` by hand -- the
     honest answer is that this URL is not length-checked, and the span still is. Inventing a
@@ -358,11 +359,29 @@ def _stop_requested():
     return bool(_STOP["signum"])
 
 
+# The error a fetch reports when a signal interrupted it. A SENTINEL, not a message: it is the one
+# value here that must never be read as a per-URL failure, because a failure is a VERDICT and a
+# verdict retires the URL to `done`, which is never re-fetched.
+STOPPED = "stopped"
+
+
+def was_stopped(err):
+    """True when a fetch came back interrupted rather than failed.
+
+    A guard that reads a different signal from the one the danger travels on is not a guard. A
+    stop reaches a caller by either of two routes -- THIS process was signalled, which raises the
+    flag, or only the child was, which arrives as its exit code turned into this string -- so
+    every guard checks both. `selftest.was_stopped` is the same predicate, duplicated rather than
+    imported because selftest must never import the harvester.
+    """
+    return (err or "").strip().lower() == STOPPED
+
+
 def _stop_name():
     try:
         return signal.Signals(_STOP["signum"]).name
     except ValueError:
-        return "signal %s" % _STOP["signum"]
+        return "a signal"
 
 
 def _end(proc, grace=2.0):
@@ -382,7 +401,14 @@ def _end(proc, grace=2.0):
 
 
 def _parent_stop(signum, _frame):
-    """Parent handler: raise the flag and pass the signal on to the fetch child, if one is up."""
+    """Parent handler: raise the flag, then stop whatever fetch is actually in flight.
+
+    Two shapes, and both have to be covered or the handler does not do the thing it was added
+    for. Normally the fetch is a child process, so terminate it. Under NETRADIO_HARVEST_CHILD=0
+    it is yt-dlp and ffmpeg spawned by THIS process, sitting in `_STOP["procs"]` -- leaving those
+    running against a parent that has gone is exactly the behaviour this handler exists to end,
+    so walk them too, ffmpeg first for the reason in `_child_stop`.
+    """
     _STOP["signum"] = signum
     child = _STOP["child"]
     if child is not None and child.poll() is None:
@@ -390,6 +416,9 @@ def _parent_stop(signum, _frame):
             child.terminate()
         except OSError:
             pass
+    for proc in _STOP["procs"]:                 # [ffmpeg, yt-dlp] -- the in-process path only
+        _end(proc)
+    _STOP["procs"] = []
 
 
 def _child_stop(signum, _frame):
@@ -457,18 +486,22 @@ JOB_STALE_S = 3600                        # a job dir older than this belongs to
 
 
 def _drain(stream, sink):
-    """Read a pipe to EOF into a bounded buffer, on a thread.
+    """Read a pipe to EOF into a bounded tail, on a thread. `sink` is a ONE-element list.
 
     yt-dlp can fill its 64 KB stderr pipe while ffmpeg is still decoding a two-hour track. Nobody
     was reading it until ffmpeg exited, so the two could deadlock: yt-dlp blocked writing stderr,
     ffmpeg blocked waiting for stdin. Only the tail matters -- the error we report is the last
     line -- so the buffer is bounded.
+
+    The thread REPLACES `sink[0]` rather than editing a shared list in place. A list item
+    assignment is a single bytecode, so a reader that gave up waiting for this thread to finish
+    sees some whole earlier tail, never a half-rewritten one.
     """
+    buf = b""
     try:
         for chunk in iter(lambda: stream.read(65536), b""):
-            sink.append(chunk)
-            if len(sink) > 1:
-                sink[:] = [b"".join(sink)[-STDERR_KEEP:]]
+            buf = (buf + chunk)[-STDERR_KEEP:]
+            sink[0] = buf
     except (OSError, ValueError):
         pass
     finally:
@@ -479,7 +512,12 @@ def _drain(stream, sink):
 
 
 def _last_line(chunks, prefix=""):
-    """The last non-empty line of a drained stderr, as the error string callers already expect."""
+    """The last non-empty line of a drained stderr, as the error string callers already expect.
+
+    Only the last STDERR_KEEP bytes survive the drain, so a single final line longer than that
+    comes back as its tail. That is a fair trade for a bounded buffer: the result is truncated to
+    160 characters either way, and a message that long is a stack trace, not a reason.
+    """
     text = b"".join(chunks).decode("utf-8", "replace")
     lines = [ln.strip() for ln in text.strip().split("\n") if ln.strip()]
     return (prefix + lines[-1])[:160] if lines else ""
@@ -582,7 +620,7 @@ def _decode_and_sign(url, job, duration=None):
                               stdin=yt.stdout, stdout=spool, stderr=subprocess.PIPE)
         yt.stdout.close()
         _STOP["procs"] = [ff, yt]              # the handler stops them in THIS order
-        yt_err, ff_err = [], []
+        yt_err, ff_err = [b""], [b""]          # one-element sinks -- see _drain
         drains = [threading.Thread(target=_drain, args=(yt.stderr, yt_err), daemon=True),
                   threading.Thread(target=_drain, args=(ff.stderr, ff_err), daemon=True)]
         for t in drains:
@@ -639,8 +677,21 @@ def _decode_and_sign(url, job, duration=None):
             "footprint_mb": current, "peak_mb": peak, "footprint_kind": memwatch.kind()}
 
 
+def _spawn_argv(job):
+    """The fetch child's command line. THE URL IS NOT ON IT.
+
+    The player's supervisor finds a live harvester by looking for `--run` as a SUBSTRING of the
+    whole `ps` command line. So anything on this argv that somebody else chose is a way for a
+    process that lives for one track to be mistaken for the harvester -- and a YouTube id may
+    legally contain `--run`, since its alphabet includes `-`. The URL therefore travels in the job
+    directory (`url.json`) and the argv carries only the job path, whose last component is `u`
+    followed by twenty hex characters.
+    """
+    return [sys.executable, os.path.abspath(__file__), "--fetch-job", job]
+
+
 def _run_fetch_child(url, job, duration=None):
-    """Spawn `harvest.py --fetch-one URL --job DIR` and read back its result."""
+    """Spawn `harvest.py --fetch-job DIR` and read back its result."""
     env = dict(os.environ)
     # macOS libmalloc caches freed LARGE blocks inside the process instead of returning them to
     # the kernel, so the harvester's footprint never came down between candidates and those dirty
@@ -649,23 +700,27 @@ def _run_fetch_child(url, job, duration=None):
     # the one the memory eval standardised on.) libmalloc reads it at process START, so it has to
     # be on the child's environment -- setting it from inside a running process does nothing.
     env.setdefault("MallocLargeCache", "0")
-    # NEVER put `--run` in this argv. The player's supervisor finds a live harvester by looking
-    # for a `harvest.py` command line that also contains `--run`, and it would adopt a fetch child
-    # as the harvester itself -- then refuse to start the real one, and later signal the wrong
-    # process group.
-    argv = [sys.executable, os.path.abspath(__file__), "--fetch-one", url, "--job", job]
-    # THE POINT OF CARRYING THIS ACROSS. A check is only as good as the information it is given,
-    # and a boundary that drops an input silently converts a real check into a decorative one.
-    # The queue door refuses on the entry's declared duration; the child is a different process
-    # and knows only what this argv tells it, so without `--duration` it would re-run the SAME
-    # predicate on strictly less information and wave through a six-hour master the parent had
-    # already refused -- a check that looks like defence in depth and is theatre. Anything the
-    # parent would refuse must still be refused after the fork, so the fact travels with the URL.
+    argv = _spawn_argv(job)
+    # The invariant, checked rather than argued. `_spawn_argv` cannot put `--run` on the command
+    # line, but the interpreter path and the repo path are not ours to promise, and a command line
+    # carrying that substring anywhere would be adopted by the player's supervisor as the
+    # harvester itself. So look, and run the fetch here rather than spawn something that will be
+    # misread.
+    if "--run" in " ".join(argv):
+        return _fetch_and_sign(url, job, duration)
+    if _stop_requested():
+        return {"ok": False, "error": STOPPED}   # do not start a fetch we are about to abandon
+    # THE JOB FILE DESCRIBES THE JOB -- all of it. The URL moved here because the command line is
+    # read by another process; the declared duration follows it because they are two halves of one
+    # fact ("fetch this, and it is this long"), and a job half-described in one place and half on
+    # an argv is how the two drift apart. The child needs the duration for the same reason it
+    # needs the URL: without it the decode door re-runs the queue door's predicate on strictly
+    # less information and waves through a six-hour master the parent already refused -- a check
+    # that looks like defence in depth and is theatre.
     #
     # Absent when there is no trustworthy length (a hand-run fetch). That is honest rather than
     # broken: the fragment span still applies, because it needs no outside information.
-    if duration is not None:
-        argv += ["--duration", repr(duration)]
+    _save(os.path.join(job, "url.json"), {"url": url, "duration": duration})
     try:
         child = subprocess.Popen(argv, cwd=HOME, env=env,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -675,12 +730,23 @@ def _run_fetch_child(url, job, duration=None):
     # reaches the parent, this child, yt-dlp and ffmpeg together.
     _STOP["child"] = child
     try:
+        if _stop_requested():
+            # A signal that arrived between the spawn and the registration above found no child
+            # to pass itself on to. Deliver it here, or a whole fetch runs unwatched while this
+            # process sits in communicate().
+            _end(child)
         _out, err = child.communicate()
     finally:
         _STOP["child"] = None
 
     if child.returncode in (130, 143):          # 128 + SIGINT / SIGTERM
-        return {"ok": False, "error": "stopped"}
+        # The child was signalled. Usually this process was too -- the supervisor signals the whole
+        # group -- but our own handler may not have run yet, and a `kill` aimed at the child alone
+        # would not raise the flag at all. Raise it here, so the naps, the loop checks and the
+        # callers' guards all read one answer and none of them can file a signalled fetch as a
+        # failed one.
+        _STOP["signum"] = _STOP["signum"] or (child.returncode - 128)
+        return {"ok": False, "error": STOPPED}
     result = _load(os.path.join(job, "result.json"), None)
     if child.returncode != 0 or not isinstance(result, dict):
         tail = _last_line([err or b""])
@@ -1912,7 +1978,11 @@ def run(args):
             # the same facts `sync_listen_queue` weighed a few lines above.
             c, samples, err = stream_chroma(url, queue_duration(url))
 
-        if _stop_requested():
+        # A stop is never a verdict, and it arrives by either route: this process was signalled
+        # (the flag), or only the fetch child was (the sentinel error). Checking one and not the
+        # other is not a guard -- the queue moves three lines below, and `done` is never
+        # re-fetched.
+        if _stop_requested() or was_stopped(err):
             samples = None                  # before the queue moves: the URL is still pending
             return _stopped(state)
 
@@ -2023,14 +2093,19 @@ def main():
                          "leaves with it; it writes only the signature and its own job "
                          "directory, never the queue or the state. Useful by hand for "
                          "reproducing one fetch.")
+    ap.add_argument("--fetch-job", metavar="DIR",
+                    help="the form `--run` spawns: fetch the URL named in DIR/url.json. The URL "
+                         "stays OFF the command line, because the player's supervisor reads that "
+                         "command line to find the harvester -- see _spawn_argv.")
     ap.add_argument("--job", metavar="DIR",
                     help="where --fetch-one leaves pcm.f32le, chroma32.npy and result.json "
                          "(default: a directory under .harvest/tmp/)")
     ap.add_argument("--duration", type=float, default=None, metavar="SECONDS",
-                    help="the player's declared length for --fetch-one's URL. `--run` passes it "
-                         "so the child refuses an over-long candidate on exactly the facts the "
-                         "queue used; by hand it is optional, and without it only the URL's own "
-                         "#t= span is length-checked.")
+                    help="the declared length of --fetch-one's URL, so an over-long candidate is "
+                         "refused on the same facts the queue used. `--run` does not pass this: "
+                         "it puts the duration in the job file beside the URL, where the whole "
+                         "job is described. By hand it is optional, and without it only the URL's "
+                         "own #t= span is length-checked.")
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--pause", action="store_true")
     ap.add_argument("--resume", action="store_true")
@@ -2064,11 +2139,27 @@ def main():
     # THE FETCH CHILD, dispatched before any lock, queue or state access -- it must never take the
     # writer lock or touch state.json / queue.json. One candidate, one process, and the recipe's
     # working set goes away when it exits.
-    if args.fetch_one:
+    if args.fetch_one or args.fetch_job:
         install_signal_handlers(child=True)
-        job = args.job or job_dir(args.fetch_one)
+        url = args.fetch_one
+        job = args.job or args.fetch_job or (job_dir(url) if url else None)
+        # The job file describes the job: the URL and, when the parent knew one, its declared
+        # length. Both are read from the same place, because a child told half of what the queue
+        # door knew re-runs its refusal on less information and lets through what the parent
+        # already refused. `--duration` on the command line still wins, so a hand-run fetch can
+        # state a length the job file does not carry.
+        duration = args.duration
+        if not url:
+            spec = _load(os.path.join(job, "url.json"), {}) or {}
+            url = spec.get("url")
+            if duration is None:
+                duration = spec.get("duration")
+        if not url:
+            print("no URL: pass --fetch-one URL, or --fetch-job DIR holding url.json",
+                  file=sys.stderr)
+            return 2
         try:
-            result = _fetch_and_sign(args.fetch_one, job, args.duration)
+            result = _fetch_and_sign(url, job, duration)
         except Exception:                    # a crash is the parent's "child failed" path
             traceback.print_exc()
             return 1
