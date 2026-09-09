@@ -45,9 +45,12 @@ import json
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
+import threading
 import time
+import traceback
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -220,41 +223,220 @@ def is_bot_wall(err):
     return any(p in e for p in BOT_WALL)
 
 
-def stream_chroma(url):
-    """Stream the audio, reduce it to a chroma signature -> (chroma, samples, error).
+def _unlink(path):
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
 
-    The full audio is NEVER written to disk. It is streamed (yt-dlp -> ffmpeg -> numpy), reduced
-    to chroma, cached as a signature, and the decoded samples are returned IN MEMORY so the caller
-    can cut a short excerpt from them without fetching again. When the caller is done with them
-    they are dropped. `samples` is the whole track only for as long as one function call.
+
+# --- the fetch: one child process per candidate --------------------------------------------------
+#
+# The recipe's working set is large and short-lived, and macOS does not give it back (see
+# memwatch). Running each candidate's fetch in its own process means the long-lived parent -- which
+# holds the state, the queue, the mysteries and the matching board -- never touches a track's audio
+# at all, and whatever a child allocates leaves with the child. The parent's footprint stays flat
+# across candidates instead of climbing to a high-water mark and staying there.
+
+JOBS = os.path.join(STATE_DIR, "tmp")     # one directory per in-flight fetch
+STDERR_KEEP = 4096                        # bytes of each subprocess's stderr we hold on to
+JOB_STALE_S = 3600                        # a job dir older than this belongs to a crashed child
+
+
+def _drain(stream, sink):
+    """Read a pipe to EOF into a bounded buffer, on a thread.
+
+    yt-dlp can fill its 64 KB stderr pipe while ffmpeg is still decoding a two-hour track. Nobody
+    was reading it until ffmpeg exited, so the two could deadlock: yt-dlp blocked writing stderr,
+    ffmpeg blocked waiting for stdin. Only the tail matters -- the error we report is the last
+    line -- so the buffer is bounded.
     """
-    import librosa
-    yt = subprocess.Popen(["yt-dlp", "-q", "--no-warnings", "--no-playlist"] + cookie_args()
-                          + ["-f", "bestaudio", "-o", "-", url],
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    ff = subprocess.Popen(["ffmpeg", "-v", "error", "-i", "pipe:0",
-                           "-ac", "1", "-ar", str(_audio.SR), "-f", "f32le", "pipe:1"],
-                          stdin=yt.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    yt.stdout.close()
-    raw, _ = ff.communicate()
-    yt_err = yt.stderr.read().decode("utf-8", "replace")
-    yt.wait()
+    try:
+        for chunk in iter(lambda: stream.read(65536), b""):
+            sink.append(chunk)
+            if len(sink) > 1:
+                sink[:] = [b"".join(sink)[-STDERR_KEEP:]]
+    except (OSError, ValueError):
+        pass
+    finally:
+        try:
+            stream.close()
+        except OSError:
+            pass
 
-    if yt.returncode != 0 or not raw:
-        return None, None, yt_err.strip().split("\n")[-1][:160] if yt_err else "no audio"
-    y = np.frombuffer(raw, dtype="float32")
-    if len(y) < chroma_recipe.MIN_SECONDS * _audio.SR:
-        return None, None, "too short (%.0fs)" % (len(y) / _audio.SR)
 
-    c = chroma_recipe.compute_chroma(y)          # THE recipe, in one place (chroma_recipe.py)
+def _last_line(chunks, prefix=""):
+    """The last non-empty line of a drained stderr, as the error string callers already expect."""
+    text = b"".join(chunks).decode("utf-8", "replace")
+    lines = [ln.strip() for ln in text.strip().split("\n") if ln.strip()]
+    return (prefix + lines[-1])[:160] if lines else ""
+
+
+def _wait(proc):
+    """Wait for a subprocess to exit."""
+    return proc.wait()
+
+
+def job_dir(url):
+    return os.path.join(JOBS, _sig_key(url)[:-4])
+
+
+def sweep_job_dirs(max_age_s=JOB_STALE_S):
+    """Remove what a crashed fetch child left behind. Nothing younger than an hour: the split
+    harvester may be mid-fetch on its own schedule, and its spool file is not ours to delete."""
+    if not os.path.isdir(JOBS):
+        return 0
+    now = time.time()
+    n = 0
+    for name in sorted(os.listdir(JOBS)):
+        path = os.path.join(JOBS, name)
+        try:
+            if now - os.path.getmtime(path) > max_age_s:
+                shutil.rmtree(path, ignore_errors=True)
+                n += 1
+        except OSError:
+            pass
+    return n
+
+
+def _fetch_and_sign(url, job):
+    """Fetch one candidate, decode it, sign it. THE CHILD'S WHOLE JOB. Returns `result.json`.
+
+    The decoded PCM goes to a FILE in the job directory, written by ffmpeg itself. The old path
+    piped it through `communicate()`, which accumulates a chunk list and then joins it -- two full
+    copies of the audio in the parent's heap at the moment of the join, 1,034 MB for 451 MB of
+    PCM. Writing to a file and reading it back with `np.fromfile` is exactly one allocation, at
+    the size the decode turned out to be.
+
+    A signature is written ONLY when yt-dlp exited 0, ffmpeg exited 0, the spool is long enough,
+    and no stop was requested. A truncated decode would produce a perfectly plausible, permanently
+    wrong recipe-1 signature for this URL -- cached, uploaded, and never fetched again.
+    """
+    os.makedirs(job, exist_ok=True)
+    part = os.path.join(job, "pcm.f32le.part")
+    pcm = os.path.join(job, "pcm.f32le")
+    started = time.time()
+
+    with open(part, "wb") as spool:
+        yt = subprocess.Popen(["yt-dlp", "-q", "--no-warnings", "--no-playlist"] + cookie_args()
+                              + ["-f", "bestaudio", "-o", "-", url],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        ff = subprocess.Popen(["ffmpeg", "-v", "error", "-i", "pipe:0",
+                               "-ac", "1", "-ar", str(_audio.SR), "-f", "f32le", "pipe:1"],
+                              stdin=yt.stdout, stdout=spool, stderr=subprocess.PIPE)
+        yt.stdout.close()
+        yt_err, ff_err = [], []
+        drains = [threading.Thread(target=_drain, args=(yt.stderr, yt_err), daemon=True),
+                  threading.Thread(target=_drain, args=(ff.stderr, ff_err), daemon=True)]
+        for t in drains:
+            t.start()
+        _wait(ff)
+        _wait(yt)
+        for t in drains:
+            t.join(timeout=5)
+
+    size = os.path.getsize(part) if os.path.exists(part) else 0
+    n_samples = size // 4
+    if yt.returncode != 0 or size == 0:
+        _unlink(part)
+        return {"ok": False, "error": _last_line(yt_err) or "no audio"}
+    if ff.returncode != 0:
+        _unlink(part)
+        return {"ok": False,
+                "error": _last_line(ff_err, "ffmpeg: ") or "ffmpeg: exit %s" % ff.returncode}
+    if n_samples < chroma_recipe.MIN_SECONDS * _audio.SR:
+        _unlink(part)
+        return {"ok": False, "error": "too short (%.0fs)" % (n_samples / _audio.SR)}
+
+    os.replace(part, pcm)
+    y = np.fromfile(pcm, dtype="float32")      # ONE allocation, at the final size
+    c = chroma_recipe.compute_chroma(y)        # THE recipe, in one place (chroma_recipe.py)
+    del y
+
     os.makedirs(CACHE, exist_ok=True)
-    np.save(sig_path(url), c.astype("float16"))
+    np.save(sig_path(url), c.astype(chroma_recipe.STORE_DTYPE))
     # The bucket is the signature's long-term home (see sigstore). Upload now, verified; on
     # failure the local file simply stays -- eviction never fires for an unverified key, so a
     # flaky upload costs disk space, never data.
     if sigstore.enabled():
         sigstore.put(sig_path(url), _sig_key(url))
-    return c, y, None
+    # The float32 chroma, for the parent's matcher. NOT the float16 round-trip: the matcher scores
+    # float32 today, and a float16 cast and back moves values by an ULP, which is enough to move a
+    # borderline verdict. Not a signature change either way -- the signature is the file above.
+    np.save(os.path.join(job, "chroma32.npy"), c)
+
+    return {"ok": True, "error": None, "n_samples": int(n_samples),
+            "seconds": round(n_samples / _audio.SR, 1), "took_s": round(time.time() - started, 1)}
+
+
+def _run_fetch_child(url, job):
+    """Spawn `harvest.py --fetch-one URL --job DIR` and read back its result."""
+    env = dict(os.environ)
+    # macOS libmalloc caches freed LARGE blocks inside the process instead of returning them to
+    # the kernel, so the harvester's footprint never came down between candidates and those dirty
+    # pages ended up compressed and swapped. Measured on this OS: 764 MB retained of 800 MB
+    # allocated and freed; 0 MB with this set. (MallocSpaceEfficient=1 measured the same; this is
+    # the one the memory eval standardised on.) libmalloc reads it at process START, so it has to
+    # be on the child's environment -- setting it from inside a running process does nothing.
+    env.setdefault("MallocLargeCache", "0")
+    # NEVER put `--run` in this argv. The player's supervisor finds a live harvester by looking
+    # for a `harvest.py` command line that also contains `--run`, and it would adopt a fetch child
+    # as the harvester itself -- then refuse to start the real one, and later signal the wrong
+    # process group.
+    argv = [sys.executable, os.path.abspath(__file__), "--fetch-one", url, "--job", job]
+    try:
+        child = subprocess.Popen(argv, cwd=HOME, env=env,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except OSError as exc:
+        return {"ok": False, "error": "could not start the fetch child: %s" % exc}
+    # Same process group as us on purpose (no start_new_session), so the supervisor's killpg
+    # reaches the parent, this child, yt-dlp and ffmpeg together.
+    _out, err = child.communicate()
+
+    if child.returncode in (130, 143):          # 128 + SIGINT / SIGTERM
+        return {"ok": False, "error": "stopped"}
+    result = _load(os.path.join(job, "result.json"), None)
+    if child.returncode != 0 or not isinstance(result, dict):
+        tail = _last_line([err or b""])
+        return {"ok": False,
+                "error": ("child failed (exit %s): %s" % (child.returncode, tail))[:160]}
+    return result
+
+
+def stream_chroma(url):
+    """Stream the audio, reduce it to a chroma signature -> (chroma, samples, error).
+
+    Unchanged as a contract: the three callers (`run()`, `harvester.work_once()`, and the live
+    canary) see the same three-tuple and the same error strings as before.
+
+    What changed is where the work happens. The fetch, the decode and the recipe now run in a
+    CHILD process, so the memory they need dies with it; this process never holds a candidate's
+    audio or the recipe's working set. `samples` is a memory map over the child's decoded PCM,
+    which behaves like the array it used to be -- `write_excerpt` slices ~30 seconds out of it and
+    `harvester.py` writes it to a FLAC job copy. The spool file is unlinked as soon as it is
+    mapped, so the disk space comes back when the caller drops `samples`, and a crash anywhere
+    after this point leaves nothing behind.
+
+    Set NETRADIO_HARVEST_CHILD=0 to run the fetch in this process instead. That is for diagnosing
+    an environment problem in the child, not for normal use: it brings the memory back with it.
+    """
+    job = job_dir(url)
+    shutil.rmtree(job, ignore_errors=True)          # a stale job dir for this URL is not ours
+    os.makedirs(job, exist_ok=True)
+    try:
+        if os.environ.get("NETRADIO_HARVEST_CHILD") == "0":
+            result = _fetch_and_sign(url, job)
+        else:
+            result = _run_fetch_child(url, job)
+        if not result.get("ok"):
+            return None, None, result.get("error") or "no signature"
+        c = np.load(os.path.join(job, "chroma32.npy"))
+        samples = np.memmap(os.path.join(job, "pcm.f32le"), dtype="float32", mode="r")
+        return c, samples, None
+    finally:
+        # POSIX keeps an unlinked file alive for as long as something has it open or mapped, so
+        # the memmap above stays readable and the space is reclaimed when `samples` is dropped.
+        shutil.rmtree(job, ignore_errors=True)
 
 
 # A short excerpt AROUND the matched instant is all we retain -- long enough to recognise the
@@ -1117,6 +1299,9 @@ def run(args):
         _save(STATE, state)
 
     sweep_excerpts()                    # drop anything past its TTL before we start
+    swept = sweep_job_dirs()            # and whatever a crashed fetch child left in .harvest/tmp
+    if swept:
+        print("# swept %d stale fetch job director%s" % (swept, "y" if swept == 1 else "ies"))
 
     # THE CANARY. A broken harvester and a pool without the answer look identical from here: zero
     # matches, for weeks. So before searching for something we have never found, prove we can still
@@ -1242,10 +1427,11 @@ def run(args):
         state["current"] = url
         _save(STATE, state)
 
-        # `samples` is the decoded audio, held IN MEMORY only for this iteration, so an excerpt
-        # can be cut without a second fetch. It is dropped at the end of the loop. From the cache
-        # there is no audio (only the signature), so a cached candidate cannot yield an excerpt --
-        # which is fine: we only ever excerpt something we are already streaming.
+        # `samples` is the decoded audio for this iteration, so an excerpt can be cut without a
+        # second fetch. It is a memory map over the fetch child's spool file, already unlinked, so
+        # dropping it at the end of the loop releases the disk space too. From the cache there is
+        # no audio (only the signature), so a cached candidate cannot yield an excerpt -- which is
+        # fine: we only ever excerpt something we are already streaming.
         samples = None
         c = _load_sig(url)                 # working cache, else the bucket -- no audio either way
         cached = c is not None
@@ -1350,6 +1536,15 @@ def main():
                     help="enumerate a YouTube/SoundCloud channel or playlist into the queue")
     ap.add_argument("--limit", type=int, default=None, help="cap how many to take from a channel")
     ap.add_argument("--run", action="store_true", help="work the queue (runs for weeks)")
+    ap.add_argument("--fetch-one", metavar="URL",
+                    help="fetch ONE candidate and write its signature, then exit. This is the "
+                         "child process `--run` spawns per candidate, so the recipe's memory "
+                         "leaves with it; it writes only the signature and its own job "
+                         "directory, never the queue or the state. Useful by hand for "
+                         "reproducing one fetch.")
+    ap.add_argument("--job", metavar="DIR",
+                    help="where --fetch-one leaves pcm.f32le, chroma32.npy and result.json "
+                         "(default: a directory under .harvest/tmp/)")
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--pause", action="store_true")
     ap.add_argument("--resume", action="store_true")
@@ -1379,6 +1574,19 @@ def main():
                          "Refuses past the safety cap (NETRADIO_REQUEUE_MISSING_CAP, default "
                          "10%% of the corpus) and reports instead.")
     args = ap.parse_args()
+
+    # THE FETCH CHILD, dispatched before any lock, queue or state access -- it must never take the
+    # writer lock or touch state.json / queue.json. One candidate, one process, and the recipe's
+    # working set goes away when it exits.
+    if args.fetch_one:
+        job = args.job or job_dir(args.fetch_one)
+        try:
+            result = _fetch_and_sign(args.fetch_one, job)
+        except Exception:                    # a crash is the parent's "child failed" path
+            traceback.print_exc()
+            return 1
+        _save(os.path.join(job, "result.json"), result)
+        return 0
 
     os.makedirs(STATE_DIR, exist_ok=True)
     if args.purge_audio:
@@ -1474,4 +1682,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())        # --fetch-one's exit code is how the parent tells a crash from a refusal
