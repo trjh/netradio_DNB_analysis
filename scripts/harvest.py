@@ -257,12 +257,20 @@ def too_long(url, duration=None):
     where it can be wrong, stale or hand-written. So the span is measured, never assumed --
     `#t=0,21600` is six hours and is refused precisely like the unsplit master it was cut from.
 
-    ONE PREDICATE, TWO DOORS. This is called at the queue door (`listen_queue_split`, which never
-    offers a refused entry as a candidate) and again at the decode door (`_decode_and_sign`, the
-    last thing before ffmpeg is handed `-ss`/`-t`). Same function both times, so the two cannot
-    drift into disagreeing about what is acceptable -- a URL that reaches the decode by some
-    other route (a hand-run `--fetch-one`, a queue file written before this rule existed) is
-    refused there on identical terms.
+    ONE PREDICATE, TWO DOORS -- AND THE SAME FACTS AT BOTH. This is called at the queue door
+    (`listen_queue_split`, which never offers a refused entry as a candidate) and again at the
+    decode door (`_decode_and_sign`, the last thing before ffmpeg is handed `-ss`/`-t`). Same
+    function both times, so they cannot drift into disagreeing about what is acceptable.
+
+    But a shared predicate is not enough on its own: it also has to be asked the same question.
+    The decode runs in a child process, which knows only what its argv carries, and while the
+    declared duration stayed behind in the parent the second call quietly answered a DIFFERENT
+    question -- fragment-only -- and waved through six-hour masters the first call had refused.
+    So the duration travels with the URL now (`--duration`, see `_run_fetch_child`).
+
+    Where genuinely no duration is known -- someone typing `--fetch-one <url>` by hand -- the
+    honest answer is that this URL is not length-checked, and the span still is. Inventing a
+    length, or refusing everything unlabelled, would both be worse than saying so.
     """
     cut = media_fragment(url)
     if cut is not None:
@@ -272,6 +280,20 @@ def too_long(url, duration=None):
     else:
         seconds = duration
     return seconds > MAX_DURATION_S
+
+
+# Past this, a number is not a length, it is a typo or an attack. A fragment span is bounded by
+# the parser, but a DECLARED duration is unbounded JSON -- a 5,000-digit int raises OverflowError
+# on its way to a float, and the one thing a refusal message must never do is become the crash it
+# was written to report. The comparison below is integer-only, so it is safe at any magnitude.
+_PRINTABLE_MAX_S = 10 ** 12
+
+
+def _hours(seconds):
+    """`seconds` as hours, for a message. Total: it prints something for any number at all."""
+    if seconds > _PRINTABLE_MAX_S:
+        return "beyond any real length"
+    return "%.1f h" % (seconds / 3600.0)
 
 
 # --- the signature ----------------------------------------------------------------------------
@@ -495,8 +517,12 @@ def sweep_job_dirs(max_age_s=JOB_STALE_S):
     return n
 
 
-def _fetch_and_sign(url, job):
+def _fetch_and_sign(url, job, duration=None):
     """Fetch one candidate, decode it, sign it. THE CHILD'S WHOLE JOB. Returns `result.json`.
+
+    `duration` is the player's declared length for this URL when one is known, so the refusal in
+    `_decode_and_sign` can weigh the same facts the queue door weighed. It is optional: a URL
+    typed by hand has no trustworthy length, and inventing one would be worse than going without.
 
     The decoded PCM goes to a FILE in the job directory, written by ffmpeg itself. The old path
     piped it through `communicate()`, which accumulates a chunk list and then joins it -- two full
@@ -509,25 +535,24 @@ def _fetch_and_sign(url, job):
     wrong recipe-1 signature for this URL -- cached, uploaded, and never fetched again.
     """
     try:
-        return _decode_and_sign(url, job)
+        return _decode_and_sign(url, job, duration)
     finally:
         _STOP["part"] = None            # nothing left for the signal handler to clean up
         _STOP["procs"] = []
 
 
-def _decode_and_sign(url, job):
+def _decode_and_sign(url, job, duration=None):
     """`_fetch_and_sign`'s body -- see there. Split out only so the stop state is always reset."""
     # THE SECOND DOOR, and the last one before ffmpeg. `listen_queue_split` already refuses an
     # entry this long, but it is not the only way a URL arrives here -- a hand-run `--fetch-one`,
-    # a working queue written before this rule existed, a caller yet to be written. Both doors
-    # call the SAME predicate, so neither can quietly decide that something the other refuses is
-    # fine after all. Refused before anything is spawned: nothing to stop, nothing to clean up.
-    if too_long(url):
-        # Only a fragment span can be judged here: this side sees a URL, never the queue entry's
-        # declared duration. A span is self-describing, which is what makes the check portable.
+    # a working queue written before this rule existed, a caller yet to be written. Same predicate
+    # as the queue door, given the same facts: `duration` is the queue's own, carried across the
+    # fork (see `_run_fetch_child`). Refused before anything is spawned: nothing to stop, nothing
+    # to clean up.
+    if too_long(url, duration):
         span = media_fragment(url)
-        return {"ok": False, "error": "too long: %.1f h in one slice -- refused, not truncated"
-                                      % ((span[1] - span[0]) / 3600.0)}
+        why = ("%s in one slice" % _hours(span[1] - span[0])) if span else _hours(duration)
+        return {"ok": False, "error": "too long: %s -- refused, not truncated" % why}
     os.makedirs(job, exist_ok=True)
     part = os.path.join(job, "pcm.f32le.part")
     pcm = os.path.join(job, "pcm.f32le")
@@ -614,7 +639,7 @@ def _decode_and_sign(url, job):
             "footprint_mb": current, "peak_mb": peak, "footprint_kind": memwatch.kind()}
 
 
-def _run_fetch_child(url, job):
+def _run_fetch_child(url, job, duration=None):
     """Spawn `harvest.py --fetch-one URL --job DIR` and read back its result."""
     env = dict(os.environ)
     # macOS libmalloc caches freed LARGE blocks inside the process instead of returning them to
@@ -629,6 +654,18 @@ def _run_fetch_child(url, job):
     # as the harvester itself -- then refuse to start the real one, and later signal the wrong
     # process group.
     argv = [sys.executable, os.path.abspath(__file__), "--fetch-one", url, "--job", job]
+    # THE POINT OF CARRYING THIS ACROSS. A check is only as good as the information it is given,
+    # and a boundary that drops an input silently converts a real check into a decorative one.
+    # The queue door refuses on the entry's declared duration; the child is a different process
+    # and knows only what this argv tells it, so without `--duration` it would re-run the SAME
+    # predicate on strictly less information and wave through a six-hour master the parent had
+    # already refused -- a check that looks like defence in depth and is theatre. Anything the
+    # parent would refuse must still be refused after the fork, so the fact travels with the URL.
+    #
+    # Absent when there is no trustworthy length (a hand-run fetch). That is honest rather than
+    # broken: the fragment span still applies, because it needs no outside information.
+    if duration is not None:
+        argv += ["--duration", repr(duration)]
     try:
         child = subprocess.Popen(argv, cwd=HOME, env=env,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -658,11 +695,16 @@ def _run_fetch_child(url, job):
 _LAST_CHILD = {}
 
 
-def stream_chroma(url):
+def stream_chroma(url, duration=None):
     """Stream the audio, reduce it to a chroma signature -> (chroma, samples, error).
 
     Unchanged as a contract: the three callers (`run()`, `harvester.work_once()`, and the live
     canary) see the same three-tuple and the same error strings as before.
+
+    `duration` is the player's declared length for this URL, which the working queue does not
+    carry (it holds bare URLs) -- callers get it from `queue_duration`. It exists so the refusal
+    inside the child weighs what the queue door weighed; see `_run_fetch_child`. Optional, and
+    None is a perfectly good answer: no length is no evidence of length.
 
     What changed is where the work happens. The fetch, the decode and the recipe now run in a
     CHILD process, so the memory they need dies with it; this process never holds a candidate's
@@ -681,9 +723,9 @@ def stream_chroma(url):
     os.makedirs(job, exist_ok=True)
     try:
         if os.environ.get("NETRADIO_HARVEST_CHILD") == "0":
-            result = _fetch_and_sign(url, job)
+            result = _fetch_and_sign(url, job, duration)
         else:
-            result = _run_fetch_child(url, job)
+            result = _run_fetch_child(url, job, duration)
         _LAST_CHILD.update(result)
         if not result.get("ok"):
             return None, None, result.get("error") or "no signature"
@@ -1432,6 +1474,38 @@ def listen_queue_split_checked(issues=None):
     return candidates, retired, True
 
 
+# The player's declared durations, url -> seconds, cached for a few minutes.
+_DURATIONS = {"at": 0.0, "by_url": None}
+
+
+def queue_duration(url, max_age_s=300):
+    """The player's declared length for `url`, or None when there is no trustworthy one.
+
+    THE FETCH PATH HAS TO ASK FOR THIS. Our working queue holds bare URLs, so by the time a
+    candidate is fetched the duration the queue door judged it on is simply gone -- and a
+    predicate handed less information than it was designed for stops being the check it looks
+    like. This is where the fetch path gets it back.
+
+    Cached for a few minutes: the listen queue is re-read every pass regardless, one fetch takes
+    minutes, and a recording's length does not change. Never raises -- same reason as
+    `listen_queue_split`: the queue is data this process does not control.
+    """
+    now = time.time()
+    if _DURATIONS["by_url"] is None or now - _DURATIONS["at"] > max_age_s:
+        by_url = {}
+        if LISTEN_QUEUE and os.path.exists(LISTEN_QUEUE):
+            try:
+                for it in _load_queue_items():
+                    u, d = it.get("url"), it.get("duration")
+                    if (isinstance(u, str) and isinstance(d, (int, float))
+                            and not isinstance(d, bool)):
+                        by_url[u.strip()] = d
+            except (OSError, ValueError, TypeError, AttributeError):
+                by_url = {}      # unreadable is not "zero seconds"; it is "no answer"
+        _DURATIONS.update({"at": now, "by_url": by_url})
+    return _DURATIONS["by_url"].get(url)
+
+
 def sync_listen_queue(q, issues=None):
     """Fold the player's queue into ours. Returns (added, dropped); mutates `q` in place.
 
@@ -1834,7 +1908,9 @@ def run(args):
             err = None
             state["skipped_cached"] += 1
         else:
-            c, samples, err = stream_chroma(url)
+            # The declared length travels with the URL, so the refusal inside the child weighs
+            # the same facts `sync_listen_queue` weighed a few lines above.
+            c, samples, err = stream_chroma(url, queue_duration(url))
 
         if _stop_requested():
             samples = None                  # before the queue moves: the URL is still pending
@@ -1950,6 +2026,11 @@ def main():
     ap.add_argument("--job", metavar="DIR",
                     help="where --fetch-one leaves pcm.f32le, chroma32.npy and result.json "
                          "(default: a directory under .harvest/tmp/)")
+    ap.add_argument("--duration", type=float, default=None, metavar="SECONDS",
+                    help="the player's declared length for --fetch-one's URL. `--run` passes it "
+                         "so the child refuses an over-long candidate on exactly the facts the "
+                         "queue used; by hand it is optional, and without it only the URL's own "
+                         "#t= span is length-checked.")
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--pause", action="store_true")
     ap.add_argument("--resume", action="store_true")
@@ -1987,7 +2068,7 @@ def main():
         install_signal_handlers(child=True)
         job = args.job or job_dir(args.fetch_one)
         try:
-            result = _fetch_and_sign(args.fetch_one, job)
+            result = _fetch_and_sign(args.fetch_one, job, args.duration)
         except Exception:                    # a crash is the parent's "child failed" path
             traceback.print_exc()
             return 1

@@ -57,6 +57,23 @@ class _FakeProc:
         pass
 
 
+class _FakeChild:
+    """A fake fetch child: already exited by the time the parent looks."""
+
+    def __init__(self, argv):
+        self.argv = argv
+        self.returncode = 0
+
+    def communicate(self, timeout=None):
+        return b"", b""
+
+    def poll(self):
+        return self.returncode
+
+    def terminate(self):
+        pass
+
+
 @unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
 class TheFragment(unittest.TestCase):
     """What counts as a chunk request, and what is just a URL with a `#` in it."""
@@ -238,12 +255,19 @@ class TheFfmpegLeg(unittest.TestCase):
         self.assertEqual(argv, self._expected_before())
 
     def test_both_doors_ask_the_same_question(self):
-        """Not two thresholds that happen to agree today: one predicate, called twice. A URL the
-        queue refuses is refused by the decode, and one it admits is decoded."""
-        for url in ("https://y/a#t=0,21600", "https://y/a#t=0,14401", "https://y/a#t=0,600",
-                    "https://y/a#t=0,14400", "https://y/a", "https://y/a#t=x,y"):
-            with self.subTest(url=url):
-                refused_at_the_queue = harvest.too_long(url)
+        """Not two thresholds that happen to agree today: one predicate, called twice, on the same
+        facts. A URL the queue refuses is refused by the decode, and one it admits is decoded."""
+        for url, duration in (("https://y/a#t=0,21600", None),
+                              ("https://y/a#t=0,14401", None),
+                              ("https://y/a#t=0,600", None),
+                              ("https://y/a#t=0,14400", None),
+                              ("https://y/a", None),
+                              ("https://y/a#t=x,y", None),
+                              ("https://y/a", 21600),        # unfragmented, and known to be long
+                              ("https://y/a", 600),
+                              ("https://y/a#t=0,600", 21600)):
+            with self.subTest(url=url, duration=duration):
+                refused_at_the_queue = harvest.too_long(url, duration)
                 spawned = []
 
                 def _popen(argv, **kwargs):
@@ -251,8 +275,63 @@ class TheFfmpegLeg(unittest.TestCase):
                     return _FakeProc(argv)
 
                 with mock.patch.object(harvest.subprocess, "Popen", _popen):
-                    harvest._fetch_and_sign(url, self.job)
+                    harvest._fetch_and_sign(url, self.job, duration)
                 self.assertEqual(refused_at_the_queue, spawned == [])
+
+    def test_a_declared_duration_the_queue_refused_still_refuses_after_the_fork(self):
+        """HALF ONE. The child is a different process and knows only what its argv carries. With
+        the duration left behind, this exact case ran both yt-dlp and ffmpeg on a six-hour master
+        the queue door had already refused -- the same predicate answering a different question
+        because it was starved of an input."""
+        url = "https://y/six-hour-master"                    # no fragment: duration is all there is
+        self.assertTrue(harvest.too_long(url, 21600))        # the queue door refuses it
+        spawned = []
+
+        def _popen(argv, **kwargs):
+            spawned.append(argv)
+            return _FakeProc(argv)
+
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            result = harvest._fetch_and_sign(url, self.job, 21600)
+        self.assertEqual(spawned, [])                        # and so does the decode door
+        self.assertFalse(result["ok"])
+        self.assertIn("too long", result["error"])
+        self.assertIn("6.0 h", result["error"])
+
+    def test_a_monstrous_declared_duration_does_not_crash_the_refusal(self):
+        """A declared duration is unbounded JSON, unlike a span. The message must never be the
+        thing that raises -- `10**5000 / 3600.0` is an `OverflowError`."""
+        with mock.patch.object(harvest.subprocess, "Popen",
+                               lambda *a, **k: self.fail("must not spawn")):
+            for duration in (10 ** 5000, float("inf"), 10 ** 13):
+                with self.subTest(duration=duration):
+                    result = harvest._fetch_and_sign("https://y/a", self.job, duration)
+                    self.assertFalse(result["ok"])
+                    self.assertIn("too long", result["error"])
+
+    def test_a_hand_run_fetch_is_span_checked_but_not_length_checked(self):
+        """HALF TWO, and it is a deliberate position, not an oversight.
+
+        Someone typing `--fetch-one <url>` is asking for that URL on purpose and there is no
+        trustworthy length to judge it by, so it is not length-checked -- inventing a probe, or
+        refusing everything unlabelled, would both be worse. The SPAN still applies, because it
+        needs nothing from outside the URL."""
+        spawned = []
+
+        def _popen(argv, **kwargs):
+            spawned.append(argv)
+            return _FakeProc(argv)
+
+        # An over-long span, URL only: still refused, because the URL says so itself.
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            result = harvest._fetch_and_sign("https://y/a#t=0,21600", self.job)
+        self.assertEqual(spawned, [])
+        self.assertIn("too long", result["error"])
+
+        # No fragment and no duration: NOT refused. This is the documented, intended behaviour.
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            harvest._fetch_and_sign("https://y/six-hour-master", self.job)
+        self.assertEqual([os.path.basename(a[0]) for a in spawned], ["yt-dlp", "ffmpeg"])
 
 
 @unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
@@ -401,6 +480,95 @@ class TheTooLongBackstop(unittest.TestCase):
         added, dropped = harvest.sync_listen_queue(q)
         self.assertEqual((added, dropped), (2, 1))
         self.assertEqual(q["pending"], ["https://y/m#t=0,7200", "https://y/m#t=7200,14400"])
+
+    def test_the_declared_duration_is_recoverable_at_fetch_time(self):
+        """Our working queue holds bare URLs, so the fetch path has to ask the listen queue for
+        the duration the queue door judged on. Without this the child gets nothing to check."""
+        self._queue([{"url": "https://y/a", "duration": 21600},
+                     {"url": "https://y/b", "duration": 600.5},
+                     {"url": "https://y/c"},                       # no duration at all
+                     {"url": "https://y/d", "duration": "600"}])   # not a number
+        harvest._DURATIONS.update({"at": 0.0, "by_url": None})     # drop the cache for the test
+        self.addCleanup(harvest._DURATIONS.update, {"at": 0.0, "by_url": None})
+        self.assertEqual(harvest.queue_duration("https://y/a"), 21600)
+        self.assertEqual(harvest.queue_duration("https://y/b"), 600.5)
+        self.assertIsNone(harvest.queue_duration("https://y/c"))
+        self.assertIsNone(harvest.queue_duration("https://y/d"))
+        self.assertIsNone(harvest.queue_duration("https://y/never-seen"))
+
+    def test_an_unreadable_queue_yields_no_duration_rather_than_zero(self):
+        """"Could not read" is not "zero seconds", and it must not raise either."""
+        fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        fh.write("{ this is not json")
+        fh.close()
+        self.addCleanup(os.unlink, fh.name)
+        self.addCleanup(setattr, harvest, "LISTEN_QUEUE", harvest.LISTEN_QUEUE)
+        harvest.LISTEN_QUEUE = fh.name
+        harvest._DURATIONS.update({"at": 0.0, "by_url": None})
+        self.addCleanup(harvest._DURATIONS.update, {"at": 0.0, "by_url": None})
+        self.assertIsNone(harvest.queue_duration("https://y/a"))
+
+
+@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+class TheChildBoundary(unittest.TestCase):
+    """What the parent tells the child. A boundary that drops an input turns a real check into a
+    decorative one, so the duration has to be ON the argv -- the child has nothing else."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.addCleanup(setattr, harvest, "JOBS", harvest.JOBS)
+        harvest.JOBS = os.path.join(self.tmp, "tmp")
+        self.addCleanup(harvest._STOP.update,
+                        {"signum": 0, "child": None, "procs": [], "part": None})
+
+    def _child_argv(self, url, *args):
+        seen = {}
+
+        def _popen(argv, **kwargs):
+            seen["argv"] = argv
+            job = argv[argv.index("--job") + 1]
+            os.makedirs(job, exist_ok=True)
+            with open(os.path.join(job, "result.json"), "w") as fh:
+                json.dump({"ok": False, "error": "nope"}, fh)
+            return _FakeChild(argv)
+
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            harvest.stream_chroma(url, *args)
+        return seen["argv"]
+
+    def test_the_duration_travels_with_the_url(self):
+        argv = self._child_argv("https://y/a", 21600)
+        self.assertEqual(argv[argv.index("--duration") + 1], "21600")
+        self.assertEqual(argv[2:4], ["--fetch-one", "https://y/a"])   # and the URL is untouched
+
+    def test_no_duration_means_no_argument_at_all(self):
+        """Rather than a `None` or a `0` the child would then have to interpret."""
+        self.assertNotIn("--duration", self._child_argv("https://y/a"))
+
+    def test_the_child_reads_back_the_same_verdict_that_was_sent(self):
+        """The round trip through argv is where a number can quietly change meaning. What has to
+        survive it is not the digits but the ANSWER: refused stays refused."""
+        for duration in (21600, 600.5, 14400, 14401, 10 ** 20, float("inf")):
+            with self.subTest(duration=duration):
+                argv = self._child_argv("https://y/a", duration)
+                # `--duration` is declared `type=float`, so this is what the child will hold.
+                as_parsed = float(argv[argv.index("--duration") + 1])
+                self.assertEqual(harvest.too_long("https://y/a", as_parsed),
+                                 harvest.too_long("https://y/a", duration))
+
+    def test_the_escape_hatch_is_told_too(self):
+        """NETRADIO_HARVEST_CHILD=0 runs the fetch in-process; it must not lose the check."""
+        seen = {}
+
+        def _fetch(url, job, duration=None):
+            seen["duration"] = duration
+            return {"ok": False, "error": "nope"}
+
+        with mock.patch.dict(os.environ, {"NETRADIO_HARVEST_CHILD": "0"}), \
+                mock.patch.object(harvest, "_fetch_and_sign", _fetch):
+            harvest.stream_chroma("https://y/a", 21600)
+        self.assertEqual(seen["duration"], 21600)
 
 
 if __name__ == "__main__":

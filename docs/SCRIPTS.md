@@ -193,11 +193,17 @@ would be a partial answer wearing a complete one's clothes. What counts as "how 
 **fragment's span** whenever there is a fragment, since the span is what ffmpeg is told to decode;
 the entry's declared duration decides only when there is no fragment. So a `#t=0,21600` slice is
 refused exactly like the six-hour master it was cut from: a fragment is a *claim* made upstream,
-not proof that an entry is short, and a backstop that trusted the claim would not be one. The same
-check runs again at the decode itself, so a URL that arrives by another route — a hand-run
-`--fetch-one`, an old working queue — is refused on identical terms. (Two hours is where splitting
-starts to pay; four is where one decode costs more than any single lead can be worth — different
-numbers for different questions.)
+not proof that an entry is short, and a backstop that trusted the claim would not be one. (Two
+hours is where splitting starts to pay; four is where one decode costs more than any single lead
+can be worth — different numbers for different questions.)
+
+The same check runs again inside the fetch child, immediately before ffmpeg. A fetch driven from
+the queue is refused there on the queue's terms, because the declared duration is passed across to
+the child (`--duration`) along with the URL — a check is only as good as what it is told, and the
+child knows only what its argv carries. A **hand-run `--fetch-one <url>` with no `--duration` is
+not length-checked**, and that is deliberate: someone typing a URL is deliberately asking for that
+URL, there is no trustworthy length to judge it by, and inventing one would be worse than going
+without. A `#t=` span is enforced in every case, since it needs nothing from outside the URL.
 
 For each candidate: streams the audio (never to disk), reduces it to a **chroma signature** (12×N
 float16, ~55 KB against ~8 MB), throws the audio away, and scores the signature against every

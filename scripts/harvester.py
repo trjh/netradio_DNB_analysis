@@ -138,7 +138,9 @@ def work_once(hstate, q):
     hstate["updated"] = _now()
     _save(HSTATE, hstate)
 
-    c, samples, err = harvest.stream_chroma(url)     # caches + uploads the sig (sigstore)
+    # The declared length rides along, so the fetch child refuses an over-long candidate on the
+    # same facts the queue door used: this runtime's queue holds bare URLs too.
+    c, samples, err = harvest.stream_chroma(url, harvest.queue_duration(url))   # caches+uploads sig
 
     # A STOP IS NEVER A VERDICT. `submit_result` reports one either way it is called, and the
     # collector acts on it: it folds the record, counts the error, and moves the URL out of

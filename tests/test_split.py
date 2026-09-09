@@ -78,7 +78,10 @@ class Base(unittest.TestCase):
         c = self._chroma() if c is None and err is None else c
         samples = self._samples() if samples is None and err is None else samples
 
-        def fetch(url):
+        # Mirrors `harvest.stream_chroma(url, duration=None)`. `duration` is the player's declared
+        # length, passed so the fetch child refuses an over-long candidate on the same facts the
+        # queue door used; a double that did not take it would pass while the real call raised.
+        def fetch(url, duration=None):
             if err is None:
                 np.save(harvest.sig_path(url), c.astype("float16"))
             return (c, samples, err)
