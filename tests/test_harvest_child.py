@@ -1,4 +1,4 @@
-"""The per-candidate fetch child and the stop path.
+"""The per-candidate fetch child, the stop path, and the memory rows.
 
 Nothing here touches the network. Every `yt-dlp` and `ffmpeg` is a fake object, every fetch child
 is a fake `Popen`, and the two things worth being careful about are pinned:
@@ -29,8 +29,9 @@ import numpy as np                      # noqa: E402
 
 try:
     import harvest                      # noqa: E402
+    import memwatch                     # noqa: E402
 except Exception:                       # a dependency this test does not own
-    harvest = None
+    harvest = memwatch = None
 
 SR = 16000
 LONG_ENOUGH = int(60 * SR)              # comfortably over chroma_recipe.MIN_SECONDS
@@ -192,7 +193,8 @@ class ChildBoundary(unittest.TestCase):
         chroma = np.arange(12 * 5, dtype="float32").reshape(12, 5)
         pcm = _pcm(4000)
         with mock.patch.object(harvest.subprocess, "Popen",
-                               self._child_writes({"ok": True, "error": None, "seconds": 0.25},
+                               self._child_writes({"ok": True, "error": None, "seconds": 0.25,
+                                                   "peak_mb": 901.5, "footprint_mb": 590.0},
                                                   chroma=chroma, pcm=pcm)):
             c, samples, err = harvest.stream_chroma(self.url)
 
@@ -207,6 +209,7 @@ class ChildBoundary(unittest.TestCase):
         # ...and it slices like the array it replaced, which is all write_excerpt needs.
         self.assertTrue(np.array_equal(np.asarray(samples[10:20], dtype="float32"),
                                        np.frombuffer(pcm, dtype="float32")[10:20]))
+        self.assertEqual(harvest._LAST_CHILD["peak_mb"], 901.5)
 
     def test_write_excerpt_from_a_memmap_matches_an_in_memory_array(self):
         """`write_excerpt` is the one place the samples are used for something other than
@@ -400,6 +403,7 @@ class NoSignatureFromAPartialDecode(unittest.TestCase):
         self.assertEqual(len(self.put), 1)
         self.assertEqual(result["n_samples"], LONG_ENOUGH)
         self.assertEqual(result["seconds"], 60.0)
+        self.assertIn("peak_mb", result)
         self.assertTrue(os.path.exists(os.path.join(self.job, "pcm.f32le")))
 
     def test_a_flood_of_stderr_does_not_deadlock_the_decode(self):
@@ -550,6 +554,113 @@ class Stopping(unittest.TestCase):
             saved = json.load(fh)
         self.assertEqual(saved["session"]["phase"], "stopped (SIGTERM)")
         self.assertIsNone(saved["current"])
+
+
+@unittest.skipUnless(memwatch is not None, "memwatch needs the scripts path")
+class Footprint(unittest.TestCase):
+    def test_the_probe_reports_a_plausible_number_and_a_peak(self):
+        current, peak = memwatch.footprint_mb()
+        if current is None:
+            self.skipTest("no footprint probe on %s" % sys.platform)
+        self.assertGreater(current, 1)
+        self.assertGreaterEqual(peak, current)
+        block = np.ones(50_000_000, dtype="float32")     # 200 MB
+        after, after_peak = memwatch.footprint_mb()
+        del block
+        self.assertGreaterEqual(after - current, 150)
+        self.assertGreaterEqual(after_peak, after)
+
+    @unittest.skipUnless(sys.platform == "darwin", "the footprint CLI is macOS only")
+    def test_the_probe_agrees_with_the_footprint_cli(self):
+        import re
+        import subprocess
+        try:
+            out = subprocess.run(["footprint", "-p", str(os.getpid())],
+                                 capture_output=True, text=True, timeout=30).stdout
+        except (OSError, subprocess.SubprocessError):
+            self.skipTest("the footprint CLI is not available")
+        m = re.search(r"Footprint:\s+([\d.]+)\s*(KB|MB|GB)", out)
+        if not m:
+            self.skipTest("could not parse the footprint CLI's output")
+        cli = float(m.group(1)) * {"KB": 1 / 1024.0, "MB": 1.0, "GB": 1024.0}[m.group(2)]
+        current = memwatch.footprint_mb()[0]
+        self.assertLess(abs(current - cli) / max(cli, 1.0), 0.10)
+
+    def test_a_broken_probe_returns_nothing_rather_than_raising(self):
+        with mock.patch.object(memwatch.ctypes, "CDLL", side_effect=OSError("no")):
+            self.assertEqual(memwatch.footprint_mb(), (None, None))
+
+    def test_the_allocator_canary_flags_retention(self):
+        readings = iter([(20.0, 20.0), (800.0, 800.0)])
+        _b, _a, retained = memwatch.allocator_canary(sampler=lambda: next(readings))
+        self.assertEqual(retained, 780.0)
+        self.assertIn("allocator retention back", memwatch.canary_issue(retained))
+        self.assertIn("MallocLargeCache", memwatch.canary_line(retained))
+
+    def test_a_clean_allocator_earns_no_issue(self):
+        readings = iter([(20.0, 20.0), (36.0, 36.0)])
+        _b, _a, retained = memwatch.allocator_canary(sampler=lambda: next(readings))
+        self.assertEqual(retained, 16.0)
+        self.assertIsNone(memwatch.canary_issue(retained))
+
+
+@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+class MemoryRowsAndCeiling(unittest.TestCase):
+    def setUp(self):
+        self.state = {"issues": []}
+        self.url = "https://example.invalid/watch?v=mem"
+
+    def _at(self, parent_mb):
+        return mock.patch.object(harvest.memwatch, "footprint_mb",
+                                 lambda: (parent_mb, parent_mb))
+
+    def test_a_row_is_written_for_a_cached_candidate_with_no_child_numbers(self):
+        with self._at(310.0):
+            row = harvest.record_memory(self.state, self.url, None)
+        self.assertEqual(row["parent_mb"], 310.0)
+        self.assertIsNone(row["child_peak_mb"])
+        self.assertEqual(self.state["mem"], row)
+        self.assertEqual(self.state["mem_log"], [row])
+
+    def test_a_row_carries_the_childs_peak_when_one_ran(self):
+        child = {"peak_mb": 905.2, "footprint_mb": 591.0, "seconds": 7020.0}
+        with self._at(310.0):
+            row = harvest.record_memory(self.state, self.url, child)
+        self.assertEqual((row["child_peak_mb"], row["child_after_mb"]), (905.2, 591.0))
+        self.assertEqual(row["seconds"], 7020.0)
+
+    def test_the_log_keeps_the_last_fifty_rows(self):
+        with self._at(100.0):
+            for i in range(60):
+                harvest.record_memory(self.state, "%s#%d" % (self.url, i), None)
+        self.assertEqual(len(self.state["mem_log"]), harvest.MEM_LOG_KEEP)
+        self.assertTrue(self.state["mem_log"][-1]["url"].endswith("#59"))
+
+    def test_the_ceiling_is_off_unless_it_is_set(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("NETRADIO_HARVEST_MEM_CEILING_MB", None)
+            with self._at(9000.0):
+                self.assertFalse(harvest.check_memory(self.state, self.url, None))
+        self.assertEqual(self.state["issues"], [])
+
+    def test_a_parent_over_the_ceiling_stands_down(self):
+        with mock.patch.dict(os.environ, {"NETRADIO_HARVEST_MEM_CEILING_MB": "3000"}):
+            with self._at(3001.0):
+                self.assertTrue(harvest.check_memory(self.state, self.url, None))
+        self.assertEqual(self.state["session"]["phase"], "restarting: memory ceiling")
+        self.assertIn("3000", self.state["issues"][-1]["issue"])
+
+    def test_a_child_over_the_ceiling_only_reports(self):
+        """The child's memory left with the child, so restarting the parent would fix nothing."""
+        with mock.patch.dict(os.environ, {"NETRADIO_HARVEST_MEM_CEILING_MB": "3000"}):
+            with self._at(300.0):
+                self.assertFalse(harvest.check_memory(self.state, self.url, {"peak_mb": 5000.0}))
+        self.assertIn("fetch child peaked at 5000 MB", self.state["issues"][-1]["issue"])
+        self.assertNotIn("session", self.state)
+
+    def test_a_nonsense_ceiling_is_ignored_rather_than_crashing_the_run(self):
+        with mock.patch.dict(os.environ, {"NETRADIO_HARVEST_MEM_CEILING_MB": "lots"}):
+            self.assertEqual(harvest.mem_ceiling_mb(), 0.0)
 
 
 if __name__ == "__main__":

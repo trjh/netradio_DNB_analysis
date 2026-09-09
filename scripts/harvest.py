@@ -66,6 +66,7 @@ from streamalign import groundtruth as _gt           # noqa: E402
 from streamalign import mystery as _mystery          # noqa: E402
 
 import chroma_recipe                                 # noqa: E402  (THE recipe, single source)
+import memwatch                                      # noqa: E402  (footprint + allocator canary)
 import selftest                                      # noqa: E402  (the canary; see run())
 import sigstore                                      # noqa: E402  (bucket = the pool's only home)
 
@@ -488,8 +489,10 @@ def _decode_and_sign(url, job):
     # borderline verdict. Not a signature change either way -- the signature is the file above.
     np.save(os.path.join(job, "chroma32.npy"), c)
 
+    current, peak = memwatch.footprint_mb()
     return {"ok": True, "error": None, "n_samples": int(n_samples),
-            "seconds": round(n_samples / _audio.SR, 1), "took_s": round(time.time() - started, 1)}
+            "seconds": round(n_samples / _audio.SR, 1), "took_s": round(time.time() - started, 1),
+            "footprint_mb": current, "peak_mb": peak, "footprint_kind": memwatch.kind()}
 
 
 def _run_fetch_child(url, job):
@@ -530,6 +533,12 @@ def _run_fetch_child(url, job):
     return result
 
 
+# The last fetch child's result.json. The memory rows (see `record_memory`) want the child's peak
+# footprint, and stream_chroma's three callers want its three-tuple unchanged, so the extra fields
+# ride here rather than on the return value.
+_LAST_CHILD = {}
+
+
 def stream_chroma(url):
     """Stream the audio, reduce it to a chroma signature -> (chroma, samples, error).
 
@@ -547,6 +556,7 @@ def stream_chroma(url):
     Set NETRADIO_HARVEST_CHILD=0 to run the fetch in this process instead. That is for diagnosing
     an environment problem in the child, not for normal use: it brings the memory back with it.
     """
+    _LAST_CHILD.clear()
     job = job_dir(url)
     shutil.rmtree(job, ignore_errors=True)          # a stale job dir for this URL is not ours
     os.makedirs(job, exist_ok=True)
@@ -555,6 +565,7 @@ def stream_chroma(url):
             result = _fetch_and_sign(url, job)
         else:
             result = _run_fetch_child(url, job)
+        _LAST_CHILD.update(result)
         if not result.get("ok"):
             return None, None, result.get("error") or "no signature"
         c = np.load(os.path.join(job, "chroma32.npy"))
@@ -1412,6 +1423,75 @@ def _stopped(state):
     print("# stopped on %s -- state saved, the interrupted URL is still pending" % name)
 
 
+# --- how much memory this is costing -------------------------------------------------------------
+#
+# One row per candidate, so "the harvester is at 40 GB again" is a number somebody can read rather
+# than a thing somebody eventually notices. The parent should stay flat -- it never holds a track's
+# audio now. The child's peak is the interesting number, and it comes back in result.json.
+
+MEM_LOG_KEEP = 50
+
+
+def mem_ceiling_mb():
+    """The parent's restart ceiling in MB, from NETRADIO_HARVEST_MEM_CEILING_MB. 0 = off.
+
+    Off by default on purpose. The right number depends on what a long candidate actually costs
+    after this change, and that measurement has not been taken yet; a guessed ceiling would
+    restart a healthy harvester.
+    """
+    try:
+        return float(os.environ.get("NETRADIO_HARVEST_MEM_CEILING_MB") or 0)
+    except ValueError:
+        return 0.0
+
+
+def _mb(value):
+    return None if value is None else round(float(value), 1)
+
+
+def record_memory(state, url, child=None):
+    """Sample this process's footprint and write the row. `child` is the fetch child's
+    result.json, or None for a candidate that came from the signature cache."""
+    current, peak = memwatch.footprint_mb()
+    child = child or {}
+    row = {"at": _now(), "url": url, "kind": memwatch.kind(),
+           "seconds": child.get("seconds"),
+           "parent_mb": _mb(current), "parent_peak_mb": _mb(peak),
+           "child_peak_mb": _mb(child.get("peak_mb")),
+           "child_after_mb": _mb(child.get("footprint_mb"))}
+    state["mem"] = row
+    state["mem_log"] = ((state.get("mem_log") or []) + [row])[-MEM_LOG_KEEP:]
+    return row
+
+
+def check_memory(state, url, child=None):
+    """Record the row, and say whether the PARENT should stand down to be restarted.
+
+    A child over the ceiling only earns an issues row: its memory left with it, so there is
+    nothing to restart. A parent over the ceiling returns from `run()` with exit 0 -- the player's
+    watchdog sees a phase that is not "queue empty" and spawns a fresh one.
+    """
+    row = record_memory(state, url, child)
+    ceiling = mem_ceiling_mb()
+    if not ceiling:
+        return False
+    if (row["child_peak_mb"] or 0) > ceiling:
+        state["issues"] = ((state.get("issues") or []) + [{
+            "at": _now(), "url": url,
+            "issue": "fetch child peaked at %.0f MB, over the %.0f MB ceiling -- reported only, "
+                     "the child's memory went with it" % (row["child_peak_mb"], ceiling)}])[-50:]
+    if (row["parent_mb"] or 0) > ceiling:
+        state["session"] = {"phase": "restarting: memory ceiling", "until": 0}
+        state["issues"] = ((state.get("issues") or []) + [{
+            "at": _now(),
+            "issue": "parent at %.0f MB, over the %.0f MB ceiling -- standing down so the "
+                     "supervisor can restart it" % (row["parent_mb"], ceiling)}])[-50:]
+        print("# parent footprint %.0f MB is over the %.0f MB ceiling -- stopping so the "
+              "watchdog restarts us" % (row["parent_mb"], ceiling))
+        return True
+    return False
+
+
 def run(args):
     install_signal_handlers()
     lock = acquire_writer_lock()
@@ -1443,6 +1523,18 @@ def run(args):
     swept = sweep_job_dirs()            # and whatever a crashed fetch child left in .harvest/tmp
     if swept:
         print("# swept %d stale fetch job director%s" % (swept, "y" if swept == 1 else "ies"))
+
+    # THE ALLOCATOR CANARY. `MallocLargeCache=0` is what stops macOS holding on to every large
+    # block the recipe frees, and it is an UNDOCUMENTED variable -- so an OS release that stops
+    # honouring it would quietly restore the old behaviour, with nothing to see but a swap file
+    # slowly growing. Measure it on every start instead of trusting a number from a past release.
+    _before, _after, retained = memwatch.allocator_canary()
+    if retained is not None:
+        print(memwatch.canary_line(retained))
+        issue = memwatch.canary_issue(retained)
+        if issue:
+            state["issues"] = (state.get("issues") or [])[-49:] + [{"at": _now(), "issue": issue}]
+            _save(STATE, state)
 
     # THE CANARY. A broken harvester and a pool without the answer look identical from here: zero
     # matches, for weeks. So before searching for something we have never found, prove we can still
@@ -1587,6 +1679,12 @@ def run(args):
         if _stop_requested():
             samples = None                  # before the queue moves: the URL is still pending
             return _stopped(state)
+
+        # One memory row per candidate, fetched or cached, and the parent's own ceiling check.
+        if check_memory(state, url, None if cached else dict(_LAST_CHILD)):
+            samples = None
+            _save(STATE, state)
+            return
 
         # --- the bot wall: STOP, do not grind ---
         #
