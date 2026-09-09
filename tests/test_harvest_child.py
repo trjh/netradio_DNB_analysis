@@ -33,6 +33,11 @@ try:
 except Exception:                       # a dependency this test does not own
     harvest = memwatch = None
 
+try:
+    import harvester                    # noqa: E402  (split mode; also needs soundfile)
+except Exception:
+    harvester = None
+
 SR = 16000
 LONG_ENOUGH = int(60 * SR)              # comfortably over chroma_recipe.MIN_SECONDS
 
@@ -673,6 +678,76 @@ class MemoryRowsAndCeiling(unittest.TestCase):
     def test_a_nonsense_ceiling_is_ignored_rather_than_crashing_the_run(self):
         with mock.patch.dict(os.environ, {"NETRADIO_HARVEST_MEM_CEILING_MB": "lots"}):
             self.assertEqual(harvest.mem_ceiling_mb(), 0.0)
+
+
+@unittest.skipUnless(harvest is not None and harvester is not None,
+                     "the split harvester needs soundfile -- not this test's job")
+class AStopIsNeverAVerdict(unittest.TestCase):
+    """The split harvester must submit nothing for a fetch a signal interrupted.
+
+    `submit_result` is a VERDICT either way it is called. The collector folds an `ok: false`
+    record, counts the error, and moves the URL out of `pending` into `done` -- and `done` is
+    never re-fetched. So once the parent gained a handler, a Ctrl-C during a fetch would have
+    dropped that candidate from the search for good, which is worse than the behaviour it
+    replaced: before the handler the process simply died mid-pipe and submitted nothing.
+
+    An interrupted fetch has nothing to report -- not success, not failure.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.url = "https://example.invalid/watch?v=stopme"
+        self.results = os.path.join(self.tmp, "results")
+        self._patches = [
+            mock.patch.object(harvester, "RESULTS", self.results),
+            mock.patch.object(harvester, "HSTATE", os.path.join(self.tmp, "hstate.json")),
+            mock.patch.object(harvester, "JOBS", os.path.join(self.tmp, "jobs")),
+            mock.patch.object(harvest, "CACHE", os.path.join(self.tmp, "cache")),
+            mock.patch.object(harvester.sigstore, "enabled", lambda: False),
+        ]
+        for patch in self._patches:
+            patch.start()
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        for patch in self._patches:
+            patch.stop()
+        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _spooled(self):
+        return sorted(os.listdir(self.results)) if os.path.isdir(self.results) else []
+
+    def _stopped_fetch(self, _url):
+        """What `stream_chroma` returns when the handler fired while the child was running."""
+        harvest._STOP["signum"] = signal.SIGTERM
+        return None, None, "stopped"
+
+    def test_a_stopped_fetch_submits_nothing_and_leaves_the_url_pending(self):
+        q = {"pending": [self.url], "done": []}
+        hstate = harvester.blank_hstate()
+        with mock.patch.object(harvest, "stream_chroma", self._stopped_fetch):
+            outcome = harvester.work_once(hstate, q)
+        self.assertEqual(outcome, "stopped")
+        self.assertEqual(self._spooled(), [],
+                         "a stop wrote a result to the spool -- the collector folds that and "
+                         "moves the URL to done, which is never re-fetched")
+        self.assertEqual(q["pending"], [self.url])
+        self.assertEqual(q["done"], [])
+        self.assertEqual(hstate["errors"], 0)
+        self.assertEqual(hstate["session"]["phase"], "stopped (SIGTERM)")
+        self.assertIsNone(hstate["current"])
+
+    def test_an_ordinary_failure_is_still_a_verdict(self):
+        """The guard must not swallow a real per-URL failure, which the collector needs."""
+        q = {"pending": [self.url], "done": []}
+        hstate = harvester.blank_hstate()
+        with mock.patch.object(harvest, "stream_chroma",
+                               lambda u: (None, None, "ERROR: video unavailable")):
+            outcome = harvester.work_once(hstate, q)
+        self.assertEqual(outcome, "fetched")
+        self.assertEqual(len(self._spooled()), 1)
+        self.assertEqual(hstate["errors"], 1)
 
 
 if __name__ == "__main__":

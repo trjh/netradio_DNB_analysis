@@ -1571,6 +1571,11 @@ def run(args):
             # query key, which fingerprints the clip) that is ours alone, and leaking it across the
             # boundary is what broke this: selftest unpacked two and got three.
             lv = selftest.live(stream_chroma, [(n, qc) for n, qc, _ in qs])
+            # A stop is never a verdict here either: an interrupted canary fetch is not a canary
+            # FAILURE, and recording it as one would leave a standing "the matcher is broken"
+            # issue behind every Ctrl-C.
+            if _stop_requested():
+                return _stopped(state)
             if lv.get("ok"):
                 print("# live canary PASS -- fetched %s fresh and matched it at %.4f"
                       % (lv["name"], lv["cost"]))

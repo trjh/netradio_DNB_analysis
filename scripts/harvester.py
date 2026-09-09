@@ -119,7 +119,7 @@ def _pick(q, hstate, done_set):
 
 def work_once(hstate, q):
     """One fetch attempt. Public so tests can step the policy. Returns:
-    'fetched' | 'skipped' | 'waiting' | 'idle' | 'halted'."""
+    'fetched' | 'skipped' | 'waiting' | 'idle' | 'halted' | 'stopped'."""
     done_set = set(q.get("done") or [])
     url, host, hinfo, wait = _pick(q, hstate, done_set)
     if url is None:
@@ -139,6 +139,22 @@ def work_once(hstate, q):
     _save(HSTATE, hstate)
 
     c, samples, err = harvest.stream_chroma(url)     # caches + uploads the sig (sigstore)
+
+    # A STOP IS NEVER A VERDICT. `submit_result` reports one either way it is called, and the
+    # collector acts on it: it folds the record, counts the error, and moves the URL out of
+    # `pending` into `done` -- which is never re-fetched. So submitting an interrupted fetch as a
+    # failure would drop that candidate from the search for good, which is worse than what the
+    # handlers replaced (the process died mid-pipe and submitted nothing). An interrupted fetch
+    # has nothing to report, so it reports nothing and the URL stays pending.
+    #
+    # If the child actually finished before the signal, its signature is already in the cache and
+    # `already_held` submits the success on the next start. Nothing is lost either way.
+    if harvest._stop_requested():
+        hstate["session"] = {"phase": "stopped (%s)" % harvest._stop_name(), "until": 0}
+        hstate["current"] = None
+        hstate["updated"] = _now()
+        _save(HSTATE, hstate)
+        return "stopped"
 
     if is_bot_wall(err):
         hstate["halted"] = {"at": _now(), "host": host, "error": (err or "")[:200]}
@@ -230,6 +246,9 @@ def run():
         q = _load(QUEUE, {"pending": [], "done": []})
         outcome = work_once(hstate, q)
         _save(HSTATE, hstate)
+        if outcome == "stopped":
+            print("# stopped -- state saved; the interrupted URL is still pending")
+            return
         if outcome == "halted":
             print("!! HALTED -- bot wall; see harvester_state.json and harvest.py's banner advice")
             return
