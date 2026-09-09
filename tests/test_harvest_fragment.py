@@ -83,6 +83,26 @@ class TheFragment(unittest.TestCase):
             with self.subTest(frag=frag):
                 self.assertIsNone(harvest.media_fragment("https://y/watch?v=a" + frag))
 
+    def test_an_endpoint_too_long_to_be_a_time_is_not_a_fragment(self):
+        """Python refuses to convert a string of more than 4,300 digits to an int. An unbounded
+        `\\d+` therefore turned one malformed queue entry into a `ValueError` out of
+        `listen_queue_split` -- which promises never to raise -- and out of `sync_listen_queue`
+        into the main loop. The pattern is bounded now, so a field that long is simply not a
+        fragment, which is the truth of it: no audio is 10**4300 seconds long."""
+        for digits in (11, 100, 4300, 4301):
+            with self.subTest(digits=digits):
+                url = "https://y/watch?v=a#t=0," + "9" * digits
+                self.assertIsNone(harvest.media_fragment(url))
+                self.assertFalse(harvest.too_long(url))          # ordinary, and not refused
+        # And at the start of the range too, where the value is never even reached today.
+        self.assertIsNone(harvest.media_fragment("https://y/a#t=" + "9" * 4301 + ",1"))
+
+    def test_the_largest_accepted_endpoint_is_ten_digits(self):
+        """The bound is generous by design: ten digits of seconds is on the order of three
+        centuries, so the boundary sits far outside anything real."""
+        self.assertEqual(harvest.media_fragment("https://y/a#t=0,9999999999"), (0, 9999999999))
+        self.assertIsNone(harvest.media_fragment("https://y/a#t=0,19999999999"))   # eleven
+
     def test_each_chunk_of_one_master_has_its_own_key(self):
         """The fragment stays in the URL, so the signature key is per chunk -- which is the whole
         mechanism: two chunks of one master must not share a cached signature."""
@@ -189,6 +209,34 @@ class TheFfmpegLeg(unittest.TestCase):
         self.assertIn("6.0 h", result["error"])
         self.assertFalse(os.path.exists(os.path.join(self.job, "pcm.f32le.part")))
 
+    def test_the_largest_accepted_span_is_refused_without_overflowing(self):
+        """The boundary itself, driven through the decode door -- not only the rejection.
+
+        Formatting the refusal divides the span by 3600.0, and a span the parser no longer bounds
+        would raise `OverflowError` there instead of producing a message. With ten digits the
+        largest value the parser can hand over converts to a float comfortably, so that failure
+        is unreachable by construction rather than by luck."""
+        spawned = []
+
+        def _popen(argv, **kwargs):
+            spawned.append(argv)
+            return _FakeProc(argv)
+
+        url = "https://y/watch?v=a#t=0,9999999999"
+        self.assertEqual(harvest.media_fragment(url), (0, 9999999999))   # accepted by the parser
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            result = harvest._fetch_and_sign(url, self.job)              # and refused as too long
+        self.assertEqual(spawned, [])
+        self.assertFalse(result["ok"])
+        self.assertIn("too long", result["error"])
+        self.assertIn("2777777.8 h", result["error"])
+
+    def test_an_endpoint_past_the_bound_is_decoded_as_an_ordinary_url(self):
+        """Past the bound it is not a fragment, so it is not a cut either: the argv is the plain
+        one, with no `-ss` and no `-t`, and nothing raises on the way."""
+        argv = self._ffmpeg_argv("https://y/watch?v=a#t=0," + "9" * 4301)
+        self.assertEqual(argv, self._expected_before())
+
     def test_both_doors_ask_the_same_question(self):
         """Not two thresholds that happen to agree today: one predicate, called twice. A URL the
         queue refuses is refused by the decode, and one it admits is decoded."""
@@ -278,6 +326,25 @@ class TheTooLongBackstop(unittest.TestCase):
         self.assertTrue(harvest.too_long("https://y/m#t=0,14401"))
         self.assertFalse(harvest.too_long("https://y/m#t=600,15000"))
         self.assertTrue(harvest.too_long("https://y/m#t=600,15001"))
+
+    def test_a_monstrous_fragment_does_not_stop_the_world(self):
+        """The queue is data this process does not control, and `listen_queue_split` promises
+        never to raise. An unbounded digit run broke that promise through `int()`, and because
+        the main loop calls `sync_listen_queue` unguarded, ONE malformed entry ended a run meant
+        to last for days. The entry is now ordinary: searched, not refused, and above all not
+        fatal -- and the good entry beside it still comes through."""
+        for digits in (4300, 4301, 9000):
+            with self.subTest(digits=digits):
+                bad = "https://y/m#t=0," + "9" * digits
+                self._queue([{"url": bad, "duration": 600},
+                             {"url": "https://y/good", "duration": 600}])
+                issues = []
+                cand, retired = harvest.listen_queue_split(issues)       # must not raise
+                self.assertEqual(cand, [bad, "https://y/good"])
+                self.assertEqual(issues, [])
+                q = {"pending": [], "done": []}
+                added, _ = harvest.sync_listen_queue(q)                  # nor this one
+                self.assertEqual(added, 2)
 
     def test_a_long_mix_under_the_backstop_is_still_searched(self):
         """The rule is still that length is not a filter -- a record hides inside a DJ set, and

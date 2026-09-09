@@ -193,17 +193,35 @@ def blank_state():
 # prevent -- and would then store that one signature under every chunk's key, so each chunk would
 # claim to be the master. Wrong answers, cached, never fetched again.
 
-_FRAGMENT = re.compile(r"t=(\d+),(\d+)", re.ASCII)
+# The digit count is BOUNDED, and that bound is part of the definition of a fragment -- not a
+# safety net bolted on after one. Ten digits of seconds is on the order of three centuries; no
+# recording, and no slice of one, comes within many orders of magnitude of that, so nothing real
+# is turned away. What an unbounded `\d+` let in was a field far too long to be a time at all:
+# Python refuses to convert a string of more than 4,300 digits to an int, so `int()` raised
+# straight through `listen_queue_split` -- which promises never to raise -- and out of
+# `sync_listen_queue` into the main loop, where a single malformed queue entry would have ended a
+# run meant to last for days. A 4,300-digit value cleared the parser instead and then overflowed
+# while its own refusal message was being formatted.
+#
+# The bound belongs HERE, in the pattern, not in a `try` wrapped around each caller. A field that
+# long is not a media fragment, so it simply fails to match and the URL is an ordinary one --
+# leaving one definition of what a valid fragment is, rather than a permissive parser that
+# everything downstream then has to survive.
+_FRAGMENT = re.compile(r"t=(\d{1,10}),(\d{1,10})", re.ASCII)
 
 
 def media_fragment(url):
     """`(start_s, end_s)` from a URL's `#t=<a>,<b>` fragment, or None if it has no valid one.
 
-    Strict on purpose: two non-negative whole seconds with a < b, and nothing else in the
-    fragment. Anything that does not match is not a media fragment, so the URL is treated as an
-    ordinary one and the whole audio is signed -- the same as before chunks existed. The one
-    thing that must never happen is a HALF-applied fragment: audio cut somewhere we did not mean,
-    signed under a key that says exactly where it should have been cut.
+    Strict on purpose: two non-negative whole seconds of at most ten digits each, with a < b, and
+    nothing else in the fragment. Anything that does not match is not a media fragment, so the URL
+    is treated as an ordinary one and the whole audio is signed -- the same as before chunks
+    existed. The one thing that must never happen is a HALF-applied fragment: audio cut somewhere
+    we did not mean, signed under a key that says exactly where it should have been cut.
+
+    NEVER RAISES, for any string at all. The queue is data this process does not control, and its
+    callers -- `listen_queue_split`, and through it the main loop's `sync_listen_queue` -- have no
+    business dying over one malformed entry.
     """
     _, sep, frag = url.partition("#")
     if not sep:
