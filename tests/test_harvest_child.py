@@ -1,4 +1,4 @@
-"""The per-candidate fetch child.
+"""The per-candidate fetch child and the stop path.
 
 Nothing here touches the network. Every `yt-dlp` and `ffmpeg` is a fake object, every fetch child
 is a fake `Popen`, and the two things worth being careful about are pinned:
@@ -16,6 +16,7 @@ import io
 import json
 import os
 import shutil
+import signal
 import sys
 import tempfile
 import unittest
@@ -110,6 +111,7 @@ class ChildBoundary(unittest.TestCase):
 
     def _restore(self):
         harvest.JOBS = self._jobs
+        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _child_writes(self, result, chroma=None, pcm=b""):
@@ -326,6 +328,7 @@ class NoSignatureFromAPartialDecode(unittest.TestCase):
 
     def _restore(self):
         harvest.CACHE = self._cache
+        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _run(self, popen, **patches):
@@ -372,6 +375,22 @@ class NoSignatureFromAPartialDecode(unittest.TestCase):
     def test_too_short_to_trust(self):
         result = self._run(fake_decode(pcm=_pcm(SR * 5)))
         self._assert_no_signature(result, "too short (5s)")
+
+    def test_a_stop_between_the_decode_and_the_recipe(self):
+        """The flag can go up after the decode finished cleanly. Nothing is written."""
+        popen = fake_decode(pcm=_pcm(LONG_ENOUGH))
+
+        def _stop_after_decode(y, sr=None):
+            raise AssertionError("compute_chroma must not run after a stop")
+
+        with mock.patch.object(harvest.subprocess, "Popen", popen), \
+                mock.patch.object(harvest.chroma_recipe, "compute_chroma", _stop_after_decode), \
+                mock.patch.object(harvest, "_wait",
+                                  side_effect=lambda p, **k: (harvest._STOP.__setitem__(
+                                      "signum", signal.SIGTERM), p.wait())[1]):
+            result = harvest._fetch_and_sign(self.url, self.job)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"], "stopped")
 
     def test_a_clean_decode_writes_the_signature_once(self):
         result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)))
@@ -479,6 +498,58 @@ class TheChildEntryPoint(unittest.TestCase):
         with open(path, "w") as fh:
             fh.write("#!/bin/sh\n" + body)
         os.chmod(path, 0o755)
+
+
+@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+class Stopping(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(lambda: harvest._STOP.update(
+            {"signum": 0, "child": None, "procs": [], "part": None}))
+
+    def test_the_parent_handler_raises_a_flag_and_passes_the_signal_on(self):
+        child = mock.Mock()
+        child.poll.return_value = None
+        harvest._STOP["child"] = child
+        harvest._parent_stop(signal.SIGTERM, None)
+        self.assertTrue(harvest._stop_requested())
+        self.assertEqual(harvest._stop_name(), "SIGTERM")
+        child.terminate.assert_called_once_with()
+
+    def test_the_nap_comes_back_early(self):
+        import threading
+        started = harvest.time.time()
+        threading.Timer(0.2, lambda: harvest._STOP.__setitem__("signum",
+                                                               signal.SIGINT)).start()
+        self.assertTrue(harvest._nap(30))
+        self.assertLess(harvest.time.time() - started, 5)
+
+    def test_the_child_stops_ffmpeg_before_ytdlp(self):
+        """Killing yt-dlp first makes ffmpeg exit 0 on a truncated stream."""
+        order = []
+        ff = _FakeProc(["ffmpeg"], alive=True, order=order)
+        yt = _FakeProc(["yt-dlp"], alive=True, order=order)
+        part = tempfile.mktemp()
+        open(part, "wb").close()
+        harvest._STOP.update({"procs": [ff, yt], "part": part})
+        exits = []
+        with mock.patch.object(harvest.os, "_exit", exits.append):
+            harvest._child_stop(signal.SIGTERM, None)
+        self.assertEqual(order, ["ffmpeg", "yt-dlp"])
+        self.assertFalse(os.path.exists(part))
+        self.assertEqual(exits, [128 + int(signal.SIGTERM)])
+
+    def test_run_stops_cleanly_and_leaves_the_url_pending(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        state_path = os.path.join(tmp, "state.json")
+        state = {"session": {"phase": "working", "until": 0}, "current": "https://x.invalid/1"}
+        harvest._STOP["signum"] = signal.SIGTERM
+        with mock.patch.object(harvest, "STATE", state_path):
+            harvest._stopped(state)
+        with open(state_path) as fh:
+            saved = json.load(fh)
+        self.assertEqual(saved["session"]["phase"], "stopped (SIGTERM)")
+        self.assertIsNone(saved["current"])
 
 
 if __name__ == "__main__":

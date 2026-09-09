@@ -46,6 +46,7 @@ import os
 import random
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -223,6 +224,101 @@ def is_bot_wall(err):
     return any(p in e for p in BOT_WALL)
 
 
+# --- stopping ----------------------------------------------------------------------------------
+#
+# There was no signal handler at all. A SIGINT or SIGTERM to this pid alone raised KeyboardInterrupt
+# inside communicate() and the process left -- while yt-dlp and ffmpeg carried on pulling bandwidth
+# from someone else's server with nobody watching. That is the one thing this program is built not
+# to do. (The player's supervisor was never affected: it signals the whole process group.)
+#
+# The handler sets a FLAG and does not raise. Raising lands on whatever bytecode happened to be
+# executing, which includes the middle of a state save; a flag is checked at points we choose.
+
+_STOP = {"signum": 0, "child": None, "procs": [], "part": None}
+
+
+def _stop_requested():
+    return bool(_STOP["signum"])
+
+
+def _stop_name():
+    try:
+        return signal.Signals(_STOP["signum"]).name
+    except ValueError:
+        return "signal %s" % _STOP["signum"]
+
+
+def _end(proc, grace=2.0):
+    """Ask a child to stop, give it `grace` seconds, then insist."""
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        proc.terminate()
+        proc.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+    except OSError:
+        pass
+
+
+def _parent_stop(signum, _frame):
+    """Parent handler: raise the flag and pass the signal on to the fetch child, if one is up."""
+    _STOP["signum"] = signum
+    child = _STOP["child"]
+    if child is not None and child.poll() is None:
+        try:
+            child.terminate()
+        except OSError:
+            pass
+
+
+def _child_stop(signum, _frame):
+    """Fetch-child handler: stop ffmpeg BEFORE yt-dlp, then leave with 128 + signum.
+
+    The order is not a detail. Kill yt-dlp first and ffmpeg sees a clean EOF on its stdin, decodes
+    what it already has, and exits 0 -- so a TRUNCATED stream looks like a complete one, and the
+    only thing left between a partial decode and a signature cached forever under this URL is the
+    length gate. Stop the decoder first and there is no such window.
+    """
+    _STOP["signum"] = signum
+    for proc in _STOP["procs"]:                # [ffmpeg, yt-dlp], in that order
+        _end(proc)
+    _STOP["procs"] = []
+    if _STOP["part"]:
+        _unlink(_STOP["part"])
+    os._exit(128 + signum)
+
+
+def install_signal_handlers(child=False):
+    """Handle SIGINT and SIGTERM. A no-op off the main thread, which is where tests run."""
+    handler = _child_stop if child else _parent_stop
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            signal.signal(sig, handler)
+        except (ValueError, OSError):
+            pass
+
+
+def _nap(seconds):
+    """Sleep, but in one-second slices, and come back the moment a stop is asked for.
+
+    The loop's rests are minutes long (a 40-120 minute idle, most of all). Sleeping through them
+    means a SIGTERM is not acted on until the nap ends, which looks exactly like a hung process.
+    Returns True when the nap was cut short.
+    """
+    end = time.time() + seconds
+    while True:
+        if _stop_requested():
+            return True
+        left = end - time.time()
+        if left <= 0:
+            return False
+        time.sleep(min(1.0, left))
+
+
 def _unlink(path):
     try:
         os.unlink(path)
@@ -272,9 +368,14 @@ def _last_line(chunks, prefix=""):
     return (prefix + lines[-1])[:160] if lines else ""
 
 
-def _wait(proc):
-    """Wait for a subprocess to exit."""
-    return proc.wait()
+def _wait(proc, poll_s=1.0):
+    """Wait for a subprocess a second at a time, so a stop is acted on during a long decode."""
+    while True:
+        try:
+            return proc.wait(timeout=poll_s)
+        except subprocess.TimeoutExpired:
+            if _stop_requested():
+                return None
 
 
 def job_dir(url):
@@ -312,9 +413,19 @@ def _fetch_and_sign(url, job):
     and no stop was requested. A truncated decode would produce a perfectly plausible, permanently
     wrong recipe-1 signature for this URL -- cached, uploaded, and never fetched again.
     """
+    try:
+        return _decode_and_sign(url, job)
+    finally:
+        _STOP["part"] = None            # nothing left for the signal handler to clean up
+        _STOP["procs"] = []
+
+
+def _decode_and_sign(url, job):
+    """`_fetch_and_sign`'s body -- see there. Split out only so the stop state is always reset."""
     os.makedirs(job, exist_ok=True)
     part = os.path.join(job, "pcm.f32le.part")
     pcm = os.path.join(job, "pcm.f32le")
+    _STOP["part"] = part
     started = time.time()
 
     with open(part, "wb") as spool:
@@ -325,6 +436,7 @@ def _fetch_and_sign(url, job):
                                "-ac", "1", "-ar", str(_audio.SR), "-f", "f32le", "pipe:1"],
                               stdin=yt.stdout, stdout=spool, stderr=subprocess.PIPE)
         yt.stdout.close()
+        _STOP["procs"] = [ff, yt]              # the handler stops them in THIS order
         yt_err, ff_err = [], []
         drains = [threading.Thread(target=_drain, args=(yt.stderr, yt_err), daemon=True),
                   threading.Thread(target=_drain, args=(ff.stderr, ff_err), daemon=True)]
@@ -334,6 +446,11 @@ def _fetch_and_sign(url, job):
         _wait(yt)
         for t in drains:
             t.join(timeout=5)
+    _STOP["procs"] = []
+
+    if _stop_requested():
+        _unlink(part)
+        return {"ok": False, "error": "stopped"}
 
     size = os.path.getsize(part) if os.path.exists(part) else 0
     n_samples = size // 4
@@ -349,9 +466,15 @@ def _fetch_and_sign(url, job):
         return {"ok": False, "error": "too short (%.0fs)" % (n_samples / _audio.SR)}
 
     os.replace(part, pcm)
+    _STOP["part"] = None
     y = np.fromfile(pcm, dtype="float32")      # ONE allocation, at the final size
+    if _stop_requested():
+        return {"ok": False, "error": "stopped"}
+
     c = chroma_recipe.compute_chroma(y)        # THE recipe, in one place (chroma_recipe.py)
     del y
+    if _stop_requested():                      # nothing half-decoded reaches the cache
+        return {"ok": False, "error": "stopped"}
 
     os.makedirs(CACHE, exist_ok=True)
     np.save(sig_path(url), c.astype(chroma_recipe.STORE_DTYPE))
@@ -391,7 +514,11 @@ def _run_fetch_child(url, job):
         return {"ok": False, "error": "could not start the fetch child: %s" % exc}
     # Same process group as us on purpose (no start_new_session), so the supervisor's killpg
     # reaches the parent, this child, yt-dlp and ffmpeg together.
-    _out, err = child.communicate()
+    _STOP["child"] = child
+    try:
+        _out, err = child.communicate()
+    finally:
+        _STOP["child"] = None
 
     if child.returncode in (130, 143):          # 128 + SIGINT / SIGTERM
         return {"ok": False, "error": "stopped"}
@@ -1272,7 +1399,21 @@ def pick_next(pending, state):
     return best
 
 
+def _stopped(state):
+    """Record a clean stop and save.
+
+    The interrupted URL stays `pending`. Its child wrote no signature (see `_fetch_and_sign`), so
+    the only honest thing to do with it is fetch it again later.
+    """
+    name = _stop_name()
+    state["session"] = {"phase": "stopped (%s)" % name, "until": 0}
+    state["current"] = None
+    _save(STATE, state)
+    print("# stopped on %s -- state saved, the interrupted URL is still pending" % name)
+
+
 def run(args):
+    install_signal_handlers()
     lock = acquire_writer_lock()
     if lock is None:
         print("another queue/state writer is running (the collector, or another harvest.py "
@@ -1288,8 +1429,8 @@ def run(args):
     if note_no_queries(state, qs):
         _save(STATE, state)                   # searchable again -> the state stands down NOW
     print("# searching for Mystery Tracks %s" % ", ".join(str(n) for n, _, _ in qs))
-    print("# work %s, idle %s, rotating hosts, jittered. Ctrl-C is safe (state is on disk)."
-          % ("4-5h", "40-120m"))
+    print("# work %s, idle %s, rotating hosts, jittered. Ctrl-C or SIGTERM stops cleanly: state "
+          "is saved, yt-dlp and ffmpeg are stopped too." % ("4-5h", "40-120m"))
 
     # A halt is a message to the human, not a permanent state: starting again IS the human saying
     # "I dealt with it". Clear it, and say whether they actually did the thing that was asked.
@@ -1329,6 +1470,8 @@ def run(args):
 
     session_end = time.time() + random.uniform(*SESSION_S)
     while True:
+        if _stop_requested():
+            return _stopped(state)
         # The live canary, about once a day: the streaming path (yt-dlp -> ffmpeg -> chroma) is
         # exactly what the offline test does NOT exercise, and it is the part with moving parts.
         if selftest.due_for_live():
@@ -1348,7 +1491,7 @@ def run(args):
         if os.path.exists(PAUSE):
             state["session"] = {"phase": "paused", "until": 0}
             _save(STATE, state)
-            time.sleep(20)
+            _nap(20)
             continue
 
         q = _load(QUEUE, {"pending": [], "done": []})
@@ -1404,13 +1547,13 @@ def run(args):
             state["session"] = {"phase": "idle", "until": time.time() + nap}
             _save(STATE, state)
             print("# session over -- idling %.0f min" % (nap / 60))
-            time.sleep(nap)
+            _nap(nap)
             session_end = time.time() + random.uniform(*SESSION_S)
             continue
 
         idx = pick_next(q["pending"], state)
         if idx is None:
-            time.sleep(60)
+            _nap(60)
             continue
         url = q["pending"][idx]
         host = host_of(url)
@@ -1420,7 +1563,7 @@ def run(args):
         if wait > 0:
             state["session"] = {"phase": "waiting on %s" % host, "until": hinfo["next_ok"]}
             _save(STATE, state)
-            time.sleep(min(wait, 60))
+            _nap(min(wait, 60))
             continue
 
         state["session"] = {"phase": "working", "until": session_end}
@@ -1440,6 +1583,10 @@ def run(args):
             state["skipped_cached"] += 1
         else:
             c, samples, err = stream_chroma(url)
+
+        if _stop_requested():
+            samples = None                  # before the queue moves: the URL is still pending
+            return _stopped(state)
 
         # --- the bot wall: STOP, do not grind ---
         #
@@ -1579,6 +1726,7 @@ def main():
     # writer lock or touch state.json / queue.json. One candidate, one process, and the recipe's
     # working set goes away when it exits.
     if args.fetch_one:
+        install_signal_handlers(child=True)
         job = args.job or job_dir(args.fetch_one)
         try:
             result = _fetch_and_sign(args.fetch_one, job)

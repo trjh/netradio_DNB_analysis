@@ -193,6 +193,10 @@ def work_once(hstate, q):
 
 
 def run():
+    # The same flag-setting SIGINT/SIGTERM handlers harvest.py's own loop installs: a signal to
+    # this pid alone used to leave yt-dlp and ffmpeg running against a dead parent. The fetch
+    # itself already runs in harvest.py's per-candidate child, so this is all this side needs.
+    harvest.install_signal_handlers()
     os.makedirs(STATE_DIR, exist_ok=True)
     lock = open(LOCK, "w")
     try:
@@ -204,16 +208,22 @@ def run():
     hstate["started"] = _now()
     session_end = time.time() + random.uniform(*SESSION_S)
     while True:
+        if harvest._stop_requested():
+            hstate["session"] = {"phase": "stopped (%s)" % harvest._stop_name(), "until": 0}
+            hstate["current"] = None
+            _save(HSTATE, hstate)
+            print("# stopped -- state saved; the fetch child, yt-dlp and ffmpeg are stopped too")
+            return
         if os.path.exists(PAUSE):
             hstate["session"] = {"phase": "paused", "until": 0}
             _save(HSTATE, hstate)
-            time.sleep(20)
+            harvest._nap(20)
             continue
         if time.time() > session_end:
             rest = random.uniform(*IDLE_S)
             hstate["session"] = {"phase": "resting", "until": time.time() + rest}
             _save(HSTATE, hstate)
-            time.sleep(rest)
+            harvest._nap(rest)
             session_end = time.time() + random.uniform(*SESSION_S)
             continue
         hstate["session"] = {"phase": "working", "until": session_end}
@@ -224,7 +234,7 @@ def run():
             print("!! HALTED -- bot wall; see harvester_state.json and harvest.py's banner advice")
             return
         if outcome in ("waiting", "idle"):
-            time.sleep(30 if outcome == "waiting" else 120)
+            harvest._nap(30 if outcome == "waiting" else 120)
 
 
 def main():
