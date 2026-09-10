@@ -77,6 +77,15 @@ align-check:          ## verify the alignment venv can do the librosa-backed wor
 test:                 ## run the test suite
 	.env/bin/python -m pytest tests/ -q
 
+# MallocLargeCache=0 tells macOS not to keep freed large blocks inside the process. Without it
+# the harvester's footprint only ever goes up: it frees everything after each candidate, libmalloc
+# holds the pages anyway, and under pressure they end up compressed and swapped. It has to be in
+# the environment at process start, which is why it is here and not inside the script. Harmless on
+# other platforms (an unknown variable). The fetch child sets it again for itself.
+harvest-run:          ## work the queue (runs for weeks), with the memory bound in place
+	set -a; [ -f .env_vars ] && . ./.env_vars; set +a; \
+	MallocLargeCache=0 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --run
+
 #########################################
 #####          TRACKLIST            #####
 #########################################

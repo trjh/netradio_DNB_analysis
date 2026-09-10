@@ -110,6 +110,29 @@ def last():
     return _read(RESULT, {})
 
 
+# A STOP IS NEVER A VERDICT.
+#
+# `fetch` (harvest.stream_chroma) returns exactly this error when a signal interrupted the fetch.
+# It says nothing about the matcher or the streaming path, so it must not become a canary result:
+# recorded as a FAILURE it would sit on /harvest saying the matcher is broken until the next daily
+# run, and recorded at all -- even as "not checked" -- it would satisfy `due_for_live` and stand
+# the canary down for 24 hours because somebody pressed Ctrl-C. So it is reported and NOT recorded,
+# and the next start asks again.
+STOPPED = "stopped"
+
+
+def was_stopped(err):
+    """True when a fetch came back because it was interrupted, not because anything failed.
+
+    Matched exactly, or as the tail of `establish_canary`'s "could not fetch <url>: <err>", so a
+    real error that happens to contain the word is not mistaken for a stop. `harvest.was_stopped`
+    is the same predicate; it is duplicated rather than imported because this module must never
+    import the harvester -- that is why `fetch` is injected.
+    """
+    e = (err or "").strip().lower()
+    return e == STOPPED or e.endswith(": " + STOPPED)
+
+
 def record(result):
     """Keep the latest of each kind, so one offline pass cannot hide a live failure."""
     all_ = _read(RESULT, {})
@@ -289,6 +312,9 @@ def live(fetch, mystery_queries=None):
     canary = _read(CANARY, {})
     if not canary.get("url"):
         est = establish_canary(fetch)
+        if was_stopped(est.get("why")):
+            return {"kind": "live", "ok": None, "when": _now(),      # NOT recorded -- see STOPPED
+                    "why": "stopped while establishing the canary"}
         if not est.get("ok"):
             return record({"kind": "live", "ok": None, "when": _now(),
                            "why": "no canary yet: %s" % est.get("why")})
@@ -301,6 +327,9 @@ def live(fetch, mystery_queries=None):
 
     t0 = time.time()
     c_fetched, _samples, err = fetch(canary["url"])          # the REAL path: yt-dlp -> ffmpeg -> chroma
+    if was_stopped(err):
+        return {"kind": "live", "ok": None, "when": _now(),          # NOT recorded -- see STOPPED
+                "url": canary["url"], "why": "stopped before the live check finished"}
     if err or c_fetched is None:
         return record({"kind": "live", "ok": False, "when": _now(), "url": canary["url"],
                        "track": canary["track"], "name": canary["name"],

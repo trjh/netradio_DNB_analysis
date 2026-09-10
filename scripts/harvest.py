@@ -45,9 +45,13 @@ import json
 import os
 import random
 import re
+import shutil
+import signal
 import subprocess
 import sys
+import threading
 import time
+import traceback
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -62,6 +66,7 @@ from streamalign import groundtruth as _gt           # noqa: E402
 from streamalign import mystery as _mystery          # noqa: E402
 
 import chroma_recipe                                 # noqa: E402  (THE recipe, single source)
+import memwatch                                      # noqa: E402  (footprint + allocator canary)
 import selftest                                      # noqa: E402  (the canary; see run())
 import sigstore                                      # noqa: E402  (bucket = the pool's only home)
 
@@ -220,41 +225,423 @@ def is_bot_wall(err):
     return any(p in e for p in BOT_WALL)
 
 
-def stream_chroma(url):
-    """Stream the audio, reduce it to a chroma signature -> (chroma, samples, error).
+# --- stopping ----------------------------------------------------------------------------------
+#
+# There was no signal handler at all. A SIGINT or SIGTERM to this pid alone raised KeyboardInterrupt
+# inside communicate() and the process left -- while yt-dlp and ffmpeg carried on pulling bandwidth
+# from someone else's server with nobody watching. That is the one thing this program is built not
+# to do. (The player's supervisor was never affected: it signals the whole process group.)
+#
+# The handler sets a FLAG and does not raise. Raising lands on whatever bytecode happened to be
+# executing, which includes the middle of a state save; a flag is checked at points we choose.
 
-    The full audio is NEVER written to disk. It is streamed (yt-dlp -> ffmpeg -> numpy), reduced
-    to chroma, cached as a signature, and the decoded samples are returned IN MEMORY so the caller
-    can cut a short excerpt from them without fetching again. When the caller is done with them
-    they are dropped. `samples` is the whole track only for as long as one function call.
+_STOP = {"signum": 0, "child": None, "procs": [], "part": None}
+
+
+def _stop_requested():
+    return bool(_STOP["signum"])
+
+
+# The error a fetch reports when a signal interrupted it. A SENTINEL, not a message: it is the one
+# value here that must never be read as a per-URL failure, because a failure is a VERDICT and a
+# verdict retires the URL to `done`, which is never re-fetched.
+STOPPED = "stopped"
+
+
+def was_stopped(err):
+    """True when a fetch came back interrupted rather than failed.
+
+    A guard that reads a different signal from the one the danger travels on is not a guard. A
+    stop reaches a caller by either of two routes -- THIS process was signalled, which raises the
+    flag, or only the child was, which arrives as its exit code turned into this string -- so
+    every guard checks both. `selftest.was_stopped` is the same predicate, duplicated rather than
+    imported because selftest must never import the harvester.
     """
-    import librosa
-    yt = subprocess.Popen(["yt-dlp", "-q", "--no-warnings", "--no-playlist"] + cookie_args()
-                          + ["-f", "bestaudio", "-o", "-", url],
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    ff = subprocess.Popen(["ffmpeg", "-v", "error", "-i", "pipe:0",
-                           "-ac", "1", "-ar", str(_audio.SR), "-f", "f32le", "pipe:1"],
-                          stdin=yt.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    yt.stdout.close()
-    raw, _ = ff.communicate()
-    yt_err = yt.stderr.read().decode("utf-8", "replace")
-    yt.wait()
+    return (err or "").strip().lower() == STOPPED
 
-    if yt.returncode != 0 or not raw:
-        return None, None, yt_err.strip().split("\n")[-1][:160] if yt_err else "no audio"
-    y = np.frombuffer(raw, dtype="float32")
-    if len(y) < chroma_recipe.MIN_SECONDS * _audio.SR:
-        return None, None, "too short (%.0fs)" % (len(y) / _audio.SR)
 
-    c = chroma_recipe.compute_chroma(y)          # THE recipe, in one place (chroma_recipe.py)
+def _stop_name():
+    try:
+        return signal.Signals(_STOP["signum"]).name
+    except ValueError:
+        return "a signal"
+
+
+def _end(proc, grace=2.0):
+    """Ask a child to stop, give it `grace` seconds, then insist."""
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        proc.terminate()
+        proc.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+    except OSError:
+        pass
+
+
+def _parent_stop(signum, _frame):
+    """Parent handler: raise the flag, then stop whatever fetch is actually in flight.
+
+    Two shapes, and both have to be covered or the handler does not do the thing it was added
+    for. Normally the fetch is a child process, so terminate it. Under NETRADIO_HARVEST_CHILD=0
+    it is yt-dlp and ffmpeg spawned by THIS process, sitting in `_STOP["procs"]` -- leaving those
+    running against a parent that has gone is exactly the behaviour this handler exists to end,
+    so walk them too, ffmpeg first for the reason in `_child_stop`.
+    """
+    _STOP["signum"] = signum
+    child = _STOP["child"]
+    if child is not None and child.poll() is None:
+        try:
+            child.terminate()
+        except OSError:
+            pass
+    for proc in _STOP["procs"]:                 # [ffmpeg, yt-dlp] -- the in-process path only
+        _end(proc)
+    _STOP["procs"] = []
+
+
+def _child_stop(signum, _frame):
+    """Fetch-child handler: stop ffmpeg BEFORE yt-dlp, then leave with 128 + signum.
+
+    The order is not a detail. Kill yt-dlp first and ffmpeg sees a clean EOF on its stdin, decodes
+    what it already has, and exits 0 -- so a TRUNCATED stream looks like a complete one, and the
+    only thing left between a partial decode and a signature cached forever under this URL is the
+    length gate. Stop the decoder first and there is no such window.
+    """
+    _STOP["signum"] = signum
+    for proc in _STOP["procs"]:                # [ffmpeg, yt-dlp], in that order
+        _end(proc)
+    _STOP["procs"] = []
+    if _STOP["part"]:
+        _unlink(_STOP["part"])
+    os._exit(128 + signum)
+
+
+def install_signal_handlers(child=False):
+    """Handle SIGINT and SIGTERM. A no-op off the main thread, which is where tests run."""
+    handler = _child_stop if child else _parent_stop
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            signal.signal(sig, handler)
+        except (ValueError, OSError):
+            pass
+
+
+def _nap(seconds):
+    """Sleep, but in one-second slices, and come back the moment a stop is asked for.
+
+    The loop's rests are minutes long (a 40-120 minute idle, most of all). Sleeping through them
+    means a SIGTERM is not acted on until the nap ends, which looks exactly like a hung process.
+    Returns True when the nap was cut short.
+    """
+    end = time.time() + seconds
+    while True:
+        if _stop_requested():
+            return True
+        left = end - time.time()
+        if left <= 0:
+            return False
+        time.sleep(min(1.0, left))
+
+
+def _unlink(path):
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+# --- the fetch: one child process per candidate --------------------------------------------------
+#
+# The recipe's working set is large and short-lived, and macOS does not give it back (see
+# memwatch). Running each candidate's fetch in its own process means the long-lived parent -- which
+# holds the state, the queue, the mysteries and the matching board -- never touches a track's audio
+# at all, and whatever a child allocates leaves with the child. The parent's footprint stays flat
+# across candidates instead of climbing to a high-water mark and staying there.
+
+JOBS = os.path.join(STATE_DIR, "tmp")     # one directory per in-flight fetch
+STDERR_KEEP = 4096                        # bytes of each subprocess's stderr we hold on to
+JOB_STALE_S = 3600                        # a job dir older than this belongs to a crashed child
+
+
+def _drain(stream, sink):
+    """Read a pipe to EOF into a bounded tail, on a thread. `sink` is a ONE-element list.
+
+    yt-dlp can fill its 64 KB stderr pipe while ffmpeg is still decoding a two-hour track. Nobody
+    was reading it until ffmpeg exited, so the two could deadlock: yt-dlp blocked writing stderr,
+    ffmpeg blocked waiting for stdin. Only the tail matters -- the error we report is the last
+    line -- so the buffer is bounded.
+
+    The thread REPLACES `sink[0]` rather than editing a shared list in place. A list item
+    assignment is a single bytecode, so a reader that gave up waiting for this thread to finish
+    sees some whole earlier tail, never a half-rewritten one.
+    """
+    buf = b""
+    try:
+        for chunk in iter(lambda: stream.read(65536), b""):
+            buf = (buf + chunk)[-STDERR_KEEP:]
+            sink[0] = buf
+    except (OSError, ValueError):
+        pass
+    finally:
+        try:
+            stream.close()
+        except OSError:
+            pass
+
+
+def _last_line(chunks, prefix=""):
+    """The last non-empty line of a drained stderr, as the error string callers already expect.
+
+    Only the last STDERR_KEEP bytes survive the drain, so a single final line longer than that
+    comes back as its tail. That is a fair trade for a bounded buffer: the result is truncated to
+    160 characters either way, and a message that long is a stack trace, not a reason.
+    """
+    text = b"".join(chunks).decode("utf-8", "replace")
+    lines = [ln.strip() for ln in text.strip().split("\n") if ln.strip()]
+    return (prefix + lines[-1])[:160] if lines else ""
+
+
+def _wait(proc, poll_s=1.0):
+    """Wait for a subprocess a second at a time, so a stop is acted on during a long decode."""
+    while True:
+        try:
+            return proc.wait(timeout=poll_s)
+        except subprocess.TimeoutExpired:
+            if _stop_requested():
+                return None
+
+
+def job_dir(url):
+    return os.path.join(JOBS, _sig_key(url)[:-4])
+
+
+def sweep_job_dirs(max_age_s=JOB_STALE_S):
+    """Remove what a crashed fetch child left behind. Nothing younger than an hour: the split
+    harvester may be mid-fetch on its own schedule, and its spool file is not ours to delete."""
+    if not os.path.isdir(JOBS):
+        return 0
+    now = time.time()
+    n = 0
+    for name in sorted(os.listdir(JOBS)):
+        path = os.path.join(JOBS, name)
+        try:
+            if now - os.path.getmtime(path) > max_age_s:
+                shutil.rmtree(path, ignore_errors=True)
+                n += 1
+        except OSError:
+            pass
+    return n
+
+
+def _fetch_and_sign(url, job):
+    """Fetch one candidate, decode it, sign it. THE CHILD'S WHOLE JOB. Returns `result.json`.
+
+    The decoded PCM goes to a FILE in the job directory, written by ffmpeg itself. The old path
+    piped it through `communicate()`, which accumulates a chunk list and then joins it -- two full
+    copies of the audio in the parent's heap at the moment of the join, 1,034 MB for 451 MB of
+    PCM. Writing to a file and reading it back with `np.fromfile` is exactly one allocation, at
+    the size the decode turned out to be.
+
+    A signature is written ONLY when yt-dlp exited 0, ffmpeg exited 0, the spool is long enough,
+    and no stop was requested. A truncated decode would produce a perfectly plausible, permanently
+    wrong recipe-1 signature for this URL -- cached, uploaded, and never fetched again.
+    """
+    try:
+        return _decode_and_sign(url, job)
+    finally:
+        _STOP["part"] = None            # nothing left for the signal handler to clean up
+        _STOP["procs"] = []
+
+
+def _decode_and_sign(url, job):
+    """`_fetch_and_sign`'s body -- see there. Split out only so the stop state is always reset."""
+    os.makedirs(job, exist_ok=True)
+    part = os.path.join(job, "pcm.f32le.part")
+    pcm = os.path.join(job, "pcm.f32le")
+    _STOP["part"] = part
+    started = time.time()
+
+    with open(part, "wb") as spool:
+        yt = subprocess.Popen(["yt-dlp", "-q", "--no-warnings", "--no-playlist"] + cookie_args()
+                              + ["-f", "bestaudio", "-o", "-", url],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        ff = subprocess.Popen(["ffmpeg", "-v", "error", "-i", "pipe:0",
+                               "-ac", "1", "-ar", str(_audio.SR), "-f", "f32le", "pipe:1"],
+                              stdin=yt.stdout, stdout=spool, stderr=subprocess.PIPE)
+        yt.stdout.close()
+        _STOP["procs"] = [ff, yt]              # the handler stops them in THIS order
+        yt_err, ff_err = [b""], [b""]          # one-element sinks -- see _drain
+        drains = [threading.Thread(target=_drain, args=(yt.stderr, yt_err), daemon=True),
+                  threading.Thread(target=_drain, args=(ff.stderr, ff_err), daemon=True)]
+        for t in drains:
+            t.start()
+        _wait(ff)
+        _wait(yt)
+        for t in drains:
+            t.join(timeout=5)
+    _STOP["procs"] = []
+
+    if _stop_requested():
+        _unlink(part)
+        return {"ok": False, "error": "stopped"}
+
+    size = os.path.getsize(part) if os.path.exists(part) else 0
+    n_samples = size // 4
+    if yt.returncode != 0 or size == 0:
+        _unlink(part)
+        return {"ok": False, "error": _last_line(yt_err) or "no audio"}
+    if ff.returncode != 0:
+        _unlink(part)
+        return {"ok": False,
+                "error": _last_line(ff_err, "ffmpeg: ") or "ffmpeg: exit %s" % ff.returncode}
+    if n_samples < chroma_recipe.MIN_SECONDS * _audio.SR:
+        _unlink(part)
+        return {"ok": False, "error": "too short (%.0fs)" % (n_samples / _audio.SR)}
+
+    os.replace(part, pcm)
+    _STOP["part"] = None
+    y = np.fromfile(pcm, dtype="float32")      # ONE allocation, at the final size
+    if _stop_requested():
+        return {"ok": False, "error": "stopped"}
+
+    c = chroma_recipe.compute_chroma(y)        # THE recipe, in one place (chroma_recipe.py)
+    del y
+    if _stop_requested():                      # nothing half-decoded reaches the cache
+        return {"ok": False, "error": "stopped"}
+
     os.makedirs(CACHE, exist_ok=True)
-    np.save(sig_path(url), c.astype("float16"))
+    np.save(sig_path(url), c.astype(chroma_recipe.STORE_DTYPE))
     # The bucket is the signature's long-term home (see sigstore). Upload now, verified; on
     # failure the local file simply stays -- eviction never fires for an unverified key, so a
     # flaky upload costs disk space, never data.
     if sigstore.enabled():
         sigstore.put(sig_path(url), _sig_key(url))
-    return c, y, None
+    # The float32 chroma, for the parent's matcher. NOT the float16 round-trip: the matcher scores
+    # float32 today, and a float16 cast and back moves values by an ULP, which is enough to move a
+    # borderline verdict. Not a signature change either way -- the signature is the file above.
+    np.save(os.path.join(job, "chroma32.npy"), c)
+
+    current, peak = memwatch.footprint_mb()
+    return {"ok": True, "error": None, "n_samples": int(n_samples),
+            "seconds": round(n_samples / _audio.SR, 1), "took_s": round(time.time() - started, 1),
+            "footprint_mb": current, "peak_mb": peak, "footprint_kind": memwatch.kind()}
+
+
+def _spawn_argv(job):
+    """The fetch child's command line. THE URL IS NOT ON IT.
+
+    The player's supervisor finds a live harvester by looking for `--run` as a SUBSTRING of the
+    whole `ps` command line. So anything on this argv that somebody else chose is a way for a
+    process that lives for one track to be mistaken for the harvester -- and a YouTube id may
+    legally contain `--run`, since its alphabet includes `-`. The URL therefore travels in the job
+    directory (`url.json`) and the argv carries only the job path, whose last component is `u`
+    followed by twenty hex characters.
+    """
+    return [sys.executable, os.path.abspath(__file__), "--fetch-job", job]
+
+
+def _run_fetch_child(url, job):
+    """Spawn `harvest.py --fetch-job DIR` and read back its result."""
+    env = dict(os.environ)
+    # macOS libmalloc caches freed LARGE blocks inside the process instead of returning them to
+    # the kernel, so the harvester's footprint never came down between candidates and those dirty
+    # pages ended up compressed and swapped. Measured on this OS: 764 MB retained of 800 MB
+    # allocated and freed; 0 MB with this set. (MallocSpaceEfficient=1 measured the same; this is
+    # the one the memory eval standardised on.) libmalloc reads it at process START, so it has to
+    # be on the child's environment -- setting it from inside a running process does nothing.
+    env.setdefault("MallocLargeCache", "0")
+    argv = _spawn_argv(job)
+    # The invariant, checked rather than argued. `_spawn_argv` cannot put `--run` on the command
+    # line, but the interpreter path and the repo path are not ours to promise, and a command line
+    # carrying that substring anywhere would be adopted by the player's supervisor as the
+    # harvester itself. So look, and run the fetch here rather than spawn something that will be
+    # misread.
+    if "--run" in " ".join(argv):
+        return _fetch_and_sign(url, job)
+    if _stop_requested():
+        return {"ok": False, "error": STOPPED}   # do not start a fetch we are about to abandon
+    _save(os.path.join(job, "url.json"), {"url": url})
+    try:
+        child = subprocess.Popen(argv, cwd=HOME, env=env,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except OSError as exc:
+        return {"ok": False, "error": "could not start the fetch child: %s" % exc}
+    # Same process group as us on purpose (no start_new_session), so the supervisor's killpg
+    # reaches the parent, this child, yt-dlp and ffmpeg together.
+    _STOP["child"] = child
+    try:
+        if _stop_requested():
+            # A signal that arrived between the spawn and the registration above found no child
+            # to pass itself on to. Deliver it here, or a whole fetch runs unwatched while this
+            # process sits in communicate().
+            _end(child)
+        _out, err = child.communicate()
+    finally:
+        _STOP["child"] = None
+
+    if child.returncode in (130, 143):          # 128 + SIGINT / SIGTERM
+        # The child was signalled. Usually this process was too -- the supervisor signals the whole
+        # group -- but our own handler may not have run yet, and a `kill` aimed at the child alone
+        # would not raise the flag at all. Raise it here, so the naps, the loop checks and the
+        # callers' guards all read one answer and none of them can file a signalled fetch as a
+        # failed one.
+        _STOP["signum"] = _STOP["signum"] or (child.returncode - 128)
+        return {"ok": False, "error": STOPPED}
+    result = _load(os.path.join(job, "result.json"), None)
+    if child.returncode != 0 or not isinstance(result, dict):
+        tail = _last_line([err or b""])
+        return {"ok": False,
+                "error": ("child failed (exit %s): %s" % (child.returncode, tail))[:160]}
+    return result
+
+
+# The last fetch child's result.json. The memory rows (see `record_memory`) want the child's peak
+# footprint, and stream_chroma's three callers want its three-tuple unchanged, so the extra fields
+# ride here rather than on the return value.
+_LAST_CHILD = {}
+
+
+def stream_chroma(url):
+    """Stream the audio, reduce it to a chroma signature -> (chroma, samples, error).
+
+    Unchanged as a contract: the three callers (`run()`, `harvester.work_once()`, and the live
+    canary) see the same three-tuple and the same error strings as before.
+
+    What changed is where the work happens. The fetch, the decode and the recipe now run in a
+    CHILD process, so the memory they need dies with it; this process never holds a candidate's
+    audio or the recipe's working set. `samples` is a memory map over the child's decoded PCM,
+    which behaves like the array it used to be -- `write_excerpt` slices ~30 seconds out of it and
+    `harvester.py` writes it to a FLAC job copy. The spool file is unlinked as soon as it is
+    mapped, so the disk space comes back when the caller drops `samples`, and a crash anywhere
+    after this point leaves nothing behind.
+
+    Set NETRADIO_HARVEST_CHILD=0 to run the fetch in this process instead. That is for diagnosing
+    an environment problem in the child, not for normal use: it brings the memory back with it.
+    """
+    _LAST_CHILD.clear()
+    job = job_dir(url)
+    shutil.rmtree(job, ignore_errors=True)          # a stale job dir for this URL is not ours
+    os.makedirs(job, exist_ok=True)
+    try:
+        if os.environ.get("NETRADIO_HARVEST_CHILD") == "0":
+            result = _fetch_and_sign(url, job)
+        else:
+            result = _run_fetch_child(url, job)
+        _LAST_CHILD.update(result)
+        if not result.get("ok"):
+            return None, None, result.get("error") or "no signature"
+        c = np.load(os.path.join(job, "chroma32.npy"))
+        samples = np.memmap(os.path.join(job, "pcm.f32le"), dtype="float32", mode="r")
+        return c, samples, None
+    finally:
+        # POSIX keeps an unlinked file alive for as long as something has it open or mapped, so
+        # the memmap above stays readable and the space is reclaimed when `samples` is dropped.
+        shutil.rmtree(job, ignore_errors=True)
 
 
 # A short excerpt AROUND the matched instant is all we retain -- long enough to recognise the
@@ -1090,7 +1477,90 @@ def pick_next(pending, state):
     return best
 
 
+def _stopped(state):
+    """Record a clean stop and save.
+
+    The interrupted URL stays `pending`. Its child wrote no signature (see `_fetch_and_sign`), so
+    the only honest thing to do with it is fetch it again later.
+    """
+    name = _stop_name()
+    state["session"] = {"phase": "stopped (%s)" % name, "until": 0}
+    state["current"] = None
+    _save(STATE, state)
+    print("# stopped on %s -- state saved, the interrupted URL is still pending" % name)
+
+
+# --- how much memory this is costing -------------------------------------------------------------
+#
+# One row per candidate, so "the harvester is at 40 GB again" is a number somebody can read rather
+# than a thing somebody eventually notices. The parent should stay flat -- it never holds a track's
+# audio now. The child's peak is the interesting number, and it comes back in result.json.
+
+MEM_LOG_KEEP = 50
+
+
+def mem_ceiling_mb():
+    """The parent's restart ceiling in MB, from NETRADIO_HARVEST_MEM_CEILING_MB. 0 = off.
+
+    Off by default on purpose. The right number depends on what a long candidate actually costs
+    after this change, and that measurement has not been taken yet; a guessed ceiling would
+    restart a healthy harvester.
+    """
+    try:
+        return float(os.environ.get("NETRADIO_HARVEST_MEM_CEILING_MB") or 0)
+    except ValueError:
+        return 0.0
+
+
+def _mb(value):
+    return None if value is None else round(float(value), 1)
+
+
+def record_memory(state, url, child=None):
+    """Sample this process's footprint and write the row. `child` is the fetch child's
+    result.json, or None for a candidate that came from the signature cache."""
+    current, peak = memwatch.footprint_mb()
+    child = child or {}
+    row = {"at": _now(), "url": url, "kind": memwatch.kind(),
+           "seconds": child.get("seconds"),
+           "parent_mb": _mb(current), "parent_peak_mb": _mb(peak),
+           "child_peak_mb": _mb(child.get("peak_mb")),
+           "child_after_mb": _mb(child.get("footprint_mb"))}
+    state["mem"] = row
+    state["mem_log"] = ((state.get("mem_log") or []) + [row])[-MEM_LOG_KEEP:]
+    return row
+
+
+def check_memory(state, url, child=None):
+    """Record the row, and say whether the PARENT should stand down to be restarted.
+
+    A child over the ceiling only earns an issues row: its memory left with it, so there is
+    nothing to restart. A parent over the ceiling returns from `run()` with exit 0 -- the player's
+    watchdog sees a phase that is not "queue empty" and spawns a fresh one.
+    """
+    row = record_memory(state, url, child)
+    ceiling = mem_ceiling_mb()
+    if not ceiling:
+        return False
+    if (row["child_peak_mb"] or 0) > ceiling:
+        state["issues"] = ((state.get("issues") or []) + [{
+            "at": _now(), "url": url,
+            "issue": "fetch child peaked at %.0f MB, over the %.0f MB ceiling -- reported only, "
+                     "the child's memory went with it" % (row["child_peak_mb"], ceiling)}])[-50:]
+    if (row["parent_mb"] or 0) > ceiling:
+        state["session"] = {"phase": "restarting: memory ceiling", "until": 0}
+        state["issues"] = ((state.get("issues") or []) + [{
+            "at": _now(),
+            "issue": "parent at %.0f MB, over the %.0f MB ceiling -- standing down so the "
+                     "supervisor can restart it" % (row["parent_mb"], ceiling)}])[-50:]
+        print("# parent footprint %.0f MB is over the %.0f MB ceiling -- stopping so the "
+              "watchdog restarts us" % (row["parent_mb"], ceiling))
+        return True
+    return False
+
+
 def run(args):
+    install_signal_handlers()
     lock = acquire_writer_lock()
     if lock is None:
         print("another queue/state writer is running (the collector, or another harvest.py "
@@ -1106,8 +1576,8 @@ def run(args):
     if note_no_queries(state, qs):
         _save(STATE, state)                   # searchable again -> the state stands down NOW
     print("# searching for Mystery Tracks %s" % ", ".join(str(n) for n, _, _ in qs))
-    print("# work %s, idle %s, rotating hosts, jittered. Ctrl-C is safe (state is on disk)."
-          % ("4-5h", "40-120m"))
+    print("# work %s, idle %s, rotating hosts, jittered. Ctrl-C or SIGTERM stops cleanly: state "
+          "is saved, yt-dlp and ffmpeg are stopped too." % ("4-5h", "40-120m"))
 
     # A halt is a message to the human, not a permanent state: starting again IS the human saying
     # "I dealt with it". Clear it, and say whether they actually did the thing that was asked.
@@ -1117,6 +1587,21 @@ def run(args):
         _save(STATE, state)
 
     sweep_excerpts()                    # drop anything past its TTL before we start
+    swept = sweep_job_dirs()            # and whatever a crashed fetch child left in .harvest/tmp
+    if swept:
+        print("# swept %d stale fetch job director%s" % (swept, "y" if swept == 1 else "ies"))
+
+    # THE ALLOCATOR CANARY. `MallocLargeCache=0` is what stops macOS holding on to every large
+    # block the recipe frees, and it is an UNDOCUMENTED variable -- so an OS release that stops
+    # honouring it would quietly restore the old behaviour, with nothing to see but a swap file
+    # slowly growing. Measure it on every start instead of trusting a number from a past release.
+    _before, _after, retained = memwatch.allocator_canary()
+    if retained is not None:
+        print(memwatch.canary_line(retained))
+        issue = memwatch.canary_issue(retained)
+        if issue:
+            state["issues"] = (state.get("issues") or [])[-49:] + [{"at": _now(), "issue": issue}]
+            _save(STATE, state)
 
     # THE CANARY. A broken harvester and a pool without the answer look identical from here: zero
     # matches, for weeks. So before searching for something we have never found, prove we can still
@@ -1144,6 +1629,8 @@ def run(args):
 
     session_end = time.time() + random.uniform(*SESSION_S)
     while True:
+        if _stop_requested():
+            return _stopped(state)
         # The live canary, about once a day: the streaming path (yt-dlp -> ffmpeg -> chroma) is
         # exactly what the offline test does NOT exercise, and it is the part with moving parts.
         if selftest.due_for_live():
@@ -1151,6 +1638,11 @@ def run(args):
             # query key, which fingerprints the clip) that is ours alone, and leaking it across the
             # boundary is what broke this: selftest unpacked two and got three.
             lv = selftest.live(stream_chroma, [(n, qc) for n, qc, _ in qs])
+            # A stop is never a verdict here either: an interrupted canary fetch is not a canary
+            # FAILURE, and recording it as one would leave a standing "the matcher is broken"
+            # issue behind every Ctrl-C.
+            if _stop_requested():
+                return _stopped(state)
             if lv.get("ok"):
                 print("# live canary PASS -- fetched %s fresh and matched it at %.4f"
                       % (lv["name"], lv["cost"]))
@@ -1163,7 +1655,7 @@ def run(args):
         if os.path.exists(PAUSE):
             state["session"] = {"phase": "paused", "until": 0}
             _save(STATE, state)
-            time.sleep(20)
+            _nap(20)
             continue
 
         q = _load(QUEUE, {"pending": [], "done": []})
@@ -1219,13 +1711,13 @@ def run(args):
             state["session"] = {"phase": "idle", "until": time.time() + nap}
             _save(STATE, state)
             print("# session over -- idling %.0f min" % (nap / 60))
-            time.sleep(nap)
+            _nap(nap)
             session_end = time.time() + random.uniform(*SESSION_S)
             continue
 
         idx = pick_next(q["pending"], state)
         if idx is None:
-            time.sleep(60)
+            _nap(60)
             continue
         url = q["pending"][idx]
         host = host_of(url)
@@ -1235,17 +1727,18 @@ def run(args):
         if wait > 0:
             state["session"] = {"phase": "waiting on %s" % host, "until": hinfo["next_ok"]}
             _save(STATE, state)
-            time.sleep(min(wait, 60))
+            _nap(min(wait, 60))
             continue
 
         state["session"] = {"phase": "working", "until": session_end}
         state["current"] = url
         _save(STATE, state)
 
-        # `samples` is the decoded audio, held IN MEMORY only for this iteration, so an excerpt
-        # can be cut without a second fetch. It is dropped at the end of the loop. From the cache
-        # there is no audio (only the signature), so a cached candidate cannot yield an excerpt --
-        # which is fine: we only ever excerpt something we are already streaming.
+        # `samples` is the decoded audio for this iteration, so an excerpt can be cut without a
+        # second fetch. It is a memory map over the fetch child's spool file, already unlinked, so
+        # dropping it at the end of the loop releases the disk space too. From the cache there is
+        # no audio (only the signature), so a cached candidate cannot yield an excerpt -- which is
+        # fine: we only ever excerpt something we are already streaming.
         samples = None
         c = _load_sig(url)                 # working cache, else the bucket -- no audio either way
         cached = c is not None
@@ -1254,6 +1747,20 @@ def run(args):
             state["skipped_cached"] += 1
         else:
             c, samples, err = stream_chroma(url)
+
+        # A stop is never a verdict, and it arrives by either route: this process was signalled
+        # (the flag), or only the fetch child was (the sentinel error). Checking one and not the
+        # other is not a guard -- the queue moves three lines below, and `done` is never
+        # re-fetched.
+        if _stop_requested() or was_stopped(err):
+            samples = None                  # before the queue moves: the URL is still pending
+            return _stopped(state)
+
+        # One memory row per candidate, fetched or cached, and the parent's own ceiling check.
+        if check_memory(state, url, None if cached else dict(_LAST_CHILD)):
+            samples = None
+            _save(STATE, state)
+            return
 
         # --- the bot wall: STOP, do not grind ---
         #
@@ -1350,6 +1857,19 @@ def main():
                     help="enumerate a YouTube/SoundCloud channel or playlist into the queue")
     ap.add_argument("--limit", type=int, default=None, help="cap how many to take from a channel")
     ap.add_argument("--run", action="store_true", help="work the queue (runs for weeks)")
+    ap.add_argument("--fetch-one", metavar="URL",
+                    help="fetch ONE candidate and write its signature, then exit. This is the "
+                         "child process `--run` spawns per candidate, so the recipe's memory "
+                         "leaves with it; it writes only the signature and its own job "
+                         "directory, never the queue or the state. Useful by hand for "
+                         "reproducing one fetch.")
+    ap.add_argument("--fetch-job", metavar="DIR",
+                    help="the form `--run` spawns: fetch the URL named in DIR/url.json. The URL "
+                         "stays OFF the command line, because the player's supervisor reads that "
+                         "command line to find the harvester -- see _spawn_argv.")
+    ap.add_argument("--job", metavar="DIR",
+                    help="where --fetch-one leaves pcm.f32le, chroma32.npy and result.json "
+                         "(default: a directory under .harvest/tmp/)")
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--pause", action="store_true")
     ap.add_argument("--resume", action="store_true")
@@ -1379,6 +1899,27 @@ def main():
                          "Refuses past the safety cap (NETRADIO_REQUEUE_MISSING_CAP, default "
                          "10%% of the corpus) and reports instead.")
     args = ap.parse_args()
+
+    # THE FETCH CHILD, dispatched before any lock, queue or state access -- it must never take the
+    # writer lock or touch state.json / queue.json. One candidate, one process, and the recipe's
+    # working set goes away when it exits.
+    if args.fetch_one or args.fetch_job:
+        install_signal_handlers(child=True)
+        url = args.fetch_one
+        job = args.job or args.fetch_job or (job_dir(url) if url else None)
+        if not url:
+            url = (_load(os.path.join(job, "url.json"), {}) or {}).get("url")
+        if not url:
+            print("no URL: pass --fetch-one URL, or --fetch-job DIR holding url.json",
+                  file=sys.stderr)
+            return 2
+        try:
+            result = _fetch_and_sign(url, job)
+        except Exception:                    # a crash is the parent's "child failed" path
+            traceback.print_exc()
+            return 1
+        _save(os.path.join(job, "result.json"), result)
+        return 0
 
     os.makedirs(STATE_DIR, exist_ok=True)
     if args.purge_audio:
@@ -1474,4 +2015,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())        # --fetch-one's exit code is how the parent tells a crash from a refusal

@@ -131,6 +131,30 @@ class LiveCanary(unittest.TestCase):
         self.assertEqual(est["url"], "https://y/right")
         self.assertTrue(os.path.exists(selftest.CANARY))
 
+    def test_an_interrupted_fetch_is_not_a_canary_failure_and_is_not_recorded(self):
+        """A stop is never a verdict.
+
+        Recorded as a FAILURE, a Ctrl-C would leave /harvest saying the matcher is broken.
+        Recorded at all -- even as "not checked" -- it would satisfy `due_for_live` and stand the
+        canary down for a day. So it is reported and nothing is written.
+        """
+        selftest._save(selftest.CANARY, {"url": "https://y/known", "track": 1, "name": "known"})
+        with mock.patch.object(selftest, "cases", return_value=[self.case]):
+            r = selftest.live(lambda url: (None, None, "stopped"), mystery_queries=[])
+        self.assertIsNone(r["ok"])                       # not a pass, and not a failure
+        self.assertIn("stopped", r["why"])
+        self.assertFalse(os.path.exists(selftest.RESULT))
+        self.assertTrue(selftest.due_for_live())         # the next start asks again
+
+    def test_a_real_fetch_failure_is_still_recorded_as_a_failure(self):
+        """The guard must not swallow the case the canary exists for."""
+        selftest._save(selftest.CANARY, {"url": "https://y/known", "track": 1, "name": "known"})
+        with mock.patch.object(selftest, "cases", return_value=[self.case]):
+            r = selftest.live(lambda url: (None, None, "yt-dlp: video unavailable"),
+                              mystery_queries=[])
+        self.assertFalse(r["ok"])
+        self.assertTrue(os.path.exists(selftest.RESULT))
+
     def test_a_known_record_that_stops_matching_is_a_failure(self):
         """The whole point: a record we KNOW is the answer, fetched live, must come back a match.
         If it doesn't, the streaming path or the matcher is broken — and this is the only check

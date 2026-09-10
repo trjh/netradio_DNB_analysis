@@ -119,7 +119,7 @@ def _pick(q, hstate, done_set):
 
 def work_once(hstate, q):
     """One fetch attempt. Public so tests can step the policy. Returns:
-    'fetched' | 'skipped' | 'waiting' | 'idle' | 'halted'."""
+    'fetched' | 'skipped' | 'waiting' | 'idle' | 'halted' | 'stopped'."""
     done_set = set(q.get("done") or [])
     url, host, hinfo, wait = _pick(q, hstate, done_set)
     if url is None:
@@ -139,6 +139,26 @@ def work_once(hstate, q):
     _save(HSTATE, hstate)
 
     c, samples, err = harvest.stream_chroma(url)     # caches + uploads the sig (sigstore)
+
+    # A STOP IS NEVER A VERDICT. `submit_result` reports one either way it is called, and the
+    # collector acts on it: it folds the record, counts the error, and moves the URL out of
+    # `pending` into `done` -- which is never re-fetched. So submitting an interrupted fetch as a
+    # failure would drop that candidate from the search for good, which is worse than what the
+    # handlers replaced (the process died mid-pipe and submitted nothing). An interrupted fetch
+    # has nothing to report, so it reports nothing and the URL stays pending.
+    #
+    # If the child actually finished before the signal, its signature is already in the cache and
+    # `already_held` submits the success on the next start. Nothing is lost either way.
+    # BOTH routes. A stop reaches here either because this process was signalled (the flag) or
+    # because only the fetch child was, which comes back as the sentinel error. Reading one and
+    # not the other is not a guard: the door left open is a `kill` aimed at the child, and it ends
+    # in submit_result(ok=False) and a candidate retired to `done` for good.
+    if harvest._stop_requested() or harvest.was_stopped(err):
+        hstate["session"] = {"phase": "stopped (%s)" % harvest._stop_name(), "until": 0}
+        hstate["current"] = None
+        hstate["updated"] = _now()
+        _save(HSTATE, hstate)
+        return "stopped"
 
     if is_bot_wall(err):
         hstate["halted"] = {"at": _now(), "host": host, "error": (err or "")[:200]}
@@ -193,6 +213,10 @@ def work_once(hstate, q):
 
 
 def run():
+    # The same flag-setting SIGINT/SIGTERM handlers harvest.py's own loop installs: a signal to
+    # this pid alone used to leave yt-dlp and ffmpeg running against a dead parent. The fetch
+    # itself already runs in harvest.py's per-candidate child, so this is all this side needs.
+    harvest.install_signal_handlers()
     os.makedirs(STATE_DIR, exist_ok=True)
     lock = open(LOCK, "w")
     try:
@@ -204,27 +228,36 @@ def run():
     hstate["started"] = _now()
     session_end = time.time() + random.uniform(*SESSION_S)
     while True:
+        if harvest._stop_requested():
+            hstate["session"] = {"phase": "stopped (%s)" % harvest._stop_name(), "until": 0}
+            hstate["current"] = None
+            _save(HSTATE, hstate)
+            print("# stopped -- state saved; the fetch child, yt-dlp and ffmpeg are stopped too")
+            return
         if os.path.exists(PAUSE):
             hstate["session"] = {"phase": "paused", "until": 0}
             _save(HSTATE, hstate)
-            time.sleep(20)
+            harvest._nap(20)
             continue
         if time.time() > session_end:
             rest = random.uniform(*IDLE_S)
             hstate["session"] = {"phase": "resting", "until": time.time() + rest}
             _save(HSTATE, hstate)
-            time.sleep(rest)
+            harvest._nap(rest)
             session_end = time.time() + random.uniform(*SESSION_S)
             continue
         hstate["session"] = {"phase": "working", "until": session_end}
         q = _load(QUEUE, {"pending": [], "done": []})
         outcome = work_once(hstate, q)
         _save(HSTATE, hstate)
+        if outcome == "stopped":
+            print("# stopped -- state saved; the interrupted URL is still pending")
+            return
         if outcome == "halted":
             print("!! HALTED -- bot wall; see harvester_state.json and harvest.py's banner advice")
             return
         if outcome in ("waiting", "idle"):
-            time.sleep(30 if outcome == "waiting" else 120)
+            harvest._nap(30 if outcome == "waiting" else 120)
 
 
 def main():
