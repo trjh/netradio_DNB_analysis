@@ -182,9 +182,126 @@ def blank_state():
             "session": {"phase": "idle", "until": 0}, "current": None}
 
 
+# --- chunks: a URL that means "this slice of that audio" ----------------------------------------
+#
+# A queue entry for audio longer than two hours arrives split into CHUNKS: the same URL, once per
+# slice, each carrying a W3C media fragment -- `#t=<start>,<end>`, in whole seconds. It is the
+# fragment, and only the fragment, that makes one chunk different from another.
+#
+# yt-dlp ignores URL fragments. So a harvester that does not read them here would fetch, decode
+# and sign the WHOLE multi-hour master once per chunk -- the exact cost splitting exists to
+# prevent -- and would then store that one signature under every chunk's key, so each chunk would
+# claim to be the master. Wrong answers, cached, never fetched again.
+
+# The digit count is BOUNDED, and that bound is part of the definition of a fragment -- not a
+# safety net bolted on after one. Ten digits of seconds is on the order of three centuries; no
+# recording, and no slice of one, comes within many orders of magnitude of that, so nothing real
+# is turned away. What an unbounded `\d+` let in was a field far too long to be a time at all:
+# Python refuses to convert a string of more than 4,300 digits to an int, so `int()` raised
+# straight through `listen_queue_split` -- which promises never to raise -- and out of
+# `sync_listen_queue` into the main loop, where a single malformed queue entry would have ended a
+# run meant to last for days. A 4,300-digit value cleared the parser instead and then overflowed
+# while its own refusal message was being formatted.
+#
+# The bound belongs HERE, in the pattern, not in a `try` wrapped around each caller. A field that
+# long is not a media fragment, so it simply fails to match and the URL is an ordinary one --
+# leaving one definition of what a valid fragment is, rather than a permissive parser that
+# everything downstream then has to survive.
+_FRAGMENT = re.compile(r"t=(\d{1,10}),(\d{1,10})", re.ASCII)
+
+
+def media_fragment(url):
+    """`(start_s, end_s)` from a URL's `#t=<a>,<b>` fragment, or None if it has no valid one.
+
+    Strict on purpose: two non-negative whole seconds of at most ten digits each, with a < b, and
+    nothing else in the fragment. Anything that does not match is not a media fragment, so the URL
+    is treated as an ordinary one and the whole audio is signed -- the same as before chunks
+    existed. The one thing that must never happen is a HALF-applied fragment: audio cut somewhere
+    we did not mean, signed under a key that says exactly where it should have been cut.
+
+    NEVER RAISES, for any string at all. The queue is data this process does not control, and its
+    callers -- `listen_queue_split`, and through it the main loop's `sync_listen_queue` -- have no
+    business dying over one malformed entry.
+    """
+    _, sep, frag = url.partition("#")
+    if not sep:
+        return None
+    m = _FRAGMENT.fullmatch(frag)
+    if not m:
+        return None
+    start, end = int(m.group(1)), int(m.group(2))
+    return (start, end) if start < end else None
+
+
+# THE BACKSTOP, not the rule. The player splits audio longer than TWO hours into chunks; the
+# harvester refuses anything that would decode more than FOUR hours in one go. The two numbers are
+# deliberately different, because they answer different questions: two hours is where a set is
+# long enough that splitting it pays, four is where one decode costs more time, more memory and
+# more of a session than any single lead can be worth.
+MAX_DURATION_S = 4 * 3600
+
+
+def too_long(url, duration=None):
+    """True when analysing this URL would decode more than MAX_DURATION_S of audio.
+
+    WHICH LENGTH GOVERNS. A queue entry can carry both a declared `duration` and a fragment, and
+    they can disagree -- a chunk's entry may well repeat the whole master's duration. The
+    fragment's SPAN wins whenever there is one, because the span is what ffmpeg is actually told
+    to decode and therefore what this run will cost. A declared duration decides only when there
+    is no fragment, and a duration that is missing, non-numeric or a bool is no evidence of
+    length at all, so it never refuses.
+
+    A FRAGMENT IS A CLAIM, NOT A GUARANTEE. It would be easy to read "it has a fragment" as "it
+    is a chunk, so it is short" and stop there. That is exactly the assumption a backstop exists
+    to survive: chunks are short *by construction*, and the construction is upstream of here,
+    where it can be wrong, stale or hand-written. So the span is measured, never assumed --
+    `#t=0,21600` is six hours and is refused precisely like the unsplit master it was cut from.
+
+    ONE PREDICATE, TWO DOORS -- AND THE SAME FACTS AT BOTH. This is called at the queue door
+    (`listen_queue_split`, which never offers a refused entry as a candidate) and again at the
+    decode door (`_decode_and_sign`, the last thing before ffmpeg is handed `-ss`/`-t`). Same
+    function both times, so they cannot drift into disagreeing about what is acceptable.
+
+    But a shared predicate is not enough on its own: it also has to be asked the same question.
+    The decode runs in a child process, which knows only what its argv carries, and while the
+    declared duration stayed behind in the parent the second call quietly answered a DIFFERENT
+    question -- fragment-only -- and waved through six-hour masters the first call had refused.
+    So the duration travels with the URL now, in the job file the child reads (see
+    `_run_fetch_child`).
+
+    Where genuinely no duration is known -- someone typing `--fetch-one <url>` by hand -- the
+    honest answer is that this URL is not length-checked, and the span still is. Inventing a
+    length, or refusing everything unlabelled, would both be worse than saying so.
+    """
+    cut = media_fragment(url)
+    if cut is not None:
+        seconds = cut[1] - cut[0]
+    elif isinstance(duration, bool) or not isinstance(duration, (int, float)):
+        return False
+    else:
+        seconds = duration
+    return seconds > MAX_DURATION_S
+
+
+# Past this, a number is not a length, it is a typo or an attack. A fragment span is bounded by
+# the parser, but a DECLARED duration is unbounded JSON -- a 5,000-digit int raises OverflowError
+# on its way to a float, and the one thing a refusal message must never do is become the crash it
+# was written to report. The comparison below is integer-only, so it is safe at any magnitude.
+_PRINTABLE_MAX_S = 10 ** 12
+
+
+def _hours(seconds):
+    """`seconds` as hours, for a message. Total: it prints something for any number at all."""
+    if seconds > _PRINTABLE_MAX_S:
+        return "beyond any real length"
+    return "%.1f h" % (seconds / 3600.0)
+
+
 # --- the signature ----------------------------------------------------------------------------
 
 def sig_path(url):
+    # The fragment stays IN the url here, and that is the point: it is what gives each chunk of one
+    # master its own key, its own cached signature and its own job directory.
     return os.path.join(CACHE, "u" + hashlib.sha1(url.encode()).hexdigest()[:20] + ".npy")
 
 
@@ -438,8 +555,12 @@ def sweep_job_dirs(max_age_s=JOB_STALE_S):
     return n
 
 
-def _fetch_and_sign(url, job):
+def _fetch_and_sign(url, job, duration=None):
     """Fetch one candidate, decode it, sign it. THE CHILD'S WHOLE JOB. Returns `result.json`.
+
+    `duration` is the player's declared length for this URL when one is known, so the refusal in
+    `_decode_and_sign` can weigh the same facts the queue door weighed. It is optional: a URL
+    typed by hand has no trustworthy length, and inventing one would be worse than going without.
 
     The decoded PCM goes to a FILE in the job directory, written by ffmpeg itself. The old path
     piped it through `communicate()`, which accumulates a chunk list and then joins it -- two full
@@ -452,26 +573,50 @@ def _fetch_and_sign(url, job):
     wrong recipe-1 signature for this URL -- cached, uploaded, and never fetched again.
     """
     try:
-        return _decode_and_sign(url, job)
+        return _decode_and_sign(url, job, duration)
     finally:
         _STOP["part"] = None            # nothing left for the signal handler to clean up
         _STOP["procs"] = []
 
 
-def _decode_and_sign(url, job):
+def _decode_and_sign(url, job, duration=None):
     """`_fetch_and_sign`'s body -- see there. Split out only so the stop state is always reset."""
+    # THE SECOND DOOR, and the last one before ffmpeg. `listen_queue_split` already refuses an
+    # entry this long, but it is not the only way a URL arrives here -- a hand-run `--fetch-one`,
+    # a working queue written before this rule existed, a caller yet to be written. Same predicate
+    # as the queue door, given the same facts: `duration` is the queue's own, carried across the
+    # fork (see `_run_fetch_child`). Refused before anything is spawned: nothing to stop, nothing
+    # to clean up.
+    if too_long(url, duration):
+        span = media_fragment(url)
+        why = ("%s in one slice" % _hours(span[1] - span[0])) if span else _hours(duration)
+        return {"ok": False, "error": "too long: %s -- refused, not truncated" % why}
     os.makedirs(job, exist_ok=True)
     part = os.path.join(job, "pcm.f32le.part")
     pcm = os.path.join(job, "pcm.f32le")
     _STOP["part"] = part
     started = time.time()
 
+    # A chunk URL asks for one slice of the audio (see `media_fragment`). `-ss` goes BEFORE `-i`
+    # and `-t` after it: ffmpeg then reads and discards the head of the pipe and stops at the
+    # slice's end, so the PCM this process ends up holding is the chunk's alone -- which is what
+    # splitting is for. yt-dlp still fetches the whole master, because it ignores the fragment;
+    # the network cost is the same until a cache can hand over the cut file, but MEMORY, the
+    # constraint that made chunks necessary, is bounded either way.
+    cut = media_fragment(url)
+    ff_argv = ["ffmpeg", "-v", "error"]
+    if cut:
+        ff_argv += ["-ss", str(cut[0])]
+    ff_argv += ["-i", "pipe:0"]
+    if cut:
+        ff_argv += ["-t", str(cut[1] - cut[0])]
+    ff_argv += ["-ac", "1", "-ar", str(_audio.SR), "-f", "f32le", "pipe:1"]
+
     with open(part, "wb") as spool:
         yt = subprocess.Popen(["yt-dlp", "-q", "--no-warnings", "--no-playlist"] + cookie_args()
                               + ["-f", "bestaudio", "-o", "-", url],
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        ff = subprocess.Popen(["ffmpeg", "-v", "error", "-i", "pipe:0",
-                               "-ac", "1", "-ar", str(_audio.SR), "-f", "f32le", "pipe:1"],
+        ff = subprocess.Popen(ff_argv,
                               stdin=yt.stdout, stdout=spool, stderr=subprocess.PIPE)
         yt.stdout.close()
         _STOP["procs"] = [ff, yt]              # the handler stops them in THIS order
@@ -545,7 +690,7 @@ def _spawn_argv(job):
     return [sys.executable, os.path.abspath(__file__), "--fetch-job", job]
 
 
-def _run_fetch_child(url, job):
+def _run_fetch_child(url, job, duration=None):
     """Spawn `harvest.py --fetch-job DIR` and read back its result."""
     env = dict(os.environ)
     # macOS libmalloc caches freed LARGE blocks inside the process instead of returning them to
@@ -562,10 +707,20 @@ def _run_fetch_child(url, job):
     # harvester itself. So look, and run the fetch here rather than spawn something that will be
     # misread.
     if "--run" in " ".join(argv):
-        return _fetch_and_sign(url, job)
+        return _fetch_and_sign(url, job, duration)
     if _stop_requested():
         return {"ok": False, "error": STOPPED}   # do not start a fetch we are about to abandon
-    _save(os.path.join(job, "url.json"), {"url": url})
+    # THE JOB FILE DESCRIBES THE JOB -- all of it. The URL moved here because the command line is
+    # read by another process; the declared duration follows it because they are two halves of one
+    # fact ("fetch this, and it is this long"), and a job half-described in one place and half on
+    # an argv is how the two drift apart. The child needs the duration for the same reason it
+    # needs the URL: without it the decode door re-runs the queue door's predicate on strictly
+    # less information and waves through a six-hour master the parent already refused -- a check
+    # that looks like defence in depth and is theatre.
+    #
+    # Absent when there is no trustworthy length (a hand-run fetch). That is honest rather than
+    # broken: the fragment span still applies, because it needs no outside information.
+    _save(os.path.join(job, "url.json"), {"url": url, "duration": duration})
     try:
         child = subprocess.Popen(argv, cwd=HOME, env=env,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -606,11 +761,16 @@ def _run_fetch_child(url, job):
 _LAST_CHILD = {}
 
 
-def stream_chroma(url):
+def stream_chroma(url, duration=None):
     """Stream the audio, reduce it to a chroma signature -> (chroma, samples, error).
 
     Unchanged as a contract: the three callers (`run()`, `harvester.work_once()`, and the live
     canary) see the same three-tuple and the same error strings as before.
+
+    `duration` is the player's declared length for this URL, which the working queue does not
+    carry (it holds bare URLs) -- callers get it from `queue_duration`. It exists so the refusal
+    inside the child weighs what the queue door weighed; see `_run_fetch_child`. Optional, and
+    None is a perfectly good answer: no length is no evidence of length.
 
     What changed is where the work happens. The fetch, the decode and the recipe now run in a
     CHILD process, so the memory they need dies with it; this process never holds a candidate's
@@ -629,9 +789,9 @@ def stream_chroma(url):
     os.makedirs(job, exist_ok=True)
     try:
         if os.environ.get("NETRADIO_HARVEST_CHILD") == "0":
-            result = _fetch_and_sign(url, job)
+            result = _fetch_and_sign(url, job, duration)
         else:
-            result = _run_fetch_child(url, job)
+            result = _run_fetch_child(url, job, duration)
         _LAST_CHILD.update(result)
         if not result.get("ok"):
             return None, None, result.get("error") or "no signature"
@@ -1322,24 +1482,28 @@ def _is_cooling(item):
     return ra_date > datetime.now(timezone.utc).date()
 
 
-def listen_queue_split():
+def listen_queue_split(issues=None):
     """(candidates, retired) from the player's listen queue. Read-only; never raises.
 
     Reads whichever layout NETRADIO_LISTEN_QUEUE names (single file, merged view, or sharded
     dir/manifest -- see _load_queue_items).
     """
-    candidates, retired, _ = listen_queue_split_checked()
+    candidates, retired, _ = listen_queue_split_checked(issues)
     return candidates, retired
 
 
-def listen_queue_split_checked():
+def listen_queue_split_checked(issues=None):
     """(candidates, retired, ok) -- listen_queue_split plus an honesty bit. ok=False means the
     queue is MISSING or UNREADABLE; an empty queue reads ok=True with empty results.
 
     Empty-on-failure is the right contract for the search loop (a weird queue is "try again
     next pass", not a dead harvester) -- but a publisher of DERIVED facts must not mistake
     "could not read" for "nothing there": stamp_pool uses the bit so a torn queue read can't
-    republish every ruled-out signature as active."""
+    republish every ruled-out signature as active.
+
+    `issues`, when a list is passed, collects one `{"url": ..., "reason": ...}` row per entry
+    refused here. A refusal is silent otherwise, and a silent refusal is indistinguishable from
+    a queue that simply had nothing in it."""
     if not LISTEN_QUEUE or not os.path.exists(LISTEN_QUEUE):
         return [], set(), False
     try:
@@ -1365,19 +1529,62 @@ def listen_queue_split_checked():
             continue                     # cooling gates the network only -- hold the URL back, but
                                          # do NOT retire it: it rejoins on its own once the date
                                          # passes, so nothing here drops it from pending.
+        elif too_long(url, it.get("duration")):
+            # Refused whole, never truncated: analysing the first four hours of a six-hour set
+            # and filing the result under the URL is a partial answer wearing a complete one's
+            # clothes. Not `retired` either -- no human ruled on it; the machine did.
+            if issues is not None:
+                issues.append({"url": url, "reason": "too_long"})
         else:
             candidates.append(url)
     return candidates, retired, True
 
 
-def sync_listen_queue(q):
+# The player's declared durations, url -> seconds, cached for a few minutes.
+_DURATIONS = {"at": 0.0, "by_url": None}
+
+
+def queue_duration(url, max_age_s=300):
+    """The player's declared length for `url`, or None when there is no trustworthy one.
+
+    THE FETCH PATH HAS TO ASK FOR THIS. Our working queue holds bare URLs, so by the time a
+    candidate is fetched the duration the queue door judged it on is simply gone -- and a
+    predicate handed less information than it was designed for stops being the check it looks
+    like. This is where the fetch path gets it back.
+
+    Cached for a few minutes: the listen queue is re-read every pass regardless, one fetch takes
+    minutes, and a recording's length does not change. Never raises -- same reason as
+    `listen_queue_split`: the queue is data this process does not control.
+    """
+    now = time.time()
+    if _DURATIONS["by_url"] is None or now - _DURATIONS["at"] > max_age_s:
+        by_url = {}
+        if LISTEN_QUEUE and os.path.exists(LISTEN_QUEUE):
+            try:
+                for it in _load_queue_items():
+                    u, d = it.get("url"), it.get("duration")
+                    if (isinstance(u, str) and isinstance(d, (int, float))
+                            and not isinstance(d, bool)):
+                        by_url[u.strip()] = d
+            except (OSError, ValueError, TypeError, AttributeError):
+                by_url = {}      # unreadable is not "zero seconds"; it is "no answer"
+        _DURATIONS.update({"at": now, "by_url": by_url})
+    return _DURATIONS["by_url"].get(url)
+
+
+def sync_listen_queue(q, issues=None):
     """Fold the player's queue into ours. Returns (added, dropped); mutates `q` in place.
 
     Length is deliberately NOT a filter: a record can hide inside an hour-long DJ mix, and the
-    match reports WHERE it hit (`at`), so a long mix is a feature, not a cost.
+    match reports WHERE it hit (`at`), so a long mix is a feature, not a cost. The one exception
+    is the MAX_DURATION_S backstop -- see `too_long`; those rows land in `issues` if a list is
+    passed.
     """
-    candidates, retired = listen_queue_split()
-    if not candidates and not retired:
+    refused = []
+    candidates, retired = listen_queue_split(refused)
+    if issues is not None:
+        issues.extend(refused)
+    if not candidates and not retired and not refused:
         return 0, 0
 
     seen = set(q["pending"]) | set(q["done"])
@@ -1386,8 +1593,13 @@ def sync_listen_queue(q):
 
     # Drop anything a human ruled on while it sat in our pending list. Not from `done` -- that is
     # our record of work completed, and re-adding a URL later must not re-analyse it.
+    #
+    # A refused entry leaves pending by the same door. A backstop that only stopped NEW arrivals
+    # would still let a master that was queued before the split rule existed be fetched whole,
+    # which is the one thing it is here to prevent. It cannot come back: it is not a candidate.
+    gone = set(retired) | {r["url"] for r in refused}
     before = len(q["pending"])
-    q["pending"] = [u for u in q["pending"] if u not in retired]
+    q["pending"] = [u for u in q["pending"] if u not in gone]
     return len(fresh), before - len(q["pending"])
 
 
@@ -1628,6 +1840,7 @@ def run(args):
     recover_missing_sigs_at_start(state)
 
     session_end = time.time() + random.uniform(*SESSION_S)
+    said_refused = set()                # queue entries this run has already refused out loud
     while True:
         if _stop_requested():
             return _stopped(state)
@@ -1661,10 +1874,25 @@ def run(args):
         q = _load(QUEUE, {"pending": [], "done": []})
         # Re-read the player's queue every pass: a subscription that fired an hour ago should feed
         # this search without a restart, and a candidate ruled on at /harvest should leave it.
-        added, dropped = sync_listen_queue(q)
+        refused = []
+        added, dropped = sync_listen_queue(q, refused)
         if added or dropped:
             _save(QUEUE, q)
             print("listen queue: +%d new, -%d ruled on" % (added, dropped))
+        # Say so ONCE per URL per run. The queue is re-read every pass, so the same refusal comes
+        # back every few minutes for as long as the entry sits there; a row per pass would bury
+        # the issue list under the one thing about it that is not news.
+        for row in refused:
+            if row["url"] in said_refused:
+                continue
+            said_refused.add(row["url"])
+            print("# skipped %s -- %s" % (row["url"], row["reason"]))
+            state["issues"] = ((state.get("issues") or []) + [
+                {"at": _now(), "url": row["url"],
+                 "issue": "skipped: over %d h to decode in one go (unsplit, or a chunk whose "
+                          "own span is that long) -- refused whole, never analysed in part"
+                          % (MAX_DURATION_S // 3600)}])[-50:]
+            _save(STATE, state)
 
         # Score cached signatures against any mystery they have not met yet -- a bounded chunk per
         # pass, so it rides along with the fetching instead of blocking it. This is CPU only
@@ -1746,7 +1974,9 @@ def run(args):
             err = None
             state["skipped_cached"] += 1
         else:
-            c, samples, err = stream_chroma(url)
+            # The declared length travels with the URL, so the refusal inside the child weighs
+            # the same facts `sync_listen_queue` weighed a few lines above.
+            c, samples, err = stream_chroma(url, queue_duration(url))
 
         # A stop is never a verdict, and it arrives by either route: this process was signalled
         # (the flag), or only the fetch child was (the sentinel error). Checking one and not the
@@ -1870,6 +2100,12 @@ def main():
     ap.add_argument("--job", metavar="DIR",
                     help="where --fetch-one leaves pcm.f32le, chroma32.npy and result.json "
                          "(default: a directory under .harvest/tmp/)")
+    ap.add_argument("--duration", type=float, default=None, metavar="SECONDS",
+                    help="the declared length of --fetch-one's URL, so an over-long candidate is "
+                         "refused on the same facts the queue used. `--run` does not pass this: "
+                         "it puts the duration in the job file beside the URL, where the whole "
+                         "job is described. By hand it is optional, and without it only the URL's "
+                         "own #t= span is length-checked.")
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--pause", action="store_true")
     ap.add_argument("--resume", action="store_true")
@@ -1907,14 +2143,23 @@ def main():
         install_signal_handlers(child=True)
         url = args.fetch_one
         job = args.job or args.fetch_job or (job_dir(url) if url else None)
+        # The job file describes the job: the URL and, when the parent knew one, its declared
+        # length. Both are read from the same place, because a child told half of what the queue
+        # door knew re-runs its refusal on less information and lets through what the parent
+        # already refused. `--duration` on the command line still wins, so a hand-run fetch can
+        # state a length the job file does not carry.
+        duration = args.duration
         if not url:
-            url = (_load(os.path.join(job, "url.json"), {}) or {}).get("url")
+            spec = _load(os.path.join(job, "url.json"), {}) or {}
+            url = spec.get("url")
+            if duration is None:
+                duration = spec.get("duration")
         if not url:
             print("no URL: pass --fetch-one URL, or --fetch-job DIR holding url.json",
                   file=sys.stderr)
             return 2
         try:
-            result = _fetch_and_sign(url, job)
+            result = _fetch_and_sign(url, job, duration)
         except Exception:                    # a crash is the parent's "child failed" path
             traceback.print_exc()
             return 1

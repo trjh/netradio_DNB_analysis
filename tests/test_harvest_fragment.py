@@ -1,0 +1,608 @@
+"""Chunk URLs: `#t=<a>,<b>` cuts the decode, and an unsplit master is refused whole.
+
+A queue entry for audio longer than two hours arrives split into chunks — the same URL once per
+slice, each carrying a W3C media fragment. yt-dlp ignores URL fragments, so if the harvester
+ignored them too, every chunk would fetch, decode and sign the WHOLE master: the cost splitting
+exists to avoid, and one signature filed under every chunk's key. Two things are pinned here:
+
+  * **The cut is real, and only where it is asked for.** The ffmpeg leg gains `-ss` before `-i`
+    and `-t` after it for a chunk URL, and for every other URL its argv is byte-identical to what
+    it was before this existed — including a fragment that is malformed, which is not a chunk
+    request and must not become a half-applied one.
+  * **A refusal is not a truncation.** An unsplit master past the four-hour backstop is skipped
+    with an issues row. Analysing its first four hours and filing that under the URL would be a
+    partial answer wearing a complete one's clothes.
+
+Nothing here touches the network: every `yt-dlp` and `ffmpeg` is a fake object and the queue is a
+temporary file.
+"""
+
+import io
+import json
+import os
+import shutil
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
+sys.path.insert(0, SCRIPTS)
+
+try:
+    import harvest                      # noqa: E402
+except Exception:                       # librosa/numpy not installed -> not this test's job
+    harvest = None
+
+
+class _FakeProc:
+    """Just enough of `Popen` for the decode path."""
+
+    def __init__(self, argv):
+        self.argv = argv
+        self.returncode = 0
+        self.stdout = io.BytesIO()
+        self.stderr = io.BytesIO(b"")
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+    def poll(self):
+        return self.returncode
+
+    def terminate(self):
+        pass
+
+    def kill(self):
+        pass
+
+
+class _FakeChild:
+    """A fake fetch child: already exited by the time the parent looks."""
+
+    def __init__(self, argv):
+        self.argv = argv
+        self.returncode = 0
+
+    def communicate(self, timeout=None):
+        return b"", b""
+
+    def poll(self):
+        return self.returncode
+
+    def terminate(self):
+        pass
+
+
+@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+class TheFragment(unittest.TestCase):
+    """What counts as a chunk request, and what is just a URL with a `#` in it."""
+
+    def test_a_well_formed_fragment_reads_as_a_cut(self):
+        self.assertEqual(harvest.media_fragment("https://y/watch?v=a#t=0,600"), (0, 600))
+        self.assertEqual(harvest.media_fragment("https://y/watch?v=a#t=7200,14400"), (7200, 14400))
+
+    def test_no_fragment_is_no_cut(self):
+        self.assertIsNone(harvest.media_fragment("https://y/watch?v=a"))
+        self.assertIsNone(harvest.media_fragment("https://y/watch?v=a#"))
+
+    def test_a_malformed_fragment_is_not_half_applied(self):
+        """Each of these is a URL with a `#` in it, not an instruction to cut audio."""
+        for frag in ("#t=5",              # one number: start of what, end of what?
+                     "#t=600,60",         # backwards
+                     "#t=60,60",          # empty slice
+                     "#t=-1,5",           # negative
+                     "#t=x,y",            # not numbers
+                     "#t=1.5,2.5",        # not whole seconds
+                     "#t=1,2,3",          # three
+                     "#t=1,2&loop",       # something else rode along
+                     "#start=1,2"):       # a different fragment entirely
+            with self.subTest(frag=frag):
+                self.assertIsNone(harvest.media_fragment("https://y/watch?v=a" + frag))
+
+    def test_an_endpoint_too_long_to_be_a_time_is_not_a_fragment(self):
+        """Python refuses to convert a string of more than 4,300 digits to an int. An unbounded
+        `\\d+` therefore turned one malformed queue entry into a `ValueError` out of
+        `listen_queue_split` -- which promises never to raise -- and out of `sync_listen_queue`
+        into the main loop. The pattern is bounded now, so a field that long is simply not a
+        fragment, which is the truth of it: no audio is 10**4300 seconds long."""
+        for digits in (11, 100, 4300, 4301):
+            with self.subTest(digits=digits):
+                url = "https://y/watch?v=a#t=0," + "9" * digits
+                self.assertIsNone(harvest.media_fragment(url))
+                self.assertFalse(harvest.too_long(url))          # ordinary, and not refused
+        # And at the start of the range too, where the value is never even reached today.
+        self.assertIsNone(harvest.media_fragment("https://y/a#t=" + "9" * 4301 + ",1"))
+
+    def test_the_largest_accepted_endpoint_is_ten_digits(self):
+        """The bound is generous by design: ten digits of seconds is on the order of three
+        centuries, so the boundary sits far outside anything real."""
+        self.assertEqual(harvest.media_fragment("https://y/a#t=0,9999999999"), (0, 9999999999))
+        self.assertIsNone(harvest.media_fragment("https://y/a#t=0,19999999999"))   # eleven
+
+    def test_each_chunk_of_one_master_has_its_own_key(self):
+        """The fragment stays in the URL, so the signature key is per chunk -- which is the whole
+        mechanism: two chunks of one master must not share a cached signature."""
+        base = "https://y/watch?v=long"
+        first = harvest.sig_path(base + "#t=0,7200")
+        second = harvest.sig_path(base + "#t=7200,14400")
+        self.assertNotEqual(first, second)
+        self.assertNotEqual(first, harvest.sig_path(base))
+
+
+@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+class TheFfmpegLeg(unittest.TestCase):
+    """The argv the decode actually runs, for a chunk URL and for an ordinary one."""
+
+    # What the ffmpeg leg was before chunks existed. An ordinary URL must still produce EXACTLY
+    # this, element for element -- a fetch that changed shape for every candidate would be a much
+    # bigger change than the one being made here.
+    BEFORE = ["ffmpeg", "-v", "error", "-i", "pipe:0",
+              "-ac", "1", "-ar", None, "-f", "f32le", "pipe:1"]
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.job = os.path.join(self.tmp, "job")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.addCleanup(harvest._STOP.update,
+                        {"signum": 0, "child": None, "procs": [], "part": None})
+
+    def _ffmpeg_argv(self, url):
+        """Run the decode far enough to see ffmpeg's argv. It writes nothing: the fake decode
+        spools no PCM, so the run ends at "no audio" before any signature could be written."""
+        seen = {}
+
+        def _popen(argv, **kwargs):
+            if "ffmpeg" in argv[0]:
+                seen["argv"] = argv
+            return _FakeProc(argv)
+
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            result = harvest._fetch_and_sign(url, self.job)
+        self.assertFalse(result["ok"])          # nothing decoded; no signature either way
+        return seen["argv"]
+
+    def _expected_before(self):
+        return [str(harvest._audio.SR) if a is None else a for a in self.BEFORE]
+
+    def test_an_ordinary_url_is_decoded_exactly_as_before(self):
+        self.assertEqual(self._ffmpeg_argv("https://y/watch?v=plain"), self._expected_before())
+
+    def test_a_malformed_fragment_is_decoded_exactly_as_before(self):
+        for frag in ("#t=5", "#t=600,60", "#t=-1,5", "#t=x,y"):
+            with self.subTest(frag=frag):
+                self.assertEqual(self._ffmpeg_argv("https://y/watch?v=a" + frag),
+                                 self._expected_before())
+
+    def test_a_chunk_url_seeks_before_the_input_and_stops_after_it(self):
+        """`-ss` BEFORE `-i` makes ffmpeg discard the head of the pipe; `-t` after it bounds what
+        follows. Either one in the wrong place decodes the wrong audio."""
+        argv = self._ffmpeg_argv("https://y/watch?v=a#t=7200,14400")
+        self.assertEqual(argv[:6], ["ffmpeg", "-v", "error", "-ss", "7200", "-i"])
+        self.assertEqual(argv[6], "pipe:0")
+        self.assertEqual(argv[7:9], ["-t", "7200"])          # end - start, not end
+        self.assertEqual(argv[9:], ["-ac", "1", "-ar", str(harvest._audio.SR),
+                                    "-f", "f32le", "pipe:1"])
+        self.assertLess(argv.index("-ss"), argv.index("-i"))
+        self.assertGreater(argv.index("-t"), argv.index("-i"))
+
+    def test_the_duration_is_the_length_of_the_slice(self):
+        argv = self._ffmpeg_argv("https://y/watch?v=a#t=90,240")
+        self.assertEqual(argv[argv.index("-ss") + 1], "90")
+        self.assertEqual(argv[argv.index("-t") + 1], "150")
+
+    def test_yt_dlp_is_still_handed_the_whole_url(self):
+        """It ignores the fragment, and that is fine -- the cut happens downstream. What matters
+        is that we do not mangle the URL it is asked to fetch."""
+        seen = []
+
+        def _popen(argv, **kwargs):
+            seen.append(argv)
+            return _FakeProc(argv)
+
+        url = "https://y/watch?v=a#t=0,600"
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            harvest._fetch_and_sign(url, self.job)
+        yt = [a for a in seen if "yt-dlp" in a[0]][0]
+        self.assertEqual(yt[-1], url)
+
+    def test_an_overlong_span_never_reaches_ffmpeg(self):
+        """The decode is the LAST door, and it refuses on the same terms as the queue door.
+
+        The queue never offers such a URL, but it is not the only way one arrives here -- a
+        hand-run `--fetch-one`, or a working queue written before this rule existed. Nothing is
+        spawned, so there is nothing to stop and nothing to clean up."""
+        spawned = []
+
+        def _popen(argv, **kwargs):
+            spawned.append(argv)
+            return _FakeProc(argv)
+
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            result = harvest._fetch_and_sign("https://y/watch?v=a#t=0,21600", self.job)
+        self.assertEqual(spawned, [])
+        self.assertFalse(result["ok"])
+        self.assertIn("too long", result["error"])
+        self.assertIn("6.0 h", result["error"])
+        self.assertFalse(os.path.exists(os.path.join(self.job, "pcm.f32le.part")))
+
+    def test_the_largest_accepted_span_is_refused_without_overflowing(self):
+        """The boundary itself, driven through the decode door -- not only the rejection.
+
+        Formatting the refusal divides the span by 3600.0, and a span the parser no longer bounds
+        would raise `OverflowError` there instead of producing a message. With ten digits the
+        largest value the parser can hand over converts to a float comfortably, so that failure
+        is unreachable by construction rather than by luck."""
+        spawned = []
+
+        def _popen(argv, **kwargs):
+            spawned.append(argv)
+            return _FakeProc(argv)
+
+        url = "https://y/watch?v=a#t=0,9999999999"
+        self.assertEqual(harvest.media_fragment(url), (0, 9999999999))   # accepted by the parser
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            result = harvest._fetch_and_sign(url, self.job)              # and refused as too long
+        self.assertEqual(spawned, [])
+        self.assertFalse(result["ok"])
+        self.assertIn("too long", result["error"])
+        self.assertIn("2777777.8 h", result["error"])
+
+    def test_an_endpoint_past_the_bound_is_decoded_as_an_ordinary_url(self):
+        """Past the bound it is not a fragment, so it is not a cut either: the argv is the plain
+        one, with no `-ss` and no `-t`, and nothing raises on the way."""
+        argv = self._ffmpeg_argv("https://y/watch?v=a#t=0," + "9" * 4301)
+        self.assertEqual(argv, self._expected_before())
+
+    def test_both_doors_ask_the_same_question(self):
+        """Not two thresholds that happen to agree today: one predicate, called twice, on the same
+        facts. A URL the queue refuses is refused by the decode, and one it admits is decoded."""
+        for url, duration in (("https://y/a#t=0,21600", None),
+                              ("https://y/a#t=0,14401", None),
+                              ("https://y/a#t=0,600", None),
+                              ("https://y/a#t=0,14400", None),
+                              ("https://y/a", None),
+                              ("https://y/a#t=x,y", None),
+                              ("https://y/a", 21600),        # unfragmented, and known to be long
+                              ("https://y/a", 600),
+                              ("https://y/a#t=0,600", 21600)):
+            with self.subTest(url=url, duration=duration):
+                refused_at_the_queue = harvest.too_long(url, duration)
+                spawned = []
+
+                def _popen(argv, **kwargs):
+                    spawned.append(argv)
+                    return _FakeProc(argv)
+
+                with mock.patch.object(harvest.subprocess, "Popen", _popen):
+                    harvest._fetch_and_sign(url, self.job, duration)
+                self.assertEqual(refused_at_the_queue, spawned == [])
+
+    def test_a_declared_duration_the_queue_refused_still_refuses_after_the_fork(self):
+        """HALF ONE. The child is a different process and knows only what its argv carries. With
+        the duration left behind, this exact case ran both yt-dlp and ffmpeg on a six-hour master
+        the queue door had already refused -- the same predicate answering a different question
+        because it was starved of an input."""
+        url = "https://y/six-hour-master"                    # no fragment: duration is all there is
+        self.assertTrue(harvest.too_long(url, 21600))        # the queue door refuses it
+        spawned = []
+
+        def _popen(argv, **kwargs):
+            spawned.append(argv)
+            return _FakeProc(argv)
+
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            result = harvest._fetch_and_sign(url, self.job, 21600)
+        self.assertEqual(spawned, [])                        # and so does the decode door
+        self.assertFalse(result["ok"])
+        self.assertIn("too long", result["error"])
+        self.assertIn("6.0 h", result["error"])
+
+    def test_a_monstrous_declared_duration_does_not_crash_the_refusal(self):
+        """A declared duration is unbounded JSON, unlike a span. The message must never be the
+        thing that raises -- `10**5000 / 3600.0` is an `OverflowError`."""
+        with mock.patch.object(harvest.subprocess, "Popen",
+                               lambda *a, **k: self.fail("must not spawn")):
+            for duration in (10 ** 5000, float("inf"), 10 ** 13):
+                with self.subTest(duration=duration):
+                    result = harvest._fetch_and_sign("https://y/a", self.job, duration)
+                    self.assertFalse(result["ok"])
+                    self.assertIn("too long", result["error"])
+
+    def test_a_hand_run_fetch_is_span_checked_but_not_length_checked(self):
+        """HALF TWO, and it is a deliberate position, not an oversight.
+
+        Someone typing `--fetch-one <url>` is asking for that URL on purpose and there is no
+        trustworthy length to judge it by, so it is not length-checked -- inventing a probe, or
+        refusing everything unlabelled, would both be worse. The SPAN still applies, because it
+        needs nothing from outside the URL."""
+        spawned = []
+
+        def _popen(argv, **kwargs):
+            spawned.append(argv)
+            return _FakeProc(argv)
+
+        # An over-long span, URL only: still refused, because the URL says so itself.
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            result = harvest._fetch_and_sign("https://y/a#t=0,21600", self.job)
+        self.assertEqual(spawned, [])
+        self.assertIn("too long", result["error"])
+
+        # No fragment and no duration: NOT refused. This is the documented, intended behaviour.
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            harvest._fetch_and_sign("https://y/six-hour-master", self.job)
+        self.assertEqual([os.path.basename(a[0]) for a in spawned], ["yt-dlp", "ffmpeg"])
+
+
+@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+class TheTooLongBackstop(unittest.TestCase):
+    """Four hours, unsplit: refused whole, with a row saying so."""
+
+    def _queue(self, items):
+        fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        json.dump({"items": items}, fh)
+        fh.close()
+        self.addCleanup(os.unlink, fh.name)
+        self.addCleanup(setattr, harvest, "LISTEN_QUEUE", harvest.LISTEN_QUEUE)
+        harvest.LISTEN_QUEUE = fh.name
+
+    def test_an_unsplit_master_is_skipped_with_a_reason(self):
+        self._queue([{"url": "https://y/master", "title": "6 HOUR SET", "duration": 21600}])
+        issues = []
+        cand, retired = harvest.listen_queue_split(issues)
+        self.assertEqual(cand, [])
+        self.assertEqual(retired, set())        # refused, not RULED ON -- no human said anything
+        self.assertEqual(issues, [{"url": "https://y/master", "reason": "too_long"}])
+
+    def test_a_chunk_of_that_same_master_is_accepted(self):
+        """Same audio, same length, split: the chunk is what the backstop exists to make happen.
+
+        Note the entry still declares the WHOLE master's duration, as a real one does. What will
+        be decoded is the span, so the span is what decides."""
+        self._queue([{"url": "https://y/master#t=0,7200", "title": "6 HOUR SET [1/3]",
+                      "duration": 21600}])
+        issues = []
+        cand, _ = harvest.listen_queue_split(issues)
+        self.assertEqual(cand, ["https://y/master#t=0,7200"])
+        self.assertEqual(issues, [])
+
+    def test_an_overlong_fragment_is_refused_like_any_other_long_audio(self):
+        """A fragment is a CLAIM made upstream, not proof that the entry is short.
+
+        `#t=0,21600` is six hours wearing a chunk's punctuation. Reading "it has a fragment" as
+        "it is a chunk, so it is short" is exactly the assumption a backstop exists to survive:
+        chunks are short *by construction*, and the construction lives upstream of here, where
+        it can be wrong, stale or hand-written."""
+        self._queue([{"url": "https://y/master#t=0,21600", "duration": 21600}])
+        issues = []
+        cand, retired = harvest.listen_queue_split(issues)
+        self.assertEqual(cand, [])
+        self.assertEqual(retired, set())
+        self.assertEqual(issues, [{"url": "https://y/master#t=0,21600", "reason": "too_long"}])
+
+    def test_a_late_chunk_is_measured_by_its_span_not_its_end(self):
+        """A slice near the end of a long master has big numbers on both ends and a modest span."""
+        self._queue([{"url": "https://y/m#t=18000,21600", "duration": 21600}])
+        cand, _ = harvest.listen_queue_split()
+        self.assertEqual(cand, ["https://y/m#t=18000,21600"])
+
+    def test_the_span_governs_when_the_two_disagree(self):
+        """An entry can carry both a declared duration and a span, and they can disagree. The
+        span is what ffmpeg is told to decode, so the span is what the refusal weighs; the
+        declared duration decides only when there is no fragment at all."""
+        # A short slice of a long master: accepted, despite the six-hour duration.
+        self.assertFalse(harvest.too_long("https://y/m#t=0,600", 21600))
+        # A long slice of something that claims to be short: refused, despite the duration.
+        self.assertTrue(harvest.too_long("https://y/m#t=0,21600", 60))
+        # No fragment: the declared duration is all there is, so it decides.
+        self.assertTrue(harvest.too_long("https://y/m", 21600))
+        self.assertFalse(harvest.too_long("https://y/m", 600))
+
+    def test_the_boundary_holds_at_exactly_four_hours(self):
+        """Four hours passes, a second more does not -- pinned so the comparison cannot drift
+        between `>` and `>=` unnoticed."""
+        self.assertFalse(harvest.too_long("https://y/m#t=0,14400"))
+        self.assertTrue(harvest.too_long("https://y/m#t=0,14401"))
+        self.assertFalse(harvest.too_long("https://y/m#t=600,15000"))
+        self.assertTrue(harvest.too_long("https://y/m#t=600,15001"))
+
+    def test_a_monstrous_fragment_does_not_stop_the_world(self):
+        """The queue is data this process does not control, and `listen_queue_split` promises
+        never to raise. An unbounded digit run broke that promise through `int()`, and because
+        the main loop calls `sync_listen_queue` unguarded, ONE malformed entry ended a run meant
+        to last for days. The entry is now ordinary: searched, not refused, and above all not
+        fatal -- and the good entry beside it still comes through."""
+        for digits in (4300, 4301, 9000):
+            with self.subTest(digits=digits):
+                bad = "https://y/m#t=0," + "9" * digits
+                self._queue([{"url": bad, "duration": 600},
+                             {"url": "https://y/good", "duration": 600}])
+                issues = []
+                cand, retired = harvest.listen_queue_split(issues)       # must not raise
+                self.assertEqual(cand, [bad, "https://y/good"])
+                self.assertEqual(issues, [])
+                q = {"pending": [], "done": []}
+                added, _ = harvest.sync_listen_queue(q)                  # nor this one
+                self.assertEqual(added, 2)
+
+    def test_a_long_mix_under_the_backstop_is_still_searched(self):
+        """The rule is still that length is not a filter -- a record hides inside a DJ set, and
+        the match reports where it hit. Four hours is a backstop, not a preference."""
+        for seconds in (3600, 7200, 14400):     # an hour, two, and exactly four
+            with self.subTest(seconds=seconds):
+                self._queue([{"url": "https://y/mix", "title": "JUNGLE 1998",
+                              "duration": seconds}])
+                issues = []
+                cand, _ = harvest.listen_queue_split(issues)
+                self.assertEqual(cand, ["https://y/mix"])
+                self.assertEqual(issues, [])
+
+    def test_an_unreadable_duration_is_not_grounds_for_refusal(self):
+        """Missing, null, a string, a bool: none of those is evidence that this is six hours long,
+        and a backstop that fires on ignorance would silently starve the search."""
+        for duration in (None, "21600", True, {"seconds": 21600}, float("nan")):
+            with self.subTest(duration=duration):
+                self._queue([{"url": "https://y/x", "title": "X", "duration": duration}])
+                issues = []
+                cand, _ = harvest.listen_queue_split(issues)
+                self.assertEqual(cand, ["https://y/x"])
+                self.assertEqual(issues, [])
+
+    def test_a_ruling_still_wins(self):
+        """A human who has heard it has retired it; the backstop does not get a second opinion."""
+        self._queue([{"url": "https://y/master", "duration": 21600, "listened": True}])
+        issues = []
+        cand, retired = harvest.listen_queue_split(issues)
+        self.assertEqual((cand, retired), ([], {"https://y/master"}))
+        self.assertEqual(issues, [])
+
+    def test_the_caller_may_ignore_the_issues_list(self):
+        """Every existing caller passes nothing, and none of them should have to care."""
+        self._queue([{"url": "https://y/master", "duration": 21600}])
+        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+
+    def test_a_refused_url_also_leaves_our_pending_list(self):
+        """It was queued before the split rule existed. A backstop that only stopped NEW arrivals
+        would still let the whole master be fetched, which is the thing it is here to prevent."""
+        self._queue([{"url": "https://y/master", "duration": 21600}])
+        q = {"pending": ["https://y/master"], "done": []}
+        issues = []
+        added, dropped = harvest.sync_listen_queue(q, issues)
+        self.assertEqual((added, dropped), (0, 1))
+        self.assertEqual(q["pending"], [])
+        self.assertEqual(issues, [{"url": "https://y/master", "reason": "too_long"}])
+
+    def test_the_chunks_flow_in_while_the_master_flows_out(self):
+        self._queue([{"url": "https://y/m", "duration": 21600},
+                     {"url": "https://y/m#t=0,7200", "duration": 21600},
+                     {"url": "https://y/m#t=7200,14400", "duration": 21600}])
+        q = {"pending": ["https://y/m"], "done": []}
+        added, dropped = harvest.sync_listen_queue(q)
+        self.assertEqual((added, dropped), (2, 1))
+        self.assertEqual(q["pending"], ["https://y/m#t=0,7200", "https://y/m#t=7200,14400"])
+
+    def test_the_declared_duration_is_recoverable_at_fetch_time(self):
+        """Our working queue holds bare URLs, so the fetch path has to ask the listen queue for
+        the duration the queue door judged on. Without this the child gets nothing to check."""
+        self._queue([{"url": "https://y/a", "duration": 21600},
+                     {"url": "https://y/b", "duration": 600.5},
+                     {"url": "https://y/c"},                       # no duration at all
+                     {"url": "https://y/d", "duration": "600"}])   # not a number
+        harvest._DURATIONS.update({"at": 0.0, "by_url": None})     # drop the cache for the test
+        self.addCleanup(harvest._DURATIONS.update, {"at": 0.0, "by_url": None})
+        self.assertEqual(harvest.queue_duration("https://y/a"), 21600)
+        self.assertEqual(harvest.queue_duration("https://y/b"), 600.5)
+        self.assertIsNone(harvest.queue_duration("https://y/c"))
+        self.assertIsNone(harvest.queue_duration("https://y/d"))
+        self.assertIsNone(harvest.queue_duration("https://y/never-seen"))
+
+    def test_an_unreadable_queue_yields_no_duration_rather_than_zero(self):
+        """"Could not read" is not "zero seconds", and it must not raise either."""
+        fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        fh.write("{ this is not json")
+        fh.close()
+        self.addCleanup(os.unlink, fh.name)
+        self.addCleanup(setattr, harvest, "LISTEN_QUEUE", harvest.LISTEN_QUEUE)
+        harvest.LISTEN_QUEUE = fh.name
+        harvest._DURATIONS.update({"at": 0.0, "by_url": None})
+        self.addCleanup(harvest._DURATIONS.update, {"at": 0.0, "by_url": None})
+        self.assertIsNone(harvest.queue_duration("https://y/a"))
+
+
+@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+class TheChildBoundary(unittest.TestCase):
+    """What the parent tells the child, and where it tells it.
+
+    The child is a separate process, so it knows only what the job hands it. Both halves of one
+    fact -- fetch THIS, and it is THIS long -- therefore live in the same place, the job file:
+    the URL is off the command line because another process pattern-matches that line, and a job
+    described half in a file and half on an argv is how the two halves drift apart.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.addCleanup(setattr, harvest, "JOBS", harvest.JOBS)
+        harvest.JOBS = os.path.join(self.tmp, "tmp")
+        self.addCleanup(harvest._STOP.update,
+                        {"signum": 0, "child": None, "procs": [], "part": None})
+
+    def _spawn(self, url, *args):
+        """Drive one spawn and return (argv, the job file the child would read)."""
+        seen = {}
+
+        def _popen(argv, **kwargs):
+            seen["argv"] = argv
+            job = argv[argv.index("--fetch-job") + 1]
+            seen["spec"] = json.load(open(os.path.join(job, "url.json")))
+            with open(os.path.join(job, "result.json"), "w") as fh:
+                json.dump({"ok": False, "error": "nope"}, fh)
+            return _FakeChild(argv)
+
+        with mock.patch.object(harvest.subprocess, "Popen", _popen):
+            harvest.stream_chroma(url, *args)
+        return seen["argv"], seen["spec"]
+
+    def test_the_duration_rides_in_the_job_file_beside_the_url(self):
+        argv, spec = self._spawn("https://y/a", 21600)
+        self.assertEqual(spec, {"url": "https://y/a", "duration": 21600})
+        self.assertNotIn("--duration", argv)
+
+    def test_nothing_about_the_job_is_on_the_command_line(self):
+        """The supervisor matches `--run` as a substring of the whole line, so the argv carries
+        the job path and nothing anybody else chose -- not the URL, and not its length either."""
+        argv, _ = self._spawn("https://y/watch?v=--run-in-the-id", 21600)
+        self.assertEqual(argv[2], "--fetch-job")
+        self.assertNotIn("https://y/watch?v=--run-in-the-id", argv)
+        self.assertNotIn("21600", " ".join(argv))
+
+    def test_no_duration_is_recorded_as_no_duration(self):
+        """Written as null rather than omitted or zeroed: the child reads "not known", which is
+        what `too_long` treats as no evidence of length."""
+        _, spec = self._spawn("https://y/a")
+        self.assertEqual(spec, {"url": "https://y/a", "duration": None})
+
+    def test_the_child_reads_back_the_same_verdict_that_was_written(self):
+        """The round trip through JSON is where a number can quietly change meaning. What has to
+        survive it is not the digits but the ANSWER: refused stays refused."""
+        for duration in (21600, 600.5, 14400, 14401, 10 ** 20, float("inf")):
+            with self.subTest(duration=duration):
+                _, spec = self._spawn("https://y/a", duration)
+                self.assertEqual(harvest.too_long("https://y/a", spec["duration"]),
+                                 harvest.too_long("https://y/a", duration))
+
+    def test_the_job_file_is_what_the_child_actually_refuses_on(self):
+        """End to end through the real child entry point: a job file the parent wrote for a
+        six-hour master is refused by `main()` without spawning yt-dlp or ffmpeg."""
+        job = os.path.join(self.tmp, "job")
+        os.makedirs(job, exist_ok=True)
+        with open(os.path.join(job, "url.json"), "w") as fh:
+            json.dump({"url": "https://y/six-hour-master", "duration": 21600}, fh)
+        spawned = []
+        argv = ["harvest.py", "--fetch-job", job]
+        with mock.patch.object(sys, "argv", argv), \
+                mock.patch.object(harvest.subprocess, "Popen",
+                                  lambda *a, **k: spawned.append(a) or _FakeProc(a[0])):
+            self.assertEqual(harvest.main(), 0)
+        self.assertEqual(spawned, [])
+        with open(os.path.join(job, "result.json")) as fh:
+            result = json.load(fh)
+        self.assertFalse(result["ok"])
+        self.assertIn("too long", result["error"])
+
+    def test_the_escape_hatch_is_told_too(self):
+        """NETRADIO_HARVEST_CHILD=0 runs the fetch in-process; it must not lose the check."""
+        seen = {}
+
+        def _fetch(url, job, duration=None):
+            seen["duration"] = duration
+            return {"ok": False, "error": "nope"}
+
+        with mock.patch.dict(os.environ, {"NETRADIO_HARVEST_CHILD": "0"}), \
+                mock.patch.object(harvest, "_fetch_and_sign", _fetch):
+            harvest.stream_chroma("https://y/a", 21600)
+        self.assertEqual(seen["duration"], 21600)
+
+
+if __name__ == "__main__":
+    unittest.main()

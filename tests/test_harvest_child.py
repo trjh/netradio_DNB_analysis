@@ -545,10 +545,23 @@ class TheChildEntryPoint(unittest.TestCase):
                                   return_value={"ok": True, "error": None}) as fetch:
             rc = harvest.main()
         self.assertEqual(rc, 0)
-        fetch.assert_called_once_with("https://example.invalid/x", self.job)
+        # The trailing None is `--duration`: absent on this argv, so no length is claimed.
+        fetch.assert_called_once_with("https://example.invalid/x", self.job, None)
         lock.assert_not_called()
         with open(os.path.join(self.job, "result.json")) as fh:
             self.assertTrue(json.load(fh)["ok"])
+
+    def test_the_child_honours_a_duration_on_its_argv(self):
+        """The parent passes the queue's declared length so the child's refusal weighs the same
+        facts the queue door weighed. The child knows only what this argv carries."""
+        argv = ["harvest.py", "--fetch-one", "https://example.invalid/x", "--job", self.job,
+                "--duration", "21600"]
+        with mock.patch.object(sys, "argv", argv), \
+                mock.patch.object(harvest, "acquire_writer_lock"), \
+                mock.patch.object(harvest, "_fetch_and_sign",
+                                  return_value={"ok": True, "error": None}) as fetch:
+            self.assertEqual(harvest.main(), 0)
+        fetch.assert_called_once_with("https://example.invalid/x", self.job, 21600.0)
 
     def test_a_crash_in_the_child_exits_nonzero(self):
         argv = ["harvest.py", "--fetch-one", "https://example.invalid/x", "--job", self.job]
@@ -819,8 +832,11 @@ class AStopIsNeverAVerdict(unittest.TestCase):
     def _spooled(self):
         return sorted(os.listdir(self.results)) if os.path.isdir(self.results) else []
 
-    def _stopped_fetch(self, _url):
-        """What `stream_chroma` returns when the handler fired while the child was running."""
+    def _stopped_fetch(self, _url, _duration=None):
+        """What `stream_chroma` returns when the handler fired while the child was running.
+
+        Takes `duration` because the real one does: it is the player's declared length, carried
+        to the fetch child so its refusal weighs what the queue door weighed."""
         harvest._STOP["signum"] = signal.SIGTERM
         return None, None, "stopped"
 
@@ -849,7 +865,7 @@ class AStopIsNeverAVerdict(unittest.TestCase):
         hstate = harvester.blank_hstate()
         self.assertFalse(harvest._stop_requested())
         with mock.patch.object(harvest, "stream_chroma",
-                               lambda u: (None, None, harvest.STOPPED)):
+                               lambda u, d=None: (None, None, harvest.STOPPED)):
             outcome = harvester.work_once(hstate, q)
         self.assertEqual(outcome, "stopped")
         self.assertEqual(self._spooled(), [])
@@ -862,7 +878,7 @@ class AStopIsNeverAVerdict(unittest.TestCase):
         q = {"pending": [self.url], "done": []}
         hstate = harvester.blank_hstate()
         with mock.patch.object(harvest, "stream_chroma",
-                               lambda u: (None, None, "ERROR: video unavailable")):
+                               lambda u, d=None: (None, None, "ERROR: video unavailable")):
             outcome = harvester.work_once(hstate, q)
         self.assertEqual(outcome, "fetched")
         self.assertEqual(len(self._spooled()), 1)

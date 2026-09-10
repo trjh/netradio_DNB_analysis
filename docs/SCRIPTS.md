@@ -181,6 +181,31 @@ fetch failed on: a `retry_after` date in the future keeps the URL off the networ
 and keeps its own working queue in `.harvest/`. It reads the queue in whatever layout the player
 keeps it — the single `listen_queue.json`, or the sharded `listen_queue/` directory (its
 `index.json` manifest + `shard-NNNN.json` files) — read-only, never writing.
+
+**Long audio arrives in chunks.** An entry for audio longer than two hours comes split: the same
+URL once per slice, each carrying a `#t=<start>,<end>` media fragment in whole seconds. yt-dlp
+ignores URL fragments, so the harvester reads the fragment itself and hands ffmpeg `-ss`/`-t` —
+each chunk is decoded, signed and cached on its own, under its own key.
+
+Anything that would decode more than **four** hours in one go is refused outright, with a
+`too_long` row in the issue list — analysing its first four hours and filing that under the URL
+would be a partial answer wearing a complete one's clothes. What counts as "how long" is the
+**fragment's span** whenever there is a fragment, since the span is what ffmpeg is told to decode;
+the entry's declared duration decides only when there is no fragment. So a `#t=0,21600` slice is
+refused exactly like the six-hour master it was cut from: a fragment is a *claim* made upstream,
+not proof that an entry is short, and a backstop that trusted the claim would not be one. (Two
+hours is where splitting starts to pay; four is where one decode costs more than any single lead
+can be worth — different numbers for different questions.)
+
+The same check runs again inside the fetch child, immediately before ffmpeg. A fetch driven from
+the queue is refused there on the queue's terms, because the declared duration is written into the
+job file beside the URL (see below) and the child reads both — a check is only as good as what it
+is told, and the child knows only what the job hands it. A **hand-run `--fetch-one <url>` with no
+`--duration` is not length-checked**, and that is deliberate: someone typing a URL is deliberately
+asking for that URL, there is no trustworthy length to judge it by, and inventing one would be
+worse than going without. A `#t=` span is enforced in every case, since it needs nothing from
+outside the URL.
+
 For each candidate: streams the audio (never to disk), reduces it to a **chroma signature** (12×N
 float16, ~55 KB against ~8 MB), throws the audio away, and scores the signature against every
 unsolved Mystery Track — **but only the mysteries it holds a clip of** (see
@@ -219,8 +244,8 @@ hand-started harvester rather than spawning a second, and a watchdog revives it 
 ### How much memory it uses, and why
 
 Two `harvest.py` processes exist while a candidate is being fetched: the long-running parent
-(`--run`) and a **fetch child** (`--fetch-job DIR`), plus that child's `yt-dlp` and `ffmpeg`.
-The child does the whole fetch — download, decode, chroma, cache, upload — and exits.
+(`--run`) and a **fetch child** (`--fetch-job DIR`, see below), plus that child's `yt-dlp` and
+`ffmpeg`. The child does the whole fetch — download, decode, chroma, cache, upload — and exits.
 The parent, which holds the state, the queue and the matching board, never touches a track's
 audio, so its footprint stays flat across candidates rather than climbing to a high-water mark
 and staying there.
@@ -237,7 +262,10 @@ The child's command line is `harvest.py --fetch-job <dir>` and the URL is **not 
 handed over in the job directory. The player's supervisor finds a live harvester by matching
 `--run` as a substring of the whole `ps` line, and a YouTube id may legally contain `--run`, so a
 URL on the argv would be a way for a process that lives for one track to be adopted as the
-harvester. To run one fetch by hand, `--fetch-one URL --job DIR` still works.
+harvester. The job file (`url.json`) carries the URL **and** the queue's declared duration for it,
+so the child's length check weighs the same facts the queue did; describing half the job there and
+half on a command line is how the two would drift apart. To run one fetch by hand,
+`--fetch-one URL --job DIR` still works, with `--duration SECONDS` if you want it length-checked.
 
 `NETRADIO_HARVEST_CHILD=0` runs the fetch in the harvester's own process instead of a child. It is
 for diagnosing a venv or environment problem in the child; it brings the memory back with it, so
