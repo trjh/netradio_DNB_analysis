@@ -648,6 +648,56 @@ def _decode_and_sign(url, job, duration=None):
         _unlink(part)
         return {"ok": False, "error": "too short (%.0fs)" % (n_samples / _audio.SR)}
 
+    # THE THIRD DOOR -- and the one `too_long` cannot open on its own. `too_long`, above, refuses
+    # on what the URL and the queue entry CLAIM: a fragment's span, or a declared duration.
+    # Neither is binding on what actually came out of ffmpeg. An entry with no fragment and no
+    # declared duration is, by `too_long`'s own account, "no evidence of length at all" -- and it
+    # sails through both doors no matter how many hours of broadcast sit behind it. The spool
+    # ffmpeg just wrote is ground truth about what this decode actually was, and this is the last
+    # place to weigh it before that ground truth becomes an allocation.
+    #
+    # READ THE SPOOL'S SIZE, NOT ITS CONTENTS. `n_samples` came from `os.path.getsize` a few lines
+    # up -- counting bytes costs nothing next to loading them. A six-hour capture at this recipe's
+    # sample rate is a gigabyte-plus `np.fromfile` one line below; the guard has to sit above that
+    # line, or it has already paid the memory cost it exists to avoid.
+    #
+    # A REFUSAL HERE IS A VERDICT, NOT A RETRY. Unlinking `part` and returning here is no
+    # different from the exit-status checks just above: the caller pops the URL to `done` exactly
+    # as it does for `too_long`, `too short`, or a nonzero ffmpeg exit, and this URL is not
+    # fetched again. That is correct, not merely tolerated -- when the player eventually splits
+    # this master into parts, each part is a NEW url, with its own fragment and its own signature
+    # key. This URL, decoded whole, was never going to be the answer for any of them.
+    #
+    # NEITHER MESSAGE BELOW MAY SAY "403", "429" OR "blocked". `run()` greps a failed fetch's
+    # error for those words to decide the HOST is throttling this URL and to back off and retry
+    # it, rather than file it to `done` (see `BLOCK_AFTER`, above). A length refusal is the
+    # opposite of a host problem and must never be read as one.
+    seconds = n_samples / _audio.SR
+    if seconds > MAX_DURATION_S:
+        _unlink(part)
+        return {"ok": False,
+                "error": "too long after decode: %s -- refused, not truncated" % _hours(seconds)}
+    # `expect` is what this decode was SUPPOSED to produce: the cut span when there is one --
+    # it is what ffmpeg was actually told to decode, via `-ss`/`-t` -- else the declared duration,
+    # when that duration is a real number and not the `True`/`False` that also happens to satisfy
+    # `isinstance(x, int)` in Python. Neither present: `expect` is `None`, and the tolerance check
+    # below does not run -- an unmeasurable length is not a mismatch, it is simply unmeasured.
+    if cut:
+        expect = cut[1] - cut[0]
+    elif not isinstance(duration, bool) and isinstance(duration, (int, float)):
+        expect = duration
+    else:
+        expect = None
+    # 2% or ten seconds, whichever is larger: yt-dlp's declared durations are rounded to the
+    # second, and container padding adds a little more. Either is noise; a decode that lands
+    # outside it did not run to completion -- the exact truncated-fetch shape this backstop
+    # exists to catch (yt-dlp killed mid-stream, ffmpeg fed a partial pipe and exiting 0 on what
+    # it got, both exit codes clean).
+    if expect and abs(seconds - expect) > max(10, 0.02 * expect):
+        _unlink(part)
+        return {"ok": False,
+                "error": "length mismatch: decoded %.0f s, expected %.0f s" % (seconds, expect)}
+
     os.replace(part, pcm)
     _STOP["part"] = None
     y = np.fromfile(pcm, dtype="float32")      # ONE allocation, at the final size
