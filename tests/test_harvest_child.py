@@ -529,6 +529,92 @@ class NoSignatureFromAPartialDecode(unittest.TestCase):
 
 
 @unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+class ThePostDecodeLengthGuard(unittest.TestCase):
+    """`too_long`, at the top of `_decode_and_sign`, refuses on a CLAIM -- a fragment's span, or a
+    declared duration. An entry with neither is, by its own account, no evidence of length, and
+    both doors wave it through no matter how long the decode actually runs. These pin the guard
+    that reads the spool ffmpeg just wrote, after the exit-status checks and before it is loaded:
+    over the cap, off the expected length, and within tolerance.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.job = os.path.join(self.tmp, "job")
+        self.url = "https://example.invalid/watch?v=long"
+        self.saved = []
+        self.put = []
+        self._cache = harvest.CACHE
+        harvest.CACHE = os.path.join(self.tmp, "cache")
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        harvest.CACHE = self._cache
+        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run(self, popen, url=None, duration=None):
+        real_save = np.save
+
+        def _save(path, arr, *a, **k):
+            self.saved.append(os.path.basename(str(path)))
+            return real_save(path, arr, *a, **k)
+
+        with mock.patch.object(harvest.subprocess, "Popen", popen), \
+                mock.patch.object(harvest.np, "save", _save), \
+                mock.patch.object(harvest.sigstore, "enabled", lambda: True), \
+                mock.patch.object(harvest.sigstore, "put",
+                                  lambda *a: self.put.append(a) or True), \
+                mock.patch.object(harvest.chroma_recipe, "compute_chroma",
+                                  lambda y, sr=None: np.zeros((12, 4), dtype="float32")):
+            return harvest._fetch_and_sign(url or self.url, self.job, duration)
+
+    def _assert_refused(self, result, error_contains):
+        self.assertFalse(result["ok"])
+        self.assertIn(error_contains, result["error"])
+        self.assertNotIn("403", result["error"])
+        self.assertNotIn("429", result["error"])
+        self.assertNotIn("blocked", result["error"].lower())
+        self.assertNotIn(os.path.basename(harvest.sig_path(self.url)), self.saved)
+        self.assertNotIn("chroma32.npy", self.saved)
+        self.assertEqual(self.put, [])
+        self.assertFalse(os.path.exists(os.path.join(self.job, "pcm.f32le.part")))
+        self.assertFalse(os.path.exists(os.path.join(self.job, "pcm.f32le")))
+
+    def test_a_spool_over_the_cap_is_refused_and_unlinked(self):
+        """No fragment, no declared duration -- `too_long` calls this "no evidence of length" and
+        lets it through to ffmpeg. Lowering the cap stands in for the six-hour spool the real
+        backstop is for, without actually decoding six hours of silence in a test."""
+        with mock.patch.object(harvest, "MAX_DURATION_S", 10):
+            result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)))       # 60s decoded, cap is 10s
+        self._assert_refused(result, "too long after decode")
+
+    def test_a_spool_off_the_expected_length_is_refused(self):
+        """The URL asks for a one-hour slice (`-ss 0 -t 3600`); the fake ffmpeg only ever wrote
+        60s to the spool before exiting 0. Both processes report success -- the shape of a
+        truncated fetch that exit codes alone never catch."""
+        result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)), url=self.url + "#t=0,3600")
+        self._assert_refused(result, "length mismatch: decoded 60 s, expected 3600 s")
+
+    def test_a_spool_within_tolerance_is_signed_as_before(self):
+        """Exactly the requested span: the guard is silent, and the rest of the function runs
+        exactly as it did before this guard existed."""
+        cut_url = self.url + "#t=0,60"
+        result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)), url=cut_url)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(self.saved.count(os.path.basename(harvest.sig_path(cut_url))), 1)
+        self.assertIn("chroma32.npy", self.saved)
+        self.assertEqual(len(self.put), 1)
+        self.assertEqual(result["n_samples"], LONG_ENOUGH)
+
+    def test_a_declared_duration_within_tolerance_is_signed(self):
+        """No fragment this time -- the declared duration alone is `expect`, and a decode a
+        couple of seconds short of it is still inside `max(10, 2%)`."""
+        result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)), duration=61)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(len(self.put), 1)
+
+
+@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
 class TheChildEntryPoint(unittest.TestCase):
     """`--fetch-one` really runs, and it runs before anything that could touch shared state."""
 
