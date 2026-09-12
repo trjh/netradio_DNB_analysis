@@ -110,7 +110,12 @@ ensure_on_main() {   # $1=repo $2=rel $3=src $4=branch $5=commit-msg [$6=derive-
     fi
     git -C "$wt" commit -q -m "$msg"
     git -C "$wt" push -q -f -u origin "$br"
-    local existing; existing="$( cd "$wt" && gh pr list --head "$br" --state open --json number --jq '.[0].number // empty' 2>/dev/null || true )"
+    # Not `cd && gh || true`: in that shape a FAILED cd is indistinguishable from "no open PR",
+    # so a vanished worktree would read as "none" and open a duplicate. Failure of either half
+    # still yields empty (the caller treats empty as "none"), but the two are now separable if
+    # this ever needs to become loud.
+    local existing
+    existing="$(cd "$wt" && gh pr list --head "$br" --state open --json number --jq '.[0].number // empty' 2>/dev/null)" || existing=""
     if [ -n "$existing" ]; then say "  $repo: updated open PR #$existing for $rel"
     else ( cd "$wt" && gh pr create --fill --base main ); fi
     if read -r -p "  Accept (merge) the $repo PR for $rel now? [y/N] " ans && [[ "${ans:-}" == [yY] ]]; then
@@ -174,7 +179,12 @@ ensure_tree_on_main() {   # $1=repo $2=reldir $3=srcdir $4=branch $5=commit-msg
   else
     git -C "$wt" commit -q -m "$msg"
     git -C "$wt" push -q -f -u origin "$br"
-    local existing; existing="$( cd "$wt" && gh pr list --head "$br" --state open --json number --jq '.[0].number // empty' 2>/dev/null || true )"
+    # Not `cd && gh || true`: in that shape a FAILED cd is indistinguishable from "no open PR",
+    # so a vanished worktree would read as "none" and open a duplicate. Failure of either half
+    # still yields empty (the caller treats empty as "none"), but the two are now separable if
+    # this ever needs to become loud.
+    local existing
+    existing="$(cd "$wt" && gh pr list --head "$br" --state open --json number --jq '.[0].number // empty' 2>/dev/null)" || existing=""
     if [ -n "$existing" ]; then say "  $repo: updated open PR #$existing for $rel"
     else ( cd "$wt" && gh pr create --fill --base main ); fi
     if read -r -p "  Accept (merge) the $repo PR for $rel now? [y/N] " ans && [[ "${ans:-}" == [yY] ]]; then
@@ -387,7 +397,7 @@ reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to 
     # time: once the split removes it, it is not -e, so its `git checkout HEAD -- $f` never runs (the
     # ensure_tree_on_main sync commit is what carries its deletion onto main).
     if [ -e "$repo/$f" ] && ! git -C "$repo" diff --quiet HEAD -- "$f"; then
-      rm -rf "$repo/$f.reconcile-bak"
+      rm -rf "${repo:?}/${f:?}.reconcile-bak"
       cp -a "$repo/$f" "$repo/$f.reconcile-bak"   # the live bytes, restored below (gitignored)
       git -C "$repo" checkout HEAD -- "$f"        # clean worktree AND index for this file/dir
       aside+=("$f")
@@ -395,15 +405,26 @@ reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to 
   done
   local ok=true
   git -C "$repo" merge --ff-only origin/main || ok=false
-  for f in ${aside[@]+"${aside[@]}"}; do rm -rf "$repo/$f"; mv "$repo/$f.reconcile-bak" "$repo/$f"; done
+  # `${f:?}` is not decoration: an empty $f turns this into `rm -rf "$repo/"`, which is the whole
+  # live checkout. Not reachable today ($repo is `:?`-guarded above, $f comes from this file's own
+  # literal call sites) — but it is one careless caller away, against a repo holding live data.
+  for f in ${aside[@]+"${aside[@]}"}; do
+    rm -rf "${repo:?}/${f:?}"
+    mv "${repo:?}/${f:?}.reconcile-bak" "${repo:?}/${f:?}"
+  done
   if $ok; then say "  $label: main fast-forwarded $n commit(s) (live data kept: ${aside[*]:-none})"
   else say "  $label: fast-forward FAILED (above) — live files restored; reconcile by hand"; fi
 }
 
 say "reconciling live checkouts (fast-forward main -> origin/main):"
 reconcile_main "$ANALYSIS" analysis "track-metadata.json" "TRACKLIST.md"
+# EVERY path queue_sync commits must be listed here, or the ff-merge below aborts on it and the
+# player repo is left un-reconciled. `metadata/queue_chapters` and `metadata/queue_info` were
+# missing until 2026-09-11 — a live `make sync` failed with "Your local changes to the following
+# files would be overwritten by merge: metadata/queue_chapters/chap-e.json". These two lists are
+# maintained by hand in different languages, so tests/test_reconcile_aside.py pins them together.
 reconcile_main "$PLAYER"   player \
   "metadata/track-metadata.json" "metadata/listen_queue.json" "metadata/listen_queue" \
-  "metadata/subscriptions.json" \
+  "metadata/subscriptions.json" "metadata/queue_chapters" "metadata/queue_info" \
   "metadata/source-inventory.json" "SOURCES.md" "data/harvest-queue.json"
 say "sync done."
