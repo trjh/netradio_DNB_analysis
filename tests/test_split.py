@@ -318,6 +318,41 @@ class TestCollector(Base):
         q3 = harvest._load(collector.QUEUE, {})
         self.assertEqual(q3["done"], [URL])                       # queue reconciled DURABLY
 
+    def test_a_crash_between_the_saves_still_sets_a_flagged_url_aside(self):
+        """The same two-file boundary, for the set-aside outcome. State persisted, the queue
+        save crashed: the replay finishes the queue move, and it has to finish it into the list
+        the fold chose. Finishing it into `done` would retire a master that the uninterrupted
+        path would have kept -- and `done` is never re-fetched, so the parts that will carry
+        its signatures would never be asked for."""
+        os.makedirs(harvester.RESULTS, exist_ok=True)
+        harvester.submit_result(URL, ok=False, error="too long: passed 2.0 h of audio",
+                                retry_later=True)
+        state = harvest.blank_state()
+        q = {"pending": [URL], "done": []}
+        real_save = collector._save
+        calls = {"n": 0}
+
+        def crashing_save(path, data):
+            real_save(path, data)
+            calls["n"] += 1
+            if calls["n"] == 1:                      # state.json landed; queue.json never does
+                raise RuntimeError("power cut")
+        with unittest.mock.patch.object(collector, "_save", side_effect=crashing_save):
+            with self.assertRaises(RuntimeError):
+                collector.collect_once(state, q, [])
+        # Restart: both files reloaded from disk, exactly as a real restart would see them.
+        state2 = harvest._load(collector.STATE, harvest.blank_state())
+        q2 = harvest._load(collector.QUEUE, {"pending": [URL], "done": []})
+        self.assertEqual(q2["pending"], [URL])                    # queue never persisted
+        self.assertIn(harvest._sig_key(URL), state2.get("folded", {}))
+        self.assertEqual(collector.collect_once(state2, q2, []), 1)
+        self.assertEqual(q2.get("retry_later"), [URL])
+        self.assertEqual(q2.get("done") or [], [])
+        self.assertEqual(q2["pending"], [])
+        q3 = harvest._load(collector.QUEUE, {})
+        self.assertEqual(q3.get("retry_later"), [URL])            # reconciled DURABLY
+        self.assertEqual(q3.get("done") or [], [])
+
     def test_no_retained_audio_scores_but_cannot_excerpt(self):
         q = self._harvested()
         key = harvest._sig_key(URL)
