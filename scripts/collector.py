@@ -133,16 +133,31 @@ def collect_once(state, q, qs):
             os.unlink(rpath)
             continue
 
+        # WHERE THIS URL LEAVES `pending` FOR. `done` is the ordinary answer and is never
+        # re-fetched; `retry_later` is where a fetch stopped at the two-hour mark waits, because
+        # that audio is still wanted as parts (see harvester.submit_result). Decided ONCE, here,
+        # so the replay below and the fold below that cannot disagree — a replay that finished
+        # the queue move into `done` would retire the master the fold had set aside.
+        dest = "retry_later" if rec.get("retry_later") else "done"
+
         # Idempotent replay: scoring and the queue live in DIFFERENT durable files, so the
         # fold marker lives in state.json ITSELF, written in the same atomic save as the
-        # scores. Marker present (or URL already done) => this record was scored-and-persisted;
-        # a crash merely interrupted the queue save or the cleanup. Finish those, never
-        # re-score — that would double analyzed/scored/match rows.
-        if sigkey in state.get("folded", {}) or url in (q.get("done") or []):
+        # scores. Marker present (or the URL already off `pending`) => this record was
+        # scored-and-persisted; a crash merely interrupted the queue save or the cleanup.
+        # Finish those, never re-score — that would double analyzed/scored/match rows.
+        #
+        # "Already off `pending`" is asked of THIS record's own destination, not of both lists.
+        # A record that would be filed to `done` proves nothing by the URL sitting on
+        # `retry_later`: that is where a PREVIOUS, different fetch of the same URL was set
+        # aside, and the two lists are not one. Once something drains the list — putting a URL
+        # back on `pending` for a fetch that now succeeds — reading membership as "already
+        # folded" would move it to `done`, count a fold and clean up the record without ever
+        # scoring the signature, and nothing would say so.
+        if sigkey in state.get("folded", {}) or url in (q.get(dest) or []):
             if url in (q.get("pending") or []):
                 q["pending"].remove(url)
-                if url not in (q.get("done") or []):
-                    q.setdefault("done", []).append(url)
+                if url not in (q.get(dest) or []):
+                    q.setdefault(dest, []).append(url)
                 _save(QUEUE, q)
             if rec.get("worker") and rec["worker"] == _watched_worker():
                 continue          # watched: hold the evidence set; a later pass cleans up
@@ -157,6 +172,14 @@ def collect_once(state, q, qs):
                 # the result for a later pass rather than silently declaring the URL done.
                 continue
             _score_new(state, url, c, _job_audio(sigkey), qs)
+        elif rec.get("retry_later"):
+            # The third outcome (see harvester.submit_result). The fetch stopped at the two-hour
+            # mark because the URL is a master, and the audio is still wanted -- the player splits
+            # it into parts, each part a URL of its own -- so it is set aside rather than retired.
+            # Not an error: nothing failed. Absent on every record written before this existed.
+            state["issues"] = (state.get("issues", []) + [{"at": _now(), "url": url,
+                                                           "reason": "too_long",
+                                                           "issue": rec.get("error")}])[-50:]
         else:
             state["errors"] += 1
             state["issues"] = (state.get("issues", []) + [{"at": _now(), "url": url,
@@ -164,7 +187,12 @@ def collect_once(state, q, qs):
 
         if url in (q.get("pending") or []):
             q["pending"].remove(url)
-        q.setdefault("done", []).append(url)
+        if dest == "done" and url in (q.get("retry_later") or []):
+            # This fetch was ruled on, so the deferral from an earlier one is over. Leaving the
+            # URL on the list would offer it to whatever drains it a second time, for audio that
+            # has just been scored.
+            q["retry_later"].remove(url)
+        q.setdefault(dest, []).append(url)
 
         # DURABILITY BEFORE CLEANUP, exactly-once across TWO files: the fold marker rides in
         # the SAME atomic state write as the scores, so a crash between the state save and the

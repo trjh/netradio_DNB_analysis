@@ -17,6 +17,7 @@ import json
 import os
 import shutil
 import signal
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -109,6 +110,79 @@ def fake_decode(pcm=b"", yt_rc=0, yt_err=b"", ff_rc=0, ff_err=b"", alive=False, 
 
     _popen.made = made
     return _popen
+
+
+def fake_slow_decode(chunks, order=None, yt_rc=0, ff_rc=0):
+    """A yt-dlp | ffmpeg pair that takes several polls to finish.
+
+    The real ffmpeg fills the spool over minutes while the parent waits on it a second at a time.
+    This one writes one element of `chunks` each time that poll times out, so the spool GROWS
+    while `_wait` is watching it -- which is the only moment the two-hour stop can happen at all.
+    A terminated ffmpeg writes nothing more, as the real one does not.
+    """
+    made = {}
+
+    class _Slow(_FakeProc):
+        def __init__(self, argv, spool):
+            _FakeProc.__init__(self, argv, returncode=ff_rc, alive=True, order=order)
+            self.spool, self.left, self.written = spool, list(chunks), 0
+
+        def wait(self, timeout=None):
+            if self.left and timeout is not None:
+                chunk = self.left.pop(0)
+                self.spool.write(chunk)
+                self.spool.flush()
+                self.written += len(chunk)
+                raise subprocess.TimeoutExpired(self.argv, timeout)
+            self.alive = False
+            return self.returncode
+
+        def terminate(self):
+            self.left = []
+            _FakeProc.terminate(self)
+
+    def _popen(argv, **kwargs):
+        if "ffmpeg" in argv[0]:
+            made["ff"] = _Slow(argv, kwargs["stdout"])
+            return made["ff"]
+        made["yt"] = _FakeProc(argv, returncode=yt_rc, alive=True, order=order)
+        return made["yt"]
+
+    _popen.made = made
+    return _popen
+
+
+def _fetch_with(case, popen, url, duration):
+    """`_fetch_and_sign` behind the subprocess seam, recording what it would have written."""
+    real_save = np.save
+
+    def _save(path, arr, *a, **k):
+        case.saved.append(os.path.basename(str(path)))
+        return real_save(path, arr, *a, **k)
+
+    with mock.patch.object(harvest.subprocess, "Popen", popen), \
+            mock.patch.object(harvest.np, "save", _save), \
+            mock.patch.object(harvest.sigstore, "enabled", lambda: True), \
+            mock.patch.object(harvest.sigstore, "put", lambda *a: case.put.append(a) or True), \
+            mock.patch.object(harvest.chroma_recipe, "compute_chroma",
+                              lambda y, sr=None: np.zeros((12, 4), dtype="float32")):
+        return harvest._fetch_and_sign(url, case.job, duration)
+
+
+def _assert_refused(case, result, error_contains):
+    """Refused, and refused the way the callers read a refusal: no signature written, no upload,
+    no spool left behind, and no word in the message that `run()` reads as a HOST problem --
+    "403", "429" or "blocked" send it down the back-off path, where the URL is never popped."""
+    case.assertFalse(result["ok"])
+    case.assertIn(error_contains, result["error"])
+    case.assertNotIn("403", result["error"])
+    case.assertNotIn("429", result["error"])
+    case.assertNotIn("blocked", result["error"].lower())
+    case.assertNotIn(os.path.basename(harvest.sig_path(case.url)), case.saved)
+    case.assertNotIn("chroma32.npy", case.saved)
+    case.assertEqual(case.put, [])
+    case.assertFalse(os.path.exists(os.path.join(case.job, "pcm.f32le.part")))
+    case.assertFalse(os.path.exists(os.path.join(case.job, "pcm.f32le")))
 
 
 @unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
@@ -526,6 +600,260 @@ class NoSignatureFromAPartialDecode(unittest.TestCase):
             result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)))
         self.assertTrue(result["ok"], result)
         self.assertFalse(os.path.exists(os.path.dirname(missing)))
+
+
+@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+class TheTwoHourStop(unittest.TestCase):
+    """The hole `too_long` cannot close, and the stop that closes it.
+
+    `too_long` refuses on a CLAIM -- a `#t=` fragment's span, or a declared duration. An entry
+    carrying neither is, by its own account, no evidence of length, and both doors wave it
+    through however many hours sit behind the URL. So the length is MEASURED as the audio
+    arrives: the spool's size is its length, the parent's one-second poll reads it, and past
+    WHOLE_MAX_S the pipe is stopped with the rest of the file never decoded at all.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.job = os.path.join(self.tmp, "job")
+        self.url = "https://example.invalid/watch?v=long"
+        self.saved = []
+        self.put = []
+        self.order = []
+        self._cache = harvest.CACHE
+        harvest.CACHE = os.path.join(self.tmp, "cache")
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        harvest.CACHE = self._cache
+        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run(self, popen, url=None, duration=None):
+        return _fetch_with(self, popen, url or self.url, duration)
+
+    def test_a_spool_that_passes_the_mark_stops_the_pipeline(self):
+        """FOUR polls' worth of audio is behind this URL; the mark is one poll's worth, so the
+        second poll is where the spool passes it. The fake ffmpeg is still running and still
+        writing when the parent acts -- which is the point: a length read after the decode has
+        already paid for the hours it is refusing.
+
+        The two chunks the stop leaves unwritten are what makes the last assertion mean
+        something. With only as many chunks as the mark needs, `written` would be low whether
+        the stop fired or not."""
+        popen = fake_slow_decode([_pcm(SR)] * 4, order=self.order)
+        with mock.patch.object(harvest, "WHOLE_MAX_S", 1):
+            result = self._run(popen)
+        _assert_refused(self, result, "too long")
+        self.assertTrue(result.get("retry_later"),
+                        "the refusal is not flagged, so run() files it to `done` -- which is "
+                        "never re-fetched, and this audio is still wanted")
+        self.assertEqual(self.order, ["ffmpeg", "yt-dlp"],
+                         "both children have to be stopped, ffmpeg first -- leaving yt-dlp "
+                         "pulling bandwidth is the thing the stop path exists to prevent")
+        self.assertLess(popen.made["ff"].written, 3 * SR * 4,
+                        "the rest of the file was decoded anyway -- the stop has to happen "
+                        "DURING the poll, not after ffmpeg finishes")
+
+    def test_the_shipped_mark_is_two_hours(self):
+        """Every other case here patches WHOLE_MAX_S down to a second so the arithmetic is
+        testable, which leaves the shipped value pinned by nothing. It is not a free choice: it
+        has to equal the player's chunk threshold, and no test can see across the two
+        repositories to check that."""
+        self.assertEqual(harvest.WHOLE_MAX_S, 2 * 3600)
+
+    def test_a_cut_url_is_never_measured_against_the_mark(self):
+        """A `#t=` fragment means ffmpeg was given `-ss`/`-t`, so the spool holds the SLICE. The
+        master cannot be signed whole from here however long it is, and an over-long span was
+        refused by `too_long` before either child was spawned -- so there is nothing left for
+        this measure to catch and one thing for it to get wrong. ffmpeg applies `-t` at frame
+        granularity, so a part cut at exactly the mark can end a frame past it; measuring it
+        would set aside a part that is exactly what was asked for, onto a list nothing drains.
+        The length of a cut decode is the mismatch check's question, and it passes that."""
+        popen = fake_slow_decode([_pcm(30 * SR), _pcm(30 * SR)], order=self.order)
+        with mock.patch.object(harvest, "WHOLE_MAX_S", 1):
+            result = self._run(popen, url=self.url + "#t=0,60")
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(self.order, [], "a cut decode was stopped -- nothing may stop one")
+        self.assertFalse(result.get("retry_later"))
+        self.assertEqual(result["n_samples"], 60 * SR)
+        self.assertEqual(len(self.put), 1)
+
+    def test_a_decode_that_finished_before_the_first_poll_is_still_measured(self):
+        """The poll cannot catch what never made it to a poll. A source ffmpeg chews through
+        faster than the poll comes round -- a local file, a fast cache -- passes the mark and
+        exits between two polls, and `_wait` returns an ordinary exit status with nothing
+        measured. No decode time is saved by refusing it here; what is saved is the signature,
+        which is the thing that must never exist for a master."""
+        popen = fake_decode(pcm=_pcm(2 * SR))
+        with mock.patch.object(harvest, "WHOLE_MAX_S", 1):
+            result = self._run(popen)
+        _assert_refused(self, result, "too long")
+        self.assertTrue(result.get("retry_later"))
+
+    def test_a_spool_under_the_mark_is_signed(self):
+        """The same slow pipeline, below the mark: the poll asks its extra question every second
+        and the decode finishes untouched. A guard that refused this would refuse everything."""
+        popen = fake_slow_decode([_pcm(SR), _pcm(LONG_ENOUGH)], order=self.order)
+        with mock.patch.object(harvest, "WHOLE_MAX_S", 3600):
+            result = self._run(popen)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(self.order, [])
+        self.assertEqual(len(self.put), 1)
+
+
+@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+class TheLengthMismatchGuard(unittest.TestCase):
+    """The second and separate fault: a decode that ended EARLY. yt-dlp killed mid-stream leaves
+    ffmpeg reading a clean EOF off a partial pipe and exiting 0, so neither exit status says
+    anything is wrong -- only the spool's length against what was asked for does. A truncated
+    decode is the WRONG audio, not audio to fetch again later, so this one is a verdict."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.job = os.path.join(self.tmp, "job")
+        self.url = "https://example.invalid/watch?v=short"
+        self.saved = []
+        self.put = []
+        self._cache = harvest.CACHE
+        harvest.CACHE = os.path.join(self.tmp, "cache")
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        harvest.CACHE = self._cache
+        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run(self, popen, url=None, duration=None):
+        return _fetch_with(self, popen, url or self.url, duration)
+
+    def test_a_spool_off_the_expected_length_is_refused(self):
+        """The URL asks for a one-hour slice (`-ss 0 -t 3600`); the fake ffmpeg only ever wrote
+        60s to the spool before exiting 0."""
+        result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)), url=self.url + "#t=0,3600")
+        _assert_refused(self, result, "length mismatch: decoded 60 s, expected 3600 s")
+        self.assertFalse(result.get("retry_later"),
+                         "truncated audio is the wrong audio -- fetching it again later is not "
+                         "the remedy, and `done` is where it belongs")
+
+    def test_a_spool_within_tolerance_is_signed_as_before(self):
+        """Exactly the requested span: the guard is silent, and the rest of the function runs
+        exactly as it did before this guard existed."""
+        cut_url = self.url + "#t=0,60"
+        result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)), url=cut_url)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(self.saved.count(os.path.basename(harvest.sig_path(cut_url))), 1)
+        self.assertIn("chroma32.npy", self.saved)
+        self.assertEqual(len(self.put), 1)
+        self.assertEqual(result["n_samples"], LONG_ENOUGH)
+
+    def test_a_declared_duration_within_tolerance_is_signed(self):
+        """No fragment this time -- the declared duration alone is `expect`, and a decode a
+        couple of seconds short of it is still inside `max(10, 2%)`."""
+        result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)), duration=61)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(len(self.put), 1)
+
+
+@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+class RetryLaterIsNotDone(unittest.TestCase):
+    """Where a stopped-at-the-mark URL ends up. `done` is never re-fetched and this audio is
+    still wanted -- the player splits the master into parts, and the parts are signable -- so the
+    URL is set aside on a third list, and a re-read of the player's queue leaves it there."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.url = "https://example.invalid/watch?v=master"
+        self._paths = harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK, harvest.JOBS
+        harvest.STATE = os.path.join(self.tmp, "state.json")
+        harvest.QUEUE = os.path.join(self.tmp, "queue.json")
+        harvest.WRITER_LOCK = os.path.join(self.tmp, "writer.lock")
+        harvest.JOBS = os.path.join(self.tmp, "jobs")
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        (harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK, harvest.JOBS) = self._paths
+        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
+        # The real `stream_chroma` clears this the moment it is called; the stub below does not
+        # clear it on the way OUT, so leaving it set would hand the next test's fetch this
+        # test's verdict.
+        harvest._LAST_CHILD.clear()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _refused_fetch(self, url, duration=None):
+        """`stream_chroma` as it returns from a decode stopped at the mark: no signature, and the
+        flag on the child's result, which is where `run()` reads the difference."""
+        harvest._LAST_CHILD.clear()
+        harvest._LAST_CHILD.update({"ok": False, "retry_later": True,
+                                    "error": "too long: passed 2.0 h of audio, stopped before "
+                                             "decoding the rest"})
+        return None, None, harvest._LAST_CHILD["error"]
+
+    def _one_pass(self, queue):
+        """Run the loop over `queue` once. It empties `pending` and then returns on its own."""
+        harvest._save(harvest.QUEUE, queue)
+        qs = [(4, np.zeros((12, 8), dtype="float32"), "4:f00")]
+        with mock.patch.object(harvest, "queries", lambda state=None: qs), \
+                mock.patch.object(harvest, "sweep_excerpts", lambda: None), \
+                mock.patch.object(harvest, "sweep_job_dirs", lambda *a, **k: 0), \
+                mock.patch.object(harvest, "recover_missing_sigs_at_start", lambda *a: None), \
+                mock.patch.object(harvest, "stamp_pool", lambda state: False), \
+                mock.patch.object(harvest, "listen_queue_split", lambda issues=None: ([], [])), \
+                mock.patch.object(harvest, "check_memory", lambda *a, **k: False), \
+                mock.patch.object(harvest, "_load_sig", lambda url: None), \
+                mock.patch.object(harvest, "stream_chroma", self._refused_fetch), \
+                mock.patch.object(harvest.sigstore, "enabled", lambda: False), \
+                mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
+                mock.patch.object(harvest.selftest, "due_for_live", lambda: False), \
+                mock.patch.object(harvest.memwatch, "allocator_canary",
+                                  lambda *a, **k: (0, 0, None)):
+            harvest.run(None)
+        return harvest._load(harvest.QUEUE, {}), harvest._load(harvest.STATE, {})
+
+    def test_run_sets_the_url_aside_instead_of_retiring_it(self):
+        q, state = self._one_pass({"pending": [self.url], "done": []})
+        self.assertEqual(q["retry_later"], [self.url])
+        self.assertEqual(q["done"], [],
+                         "`done` is never re-fetched -- a master filed there can never be "
+                         "picked up again, as parts or otherwise")
+        self.assertEqual(q["pending"], [])
+        rows = [r for r in state["issues"] if r.get("url") == self.url]
+        self.assertEqual([r["reason"] for r in rows], ["too_long"])
+
+    def test_a_queue_written_before_the_third_list_existed_still_loads(self):
+        """The list is absent from every queue file written so far, and from the default every
+        loader passes. Its absence has to read as 'empty', not as a KeyError in the one loop that
+        is meant to run for weeks."""
+        q, _ = self._one_pass({"pending": [self.url], "done": ["https://example.invalid/old"]})
+        self.assertEqual(q["retry_later"], [self.url])
+        self.assertEqual(q["done"], ["https://example.invalid/old"])
+
+    def test_a_listen_queue_re_read_does_not_hand_it_back(self):
+        """The player's queue still offers the URL -- nothing there has changed, and nothing
+        will until the master is split. Without `retry_later` in the seen set the next pass puts
+        it straight back in `pending` and the harvester decodes two hours of it again, every few
+        minutes, for as long as the entry exists."""
+        q = {"pending": [], "done": [], "retry_later": [self.url]}
+        with mock.patch.object(harvest, "listen_queue_split",
+                               lambda issues=None: ([self.url], [])):
+            added, dropped = harvest.sync_listen_queue(q)
+        self.assertEqual((added, dropped), (0, 0))
+        self.assertEqual(q["pending"], [])
+        self.assertEqual(q["retry_later"], [self.url])
+
+    def test_a_ruling_takes_it_off_the_set_aside_list_too(self):
+        """A URL waits on `retry_later` for parts, and the parts only come while the player
+        still offers the entry. Once a human has ruled on it there are none coming, so it leaves
+        by the same door `pending` uses. `done` is the list that does NOT work this way: that is
+        a record of work completed, and forgetting it would re-analyse the URL on a re-add."""
+        q = {"pending": [], "done": [], "retry_later": [self.url]}
+        with mock.patch.object(harvest, "listen_queue_split",
+                               lambda issues=None: ([], [self.url])):
+            added, dropped = harvest.sync_listen_queue(q)
+        self.assertEqual((added, dropped), (0, 1))
+        self.assertEqual(q["retry_later"], [],
+                         "a retired URL left on the list is one for whatever drains it to trip "
+                         "over -- it is not coming back as a candidate")
 
 
 @unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
