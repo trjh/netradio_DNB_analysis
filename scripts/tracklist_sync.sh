@@ -21,8 +21,8 @@
 #
 # Each repo's LIVE checkout is reconciled twice — before the self-check, and as the final step: if
 # it sits on `main` and is strictly behind origin/main, it is fast-forwarded (never merged, never
-# stashed) — so a sync run leaves no repo needing the stash/pull/pop dance afterwards. See
-# reconcile_main below.
+# stashed) — so a sync run leaves no repo needing the stash/pull/pop dance afterwards. The player
+# checkout is touched only with the player known to be down. See reconcile_main below.
 #
 # The SELF-CHECK then requires both repos' copies of this script to be byte-identical, otherwise
 # the sync refuses to run (copies have drifted before; see the check for the fix).
@@ -225,6 +225,8 @@ say "NETRADIO_PLAYER_REPO=$PLAYER"
 # data always survives on disk and the next sync run PRs whatever delta remains. Nothing is
 # silenced (the worktree rule): any git failure is shown, and the live files are restored
 # before moving on. A diverged main (local commits origin lacks) is reported, not rewritten.
+# Every way it leaves a checkout behind origin/main appends the label to BLOCKED, which the
+# self-check reads to say what actually went wrong.
 reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to set aside...]
   local repo="$1" label="$2"; shift 2
   git -C "$repo" fetch -q origin main
@@ -232,9 +234,12 @@ reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to 
   head="$(git -C "$repo" rev-parse HEAD)"; origin="$(git -C "$repo" rev-parse origin/main)"
   if [ "$head" = "$origin" ]; then say "  $label: main already at origin/main"; return 0; fi
   cur="$(git -C "$repo" symbolic-ref --short -q HEAD || echo '(detached)')"
-  if [ "$cur" != main ]; then say "  $label: checked out on '$cur' — leaving main alone"; return 0; fi
+  if [ "$cur" != main ]; then
+    say "  $label: checked out on '$cur' — leaving main alone"; BLOCKED="$BLOCKED $label"; return 0
+  fi
   if ! git -C "$repo" merge-base --is-ancestor "$head" "$origin"; then
-    say "  $label: main has commits origin/main lacks — not rewriting; reconcile by hand"; return 0
+    say "  $label: main has commits origin/main lacks — not rewriting; reconcile by hand"
+    BLOCKED="$BLOCKED $label"; return 0
   fi
   local n; n="$(git -C "$repo" rev-list --count "$head..$origin")"
   if $DRY; then say "  [dry-run] $label: would fast-forward main $n commit(s) to origin/main"; return 0; fi
@@ -263,7 +268,10 @@ reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to 
     mv "${repo:?}/${f:?}.reconcile-bak" "${repo:?}/${f:?}"
   done
   if $ok; then say "  $label: main fast-forwarded $n commit(s) (live data kept: ${aside[*]:-none})"
-  else say "  $label: fast-forward FAILED (above) — live files restored; reconcile by hand"; fi
+  else
+    say "  $label: fast-forward FAILED (above) — live files restored; reconcile by hand"
+    BLOCKED="$BLOCKED $label"
+  fi
 }
 
 # The live data files each checkout's running process rewrites, set aside around every fast-forward.
@@ -274,7 +282,26 @@ reconcile_analysis() { reconcile_main "$ANALYSIS" analysis "track-metadata.json"
 # would be overwritten by merge: metadata/queue_chapters/chap-e.json". These two lists are
 # maintained by hand in different languages, so the player repo's tests/test_reconcile_aside.py
 # pins them together.
+# The player checkout holds the running player's live queue files, and its fast-forward sets them
+# aside and puts them back: a queue save that lands in between is lost. So it runs only with the
+# player known to be down. `make sync` in the player repo runs this script inside
+# scripts/sync_guard.sh, which stops the player and exports NETRADIO_SYNC_GUARD_HELD=1. Any other
+# caller (the analysis repo's `make sync`, a run by hand) asks the player's launcher; "up" and
+# "cannot tell" both leave the checkout for a guarded run. A dry run moves nothing, so it asks nobody.
+player_is_down() {
+  [ "${NETRADIO_SYNC_GUARD_HELD:-}" = 1 ] && return 0
+  local rc=0
+  bash "$PLAYER/scripts/run_player.sh" running >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 1 ]
+}
 reconcile_player() {
+  if ! $DRY && ! player_is_down; then
+    say "  player: the player is running, or its launcher cannot tell — leaving the checkout alone;"
+    say "          run make sync from the player repo, which stops the player first"
+    BLOCKED="$BLOCKED player"
+    git -C "$PLAYER" fetch -q origin main   # refs only, never the tree: lets the self-check compare origin copies
+    return 0
+  fi
   reconcile_main "$PLAYER" player \
     "metadata/track-metadata.json" "metadata/listen_queue.json" "metadata/listen_queue" \
     "metadata/subscriptions.json" "metadata/queue_chapters" "metadata/queue_info" \
@@ -289,17 +316,22 @@ reconcile_player() {
 # If that changed THIS script, re-run the new version: finishing a sync with old code is how the
 # copies drifted in the first place. The running bash is unaffected until the exec, because git
 # replaces a file rather than writing into it.
+BLOCKED=""   # labels of the checkouts a reconcile left behind origin/main
 self_sum="$(cksum < "$0")"
+# A re-run carries the checksum of the script it re-ran into. Any other value is a leftover in the
+# caller's shell, not a re-run, and must not refuse the first real one.
+[ "${NETRADIO_TRACKLIST_SYNC_REEXEC:-}" = "$self_sum" ] || unset NETRADIO_TRACKLIST_SYNC_REEXEC
 say "catching up live checkouts before the self-check:"
 reconcile_analysis
 reconcile_player
-if [ "$(cksum < "$0")" != "$self_sum" ]; then
+new_sum="$(cksum < "$0")"
+if [ "$new_sum" != "$self_sum" ]; then
   if [ -n "${NETRADIO_TRACKLIST_SYNC_REEXEC:-}" ]; then
     say "ERROR: tracklist_sync.sh changed again after re-running it — refusing to loop" >&2
     exit 1
   fi
   say "tracklist_sync.sh changed in the fast-forward — re-running the new version"
-  export NETRADIO_TRACKLIST_SYNC_REEXEC=1
+  export NETRADIO_TRACKLIST_SYNC_REEXEC="$new_sum"
   exec bash "$0" "$@"
 fi
 
@@ -310,18 +342,43 @@ fi
 # blocked run. Fix = copy the version you just edited over the other and PR it in BOTH repos.
 SELF_P="$PLAYER/scripts/tracklist_sync.sh"
 SELF_A="$ANALYSIS/scripts/tracklist_sync.sh"
-if ! cmp -s "$SELF_P" "$SELF_A"; then
-  {
-    say "ERROR: scripts/tracklist_sync.sh differs between the two repos:"
-    diff -u "$SELF_A" "$SELF_P" | head -40 || true
-    say ""
-    say "Copy the version you just edited over the other, PR it in BOTH repos, then re-run:"
-    say "  cp '$SELF_P' '$SELF_A'    # player copy wins"
-    say "  cp '$SELF_A' '$SELF_P'    # analysis copy wins"
-  } >&2
+origin_copy() { git -C "$1" rev-parse -q --verify "origin/main:scripts/tracklist_sync.sh" 2>/dev/null || true; }
+if cmp -s "$SELF_P" "$SELF_A"; then
+  say "self-check: tracklist_sync.sh identical in both repos ✓"
+else
+  op="$(origin_copy "$PLAYER")"; oa="$(origin_copy "$ANALYSIS")"
+  if $DRY && [ -n "$op" ] && [ "$op" = "$oa" ]; then
+    # A dry run skipped the catch-up, so the copies on disk can still differ where a real run would
+    # have fast-forwarded them first. What decides the real run is the two origin/main copies.
+    say "[dry-run] self-check: the copies on disk differ, but both origin/main copies match —"
+    say "          a real run fast-forwards first and passes"
+  else
+    {
+      say "ERROR: scripts/tracklist_sync.sh differs between the two repos:"
+      diff -u "$SELF_A" "$SELF_P" | head -40 || true
+      say ""
+      if [ -n "$BLOCKED" ]; then
+        # The catch-up could not move a checkout, so the difference may be nothing more than that
+        # checkout being behind. Copying one script over the other would hide the real fault.
+        say "The catch-up could not fast-forward:${BLOCKED} (see above). Fix that, then re-run."
+        if [ -n "$op" ] && [ "$op" = "$oa" ]; then
+          say "Both origin/main copies already match, so no copy is needed."
+        fi
+      else
+        say "Copy the version you just edited over the other, PR it in BOTH repos, then re-run:"
+        say "  cp '$SELF_P' '$SELF_A'    # player copy wins"
+        say "  cp '$SELF_A' '$SELF_P'    # analysis copy wins"
+      fi
+    } >&2
+    exit 1
+  fi
+fi
+# The copies agree, but THIS run's code must be one of them: a copy run from anywhere else could be
+# older than both and still pass the comparison above.
+if ! cmp -s "$0" "$SELF_P" && ! cmp -s "$0" "$SELF_A"; then
+  say "ERROR: this run's script ($0) matches neither repo's copy — run it from a repo root (make sync)" >&2
   exit 1
 fi
-say "self-check: tracklist_sync.sh identical in both repos ✓"
 
 # --- track-metadata.json: 3-way sync between the canonical (analysis) and the mirror (player) ---
 ha=$(nhash "$A"); hp=$(nhash "$P")
