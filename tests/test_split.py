@@ -138,6 +138,27 @@ class TestHarvester(Base):
             self.assertEqual(harvester.work_once(hstate, q), "halted")
         self.assertIn("halted", hstate)
 
+    def test_a_fetch_stopped_at_the_two_hour_mark_is_flagged_not_failed(self):
+        """The split runtime has the same duty `harvest.run()` has. A decode stopped at
+        `harvest.WHOLE_MAX_S` is not a per-URL failure -- reporting it as one puts a master on
+        `done`, which is never re-fetched, and the parts that would have carried its signatures
+        do not exist yet. The flag rides the fetch child's result, then the spool record."""
+        hstate = harvester.blank_hstate()
+        q = {"pending": [URL], "done": []}
+        err = "too long: passed 2.0 h of audio, stopped before decoding the rest"
+
+        def fetch(url, duration=None):
+            harvest._LAST_CHILD.clear()
+            harvest._LAST_CHILD.update({"ok": False, "retry_later": True, "error": err})
+            return (None, None, err)
+        self.addCleanup(harvest._LAST_CHILD.clear)
+        with unittest.mock.patch.object(harvest, "stream_chroma", side_effect=fetch):
+            self.assertEqual(harvester.work_once(hstate, q), "fetched")
+        with open(os.path.join(harvester.RESULTS, os.listdir(harvester.RESULTS)[0])) as fh:
+            rec = json.load(fh)
+        self.assertTrue(rec["retry_later"])
+        self.assertEqual(hstate["errors"], 0, "nothing failed -- the URL is set aside")
+
     def test_permanent_url_failure_submits_error_result(self):
         hstate = harvester.blank_hstate()
         q = {"pending": [URL], "done": []}
@@ -187,6 +208,23 @@ class TestCollector(Base):
         self.assertEqual(n, 1)
         self.assertEqual(state["errors"], 1)
         self.assertEqual(q["done"], [URL])
+
+    def test_a_flagged_result_is_set_aside_and_never_retired(self):
+        """`done` is never re-fetched, so a master filed there can never be picked up again --
+        as parts or otherwise. The third list is where it waits."""
+        os.makedirs(harvester.RESULTS, exist_ok=True)
+        harvester.submit_result(URL, ok=False, error="too long: passed 2.0 h of audio",
+                                retry_later=True)
+        state = harvest.blank_state()
+        q = {"pending": [URL], "done": []}
+        n = collector.collect_once(state, q, [])
+        self.assertEqual(n, 1)
+        self.assertEqual(q["retry_later"], [URL])
+        self.assertEqual(q["done"], [])
+        self.assertEqual(q["pending"], [])
+        self.assertEqual(state["errors"], 0)
+        self.assertEqual([r["reason"] for r in state["issues"] if r.get("url") == URL],
+                         ["too_long"])
 
     def test_ok_result_with_missing_sig_is_left_for_later(self):
         os.makedirs(harvester.RESULTS, exist_ok=True)

@@ -83,9 +83,15 @@ def job_dir(url):
     return os.path.join(JOBS, _sig_key(url)[:-4], "f1")     # keyed like the cache, .npy stripped
 
 
-def submit_result(url, ok, error=None):
+def submit_result(url, ok, error=None, retry_later=False):
+    """Hand one outcome to the collector. `retry_later` is a THIRD outcome, not a flavour of
+    failure: the fetch stopped because the URL is a master (see harvest.WHOLE_MAX_S), and the
+    collector must set it aside instead of retiring it to `done`, which is never re-fetched.
+    Absent on every record written so far, so the collector reads it with `get`."""
     os.makedirs(RESULTS, exist_ok=True)
     rec = {"sigkey": _sig_key(url), "url": url, "ok": bool(ok), "at": _now()}
+    if retry_later:
+        rec["retry_later"] = True
     if error:
         rec["error"] = str(error)[:200]
     _atomic_write(os.path.join(RESULTS, _sig_key(url) + ".json"),
@@ -187,6 +193,15 @@ def work_once(hstate, q):
     hinfo["next_ok"] = time.time() + gap
 
     if c is None:
+        # SET ASIDE, NOT RETIRED, when the fetch stopped at the two-hour mark: this runtime has
+        # the same duty `harvest.run()` has, and reporting it as an ordinary failure would put a
+        # master on `done`, which is never re-fetched. The flag rides the fetch child's result
+        # (`_LAST_CHILD`, the same place the memory rows come from) and then the spool record.
+        # Not counted as an error either: nothing failed.
+        if harvest._LAST_CHILD.get("retry_later"):
+            _save(HSTATE, hstate)
+            submit_result(url, ok=False, error=err or "too long", retry_later=True)
+            return "fetched"
         # A permanent per-URL failure (not a host refusal): tell the collector so it can
         # advance the queue and record the issue in the shared state.
         hstate["errors"] += 1

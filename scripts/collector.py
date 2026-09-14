@@ -157,6 +157,14 @@ def collect_once(state, q, qs):
                 # the result for a later pass rather than silently declaring the URL done.
                 continue
             _score_new(state, url, c, _job_audio(sigkey), qs)
+        elif rec.get("retry_later"):
+            # The third outcome (see harvester.submit_result). The fetch stopped at the two-hour
+            # mark because the URL is a master, and the audio is still wanted -- the player splits
+            # it into parts, each part a URL of its own -- so it is set aside rather than retired.
+            # Not an error: nothing failed. Absent on every record written before this existed.
+            state["issues"] = (state.get("issues", []) + [{"at": _now(), "url": url,
+                                                           "reason": "too_long",
+                                                           "issue": rec.get("error")}])[-50:]
         else:
             state["errors"] += 1
             state["issues"] = (state.get("issues", []) + [{"at": _now(), "url": url,
@@ -164,7 +172,7 @@ def collect_once(state, q, qs):
 
         if url in (q.get("pending") or []):
             q["pending"].remove(url)
-        q.setdefault("done", []).append(url)
+        q.setdefault("retry_later" if rec.get("retry_later") else "done", []).append(url)
 
         # DURABILITY BEFORE CLEANUP, exactly-once across TWO files: the fold marker rides in
         # the SAME atomic state write as the scores, so a crash between the state save and the

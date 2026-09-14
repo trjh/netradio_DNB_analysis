@@ -745,6 +745,10 @@ class RetryLaterIsNotDone(unittest.TestCase):
     def _restore(self):
         (harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK, harvest.JOBS) = self._paths
         harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
+        # The real `stream_chroma` clears this the moment it is called; the stub below does not
+        # clear it on the way OUT, so leaving it set would hand the next test's fetch this
+        # test's verdict.
+        harvest._LAST_CHILD.clear()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _refused_fetch(self, url, duration=None):
