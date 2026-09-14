@@ -7,8 +7,8 @@
 #                            standing `queue-data` branch via queue_sync.py / `make queue-sync`. The
 #                            per-change PR below only runs as a FALLBACK when NETRADIO_QUEUE_SYNC=0.
 #   * harvest-queue.json    (player data/, snapshot of analysis .harvest/queue.json)   — RETIRED here
-#                            for the same reason: it rides the SAME `queue-data` branch (Tim's decision
-#                            2). We still refresh the live mirror; the PR only runs when NETRADIO_QUEUE_SYNC=0.
+#                            for the same reason: it rides the SAME `queue-data` branch (queue-scale
+#                            P3, decision 2). We still refresh the live mirror; the PR only runs when NETRADIO_QUEUE_SYNC=0.
 #   * TRACKLIST.md          (analysis only)                          — regenerated from the synced
 #                            track-metadata.json and included in the analysis PR (render only)
 #   * SOURCES.md            (player only)                            — regenerated from the synced
@@ -19,12 +19,13 @@
 # a FRESH worktree off origin/main and contains ONLY those file(s). It never commits to main
 # directly. Symmetric — `make sync` runs from EITHER repo.
 #
-# The final step reconciles each repo's LIVE checkout: if it sits on `main` and is strictly
-# behind origin/main, it is fast-forwarded (never merged, never stashed) — so a sync run leaves
-# no repo needing the stash/pull/pop dance afterwards. See reconcile_main below.
+# Each repo's LIVE checkout is reconciled twice — before the self-check, and as the final step: if
+# it sits on `main` and is strictly behind origin/main, it is fast-forwarded (never merged, never
+# stashed) — so a sync run leaves no repo needing the stash/pull/pop dance afterwards. The player
+# checkout is touched only with the player known to be down. See reconcile_main below.
 #
-# The run starts with a SELF-CHECK: both repos' copies of this script must be byte-identical,
-# otherwise the sync refuses to run (copies have drifted before; see the check for the fix).
+# The SELF-CHECK then requires both repos' copies of this script to be byte-identical, otherwise
+# the sync refuses to run (copies have drifted before; see the check for the fix).
 #
 #   track-metadata.json copies equal      -> verify each repo's main has it (re-PR any that lag)
 #   only player changed since baseline     -> winner = player; land it on BOTH mains
@@ -213,6 +214,131 @@ landed() { [ "$1" = NOOP ] || [ "$1" = MERGED ]; }   # is the content durably on
 say "NETRADIO_ANALYSIS_REPO=$ANALYSIS"
 say "NETRADIO_PLAYER_REPO=$PLAYER"
 
+# --- reconcile the LIVE checkouts: fast-forward main to origin/main -------------------------
+# ensure_on_main lands data via throwaway worktrees and never touches the live checkout, so
+# local `main` falls behind origin/main after every merged sync PR — and pulling by hand under
+# a RUNNING player is the stash/pull/pop trap (a stash-pop conflict on listen_queue.json makes
+# the store load an empty queue, and the next save clobbers the file). This step removes that
+# chore: a live checkout sitting on `main`, strictly behind origin/main, is fast-forwarded.
+# Dirty LIVE data files (the running player rewrites listen_queue.json continuously) are set
+# aside verbatim and put back after the ff — never stashed, never merged — so the newest local
+# data always survives on disk and the next sync run PRs whatever delta remains. Nothing is
+# silenced (the worktree rule): any git failure is shown, and the live files are restored
+# before moving on. A diverged main (local commits origin lacks) is reported, not rewritten.
+# Every way it leaves a checkout behind origin/main appends the label to BLOCKED, which the
+# self-check reads to say what actually went wrong.
+reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to set aside...]
+  local repo="$1" label="$2"; shift 2
+  git -C "$repo" fetch -q origin main
+  local head origin cur
+  head="$(git -C "$repo" rev-parse HEAD)"; origin="$(git -C "$repo" rev-parse origin/main)"
+  if [ "$head" = "$origin" ]; then say "  $label: main already at origin/main"; return 0; fi
+  cur="$(git -C "$repo" symbolic-ref --short -q HEAD || echo '(detached)')"
+  if [ "$cur" != main ]; then
+    say "  $label: checked out on '$cur' — leaving main alone"; BLOCKED="$BLOCKED $label"; return 0
+  fi
+  if ! git -C "$repo" merge-base --is-ancestor "$head" "$origin"; then
+    say "  $label: main has commits origin/main lacks — not rewriting; reconcile by hand"
+    BLOCKED="$BLOCKED $label"; return 0
+  fi
+  local n; n="$(git -C "$repo" rev-list --count "$head..$origin")"
+  if $DRY; then say "  [dry-run] $label: would fast-forward main $n commit(s) to origin/main"; return 0; fi
+  local f aside=()
+  for f in "$@"; do
+    # P2: a pathspec may be the shard DIRECTORY (metadata/listen_queue), not just a file — so guard
+    # with -e and back up with `cp -a` (recursive). `git diff/checkout -- <dir>` already handle a
+    # dir pathspec and only touch TRACKED files (the gitignored journal/derived views are left be).
+    # The -e guard also stops the deleted single listen_queue.json from RESURRECTING at migration
+    # time: once the split removes it, it is not -e, so its `git checkout HEAD -- $f` never runs (the
+    # ensure_tree_on_main sync commit is what carries its deletion onto main).
+    if [ -e "$repo/$f" ] && ! git -C "$repo" diff --quiet HEAD -- "$f"; then
+      rm -rf "${repo:?}/${f:?}.reconcile-bak"
+      cp -a "$repo/$f" "$repo/$f.reconcile-bak"   # the live bytes, restored below (gitignored)
+      git -C "$repo" checkout HEAD -- "$f"        # clean worktree AND index for this file/dir
+      aside+=("$f")
+    fi
+  done
+  local ok=true
+  git -C "$repo" merge --ff-only origin/main || ok=false
+  # `${f:?}` is not decoration: an empty $f turns this into `rm -rf "$repo/"`, which is the whole
+  # live checkout. Not reachable today ($repo is `:?`-guarded above, $f comes from this file's own
+  # literal call sites) — but it is one careless caller away, against a repo holding live data.
+  for f in ${aside[@]+"${aside[@]}"}; do
+    rm -rf "${repo:?}/${f:?}"
+    mv "${repo:?}/${f:?}.reconcile-bak" "${repo:?}/${f:?}"
+  done
+  if $ok; then say "  $label: main fast-forwarded $n commit(s) (live data kept: ${aside[*]:-none})"
+  else
+    say "  $label: fast-forward FAILED (above) — live files restored; reconcile by hand"
+    BLOCKED="$BLOCKED $label"
+  fi
+}
+
+# The live data files each checkout's running process rewrites, set aside around every fast-forward.
+reconcile_analysis() { reconcile_main "$ANALYSIS" analysis "track-metadata.json" "TRACKLIST.md"; }
+# EVERY path queue_sync commits must be listed here, or the ff-merge aborts on it and the player
+# repo is left un-reconciled. `metadata/queue_chapters` and `metadata/queue_info` were missing
+# until 2026-09-11 — a live `make sync` failed with "Your local changes to the following files
+# would be overwritten by merge: metadata/queue_chapters/chap-e.json". These two lists are
+# maintained by hand in different languages, so the player repo's tests/test_reconcile_aside.py
+# pins them together.
+# The player checkout holds the running player's live queue files, and its fast-forward sets them
+# aside and puts them back: a queue save that lands in between is lost. So before moving it, ask the
+# player's own launcher, every time: `running` exits 1 only when nothing listens on the player port.
+# Under `make sync` in the player repo, scripts/sync_guard.sh has already stopped the player, so the
+# answer is "down"; any other caller (the analysis repo's `make sync`, a run by hand) gets the true
+# answer. "Up" and "cannot tell" both leave the checkout for a guarded run. There is deliberately no
+# environment switch to skip the question, because any shell could set one. A checkout with nothing
+# to fast-forward, and a dry run (which moves nothing), ask nobody.
+player_is_down() {
+  local rc=0
+  bash "$PLAYER/scripts/run_player.sh" running >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 1 ]
+}
+reconcile_player() {
+  if ! $DRY; then
+    git -C "$PLAYER" fetch -q origin main   # refs only, never the tree
+    if [ "$(git -C "$PLAYER" rev-parse HEAD)" != "$(git -C "$PLAYER" rev-parse origin/main)" ] \
+       && ! player_is_down; then
+      say "  player: the player is running, or its launcher cannot tell — leaving the checkout alone;"
+      say "          run make sync from the player repo, which stops the player first"
+      BLOCKED="$BLOCKED player"
+      return 0
+    fi
+  fi
+  reconcile_main "$PLAYER" player \
+    "metadata/track-metadata.json" "metadata/listen_queue.json" "metadata/listen_queue" \
+    "metadata/subscriptions.json" "metadata/queue_chapters" "metadata/queue_info" \
+    "metadata/source-inventory.json" "SOURCES.md" "data/harvest-queue.json"
+}
+
+# --- catch up before the self-check ------------------------------------------------------------
+# A change to this script lands as a pair of PRs, one per repo. If both merged but only one live
+# checkout was pulled, the two copies on disk differ, and the self-check below refused every run —
+# while the fast-forward that would have fixed it sat at the end of the script, never reached. So
+# fast-forward both checkouts first, with the same set-aside as the final step, then compare.
+# If that changed THIS script, re-run the new version: finishing a sync with old code is how the
+# copies drifted in the first place. The running bash is unaffected until the exec, because git
+# replaces a file rather than writing into it.
+BLOCKED=""   # labels of the checkouts a reconcile left behind origin/main
+self_sum="$(cksum < "$0")"
+# A re-run carries the checksum of the script it re-ran into. Any other value is a leftover in the
+# caller's shell, not a re-run, and must not refuse the first real one.
+[ "${NETRADIO_TRACKLIST_SYNC_REEXEC:-}" = "$self_sum" ] || unset NETRADIO_TRACKLIST_SYNC_REEXEC
+say "catching up live checkouts before the self-check:"
+reconcile_analysis
+reconcile_player
+new_sum="$(cksum < "$0")"
+if [ "$new_sum" != "$self_sum" ]; then
+  if [ -n "${NETRADIO_TRACKLIST_SYNC_REEXEC:-}" ]; then
+    say "ERROR: tracklist_sync.sh changed again after re-running it — refusing to loop" >&2
+    exit 1
+  fi
+  say "tracklist_sync.sh changed in the fast-forward — re-running the new version"
+  export NETRADIO_TRACKLIST_SYNC_REEXEC="$new_sum"
+  exec bash "$0" "$@"
+fi
+
 # --- self-check: this script must be byte-identical in both repos ---------------------------
 # Each repo carries a copy of scripts/tracklist_sync.sh, and copies drift silently (it
 # happened: the analysis copy sat weeks behind, missing the QUEUE_VIEW.md derive). Refuse to
@@ -220,18 +346,43 @@ say "NETRADIO_PLAYER_REPO=$PLAYER"
 # blocked run. Fix = copy the version you just edited over the other and PR it in BOTH repos.
 SELF_P="$PLAYER/scripts/tracklist_sync.sh"
 SELF_A="$ANALYSIS/scripts/tracklist_sync.sh"
-if ! cmp -s "$SELF_P" "$SELF_A"; then
-  {
-    say "ERROR: scripts/tracklist_sync.sh differs between the two repos:"
-    diff -u "$SELF_A" "$SELF_P" | head -40 || true
-    say ""
-    say "Copy the version you just edited over the other, PR it in BOTH repos, then re-run:"
-    say "  cp '$SELF_P' '$SELF_A'    # player copy wins"
-    say "  cp '$SELF_A' '$SELF_P'    # analysis copy wins"
-  } >&2
+origin_copy() { git -C "$1" rev-parse -q --verify "origin/main:scripts/tracklist_sync.sh" 2>/dev/null || true; }
+if cmp -s "$SELF_P" "$SELF_A"; then
+  say "self-check: tracklist_sync.sh identical in both repos ✓"
+else
+  op="$(origin_copy "$PLAYER")"; oa="$(origin_copy "$ANALYSIS")"
+  if $DRY && [ -n "$op" ] && [ "$op" = "$oa" ]; then
+    # A dry run skipped the catch-up, so the copies on disk can still differ where a real run would
+    # have fast-forwarded them first. What decides the real run is the two origin/main copies.
+    say "[dry-run] self-check: the copies on disk differ, but both origin/main copies match —"
+    say "          a real run fast-forwards first and passes"
+  else
+    {
+      say "ERROR: scripts/tracklist_sync.sh differs between the two repos:"
+      diff -u "$SELF_A" "$SELF_P" | head -40 || true
+      say ""
+      if [ -n "$BLOCKED" ]; then
+        # The catch-up could not move a checkout, so the difference may be nothing more than that
+        # checkout being behind. Copying one script over the other would hide the real fault.
+        say "The catch-up could not fast-forward:${BLOCKED} (see above). Fix that, then re-run."
+        if [ -n "$op" ] && [ "$op" = "$oa" ]; then
+          say "Both origin/main copies already match, so no copy is needed."
+        fi
+      else
+        say "Copy the version you just edited over the other, PR it in BOTH repos, then re-run:"
+        say "  cp '$SELF_P' '$SELF_A'    # player copy wins"
+        say "  cp '$SELF_A' '$SELF_P'    # analysis copy wins"
+      fi
+    } >&2
+    exit 1
+  fi
+fi
+# The copies agree, but THIS run's code must be one of them: a copy run from anywhere else could be
+# older than both and still pass the comparison above.
+if ! cmp -s "$0" "$SELF_P" && ! cmp -s "$0" "$SELF_A"; then
+  say "ERROR: this run's script ($0) matches neither repo's copy — run it from a repo root (make sync)" >&2
   exit 1
 fi
-say "self-check: tracklist_sync.sh identical in both repos ✓"
 
 # --- track-metadata.json: 3-way sync between the canonical (analysis) and the mirror (player) ---
 ha=$(nhash "$A"); hp=$(nhash "$P")
@@ -313,7 +464,7 @@ fi
 # --- listen_queue (player-only): land it on the player main when it differs ---
 # RETIRED (queue-scale P3, 2026-07-27): the listen queue now rides the standing `queue-data` branch,
 # committed every ~15 min + pushed hourly by the running player (queue_sync.py) and squash-merged by
-# Tim via `make queue-sync`. This per-change PR section only runs as a FALLBACK when the queue-data
+# hand via `make queue-sync`. This per-change PR section only runs as a FALLBACK when the queue-data
 # automation is disabled (NETRADIO_QUEUE_SYNC=0). (QUEUE_VIEW.md — the old derived extra — retired
 # 2026-07-24.) P2: post-migration the canon is the shard dir + manifest ($PQD/index.json is the
 # migration marker); pre-migration it is the single $PQ. Mirror whichever is the live canon.
@@ -349,7 +500,7 @@ fi
 # data/ for progress history + disaster recovery. The live harvester stays the source of truth;
 # this is a one-way mirror (analysis -> player), landed only when it differs from the player main.
 # RETIRED (queue-scale P3, 2026-07-27): data/harvest-queue.json now rides the SAME `queue-data` branch
-# as the listen-queue shards (Tim's decision 2) — committed + pushed by queue_sync.py, squash-merged
+# as the listen-queue shards (queue-scale P3, decision 2) — committed + pushed by queue_sync.py, squash-merged
 # via `make queue-sync`. We still refresh the player's live mirror ($PHQ) from the harvester here so
 # the running player has current data on disk for queue_sync to commit; the per-change PR only runs as
 # a FALLBACK when the queue-data automation is disabled (NETRADIO_QUEUE_SYNC=0).
@@ -364,67 +515,7 @@ if [ -f "$HQ" ]; then
   fi
 fi
 
-# --- reconcile the LIVE checkouts: fast-forward main to origin/main -------------------------
-# ensure_on_main lands data via throwaway worktrees and never touches the live checkout, so
-# local `main` falls behind origin/main after every merged sync PR — and pulling by hand under
-# a RUNNING player is the stash/pull/pop trap (a stash-pop conflict on listen_queue.json makes
-# the store load an empty queue, and the next save clobbers the file). This step removes that
-# chore: a live checkout sitting on `main`, strictly behind origin/main, is fast-forwarded.
-# Dirty LIVE data files (the running player rewrites listen_queue.json continuously) are set
-# aside verbatim and put back after the ff — never stashed, never merged — so the newest local
-# data always survives on disk and the next sync run PRs whatever delta remains. Nothing is
-# silenced (the worktree rule): any git failure is shown, and the live files are restored
-# before moving on. A diverged main (local commits origin lacks) is reported, not rewritten.
-reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to set aside...]
-  local repo="$1" label="$2"; shift 2
-  git -C "$repo" fetch -q origin main
-  local head origin cur
-  head="$(git -C "$repo" rev-parse HEAD)"; origin="$(git -C "$repo" rev-parse origin/main)"
-  if [ "$head" = "$origin" ]; then say "  $label: main already at origin/main"; return 0; fi
-  cur="$(git -C "$repo" symbolic-ref --short -q HEAD || echo '(detached)')"
-  if [ "$cur" != main ]; then say "  $label: checked out on '$cur' — leaving main alone"; return 0; fi
-  if ! git -C "$repo" merge-base --is-ancestor "$head" "$origin"; then
-    say "  $label: main has commits origin/main lacks — not rewriting; reconcile by hand"; return 0
-  fi
-  local n; n="$(git -C "$repo" rev-list --count "$head..$origin")"
-  if $DRY; then say "  [dry-run] $label: would fast-forward main $n commit(s) to origin/main"; return 0; fi
-  local f aside=()
-  for f in "$@"; do
-    # P2: a pathspec may be the shard DIRECTORY (metadata/listen_queue), not just a file — so guard
-    # with -e and back up with `cp -a` (recursive). `git diff/checkout -- <dir>` already handle a
-    # dir pathspec and only touch TRACKED files (the gitignored journal/derived views are left be).
-    # The -e guard also stops the deleted single listen_queue.json from RESURRECTING at migration
-    # time: once the split removes it, it is not -e, so its `git checkout HEAD -- $f` never runs (the
-    # ensure_tree_on_main sync commit is what carries its deletion onto main).
-    if [ -e "$repo/$f" ] && ! git -C "$repo" diff --quiet HEAD -- "$f"; then
-      rm -rf "${repo:?}/${f:?}.reconcile-bak"
-      cp -a "$repo/$f" "$repo/$f.reconcile-bak"   # the live bytes, restored below (gitignored)
-      git -C "$repo" checkout HEAD -- "$f"        # clean worktree AND index for this file/dir
-      aside+=("$f")
-    fi
-  done
-  local ok=true
-  git -C "$repo" merge --ff-only origin/main || ok=false
-  # `${f:?}` is not decoration: an empty $f turns this into `rm -rf "$repo/"`, which is the whole
-  # live checkout. Not reachable today ($repo is `:?`-guarded above, $f comes from this file's own
-  # literal call sites) — but it is one careless caller away, against a repo holding live data.
-  for f in ${aside[@]+"${aside[@]}"}; do
-    rm -rf "${repo:?}/${f:?}"
-    mv "${repo:?}/${f:?}.reconcile-bak" "${repo:?}/${f:?}"
-  done
-  if $ok; then say "  $label: main fast-forwarded $n commit(s) (live data kept: ${aside[*]:-none})"
-  else say "  $label: fast-forward FAILED (above) — live files restored; reconcile by hand"; fi
-}
-
 say "reconciling live checkouts (fast-forward main -> origin/main):"
-reconcile_main "$ANALYSIS" analysis "track-metadata.json" "TRACKLIST.md"
-# EVERY path queue_sync commits must be listed here, or the ff-merge below aborts on it and the
-# player repo is left un-reconciled. `metadata/queue_chapters` and `metadata/queue_info` were
-# missing until 2026-09-11 — a live `make sync` failed with "Your local changes to the following
-# files would be overwritten by merge: metadata/queue_chapters/chap-e.json". These two lists are
-# maintained by hand in different languages, so tests/test_reconcile_aside.py pins them together.
-reconcile_main "$PLAYER"   player \
-  "metadata/track-metadata.json" "metadata/listen_queue.json" "metadata/listen_queue" \
-  "metadata/subscriptions.json" "metadata/queue_chapters" "metadata/queue_info" \
-  "metadata/source-inventory.json" "SOURCES.md" "data/harvest-queue.json"
+reconcile_analysis
+reconcile_player
 say "sync done."
