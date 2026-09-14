@@ -283,24 +283,28 @@ reconcile_analysis() { reconcile_main "$ANALYSIS" analysis "track-metadata.json"
 # maintained by hand in different languages, so the player repo's tests/test_reconcile_aside.py
 # pins them together.
 # The player checkout holds the running player's live queue files, and its fast-forward sets them
-# aside and puts them back: a queue save that lands in between is lost. So it runs only with the
-# player known to be down. `make sync` in the player repo runs this script inside
-# scripts/sync_guard.sh, which stops the player and exports NETRADIO_SYNC_GUARD_HELD=1. Any other
-# caller (the analysis repo's `make sync`, a run by hand) asks the player's launcher; "up" and
-# "cannot tell" both leave the checkout for a guarded run. A dry run moves nothing, so it asks nobody.
+# aside and puts them back: a queue save that lands in between is lost. So before moving it, ask the
+# player's own launcher, every time: `running` exits 1 only when nothing listens on the player port.
+# Under `make sync` in the player repo, scripts/sync_guard.sh has already stopped the player, so the
+# answer is "down"; any other caller (the analysis repo's `make sync`, a run by hand) gets the true
+# answer. "Up" and "cannot tell" both leave the checkout for a guarded run. There is deliberately no
+# environment switch to skip the question, because any shell could set one. A checkout with nothing
+# to fast-forward, and a dry run (which moves nothing), ask nobody.
 player_is_down() {
-  [ "${NETRADIO_SYNC_GUARD_HELD:-}" = 1 ] && return 0
   local rc=0
   bash "$PLAYER/scripts/run_player.sh" running >/dev/null 2>&1 || rc=$?
   [ "$rc" = 1 ]
 }
 reconcile_player() {
-  if ! $DRY && ! player_is_down; then
-    say "  player: the player is running, or its launcher cannot tell — leaving the checkout alone;"
-    say "          run make sync from the player repo, which stops the player first"
-    BLOCKED="$BLOCKED player"
-    git -C "$PLAYER" fetch -q origin main   # refs only, never the tree: lets the self-check compare origin copies
-    return 0
+  if ! $DRY; then
+    git -C "$PLAYER" fetch -q origin main   # refs only, never the tree
+    if [ "$(git -C "$PLAYER" rev-parse HEAD)" != "$(git -C "$PLAYER" rev-parse origin/main)" ] \
+       && ! player_is_down; then
+      say "  player: the player is running, or its launcher cannot tell — leaving the checkout alone;"
+      say "          run make sync from the player repo, which stops the player first"
+      BLOCKED="$BLOCKED player"
+      return 0
+    fi
   fi
   reconcile_main "$PLAYER" player \
     "metadata/track-metadata.json" "metadata/listen_queue.json" "metadata/listen_queue" \
