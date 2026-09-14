@@ -145,8 +145,15 @@ def collect_once(state, q, qs):
         # scores. Marker present (or the URL already off `pending`) => this record was
         # scored-and-persisted; a crash merely interrupted the queue save or the cleanup.
         # Finish those, never re-score — that would double analyzed/scored/match rows.
-        if (sigkey in state.get("folded", {}) or url in (q.get("done") or [])
-                or url in (q.get("retry_later") or [])):
+        #
+        # "Already off `pending`" is asked of THIS record's own destination, not of both lists.
+        # A record that would be filed to `done` proves nothing by the URL sitting on
+        # `retry_later`: that is where a PREVIOUS, different fetch of the same URL was set
+        # aside, and the two lists are not one. Once something drains the list — putting a URL
+        # back on `pending` for a fetch that now succeeds — reading membership as "already
+        # folded" would move it to `done`, count a fold and clean up the record without ever
+        # scoring the signature, and nothing would say so.
+        if sigkey in state.get("folded", {}) or url in (q.get(dest) or []):
             if url in (q.get("pending") or []):
                 q["pending"].remove(url)
                 if url not in (q.get(dest) or []):
@@ -180,6 +187,11 @@ def collect_once(state, q, qs):
 
         if url in (q.get("pending") or []):
             q["pending"].remove(url)
+        if dest == "done" and url in (q.get("retry_later") or []):
+            # This fetch was ruled on, so the deferral from an earlier one is over. Leaving the
+            # URL on the list would offer it to whatever drains it a second time, for audio that
+            # has just been scored.
+            q["retry_later"].remove(url)
         q.setdefault(dest, []).append(url)
 
         # DURABILITY BEFORE CLEANUP, exactly-once across TWO files: the fold marker rides in

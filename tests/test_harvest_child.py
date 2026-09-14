@@ -633,10 +633,15 @@ class TheTwoHourStop(unittest.TestCase):
         return _fetch_with(self, popen, url or self.url, duration)
 
     def test_a_spool_that_passes_the_mark_stops_the_pipeline(self):
-        """Two polls' worth of audio arrives; the mark is one poll's worth. The fake ffmpeg is
-        still running and still writing when the parent acts -- which is the point: a length read
-        after the decode has already paid for the hours it is refusing."""
-        popen = fake_slow_decode([_pcm(SR), _pcm(SR)], order=self.order)
+        """FOUR polls' worth of audio is behind this URL; the mark is one poll's worth, so the
+        second poll is where the spool passes it. The fake ffmpeg is still running and still
+        writing when the parent acts -- which is the point: a length read after the decode has
+        already paid for the hours it is refusing.
+
+        The two chunks the stop leaves unwritten are what makes the last assertion mean
+        something. With only as many chunks as the mark needs, `written` would be low whether
+        the stop fired or not."""
+        popen = fake_slow_decode([_pcm(SR)] * 4, order=self.order)
         with mock.patch.object(harvest, "WHOLE_MAX_S", 1):
             result = self._run(popen)
         _assert_refused(self, result, "too long")
@@ -649,6 +654,30 @@ class TheTwoHourStop(unittest.TestCase):
         self.assertLess(popen.made["ff"].written, 3 * SR * 4,
                         "the rest of the file was decoded anyway -- the stop has to happen "
                         "DURING the poll, not after ffmpeg finishes")
+
+    def test_the_shipped_mark_is_two_hours(self):
+        """Every other case here patches WHOLE_MAX_S down to a second so the arithmetic is
+        testable, which leaves the shipped value pinned by nothing. It is not a free choice: it
+        has to equal the player's chunk threshold, and no test can see across the two
+        repositories to check that."""
+        self.assertEqual(harvest.WHOLE_MAX_S, 2 * 3600)
+
+    def test_a_cut_url_is_never_measured_against_the_mark(self):
+        """A `#t=` fragment means ffmpeg was given `-ss`/`-t`, so the spool holds the SLICE. The
+        master cannot be signed whole from here however long it is, and an over-long span was
+        refused by `too_long` before either child was spawned -- so there is nothing left for
+        this measure to catch and one thing for it to get wrong. ffmpeg applies `-t` at frame
+        granularity, so a part cut at exactly the mark can end a frame past it; measuring it
+        would set aside a part that is exactly what was asked for, onto a list nothing drains.
+        The length of a cut decode is the mismatch check's question, and it passes that."""
+        popen = fake_slow_decode([_pcm(30 * SR), _pcm(30 * SR)], order=self.order)
+        with mock.patch.object(harvest, "WHOLE_MAX_S", 1):
+            result = self._run(popen, url=self.url + "#t=0,60")
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(self.order, [], "a cut decode was stopped -- nothing may stop one")
+        self.assertFalse(result.get("retry_later"))
+        self.assertEqual(result["n_samples"], 60 * SR)
+        self.assertEqual(len(self.put), 1)
 
     def test_a_decode_that_finished_before_the_first_poll_is_still_measured(self):
         """The poll cannot catch what never made it to a poll. A source ffmpeg chews through
@@ -811,6 +840,20 @@ class RetryLaterIsNotDone(unittest.TestCase):
         self.assertEqual((added, dropped), (0, 0))
         self.assertEqual(q["pending"], [])
         self.assertEqual(q["retry_later"], [self.url])
+
+    def test_a_ruling_takes_it_off_the_set_aside_list_too(self):
+        """A URL waits on `retry_later` for parts, and the parts only come while the player
+        still offers the entry. Once a human has ruled on it there are none coming, so it leaves
+        by the same door `pending` uses. `done` is the list that does NOT work this way: that is
+        a record of work completed, and forgetting it would re-analyse the URL on a re-add."""
+        q = {"pending": [], "done": [], "retry_later": [self.url]}
+        with mock.patch.object(harvest, "listen_queue_split",
+                               lambda issues=None: ([], [self.url])):
+            added, dropped = harvest.sync_listen_queue(q)
+        self.assertEqual((added, dropped), (0, 1))
+        self.assertEqual(q["retry_later"], [],
+                         "a retired URL left on the list is one for whatever drains it to trip "
+                         "over -- it is not coming back as a candidate")
 
 
 @unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")

@@ -226,6 +226,28 @@ class TestCollector(Base):
         self.assertEqual([r["reason"] for r in state["issues"] if r.get("url") == URL],
                          ["too_long"])
 
+    def test_a_url_returned_from_the_set_aside_list_is_really_scored(self):
+        """The set-aside list is a deferral, not a verdict: something will eventually drain it,
+        put a URL back on `pending` and let the fetch run again -- as parts, or against a source
+        that is no longer a master. That fetch's result must be SCORED. Reading membership in
+        `retry_later` as proof the record was already folded would take the replay branch here:
+        the URL would move to `done`, the fold would be counted and the record cleaned up, with
+        the signature never compared against a single mystery and nothing saying so."""
+        q = self._harvested()
+        q["retry_later"] = [URL]                     # the earlier, set-aside fetch of this URL
+        state = harvest.blank_state()
+        qs = [(4, self._chroma(), "MT4:deadbeef")]
+        with unittest.mock.patch.object(collector, "_cm") as cm:
+            cm.match.return_value = (0.031, 2, 12.0)
+            self.assertEqual(collector.collect_once(state, q, qs), 1)
+        self.assertIn(harvest._sig_key(URL), state["scored"]["MT4:deadbeef"])
+        self.assertEqual(len(state["matches"]), 1)
+        self.assertEqual(q["done"], [URL])
+        self.assertEqual(q["pending"], [])
+        self.assertEqual(q["retry_later"], [],
+                         "the deferral is over -- left on the list, the URL is offered to the "
+                         "drain a second time for audio that has just been scored")
+
     def test_ok_result_with_missing_sig_is_left_for_later(self):
         os.makedirs(harvester.RESULTS, exist_ok=True)
         harvester.submit_result(URL, ok=True)             # ...but no sig anywhere

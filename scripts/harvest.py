@@ -247,6 +247,11 @@ MAX_DURATION_S = 4 * 3600
 # bought with however many hours of decode it took. `MAX_DURATION_S` refuses on what a URL or a
 # queue entry CLAIMS, before anything is transferred, which is cheaper still; this one refuses on
 # what actually arrives, which is the only thing that catches an entry claiming nothing at all.
+#
+# IT HAS TO TRACK THE PLAYER'S OWN CHUNK THRESHOLD, and nothing enforces that: the two constants
+# live in two repositories and no test can see across them. Raised here and not there, masters the
+# player never splits are refused for good; raised there and not here, a master the player treats
+# as one piece is set aside as if parts were coming. Either side moving is a hand edit on both.
 WHOLE_MAX_S = 2 * 3600
 
 
@@ -544,10 +549,16 @@ def _spool_over(part):
     THE SIZE IS THE LENGTH. ffmpeg is writing mono float32 at `_audio.SR`, so one second of audio
     is exactly `SR * 4` bytes and the file's size answers "how long is this so far" without
     reading a byte of it. A file that is not there yet (ffmpeg has not written) is not over.
+
+    ONLY that one absence is caught. Any other `OSError` -- a permission, an I/O fault -- means
+    the guard could not ask its question at all, and answering "not over" would switch the guard
+    off for that decode without saying so. Those propagate: the child's `--fetch-one` arm turns a
+    raised exception into a failed fetch for this URL, so a guard that cannot read the spool is
+    VISIBLE rather than quietly absent.
     """
     try:
         return os.path.getsize(part) > WHOLE_MAX_S * _audio.SR * 4
-    except OSError:
+    except FileNotFoundError:
         return False
 
 
@@ -663,7 +674,14 @@ def _decode_and_sign(url, job, duration=None):
                   threading.Thread(target=_drain, args=(ff.stderr, ff_err), daemon=True)]
         for t in drains:
             t.start()
-        overlong = _wait(ff, part=part) == OVERLONG
+        # A CUT URL IS NOT MEASURED. `cut` means ffmpeg was given `-ss`/`-t`, so the spool holds
+        # the SLICE and not the master, and the thing this stop exists to prevent -- a master
+        # signed whole -- cannot happen however long the source is. A span longer than the mark
+        # was already refused by `too_long` before either child was spawned. So the measure has
+        # nothing left to catch here and only something to get wrong: ffmpeg applies `-t` at
+        # frame granularity, so a part cut at exactly two hours can end a frame past it, and
+        # refusing THAT sets aside a part the player will never split again.
+        overlong = _wait(ff, part=(None if cut else part)) == OVERLONG
         if overlong:
             for proc in _STOP["procs"]:        # [ffmpeg, yt-dlp] -- the stop path, same order
                 _end(proc)
@@ -700,7 +718,12 @@ def _decode_and_sign(url, job, duration=None):
     # THE MESSAGE MAY NOT SAY "403", "429" OR "blocked". `run()` greps a failed fetch's error for
     # those words to decide the HOST is throttling us, backs off, and never pops the URL at all
     # (see `BLOCK_AFTER`). Nothing about a long recording is a host problem.
-    if overlong or _spool_over(part):
+    #
+    # `not cut` for the same reason the poll above skips a cut URL: the spool is a slice, the
+    # length that matters was ruled on before the fetch, and the only thing left to measure is
+    # ffmpeg's frame rounding. A cut decode's length is judged by the mismatch check below, which
+    # compares it against the span it was actually asked for.
+    if not cut and (overlong or _spool_over(part)):
         _unlink(part)
         why = ("stopped before decoding the rest" if overlong
                else "the decode had finished before the first poll -- not signed")
@@ -736,18 +759,26 @@ def _decode_and_sign(url, job, duration=None):
     # when that duration is a real number and not the `True`/`False` that also happens to satisfy
     # `isinstance(x, int)` in Python. Neither present: `expect` is `None`, and the tolerance check
     # below does not run -- an unmeasurable length is not a mismatch, it is simply unmeasured.
+    #
+    # A length of ZERO is one of the unmeasurable ones, and it is spelled out here rather than
+    # left to fall out of `if expect and ...` below. `duration: 0` is how a source with no length
+    # to declare (a live stream, a broken probe) reads, so it is a claim of ignorance, not a claim
+    # that the audio is empty -- and taken literally it would refuse every decode over ten seconds
+    # and retire the URL to `done` for good. `None` is what "no evidence" already means here.
     if cut:
         expect = cut[1] - cut[0]
     elif not isinstance(duration, bool) and isinstance(duration, (int, float)):
         expect = duration
     else:
         expect = None
+    if expect is not None and expect <= 0:
+        expect = None
     # 2% or ten seconds, whichever is larger: yt-dlp's declared durations are rounded to the
     # second, and container padding adds a little more. Either is noise; a decode that lands
     # outside it did not run to completion -- the exact truncated-fetch shape this backstop
     # exists to catch (yt-dlp killed mid-stream, ffmpeg fed a partial pipe and exiting 0 on what
     # it got, both exit codes clean).
-    if expect and abs(seconds - expect) > max(10, 0.02 * expect):
+    if expect is not None and abs(seconds - expect) > max(10, 0.02 * expect):
         _unlink(part)
         return {"ok": False,
                 "error": "length mismatch: decoded %.0f s, expected %.0f s" % (seconds, expect)}
@@ -1706,10 +1737,17 @@ def sync_listen_queue(q, issues=None):
     # A refused entry leaves pending by the same door. A backstop that only stopped NEW arrivals
     # would still let a master that was queued before the split rule existed be fetched whole,
     # which is the one thing it is here to prevent. It cannot come back: it is not a candidate.
+    # `retry_later` leaves by the same door, and for the same reason `done` does not. `done` is a
+    # record of work completed; `retry_later` is a DEFERRAL -- a URL waiting for parts that only
+    # exist while the player still offers the entry. Once a human has ruled on it there are no
+    # parts coming, and a URL left on the list would be a retired one for whatever drains it to
+    # trip over later. It cannot come back either way: it is no longer a candidate.
     gone = set(retired) | {r["url"] for r in refused}
-    before = len(q["pending"])
+    before = len(q["pending"]) + len(q.get("retry_later") or [])
     q["pending"] = [u for u in q["pending"] if u not in gone]
-    return len(fresh), before - len(q["pending"])
+    if q.get("retry_later"):
+        q["retry_later"] = [u for u in q["retry_later"] if u not in gone]
+    return len(fresh), before - len(q["pending"]) - len(q.get("retry_later") or [])
 
 
 # --- the run ------------------------------------------------------------------------------------
