@@ -676,10 +676,21 @@ def _decode_and_sign(url, job, duration=None):
         _unlink(part)
         return {"ok": False, "error": "stopped"}
 
-    # STOPPED AT THE MARK, and it has to be answered before the exit statuses below. Killing the
-    # pipe leaves yt-dlp with a nonzero status and ffmpeg with whatever it managed, so read those
-    # first and this refusal comes back as "no audio" -- a per-URL failure, filed to `done`, which
-    # is the one place this URL must not go.
+    size = os.path.getsize(part) if os.path.exists(part) else 0
+    n_samples = size // 4
+
+    # PAST THE MARK -- and it has to be answered before the exit statuses below. Killing the pipe
+    # leaves yt-dlp with a nonzero status and ffmpeg with whatever it managed, so read those first
+    # and this refusal comes back as "no audio": a per-URL failure, filed to `done`, which is the
+    # one place this URL must not go.
+    #
+    # TWO WAYS TO NOTICE, because there are two ways for it to happen. The poll above catches a
+    # decode that is still running, which is the case that matters -- it stops the pipe with the
+    # rest of the file never decoded. But a source ffmpeg chews through faster than the poll comes
+    # round (a local file, a fast cache) can pass the mark and EXIT between two polls, and `_wait`
+    # then returns an ordinary exit status with nothing measured. So the spool is measured once
+    # more here, against the same threshold, where its size is final. Nothing was saved in decode
+    # time by then; what is saved is the signature, which is the thing that must never exist.
     #
     # `retry_later` is what makes that difference travel: it rides the result dict across the
     # fork, and `run()` reads it to put the URL on the third list instead of `done`. The audio is
@@ -689,14 +700,13 @@ def _decode_and_sign(url, job, duration=None):
     # THE MESSAGE MAY NOT SAY "403", "429" OR "blocked". `run()` greps a failed fetch's error for
     # those words to decide the HOST is throttling us, backs off, and never pops the URL at all
     # (see `BLOCK_AFTER`). Nothing about a long recording is a host problem.
-    if overlong:
+    if overlong or _spool_over(part):
         _unlink(part)
+        why = ("stopped before decoding the rest" if overlong
+               else "the decode had finished before the first poll -- not signed")
         return {"ok": False, "retry_later": True,
-                "error": "too long: passed %s of audio, stopped before decoding the rest"
-                         % _hours(WHOLE_MAX_S)}
+                "error": "too long: passed %s of audio, %s" % (_hours(WHOLE_MAX_S), why)}
 
-    size = os.path.getsize(part) if os.path.exists(part) else 0
-    n_samples = size // 4
     if yt.returncode != 0 or size == 0:
         _unlink(part)
         return {"ok": False, "error": _last_line(yt_err) or "no audio"}

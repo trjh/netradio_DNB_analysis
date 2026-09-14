@@ -650,6 +650,18 @@ class TheTwoHourStop(unittest.TestCase):
                         "the rest of the file was decoded anyway -- the stop has to happen "
                         "DURING the poll, not after ffmpeg finishes")
 
+    def test_a_decode_that_finished_before_the_first_poll_is_still_measured(self):
+        """The poll cannot catch what never made it to a poll. A source ffmpeg chews through
+        faster than the poll comes round -- a local file, a fast cache -- passes the mark and
+        exits between two polls, and `_wait` returns an ordinary exit status with nothing
+        measured. No decode time is saved by refusing it here; what is saved is the signature,
+        which is the thing that must never exist for a master."""
+        popen = fake_decode(pcm=_pcm(2 * SR))
+        with mock.patch.object(harvest, "WHOLE_MAX_S", 1):
+            result = self._run(popen)
+        _assert_refused(self, result, "too long")
+        self.assertTrue(result.get("retry_later"))
+
     def test_a_spool_under_the_mark_is_signed(self):
         """The same slow pipeline, below the mark: the poll asks its extra question every second
         and the decode finishes untouched. A guard that refused this would refuse everything."""
