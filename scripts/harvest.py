@@ -1906,10 +1906,15 @@ def hold_no_audio(url, hold_s=NO_AUDIO_HOLD_S):
     _NO_AUDIO[url] = time.time() + hold_s
 
 
+def is_held(url):
+    """True while a "no audio" answer is still holding this URL back (see `hold_no_audio`)."""
+    return _NO_AUDIO.get(url, 0) > time.time()
+
+
 def has_audio(url):
     """The predicate `pick_next` prefers by: cached audio exists for this URL, and no recent
     attempt found it missing."""
-    if _NO_AUDIO.get(url, 0) > time.time():
+    if is_held(url):
         return False
     return audio_for(url) is not None
 
@@ -2032,6 +2037,12 @@ def pick_next(pending, state, has_audio=None):
     cached file asks nothing of the host. Only when NO pending URL has audio does the choice fall
     to the rest, and only while the fetch fallback is on (`fetch_fallback_on`); with it off, the
     rest wait in `pending` for the player to fetch them, and this returns None.
+
+    A HELD URL BELONGS TO NEITHER PASS. `hold_no_audio` marks a URL whose audio was expected and
+    not there; that is "wait for the player's copy", not "fetch it from the web instead", so the
+    fallback pass skips it too. Without that the hold only moved the URL from the first pass to
+    the second, and the loop re-ran the same child for it with no nap between (the child said
+    `no_audio` again, the hold was refreshed, and nothing slept).
     """
     now = time.time()
     last = state.get("hosts", {})
@@ -2057,7 +2068,7 @@ def pick_next(pending, state, has_audio=None):
         return best_of(with_audio, ignore_pacing=True)
     if not fetch_fallback_on():
         return None
-    return best_of(range(len(pending)))
+    return best_of(i for i, url in enumerate(pending) if not is_held(url))
 
 
 def _stopped(state):
@@ -2324,8 +2335,10 @@ def run(args):
         hinfo = state.setdefault("hosts", {}).setdefault(host, {})
 
         # Host pacing is for the web. A candidate served from the player's cache asks the host
-        # for nothing, so it neither waits on the host's turn nor spends it.
-        from_cache = audio_for(url) is not None
+        # for nothing, so it neither waits on the host's turn nor spends it. `has_audio`, not
+        # `audio_for`: a held URL is never picked (see `pick_next`), and if one ever were it must
+        # take the host's turn like any web fetch rather than skip the wait.
+        from_cache = has_audio(url)
         wait = hinfo.get("next_ok", 0) - time.time()
         if wait > 0 and not from_cache:
             state["session"] = {"phase": "waiting on %s" % host, "until": hinfo["next_ok"]}
@@ -2427,8 +2440,12 @@ def run(args):
             _save(STATE, state)
             continue
         hinfo["strikes"] = 0
-        if cached or _LAST_CHILD.get("source") == "fetch":
-            hinfo["next_ok"] = time.time() + gap      # a cache read spent none of the host's turn
+        # EVERY web attempt spends the host's turn, failed or not -- a run of dead links on one
+        # host must not be fetched back to back. A failure result carries no `source`, so the
+        # test is "not served from the cache", never "served from the web"; `cached` (a signature
+        # cache hit) keeps the pacing it always had.
+        if cached or _LAST_CHILD.get("source") not in ("file", "bucket"):
+            hinfo["next_ok"] = time.time() + gap
 
         # SET ASIDE, NOT RETIRED. The fetch leg stopped this decode at two hours because what is
         # behind the URL is a master (see `WHOLE_MAX_S`). `done` is never re-fetched, and this

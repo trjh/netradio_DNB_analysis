@@ -124,6 +124,8 @@ def _pick(q, hstate, done_set, has_audio=None):
         if not harvest.fetch_fallback_on():
             return None, None, None, None
     for url in pending:
+        if has_audio is not None and harvest.is_held(url):
+            continue                    # waiting for the player's copy: not the web's to fetch
         host = host_of(url)
         hinfo = hstate["hosts"].setdefault(host, {})
         if hinfo.get("blocked"):

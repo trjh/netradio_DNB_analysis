@@ -24,6 +24,7 @@ import shutil
 import signal
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -240,6 +241,19 @@ class PickNext(Base):
         self.assertEqual(harvest.pick_next([self.URL_NONE, self.URL_LOCAL], self._state(),
                                            has_audio=harvest.has_audio), 1)
 
+    def test_a_held_url_belongs_to_neither_pass(self):
+        """The hold means "wait for the player's copy", not "fetch it from the web instead"."""
+        harvest.hold_no_audio(self.URL_LOCAL)
+        self.assertIsNone(harvest.pick_next([self.URL_LOCAL], self._state(),
+                                            has_audio=harvest.has_audio),
+                          "fallback on, the only pending URL held: nothing to pick")
+        pending = [self.URL_LOCAL, self.URL_NONE]
+        idx = harvest.pick_next(pending, self._state(), has_audio=harvest.has_audio)
+        self.assertEqual(pending[idx], self.URL_NONE, "the fallback pass skips the held URL")
+        harvest.hold_no_audio(self.URL_LOCAL, hold_s=-1)
+        self.assertEqual(harvest.pick_next(pending, self._state(), has_audio=harvest.has_audio),
+                         0, "and picks it again once the hold has passed")
+
     def test_without_the_predicate_the_old_selection_is_unchanged(self):
         pending = ["https://a/1", "https://b/2"]
         state = self._state(a={"next_ok": 4102444800.0})
@@ -445,7 +459,16 @@ class TheChild(Base):
 class NoAudioIsNotAVerdict(Base):
     """`run()` and `harvester.work_once()` both leave a no-audio URL pending."""
 
+    def setUp(self):
+        Base.setUp(self)
+        self.child_runs = 0
+        self.naps = []
+
     def _no_audio(self, url, duration=None):
+        self.child_runs += 1
+        if self.child_runs > 25:                     # a bounded stub, never a hung test
+            harvest._STOP["signum"] = signal.SIGTERM
+            return None, None, harvest.STOPPED
         harvest._LAST_CHILD.clear()
         harvest._LAST_CHILD.update({"ok": False, "no_audio": True,
                                     "error": "no audio: entry id-none has no local file and no "
@@ -453,14 +476,13 @@ class NoAudioIsNotAVerdict(Base):
         return None, None, harvest._LAST_CHILD["error"]
 
     def _stop_on_nap(self, seconds):
+        self.naps.append(seconds)
         harvest._STOP["signum"] = signal.SIGTERM
 
-    def test_run_leaves_the_url_pending_and_says_so_once(self):
-        os.environ["NETRADIO_HARVEST_FETCH_FALLBACK"] = "0"
-        harvest._save(harvest.QUEUE, {"pending": [self.URL_NONE], "done": []})
+    def _run(self, queue, fetch=None, cm_match=None, audio_for=None):
+        """Run the loop over `queue`; the first nap (or the 26th child) stops it."""
+        harvest._save(harvest.QUEUE, queue)
         qs = [(4, np.zeros((12, 8), dtype="float32"), "4:f00")]
-        # `has_audio` says yes once (the snapshot), the child says no; after the hold the loop
-        # finds nothing pickable, naps, and the nap is where the test stops it.
         with mock.patch.object(harvest, "queries", lambda state=None: qs), \
                 mock.patch.object(harvest, "sweep_excerpts", lambda: None), \
                 mock.patch.object(harvest, "sweep_job_dirs", lambda *a, **k: 0), \
@@ -469,18 +491,19 @@ class NoAudioIsNotAVerdict(Base):
                 mock.patch.object(harvest, "listen_queue_split", lambda issues=None: ([], [])), \
                 mock.patch.object(harvest, "check_memory", lambda *a, **k: False), \
                 mock.patch.object(harvest, "_load_sig", lambda url: None), \
-                mock.patch.object(harvest, "audio_for",
-                                  lambda url: {"id": "id-none", "path": None}), \
-                mock.patch.object(harvest, "stream_chroma", self._no_audio), \
+                mock.patch.object(harvest, "audio_for", audio_for or harvest.audio_for), \
+                mock.patch.object(harvest, "stream_chroma", fetch or self._no_audio), \
                 mock.patch.object(harvest, "_nap", self._stop_on_nap), \
+                mock.patch.object(harvest._cm, "match", cm_match or harvest._cm.match), \
                 mock.patch.object(harvest.sigstore, "enabled", lambda: False), \
                 mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
                 mock.patch.object(harvest.selftest, "due_for_live", lambda: False), \
                 mock.patch.object(harvest.memwatch, "allocator_canary",
                                   lambda *a, **k: (0, 0, None)):
             harvest.run(None)
-        q = harvest._load(harvest.QUEUE, {})
-        state = harvest._load(harvest.STATE, {})
+        return harvest._load(harvest.QUEUE, {}), harvest._load(harvest.STATE, {})
+
+    def _assert_left_pending(self, q, state):
         self.assertEqual(q["pending"], [self.URL_NONE])
         self.assertEqual(q["done"], [], "`done` is never re-fetched")
         self.assertEqual(q.get("retry_later", []), [])
@@ -488,6 +511,53 @@ class NoAudioIsNotAVerdict(Base):
         self.assertEqual([r["reason"] for r in rows], ["no_audio"])
         self.assertEqual(state["errors"], 0, "nothing failed")
         self.assertIn(self.URL_NONE, harvest._NO_AUDIO)
+
+    def test_run_leaves_the_url_pending_and_says_so_once(self):
+        os.environ["NETRADIO_HARVEST_FETCH_FALLBACK"] = "0"
+        # `has_audio` says yes once (the snapshot), the child says no; after the hold the loop
+        # finds nothing pickable, naps, and the nap is where the test stops it.
+        q, state = self._run({"pending": [self.URL_NONE], "done": []},
+                             audio_for=lambda url: {"id": "id-none", "path": None})
+        self._assert_left_pending(q, state)
+        self.assertEqual(self.child_runs, 1)
+        self.assertEqual(len(self.naps), 1)
+
+    def test_with_the_fallback_on_a_held_url_is_not_fetched_from_the_web_instead(self):
+        """The hold is "wait for the player's copy". With the fallback ON the second pass used to
+        pick the held URL straight back, the pacing wait was skipped, the child was told
+        `fetch=False`, said `no_audio` again, and the loop went round with no sleep: one child
+        per iteration for as long as the hold lasted."""
+        os.environ["NETRADIO_HARVEST_FETCH_FALLBACK"] = "1"
+        q, state = self._run({"pending": [self.URL_NONE], "done": []},
+                             audio_for=lambda url: {"id": "id-none", "path": None})
+        self._assert_left_pending(q, state)
+        self.assertEqual(self.child_runs, 1, "one child, then the hold; never a second")
+        self.assertEqual(len(self.naps), 1, "nothing pickable -> the loop naps")
+
+    def test_a_failed_web_fetch_still_paces_its_host(self):
+        """A failure result carries no `source`; it must spend the host's turn all the same, or
+        a run of dead links on one host is fetched back to back."""
+        def _dead(url, duration=None):
+            harvest._LAST_CHILD.clear()
+            harvest._LAST_CHILD.update({"ok": False, "error": "too short (12s)"})
+            return None, None, "too short (12s)"
+
+        before = time.time()
+        q, state = self._run({"pending": [self.URL_NONE], "done": []}, fetch=_dead)
+        self.assertEqual(q["done"], [self.URL_NONE], "an ordinary failure is still a verdict")
+        self.assertGreater(state["hosts"]["s"]["next_ok"], before)
+
+    def test_a_cached_read_spends_no_host_turn(self):
+        def _signed(url, duration=None):
+            harvest._LAST_CHILD.clear()
+            harvest._LAST_CHILD.update({"ok": True, "source": "file"})
+            return np.zeros((12, 4), dtype="float32"), np.zeros(SR, dtype="float32"), None
+
+        q, state = self._run({"pending": [self.URL_LOCAL], "done": []}, fetch=_signed,
+                             cm_match=lambda qc, c: (1.0, 0, 0.0))
+        self.assertEqual(q["done"], [self.URL_LOCAL])
+        self.assertNotIn("next_ok", state["hosts"].get("y", {}),
+                         "a file the player holds asks the host for nothing")
 
 
 @unittest.skipIf(harvester is None, "harvester.py needs the librosa venv (.venv) -- skipping")
@@ -540,6 +610,14 @@ class TheSplitRuntime(Base):
         self.assertEqual(json.load(open(os.path.join(harvester.RESULTS, self._spooled()[0])))["url"],
                          self.URL_LOCAL)
         self._root_untouched()
+
+    def test_a_held_url_is_not_fetched_from_the_web_by_the_split_runtime_either(self):
+        harvest.hold_no_audio(self.URL_LOCAL)
+        q = {"pending": [self.URL_LOCAL], "done": []}
+        hstate = harvester.blank_hstate()
+        with mock.patch.object(harvest, "stream_chroma",
+                               lambda *a: self.fail("fetched a held URL")):
+            self.assertEqual(harvester.work_once(hstate, q), "idle")
 
     def test_with_the_fallback_off_and_nothing_cached_it_idles(self):
         os.environ["NETRADIO_HARVEST_FETCH_FALLBACK"] = "0"
