@@ -206,9 +206,36 @@ asking for that URL, there is no trustworthy length to judge it by, and inventin
 worse than going without. A `#t=` span is enforced in every case, since it needs nothing from
 outside the URL.
 
-For each candidate: streams the audio (never to disk), reduces it to a **chroma signature** (12×N
-float16, ~55 KB against ~8 MB), throws the audio away, and scores the signature against every
-unsolved Mystery Track — **but only the mysteries it holds a clip of** (see
+**Where the audio comes from.** The player's copy, first; the web only when there is none.
+
+```
+NETRADIO_DOWNLOAD_ROOT=/path/to/the/player/downloads   # the player's index.json + files, read-only
+NETRADIO_AUDIO_BUCKET=...                              # the player's audio bucket (audio/<id>.<ext>)
+NETRADIO_HARVEST_FETCH_FALLBACK=1                      # 0: never fetch; wait for the player's copy
+```
+
+The player downloads each listen-queue entry once and copies it to a bucket, so the harvester no
+longer fetches the same audio a second time. A candidate's audio is looked up **by its queue id**
+(never its URL): a file the player holds on this machine is decoded where it lies, with no copy;
+otherwise the bucket object is copied into the job directory and deleted with it; and only an
+entry with neither is fetched with yt-dlp as before — while the fallback is on. One listing of
+the bucket per five minutes answers "has audio" for the whole pending list, and a cached
+candidate is picked before any uncached one, whatever the host pacing says: reading a file asks
+nothing of the host, so it neither waits for the host's turn nor spends it. A chunk's file is
+already on its own clock, so the `#t=` fragment is a **check**, not a cut — no `-ss`, no `-t`;
+a file that misses its span by more than two seconds is **set aside for a day** with a
+`span_mismatch` row (`SPAN_MISMATCH_HOLD_S`), not retired: the player can re-cut the part under
+the same id and key, and the harvester looks again once the hold passes. An entry whose audio is
+expected and not there (the cache moved on, or the copy failed) is **not a failure** either: it
+stays `pending`, held back for fifteen minutes (`NO_AUDIO_HOLD_S`), with a `no_audio` row — and
+with the fallback off, so does every entry the player has not fetched yet. When the bucket is
+configured but its listing cannot be read, nothing is fetched from the web at all (an unknown
+bucket is not an empty one) and one `bucket_listing` row says so. The harvester never deletes
+audio, locally or in the bucket; the player owns both.
+
+For each candidate: decodes the audio (to a spool file, never held in memory), reduces it to a
+**chroma signature** (12×N float16, ~55 KB against ~8 MB), throws the audio away, and scores the
+signature against every unsolved Mystery Track — **but only the mysteries it holds a clip of** (see
 [PROCESS §8b](../PROCESS.md#8b-giving-the-harvester-a-new-or-better-mystery-track-clip)).
 
 **It proposes; you dispose.** It never marks a mystery solved. It keeps the best **leads** (best 12
@@ -228,7 +255,8 @@ bigger than this disk. 100,000 tracks is ~5 GB of signatures and 0 GB of audio.
 **How it stays polite.** Rotates hosts between tracks (no site sees a burst), per-host token
 buckets, jittered delays (never a fixed cadence), 4–5 h sessions then 40–120 min idle,
 exponential backoff on 429/403, and a hard stop after 5 refusals from one host. Every track is
-fetched **once, ever** — the signature cache guarantees it.
+fetched **once, ever** — the signature cache guarantees it. All of this governs the fallback
+fetch only; a candidate served from the player's cache touches no host.
 
 **The bot wall.** *"Sign in to confirm you're not a bot"* carries no 403 and no 429, so it slips
 past the backoff logic entirely. The harvester **halts** on it instead of failing forever. Feed it
@@ -244,8 +272,8 @@ hand-started harvester rather than spawning a second, and a watchdog revives it 
 ### How much memory it uses, and why
 
 Two `harvest.py` processes exist while a candidate is being fetched: the long-running parent
-(`--run`) and a **fetch child** (`--fetch-job DIR`, see below), plus that child's `yt-dlp` and
-`ffmpeg`. The child does the whole fetch — download, decode, chroma, cache, upload — and exits.
+(`--run`) and a **fetch child** (`--fetch-job DIR`, see below), plus that child's `ffmpeg` (and
+its `yt-dlp`, on a fallback fetch). The child does the whole fetch — download, decode, chroma, cache, upload — and exits.
 The parent, which holds the state, the queue and the matching board, never touches a track's
 audio, so its footprint stays flat across candidates rather than climbing to a high-water mark
 and staying there.
@@ -264,7 +292,9 @@ handed over in the job directory. The player's supervisor finds a live harvester
 URL on the argv would be a way for a process that lives for one track to be adopted as the
 harvester. The job file (`url.json`) carries the URL **and** the queue's declared duration for it,
 so the child's length check weighs the same facts the queue did; describing half the job there and
-half on a command line is how the two would drift apart. To run one fetch by hand,
+half on a command line is how the two would drift apart. It also carries where the entry's audio
+already is (`audio`: the queue id, and a local path when the parent saw one) and whether the web
+may be asked when it is nowhere (`fetch`) — the parent's decisions, carried out by the child. To run one fetch by hand,
 `--fetch-one URL --job DIR` still works, with `--duration SECONDS` if you want it length-checked.
 
 `NETRADIO_HARVEST_CHILD=0` runs the fetch in the harvester's own process instead of a child. It is

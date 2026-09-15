@@ -436,8 +436,12 @@ the rate difference, solved downstream by `speed = (trackB − trackA) / (origB 
 
 ## The harvester, and the bot wall
 
-`harvest.py` streams candidates, reduces each to a chroma signature, discards the audio,
-scores against every unsolved mystery, for weeks. Watch it — and rule — at **`/harvest`**.
+`harvest.py` reads each candidate's audio from the player's cache (its download root, then
+its audio bucket — see [SCRIPTS: *Where the audio comes from*](docs/SCRIPTS.md#the-harvester)),
+reduces it to a chroma signature, discards the audio, and scores it against every unsolved
+mystery, for weeks. Watch it — and rule — at **`/harvest`**. It fetches from the web itself only
+for an entry the player has no copy of, and only while `NETRADIO_HARVEST_FETCH_FALLBACK` is on;
+the bot wall below is that fetch's problem, not the cache's.
 
 Give it a YouTube session — set **one** of these in `.env_vars` (gitignored), then restart:
 

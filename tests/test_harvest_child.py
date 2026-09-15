@@ -874,7 +874,7 @@ class TheChildEntryPoint(unittest.TestCase):
             rc = harvest.main()
         self.assertEqual(rc, 0)
         # The trailing None is `--duration`: absent on this argv, so no length is claimed.
-        fetch.assert_called_once_with("https://example.invalid/x", self.job, None)
+        fetch.assert_called_once_with("https://example.invalid/x", self.job, None, None, True)
         lock.assert_not_called()
         with open(os.path.join(self.job, "result.json")) as fh:
             self.assertTrue(json.load(fh)["ok"])
@@ -889,7 +889,7 @@ class TheChildEntryPoint(unittest.TestCase):
                 mock.patch.object(harvest, "_fetch_and_sign",
                                   return_value={"ok": True, "error": None}) as fetch:
             self.assertEqual(harvest.main(), 0)
-        fetch.assert_called_once_with("https://example.invalid/x", self.job, 21600.0)
+        fetch.assert_called_once_with("https://example.invalid/x", self.job, 21600.0, None, True)
 
     def test_a_crash_in_the_child_exits_nonzero(self):
         argv = ["harvest.py", "--fetch-one", "https://example.invalid/x", "--job", self.job]

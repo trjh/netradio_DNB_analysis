@@ -69,6 +69,7 @@ import chroma_recipe                                 # noqa: E402  (THE recipe, 
 import memwatch                                      # noqa: E402  (footprint + allocator canary)
 import selftest                                      # noqa: E402  (the canary; see run())
 import sigstore                                      # noqa: E402  (bucket = the pool's only home)
+import audiostore                                    # noqa: E402  (the player's audio: read side)
 
 HOME = _gt.REPO_ROOT
 STATE_DIR = os.path.join(HOME, ".harvest")
@@ -253,6 +254,40 @@ MAX_DURATION_S = 4 * 3600
 # player never splits are refused for good; raised there and not here, a master the player treats
 # as one piece is set aside as if parts were coming. Either side moving is a hand edit on both.
 WHOLE_MAX_S = 2 * 3600
+
+# A CACHED FILE IS CHECKED AGAINST ITS LABEL, NOT CUT TO IT. A chunk's file arrives from the
+# player already on the chunk's own clock (the player cuts with `-ss` before `-i`, so the file
+# starts at 0), and the URL's `#t=a,b` fragment says how long that file should be. The two are
+# compared, never reconciled: a file that misses its span by more than this is a failed hand-over
+# and is refused with a `span_mismatch` row, because a signature filed under a label the audio
+# does not match is a wrong answer that is never asked again. Two seconds is the player's own
+# cut-verification tolerance (a container's frame rounding), and it tracks that constant by hand
+# exactly as WHOLE_MAX_S tracks the chunk threshold.
+VERIFY_TOLERANCE_S = 2
+
+# How long a URL whose audio was expected but not there at open time is held back from being
+# picked again. The availability set is re-read every few minutes (`audiostore.LIST_TTL_S`), so
+# a hold this long lets it catch up rather than re-picking the same URL every pass.
+NO_AUDIO_HOLD_S = 900
+
+# How long a chunk whose cached file did not match its label is set aside. A DEFERRAL, not a
+# verdict: the mismatch is a defect on the player's side of the hand-over, and the player can
+# repair it -- a re-cut part keeps the same id and the same `#t=` URL, so the same key -- and
+# `done` is never re-fetched. A day costs a permanently wrong file one ffprobe per day and keeps
+# it visible in the issues list; a repaired one is signed on the next look.
+SPAN_MISMATCH_HOLD_S = 24 * 3600
+
+
+def fetch_fallback_on():
+    """May the harvester still fetch from the web when an entry has no cached audio?
+
+    ON by default for now: the player is filling the audio cache and the pending set is not yet
+    covered, so a harvester that only read the cache would go dark. OFF (`0`) makes every entry
+    with no audio WAIT in `pending` instead. THE ONE SEAM the retirement of the fetch leg
+    removes: with the fallback gone this returns False unconditionally, and the yt-dlp path in
+    `_decode_and_sign` and the second pass in `pick_next` are dead code to delete.
+    """
+    return os.environ.get("NETRADIO_HARVEST_FETCH_FALLBACK", "1").strip() != "0"
 
 
 def too_long(url, duration=None):
@@ -604,8 +639,62 @@ def sweep_job_dirs(max_age_s=JOB_STALE_S):
     return n
 
 
-def _fetch_and_sign(url, job, duration=None):
+def _probe_seconds(path):
+    """The container's own length for a cached file, via ffprobe, or None when it cannot say.
+
+    A pre-check, so a hand-over whose length disagrees with its label is refused BEFORE the decode
+    is paid for. Not the check of record: the decoded spool's size is measured again afterwards,
+    against the same tolerance, so an absent ffprobe costs one decode and never a wrong answer.
+    """
+    ffprobe = os.environ.get("NETRADIO_FFPROBE", "").strip() or "ffprobe"   # as the player does
+    try:
+        proc = subprocess.run([ffprobe, "-v", "error", "-show_entries", "format=duration",
+                               "-of", "csv=p=0", path], capture_output=True, text=True,
+                              timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode != 0:
+        return None
+    try:
+        return float(proc.stdout.strip())
+    except ValueError:
+        return None
+
+
+def _open_audio(job, audio):
+    """Where ffmpeg reads a cached entry from: `(path, "file" | "bucket")`, or `(None, why)`.
+
+    `audio` is the parent's answer to "does this URL's entry have audio" -- its queue id and, when
+    the parent saw one, a local path. The path is checked AGAIN here rather than trusted: the
+    parent's view is a snapshot a few minutes old, and the player moves a file between its
+    lifecycle directories (unplayed, keep, trash) as the user rules on it. A file that has moved
+    is found under its new name; one that is gone is looked for in the bucket; and a bucket copy
+    lands in the job directory, which is deleted with the job -- the harvester keeps no audio.
+    """
+    if not audio:
+        return None, "no queue entry for this URL"
+    path = audio.get("path")
+    if path and os.path.isfile(path):
+        return path, "file"
+    item_id = audio.get("id")
+    if not item_id:
+        return None, "no queue id"
+    fresh = audiostore.local_path(item_id)
+    if fresh:
+        return fresh, "file"
+    if not audiostore.enabled():
+        return None, "entry %s has no local file, and no audio bucket is configured" % item_id
+    got = audiostore.fetch(item_id, job)
+    if got:
+        return got, "bucket"
+    return None, "entry %s has no local file and no object in the bucket" % item_id
+
+
+def _fetch_and_sign(url, job, duration=None, audio=None, fetch=True):
     """Fetch one candidate, decode it, sign it. THE CHILD'S WHOLE JOB. Returns `result.json`.
+
+    `audio` says where the entry's audio already is (see `audio_for`), and `fetch` whether the
+    web may be asked when it is nowhere -- both decided by the parent and carried in the job file.
 
     `duration` is the player's declared length for this URL when one is known, so the refusal in
     `_decode_and_sign` can weigh the same facts the queue door weighed. It is optional: a URL
@@ -622,13 +711,13 @@ def _fetch_and_sign(url, job, duration=None):
     wrong recipe-1 signature for this URL -- cached, uploaded, and never fetched again.
     """
     try:
-        return _decode_and_sign(url, job, duration)
+        return _decode_and_sign(url, job, duration, audio, fetch)
     finally:
         _STOP["part"] = None            # nothing left for the signal handler to clean up
         _STOP["procs"] = []
 
 
-def _decode_and_sign(url, job, duration=None):
+def _decode_and_sign(url, job, duration=None, audio=None, fetch=True):
     """`_fetch_and_sign`'s body -- see there. Split out only so the stop state is always reset."""
     # THE SECOND DOOR, and the last one before ffmpeg. `listen_queue_split` already refuses an
     # entry this long, but it is not the only way a URL arrives here -- a hand-run `--fetch-one`,
@@ -645,47 +734,85 @@ def _decode_and_sign(url, job, duration=None):
     pcm = os.path.join(job, "pcm.f32le")
     _STOP["part"] = part
     started = time.time()
-
-    # A chunk URL asks for one slice of the audio (see `media_fragment`). `-ss` goes BEFORE `-i`
-    # and `-t` after it: ffmpeg then reads and discards the head of the pipe and stops at the
-    # slice's end, so the PCM this process ends up holding is the chunk's alone -- which is what
-    # splitting is for. yt-dlp still fetches the whole master, because it ignores the fragment;
-    # the network cost is the same until a cache can hand over the cut file, but MEMORY, the
-    # constraint that made chunks necessary, is bounded either way.
     cut = media_fragment(url)
-    ff_argv = ["ffmpeg", "-v", "error"]
-    if cut:
-        ff_argv += ["-ss", str(cut[0])]
-    ff_argv += ["-i", "pipe:0"]
-    if cut:
-        ff_argv += ["-t", str(cut[1] - cut[0])]
-    ff_argv += ["-ac", "1", "-ar", str(_audio.SR), "-f", "f32le", "pipe:1"]
 
+    # WHERE THE AUDIO COMES FROM. The player's copy first -- a file it holds on this machine, or
+    # its object in the audio bucket -- and only when the entry has neither, and the parent said
+    # the web may be asked, the yt-dlp fetch that used to be the only way. "Audio expected but not
+    # there" is NOT a failure of this URL: nothing about the recording is known to be wrong, the
+    # cache simply has not caught up (or has just moved on), so the result says `no_audio` and the
+    # parent leaves the URL pending. The same non-verdict when the fallback is off and there is
+    # nothing cached: the URL waits for the player to fetch it.
+    src, source = _open_audio(job, audio)
+    if src is None:
+        if audio is not None:
+            return {"ok": False, "no_audio": True, "error": "no audio: %s" % source}
+        if not fetch:
+            return {"ok": False, "no_audio": True,
+                    "error": "no audio: nothing cached for this URL, and the fetch fallback is off"}
+        source = "fetch"
+
+    if src is not None:
+        # A CACHED FILE IS ALREADY THE CHUNK. The player cut it with `-ss` before `-i`, so the file
+        # starts at 0 and holds exactly the fragment's span -- or it does not, and then it is
+        # refused, never trimmed to fit: no `-ss`, no `-t`. The pre-check is the container's own
+        # length; the decoded length is measured again below, against the same tolerance.
+        if cut:
+            span = cut[1] - cut[0]
+            probed = _probe_seconds(src)
+            if probed is not None and abs(probed - span) > VERIFY_TOLERANCE_S:
+                return {"ok": False, "reason": "span_mismatch",
+                        "error": "span mismatch: the file holds %.0f s, the label says %d s "
+                                 "-- refused, not trimmed" % (probed, span)}
+        ff_argv = ["ffmpeg", "-v", "error", "-i", src,
+                   "-ac", "1", "-ar", str(_audio.SR), "-f", "f32le", "pipe:1"]
+    else:
+        # A chunk URL asks for one slice of the audio (see `media_fragment`). `-ss` goes BEFORE
+        # `-i` and `-t` after it: ffmpeg then reads and discards the head of the pipe and stops at
+        # the slice's end, so the PCM this process ends up holding is the chunk's alone -- which
+        # is what splitting is for. yt-dlp still fetches the whole master, because it ignores the
+        # fragment; that is the cost the cache path above removes.
+        ff_argv = ["ffmpeg", "-v", "error"]
+        if cut:
+            ff_argv += ["-ss", str(cut[0])]
+        ff_argv += ["-i", "pipe:0"]
+        if cut:
+            ff_argv += ["-t", str(cut[1] - cut[0])]
+        ff_argv += ["-ac", "1", "-ar", str(_audio.SR), "-f", "f32le", "pipe:1"]
+
+    yt = None
+    yt_err, ff_err = [b""], [b""]              # one-element sinks -- see _drain
     with open(part, "wb") as spool:
-        yt = subprocess.Popen(["yt-dlp", "-q", "--no-warnings", "--no-playlist"] + cookie_args()
-                              + ["-f", "bestaudio", "-o", "-", url],
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        ff = subprocess.Popen(ff_argv,
-                              stdin=yt.stdout, stdout=spool, stderr=subprocess.PIPE)
-        yt.stdout.close()
-        _STOP["procs"] = [ff, yt]              # the handler stops them in THIS order
-        yt_err, ff_err = [b""], [b""]          # one-element sinks -- see _drain
-        drains = [threading.Thread(target=_drain, args=(yt.stderr, yt_err), daemon=True),
-                  threading.Thread(target=_drain, args=(ff.stderr, ff_err), daemon=True)]
+        if src is None:
+            yt = subprocess.Popen(["yt-dlp", "-q", "--no-warnings", "--no-playlist"]
+                                  + cookie_args() + ["-f", "bestaudio", "-o", "-", url],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            ff = subprocess.Popen(ff_argv,
+                                  stdin=yt.stdout, stdout=spool, stderr=subprocess.PIPE)
+            yt.stdout.close()
+            _STOP["procs"] = [ff, yt]              # the handler stops them in THIS order
+            drains = [threading.Thread(target=_drain, args=(yt.stderr, yt_err), daemon=True),
+                      threading.Thread(target=_drain, args=(ff.stderr, ff_err), daemon=True)]
+        else:
+            ff = subprocess.Popen(ff_argv, stdin=subprocess.DEVNULL, stdout=spool,
+                                  stderr=subprocess.PIPE)
+            _STOP["procs"] = [ff]
+            drains = [threading.Thread(target=_drain, args=(ff.stderr, ff_err), daemon=True)]
         for t in drains:
             t.start()
-        # A CUT URL IS NOT MEASURED. `cut` means ffmpeg was given `-ss`/`-t`, so the spool holds
-        # the SLICE and not the master, and the thing this stop exists to prevent -- a master
-        # signed whole -- cannot happen however long the source is. A span longer than the mark
-        # was already refused by `too_long` before either child was spawned. So the measure has
-        # nothing left to catch here and only something to get wrong: ffmpeg applies `-t` at
-        # frame granularity, so a part cut at exactly two hours can end a frame past it, and
-        # refusing THAT sets aside a part the player will never split again.
+        # A CUT URL IS NOT MEASURED. `cut` means the spool holds the SLICE and not the master --
+        # ffmpeg was given `-ss`/`-t`, or the file IS the slice -- and the thing this stop exists
+        # to prevent, a master signed whole, cannot happen however long the source is. A span
+        # longer than the mark was already refused by `too_long` before anything was spawned. So
+        # the measure has nothing left to catch here and only something to get wrong: ffmpeg
+        # applies `-t` at frame granularity, so a part cut at exactly two hours can end a frame
+        # past it, and refusing THAT sets aside a part the player will never split again.
         overlong = _wait(ff, part=(None if cut else part)) == OVERLONG
         if overlong:
             for proc in _STOP["procs"]:        # [ffmpeg, yt-dlp] -- the stop path, same order
                 _end(proc)
-        _wait(yt)
+        if yt is not None:
+            _wait(yt)
         for t in drains:
             t.join(timeout=5)
     _STOP["procs"] = []
@@ -730,7 +857,7 @@ def _decode_and_sign(url, job, duration=None):
         return {"ok": False, "retry_later": True,
                 "error": "too long: passed %s of audio, %s" % (_hours(WHOLE_MAX_S), why)}
 
-    if yt.returncode != 0 or size == 0:
+    if (yt is not None and yt.returncode != 0) or size == 0:
         _unlink(part)
         return {"ok": False, "error": _last_line(yt_err) or "no audio"}
     if ff.returncode != 0:
@@ -778,7 +905,18 @@ def _decode_and_sign(url, job, duration=None):
     # outside it did not run to completion -- the exact truncated-fetch shape this backstop
     # exists to catch (yt-dlp killed mid-stream, ffmpeg fed a partial pipe and exiting 0 on what
     # it got, both exit codes clean).
-    if expect is not None and abs(seconds - expect) > max(10, 0.02 * expect):
+    #
+    # A CACHED CHUNK IS HELD TO THE PLAYER'S OWN TOLERANCE instead: its file was cut to the span
+    # and verified to VERIFY_TOLERANCE_S by the player, so anything looser here would wave through
+    # a hand-over the player itself would have refused. The row names the reason (`span_mismatch`)
+    # so it is not mistaken for a truncated download.
+    if src is not None and cut:
+        if expect is not None and abs(seconds - expect) > VERIFY_TOLERANCE_S:
+            _unlink(part)
+            return {"ok": False, "reason": "span_mismatch",
+                    "error": "span mismatch: the file decoded to %.0f s, the label says %.0f s "
+                             "-- refused, not trimmed" % (seconds, expect)}
+    elif expect is not None and abs(seconds - expect) > max(10, 0.02 * expect):
         _unlink(part)
         return {"ok": False,
                 "error": "length mismatch: decoded %.0f s, expected %.0f s" % (seconds, expect)}
@@ -807,7 +945,7 @@ def _decode_and_sign(url, job, duration=None):
     np.save(os.path.join(job, "chroma32.npy"), c)
 
     current, peak = memwatch.footprint_mb()
-    return {"ok": True, "error": None, "n_samples": int(n_samples),
+    return {"ok": True, "error": None, "source": source, "n_samples": int(n_samples),
             "seconds": round(n_samples / _audio.SR, 1), "took_s": round(time.time() - started, 1),
             "footprint_mb": current, "peak_mb": peak, "footprint_kind": memwatch.kind()}
 
@@ -825,7 +963,7 @@ def _spawn_argv(job):
     return [sys.executable, os.path.abspath(__file__), "--fetch-job", job]
 
 
-def _run_fetch_child(url, job, duration=None):
+def _run_fetch_child(url, job, duration=None, audio=None, fetch=True):
     """Spawn `harvest.py --fetch-job DIR` and read back its result."""
     env = dict(os.environ)
     # macOS libmalloc caches freed LARGE blocks inside the process instead of returning them to
@@ -842,7 +980,7 @@ def _run_fetch_child(url, job, duration=None):
     # harvester itself. So look, and run the fetch here rather than spawn something that will be
     # misread.
     if "--run" in " ".join(argv):
-        return _fetch_and_sign(url, job, duration)
+        return _fetch_and_sign(url, job, duration, audio, fetch)
     if _stop_requested():
         return {"ok": False, "error": STOPPED}   # do not start a fetch we are about to abandon
     # THE JOB FILE DESCRIBES THE JOB -- all of it. The URL moved here because the command line is
@@ -855,7 +993,12 @@ def _run_fetch_child(url, job, duration=None):
     #
     # Absent when there is no trustworthy length (a hand-run fetch). That is honest rather than
     # broken: the fragment span still applies, because it needs no outside information.
-    _save(os.path.join(job, "url.json"), {"url": url, "duration": duration})
+    #
+    # `audio` and `fetch` ride the same file for the same reason: where the audio is, and whether
+    # the web may be asked when it is nowhere, are the parent's decisions (it holds the queue and
+    # the availability set); the child carries them out.
+    _save(os.path.join(job, "url.json"),
+          {"url": url, "duration": duration, "audio": audio, "fetch": bool(fetch)})
     try:
         child = subprocess.Popen(argv, cwd=HOME, env=env,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -922,11 +1065,15 @@ def stream_chroma(url, duration=None):
     job = job_dir(url)
     shutil.rmtree(job, ignore_errors=True)          # a stale job dir for this URL is not ours
     os.makedirs(job, exist_ok=True)
+    # The player's copy of the audio, when the entry has one; the web only when it has none AND
+    # the fallback is on. Decided here, in the parent, and handed to the child whole.
+    audio = audio_for(url)
+    fetch = audio is None and fetch_fallback_on()
     try:
         if os.environ.get("NETRADIO_HARVEST_CHILD") == "0":
-            result = _fetch_and_sign(url, job, duration)
+            result = _fetch_and_sign(url, job, duration, audio, fetch)
         else:
-            result = _run_fetch_child(url, job, duration)
+            result = _run_fetch_child(url, job, duration, audio, fetch)
         _LAST_CHILD.update(result)
         if not result.get("ok"):
             return None, None, result.get("error") or "no signature"
@@ -1675,8 +1822,38 @@ def listen_queue_split_checked(issues=None):
     return candidates, retired, True
 
 
-# The player's declared durations, url -> seconds, cached for a few minutes.
+# The player's declared durations, url -> seconds, cached for a few minutes. `_IDS` is the same
+# read's other half, url -> the entry's queue id, which is how its audio is addressed.
 _DURATIONS = {"at": 0.0, "by_url": None}
+_IDS = {"by_url": {}}
+
+
+def _queue_facts(max_age_s=300):
+    """Re-read the player's queue into `_DURATIONS` and `_IDS` when the cache is stale."""
+    now = time.time()
+    if _DURATIONS["by_url"] is None or now - _DURATIONS["at"] > max_age_s:
+        by_url, ids = {}, {}
+        if LISTEN_QUEUE and os.path.exists(LISTEN_QUEUE):
+            try:
+                for it in _load_queue_items():
+                    u, d, i = it.get("url"), it.get("duration"), it.get("id")
+                    if not isinstance(u, str):
+                        continue
+                    if isinstance(d, (int, float)) and not isinstance(d, bool):
+                        by_url[u.strip()] = d
+                    if isinstance(i, str) and i:
+                        ids[u.strip()] = i
+            except (OSError, ValueError, TypeError, AttributeError):
+                by_url, ids = {}, {}   # unreadable is not "zero seconds"; it is "no answer"
+        _DURATIONS.update({"at": now, "by_url": by_url})
+        _IDS["by_url"] = ids
+
+
+def queue_id(url, max_age_s=300):
+    """The listen-queue entry id behind `url`, or None when the queue has no such entry (a URL
+    seeded by hand, or the canary). Audio is addressed by this id, never by the URL."""
+    _queue_facts(max_age_s)
+    return _IDS["by_url"].get(url)
 
 
 def queue_duration(url, max_age_s=300):
@@ -1691,20 +1868,123 @@ def queue_duration(url, max_age_s=300):
     minutes, and a recording's length does not change. Never raises -- same reason as
     `listen_queue_split`: the queue is data this process does not control.
     """
-    now = time.time()
-    if _DURATIONS["by_url"] is None or now - _DURATIONS["at"] > max_age_s:
-        by_url = {}
-        if LISTEN_QUEUE and os.path.exists(LISTEN_QUEUE):
-            try:
-                for it in _load_queue_items():
-                    u, d = it.get("url"), it.get("duration")
-                    if (isinstance(u, str) and isinstance(d, (int, float))
-                            and not isinstance(d, bool)):
-                        by_url[u.strip()] = d
-            except (OSError, ValueError, TypeError, AttributeError):
-                by_url = {}      # unreadable is not "zero seconds"; it is "no answer"
-        _DURATIONS.update({"at": now, "by_url": by_url})
+    _queue_facts(max_age_s)
     return _DURATIONS["by_url"].get(url)
+
+
+# --- where the audio is (the availability set) ---------------------------------------------------
+#
+# The harvester analyses the PLAYER'S copy of a candidate's audio and asks the web only when there
+# is none. "Has audio" is answered for the whole pending list at once, from one local index read
+# and one bucket listing, both refreshed together every `audiostore.LIST_TTL_S`; the child
+# re-checks the one file it opens.
+
+_AVAILABLE = {"at": 0.0, "ids": None, "local": {}, "remote_unknown": False}
+_NO_AUDIO = {}                  # url -> time until which a hold keeps it from being picked
+_LISTING_SAID = {"on": False}   # "the bucket listing failed" has been said for this episode
+
+
+def _availability(max_age_s=audiostore.LIST_TTL_S):
+    """The availability snapshot, refreshed as one unit: the local index and the bucket listing
+    are read together, and the listing is FORCED so the two caches do not stack (a five-minute
+    cache over a five-minute cache lags the bucket by up to ten).
+
+    `remote_unknown` is the honesty bit: the bucket is configured but the listing could not be
+    read even once (a dark CLI, an unreachable endpoint). Unknown is not empty -- see
+    `bucket_listing_unknown`.
+    """
+    now = time.time()
+    if _AVAILABLE["ids"] is None or now - _AVAILABLE["at"] > max_age_s:
+        local = audiostore.local_files()
+        ids = set(local)
+        remote = audiostore.bucket_ids(force=True)
+        if remote:
+            ids |= remote
+        unknown = audiostore.enabled() and remote is None
+        if not unknown:
+            _LISTING_SAID["on"] = False          # a good listing ends the episode
+        _AVAILABLE.update({"at": now, "ids": ids, "local": local, "remote_unknown": unknown})
+    return _AVAILABLE
+
+
+def bucket_listing_unknown():
+    """True when the bucket is configured but its listing cannot be read. Then "has no audio" is
+    not knowable for a bucket-only entry, and the fallback must NOT run: with the bucket
+    unreachable (the endpoint is behind a network path that drops) every bucket-only entry would
+    otherwise read as uncached and be fetched from the web -- the whole queue, twice."""
+    return bool(_availability()["remote_unknown"])
+
+
+def note_listing_unknown(state):
+    """One issues row per episode (not per tick) saying the listing failed. True when it wrote."""
+    if _LISTING_SAID["on"]:
+        return False
+    _LISTING_SAID["on"] = True
+    state["issues"] = ((state.get("issues") or []) + [
+        {"at": _now(), "reason": "bucket_listing",
+         "issue": "the audio bucket's listing cannot be read -- nothing is fetched from the "
+                  "web until it can (an unknown bucket is not an empty one)"}])[-50:]
+    return True
+
+
+def audio_for(url):
+    """`{"id": queue id, "path": local file or None}` when the entry behind `url` has audio in the
+    player's cache (this machine's download root, or the bucket); None when it has none, or the
+    URL is not a queue entry at all."""
+    item_id = queue_id(url)
+    if not item_id:
+        return None
+    avail = _availability()
+    if item_id not in avail["ids"]:
+        return None
+    return {"id": item_id, "path": avail["local"].get(item_id)}
+
+
+def hold_url(url, hold_s):
+    """Keep `url` out of both of `pick_next`'s passes for `hold_s` seconds. Expired holds are
+    dropped on the way, so the table never grows past the URLs actually held."""
+    now = time.time()
+    for u in [u for u, until in _NO_AUDIO.items() if until <= now]:
+        del _NO_AUDIO[u]
+    _NO_AUDIO[url] = now + hold_s
+
+
+def hold_no_audio(url, hold_s=NO_AUDIO_HOLD_S):
+    """The child found nothing where the availability set said there was audio. Hold the URL
+    back for a while rather than pick it again on the next pass -- the set is a snapshot, and the
+    next re-read will agree with the child."""
+    hold_url(url, hold_s)
+
+
+def hold_span_mismatch(url, hold_s=SPAN_MISMATCH_HOLD_S):
+    """The cached file did not match its label. Set aside for the player to repair (see
+    `SPAN_MISMATCH_HOLD_S`); looked at again, same id and key, once the hold passes."""
+    hold_url(url, hold_s)
+
+
+def prune_holds(pending=None):
+    """Drop expired holds, and -- given the pending list -- holds on URLs no longer pending (ruled
+    on, or gone from the player's queue). Returns how many were dropped."""
+    now = time.time()
+    keep = set(pending) if pending is not None else None
+    gone = [u for u, until in _NO_AUDIO.items()
+            if until <= now or (keep is not None and u not in keep)]
+    for u in gone:
+        del _NO_AUDIO[u]
+    return len(gone)
+
+
+def is_held(url):
+    """True while a hold (`hold_no_audio`, `hold_span_mismatch`) keeps this URL back."""
+    return _NO_AUDIO.get(url, 0) > time.time()
+
+
+def has_audio(url):
+    """The predicate `pick_next` prefers by: cached audio exists for this URL, and no recent
+    attempt found it missing."""
+    if is_held(url):
+        return False
+    return audio_for(url) is not None
 
 
 def sync_listen_queue(q, issues=None):
@@ -1814,26 +2094,56 @@ def queries(state=None):
     return out
 
 
-def pick_next(pending, state):
+def pick_next(pending, state, has_audio=None):
     """Next URL, ROTATING hosts so no single site ever sees a burst.
 
     This is the core load-spreading move: consecutive fetches go to DIFFERENT hosts, so no single
     host ever carries a run of back-to-back requests, even during a fast stretch.
+
+    With `has_audio` (a predicate on the URL), the player's cache comes first: a URL whose entry
+    has audio is picked before any that has none, whatever its host's pacing says -- reading a
+    cached file asks nothing of the host. Only when NO pending URL has audio does the choice fall
+    to the rest, and only while the fetch fallback is on (`fetch_fallback_on`); with it off, the
+    rest wait in `pending` for the player to fetch them, and this returns None.
+
+    A HELD URL BELONGS TO NEITHER PASS. `hold_no_audio` marks a URL whose audio was expected and
+    not there; that is "wait for the player's copy", not "fetch it from the web instead", so the
+    fallback pass skips it too. Without that the hold only moved the URL from the first pass to
+    the second, and the loop re-ran the same child for it with no nap between (the child said
+    `no_audio` again, the hold was refreshed, and nothing slept).
+
+    AN UNKNOWN BUCKET IS NOT AN EMPTY ONE. When the bucket is configured but its listing cannot
+    be read, "this entry has no audio" is not knowable, so there is no fallback pass at all
+    (`bucket_listing_unknown`): None, and the caller naps.
+
+    Host rotation is the FALLBACK pass's rule. Cached candidates come out in pending order
+    whatever their hosts, and that is right: a file read touches no host.
     """
     now = time.time()
     last = state.get("hosts", {})
-    best, best_key = None, None
-    for i, url in enumerate(pending):
-        h = host_of(url)
-        info = last.get(h, {})
-        if info.get("blocked"):
-            continue
-        ready_at = info.get("next_ok", 0)
-        # prefer the host we have left alone longest, and never one that isn't ready
-        key = (ready_at > now, ready_at)
-        if best_key is None or key < best_key:
-            best, best_key = i, key
-    return best
+
+    def best_of(indices, ignore_pacing=False):
+        best, best_key = None, None
+        for i in indices:
+            h = host_of(pending[i])
+            info = last.get(h, {})
+            if info.get("blocked") and not ignore_pacing:
+                continue
+            ready_at = 0 if ignore_pacing else info.get("next_ok", 0)
+            # prefer the host we have left alone longest, and never one that isn't ready
+            key = (ready_at > now, ready_at)
+            if best_key is None or key < best_key:
+                best, best_key = i, key
+        return best
+
+    if has_audio is None:
+        return best_of(range(len(pending)))
+    with_audio = [i for i, url in enumerate(pending) if has_audio(url)]
+    if with_audio:
+        return best_of(with_audio, ignore_pacing=True)
+    if not fetch_fallback_on() or bucket_listing_unknown():
+        return None
+    return best_of(i for i, url in enumerate(pending) if not is_held(url))
 
 
 def _stopped(state):
@@ -1988,6 +2298,7 @@ def run(args):
 
     session_end = time.time() + random.uniform(*SESSION_S)
     said_refused = set()                # queue entries this run has already refused out loud
+    said_no_audio = set()               # ... and those it has already reported as waiting for audio
     while True:
         if _stop_requested():
             return _stopped(state)
@@ -2026,6 +2337,7 @@ def run(args):
         if added or dropped:
             _save(QUEUE, q)
             print("listen queue: +%d new, -%d ruled on" % (added, dropped))
+        prune_holds(q["pending"])          # expired holds, and holds on URLs no longer pending
         # Say so ONCE per URL per run. The queue is re-read every pass, so the same refusal comes
         # back every few minutes for as long as the entry sits there; a row per pass would bury
         # the issue list under the one thing about it that is not news.
@@ -2090,16 +2402,24 @@ def run(args):
             session_end = time.time() + random.uniform(*SESSION_S)
             continue
 
-        idx = pick_next(q["pending"], state)
+        idx = pick_next(q["pending"], state, has_audio=has_audio)
         if idx is None:
+            if bucket_listing_unknown() and note_listing_unknown(state):
+                print("!! the audio bucket's listing cannot be read -- no web fetch until it can")
+                _save(STATE, state)
             _nap(60)
             continue
         url = q["pending"][idx]
         host = host_of(url)
         hinfo = state.setdefault("hosts", {}).setdefault(host, {})
 
+        # Host pacing is for the web. A candidate served from the player's cache asks the host
+        # for nothing, so it neither waits on the host's turn nor spends it. `has_audio`, not
+        # `audio_for`: a held URL is never picked (see `pick_next`), and if one ever were it must
+        # take the host's turn like any web fetch rather than skip the wait.
+        from_cache = has_audio(url)
         wait = hinfo.get("next_ok", 0) - time.time()
-        if wait > 0:
+        if wait > 0 and not from_cache:
             state["session"] = {"phase": "waiting on %s" % host, "until": hinfo["next_ok"]}
             _save(STATE, state)
             _nap(min(wait, 60))
@@ -2138,6 +2458,40 @@ def run(args):
             samples = None
             _save(STATE, state)
             return
+
+        # NO AUDIO IS NOT A VERDICT. The availability set said this entry had audio and the child
+        # found none (moved on, or a copy that failed), or the entry has none and the fallback is
+        # off. Nothing is known to be wrong with the recording, so the URL stays `pending` -- held
+        # back for a while so the next pass does not pick it straight back -- and the queue does
+        # not move. `done` is never re-fetched; this must never reach it. Said once per URL per
+        # run, like a refusal.
+        if not cached and _LAST_CHILD.get("no_audio"):
+            hold_no_audio(url)
+            if url not in said_no_audio:
+                said_no_audio.add(url)
+                print("# no audio yet for %s -- %s; left pending" % (url, err))
+                state["issues"] = ((state.get("issues") or []) + [
+                    {"at": _now(), "url": url, "reason": "no_audio",
+                     "issue": "%s -- waiting for the player's copy" % (err or "no audio")}])[-50:]
+                _save(STATE, state)
+            continue
+
+        # A SPAN MISMATCH IS A DEFERRAL TOO. The cached file did not match its label: the
+        # player's side of the hand-over is wrong, and the player can repair it under the same
+        # id and key. Set aside for a day (`SPAN_MISMATCH_HOLD_S`), said once per URL per run,
+        # never filed to `done`. The whole-entry length mismatch below stays a verdict -- a
+        # truncated web fetch has no owner to repair it.
+        if not cached and _LAST_CHILD.get("reason") == "span_mismatch":
+            hold_span_mismatch(url)
+            if url not in said_no_audio:
+                said_no_audio.add(url)
+                print("# span mismatch for %s -- %s; set aside for the player to repair"
+                      % (url, err))
+                state["issues"] = ((state.get("issues") or []) + [
+                    {"at": _now(), "url": url, "reason": "span_mismatch",
+                     "issue": "%s -- set aside a day for the player to re-cut it" % err}])[-50:]
+                _save(STATE, state)
+            continue
 
         # --- the bot wall: STOP, do not grind ---
         #
@@ -2182,7 +2536,12 @@ def run(args):
             _save(STATE, state)
             continue
         hinfo["strikes"] = 0
-        hinfo["next_ok"] = time.time() + gap
+        # EVERY web attempt spends the host's turn, failed or not -- a run of dead links on one
+        # host must not be fetched back to back. A failure result carries no `source`, so the
+        # test is "not served from the cache", never "served from the web"; `cached` (a signature
+        # cache hit) keeps the pacing it always had.
+        if cached or _LAST_CHILD.get("source") not in ("file", "bucket"):
+            hinfo["next_ok"] = time.time() + gap
 
         # SET ASIDE, NOT RETIRED. The fetch leg stopped this decode at two hours because what is
         # behind the URL is a master (see `WHOLE_MAX_S`). `done` is never re-fetched, and this
@@ -2207,8 +2566,10 @@ def run(args):
 
         if c is None:
             state["errors"] += 1
-            state["issues"] = (state["issues"] + [{"at": _now(), "url": url,
-                                                   "issue": err or "no signature"}])[-50:]
+            row = {"at": _now(), "url": url, "issue": err or "no signature"}
+            if not cached and _LAST_CHILD.get("reason"):
+                row["reason"] = _LAST_CHILD["reason"]
+            state["issues"] = (state["issues"] + [row])[-50:]
             _save(STATE, state)
             continue
 
@@ -2313,17 +2674,23 @@ def main():
         # already refused. `--duration` on the command line still wins, so a hand-run fetch can
         # state a length the job file does not carry.
         duration = args.duration
+        # By hand, `--fetch-one` FETCHES: there is no queue entry to read audio for, and the person
+        # typing it is asking for exactly that. A queue-driven job reads where its audio is, and
+        # whether the web may be asked, from the same file as its URL.
+        audio, fetch = None, True
         if not url:
             spec = _load(os.path.join(job, "url.json"), {}) or {}
             url = spec.get("url")
             if duration is None:
                 duration = spec.get("duration")
+            audio = spec.get("audio") if isinstance(spec.get("audio"), dict) else None
+            fetch = bool(spec.get("fetch", True))
         if not url:
             print("no URL: pass --fetch-one URL, or --fetch-job DIR holding url.json",
                   file=sys.stderr)
             return 2
         try:
-            result = _fetch_and_sign(url, job, duration)
+            result = _fetch_and_sign(url, job, duration, audio, fetch)
         except Exception:                    # a crash is the parent's "child failed" path
             traceback.print_exc()
             return 1
