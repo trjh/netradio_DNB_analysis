@@ -223,10 +223,14 @@ the bucket per five minutes answers "has audio" for the whole pending list, and 
 candidate is picked before any uncached one, whatever the host pacing says: reading a file asks
 nothing of the host, so it neither waits for the host's turn nor spends it. A chunk's file is
 already on its own clock, so the `#t=` fragment is a **check**, not a cut — no `-ss`, no `-t`;
-a file that misses its span by more than two seconds is refused with a `span_mismatch` row. An
-entry whose audio is expected and not there (the cache moved on, or the copy failed) is **not a
-failure**: it stays `pending`, held back for a while, with a `no_audio` row — and with the
-fallback off, so does every entry the player has not fetched yet. The harvester never deletes
+a file that misses its span by more than two seconds is **set aside for a day** with a
+`span_mismatch` row (`SPAN_MISMATCH_HOLD_S`), not retired: the player can re-cut the part under
+the same id and key, and the harvester looks again once the hold passes. An entry whose audio is
+expected and not there (the cache moved on, or the copy failed) is **not a failure** either: it
+stays `pending`, held back for fifteen minutes (`NO_AUDIO_HOLD_S`), with a `no_audio` row — and
+with the fallback off, so does every entry the player has not fetched yet. When the bucket is
+configured but its listing cannot be read, nothing is fetched from the web at all (an unknown
+bucket is not an empty one) and one `bucket_listing` row says so. The harvester never deletes
 audio, locally or in the bucket; the player owns both.
 
 For each candidate: decodes the audio (to a spool file, never held in memory), reduces it to a

@@ -39,6 +39,7 @@ _run = subprocess.run
 
 PREFIX = "audio/"
 LIST_TTL_S = 300            # one listing answers "is this id in the bucket" for five minutes
+LIST_MAX_PAGES = 1000       # a paging fault must never loop forever; past this the answer is unknown
 LIST_TIMEOUT_S = 120
 CP_TIMEOUT_S = 900          # a two-hour part is ~150 MB; the copy is local-network at worst
 
@@ -145,7 +146,7 @@ def bucket_ids(max_age_s=LIST_TTL_S, force=False):
     if not force and _LIST["ids"] is not None and now - _LIST["at"] < max_age_s:
         return _LIST["ids"]
     ids, token = set(), None
-    for _page in range(1000):                      # a paging fault must never loop forever
+    for _page in range(LIST_MAX_PAGES):
         cmd = _base_cmd() + ["s3api", "list-objects-v2", "--bucket", _bucket(),
                              "--prefix", PREFIX, "--output", "json"]
         if token:
@@ -170,6 +171,10 @@ def bucket_ids(max_age_s=LIST_TTL_S, force=False):
         token = payload.get("NextContinuationToken")
         if not token:
             break
+    if token:
+        # The page ceiling was hit with more to come. A partial set cached as complete would read
+        # every id past it as "not in the bucket" -- worse than saying nothing. Unknown, or stale.
+        return _LIST["ids"]
     _LIST.update(at=now, ids=ids)
     return ids
 

@@ -149,7 +149,8 @@ class Base(unittest.TestCase):
     def _reset_caches(self):
         harvest._DURATIONS.update({"at": 0.0, "by_url": None})
         harvest._IDS["by_url"] = {}
-        harvest._AVAILABLE.update({"at": 0.0, "ids": None, "local": {}})
+        harvest._AVAILABLE.update({"at": 0.0, "ids": None, "local": {}, "remote_unknown": False})
+        harvest._LISTING_SAID["on"] = False
         harvest._NO_AUDIO.clear()
         harvest._LAST_CHILD.clear()
         harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
@@ -200,6 +201,60 @@ class Availability(Base):
             json.dump({"entries": {"id-none": {"bucket": "trash", "file": "trash/id-none.m4a"}}},
                       fh)
         self.assertIsNotNone(harvest.audio_for(self.URL_NONE))
+
+    def test_the_availability_refresh_forces_the_listing_so_the_caches_do_not_stack(self):
+        harvest.has_audio(self.URL_BUCKET)
+        lists = lambda: len([c for c in self.rec.calls if "list-objects-v2" in c])  # noqa: E731
+        self.assertEqual(lists(), 1)
+        harvest._AVAILABLE["at"] = 0.0                 # five minutes pass for the outer snapshot
+        self.rec.results = [_listing(["audio/id-bucket.opus"])]
+        harvest.has_audio(self.URL_BUCKET)
+        self.assertEqual(lists(), 2, "the inner five-minute cache must not add a second lag")
+
+    def test_an_unknown_listing_is_not_an_empty_bucket(self):
+        """Bucket configured, listing unreadable: a bucket-only entry is neither cached nor
+        uncached, so there is no fallback pass -- the whole queue would otherwise be fetched from
+        the web the moment the endpoint's network path dropped."""
+        self.rec.results = [FakeProc(returncode=1, stderr="could not connect")]
+        self.assertTrue(harvest.bucket_listing_unknown())
+        self.assertIsNone(harvest.audio_for(self.URL_BUCKET))
+        self.assertIsNone(harvest.pick_next([self.URL_BUCKET, self.URL_NONE], {"hosts": {}},
+                                            has_audio=harvest.has_audio),
+                          "fallback on, listing unknown: nothing is picked")
+        self.assertEqual(harvest.pick_next([self.URL_BUCKET, self.URL_LOCAL], {"hosts": {}},
+                                           has_audio=harvest.has_audio), 1,
+                         "a locally held file is still known and still first")
+        state = {}
+        self.assertTrue(harvest.note_listing_unknown(state))
+        self.assertFalse(harvest.note_listing_unknown(state), "once per episode, not per tick")
+        self.assertEqual([r["reason"] for r in state["issues"]], ["bucket_listing"])
+        harvest._AVAILABLE["at"] = 0.0
+        self.rec.results = [_listing(["audio/id-bucket.opus"])]     # the listing comes back
+        self.assertFalse(harvest.bucket_listing_unknown())
+        self.assertTrue(harvest.note_listing_unknown(state), "a good listing ends the episode")
+
+    def test_holds_are_pruned_when_expired_or_no_longer_pending(self):
+        harvest.hold_no_audio("https://a/1")
+        harvest.hold_no_audio("https://a/2", hold_s=-1)
+        harvest.hold_no_audio("https://a/3")
+        self.assertNotIn("https://a/2", harvest._NO_AUDIO, "a new hold drops the expired ones")
+        self.assertEqual(harvest.prune_holds(["https://a/1"]), 1)
+        self.assertEqual(set(harvest._NO_AUDIO), {"https://a/1"})
+        self.assertEqual(harvest.prune_holds(), 0)
+
+    def test_ffprobe_is_taken_from_the_environment_like_the_player(self):
+        seen = []
+
+        def _run(argv, **kwargs):
+            seen.append(argv)
+            return FakeProc(stdout="600.0\n")
+
+        with mock.patch.object(harvest.subprocess, "run", _run):
+            self.assertEqual(harvest._probe_seconds("/x.m4a"), 600.0)
+            os.environ["NETRADIO_FFPROBE"] = "/opt/ffprobe"
+            self.addCleanup(os.environ.pop, "NETRADIO_FFPROBE", None)
+            harvest._probe_seconds("/x.m4a")
+        self.assertEqual([a[0] for a in seen], ["ffprobe", "/opt/ffprobe"])
 
     def test_a_no_audio_answer_holds_the_url_back_for_a_while(self):
         self.assertTrue(harvest.has_audio(self.URL_LOCAL))
@@ -534,6 +589,35 @@ class NoAudioIsNotAVerdict(Base):
         self.assertEqual(self.child_runs, 1, "one child, then the hold; never a second")
         self.assertEqual(len(self.naps), 1, "nothing pickable -> the loop naps")
 
+    def test_an_unknown_listing_naps_and_says_so_once(self):
+        os.environ["NETRADIO_HARVEST_FETCH_FALLBACK"] = "1"
+        self.rec.results = [FakeProc(returncode=1, stderr="could not connect")]
+        q, state = self._run({"pending": [self.URL_BUCKET, self.URL_NONE], "done": []},
+                             fetch=lambda *a: self.fail("fetched with the bucket unknown"))
+        self.assertEqual(len(q["pending"]), 2)
+        self.assertEqual(len(self.naps), 1)
+        self.assertEqual([r["reason"] for r in state["issues"]], ["bucket_listing"])
+
+    def test_a_span_mismatch_is_set_aside_for_the_player_not_retired(self):
+        def _mismatch(url, duration=None):
+            harvest._LAST_CHILD.clear()
+            harvest._LAST_CHILD.update({"ok": False, "reason": "span_mismatch",
+                                        "error": "span mismatch: the file holds 650 s, the label "
+                                                 "says 600 s -- refused, not trimmed"})
+            return None, None, harvest._LAST_CHILD["error"]
+
+        os.environ["NETRADIO_HARVEST_FETCH_FALLBACK"] = "1"
+        q, state = self._run({"pending": [self.URL_BUCKET], "done": []}, fetch=_mismatch)
+        self.assertEqual(q["pending"], [self.URL_BUCKET], "the player can re-cut it: same id, "
+                                                          "same key, so it must stay pending")
+        self.assertEqual(q["done"], [])
+        self.assertEqual([r["reason"] for r in state["issues"] if r.get("url")],
+                         ["span_mismatch"])
+        self.assertEqual(state["errors"], 0)
+        self.assertGreater(harvest._NO_AUDIO[self.URL_BUCKET], time.time() + 23 * 3600,
+                           "set aside for a day, not fifteen minutes")
+        self.assertEqual(len(self.naps), 1)
+
     def test_a_failed_web_fetch_still_paces_its_host(self):
         """A failure result carries no `source`; it must spend the host's turn all the same, or
         a run of dead links on one host is fetched back to back."""
@@ -610,6 +694,29 @@ class TheSplitRuntime(Base):
         self.assertEqual(json.load(open(os.path.join(harvester.RESULTS, self._spooled()[0])))["url"],
                          self.URL_LOCAL)
         self._root_untouched()
+
+    def test_a_span_mismatch_submits_nothing_and_is_set_aside(self):
+        def _mismatch(url, duration=None):
+            harvest._LAST_CHILD.clear()
+            harvest._LAST_CHILD.update({"ok": False, "reason": "span_mismatch", "error": "span"})
+            return None, None, "span mismatch"
+
+        q = {"pending": [self.URL_LOCAL], "done": []}
+        hstate = harvester.blank_hstate()
+        with mock.patch.object(harvest, "stream_chroma", _mismatch):
+            self.assertEqual(harvester.work_once(hstate, q), "waiting")
+        self.assertEqual(self._spooled(), [])
+        self.assertEqual([r["reason"] for r in hstate["issues"]], ["span_mismatch"])
+        self.assertTrue(harvest.is_held(self.URL_LOCAL))
+
+    def test_an_unknown_listing_idles_the_split_runtime_with_one_row(self):
+        self.rec.results = [FakeProc(returncode=1)]
+        q = {"pending": [self.URL_BUCKET], "done": []}
+        hstate = harvester.blank_hstate()
+        with mock.patch.object(harvest, "stream_chroma", lambda *a: self.fail("fetched")):
+            self.assertEqual(harvester.work_once(hstate, q), "idle")
+            self.assertEqual(harvester.work_once(hstate, q), "idle")
+        self.assertEqual([r["reason"] for r in hstate["issues"]], ["bucket_listing"])
 
     def test_a_held_url_is_not_fetched_from_the_web_by_the_split_runtime_either(self):
         harvest.hold_no_audio(self.URL_LOCAL)

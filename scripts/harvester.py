@@ -121,8 +121,8 @@ def _pick(q, hstate, done_set, has_audio=None):
             if has_audio(url):
                 host = host_of(url)
                 return url, host, hstate["hosts"].setdefault(host, {}), 0
-        if not harvest.fetch_fallback_on():
-            return None, None, None, None
+        if not harvest.fetch_fallback_on() or harvest.bucket_listing_unknown():
+            return None, None, None, None       # off, or the bucket is unknown (not empty)
     for url in pending:
         if has_audio is not None and harvest.is_held(url):
             continue                    # waiting for the player's copy: not the web's to fetch
@@ -141,11 +141,14 @@ def work_once(hstate, q):
     """One fetch attempt. Public so tests can step the policy. Returns:
     'fetched' | 'skipped' | 'waiting' | 'idle' | 'halted' | 'stopped'."""
     done_set = set(q.get("done") or [])
+    harvest.prune_holds([u for u in (q.get("pending") or []) if u not in done_set])
     url, host, hinfo, wait = _pick(q, hstate, done_set, has_audio=harvest.has_audio)
     if url is None:
         if wait is not None:
             hstate["session"] = {"phase": "waiting on hosts", "until": time.time() + wait}
             return "waiting"
+        if harvest.bucket_listing_unknown() and harvest.note_listing_unknown(hstate):
+            _save(HSTATE, hstate)
         return "idle"
 
     if already_held(url):
@@ -188,6 +191,16 @@ def work_once(hstate, q):
     if c is None and harvest._LAST_CHILD.get("no_audio"):
         harvest.hold_no_audio(url)
         hstate["session"] = {"phase": "waiting for the player's copy of %s" % url, "until": 0}
+        hstate["current"] = None
+        hstate["updated"] = _now()
+        _save(HSTATE, hstate)
+        return "waiting"
+    # ... and neither is a span mismatch (see harvest.run): set aside for the player to repair.
+    if c is None and harvest._LAST_CHILD.get("reason") == "span_mismatch":
+        harvest.hold_span_mismatch(url)
+        hstate["issues"] = (hstate["issues"] + [{"at": _now(), "url": url,
+                                                 "reason": "span_mismatch",
+                                                 "issue": err or "span mismatch"}])[-50:]
         hstate["current"] = None
         hstate["updated"] = _now()
         _save(HSTATE, hstate)

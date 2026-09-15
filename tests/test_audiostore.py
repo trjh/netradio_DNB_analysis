@@ -14,6 +14,7 @@ import os
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "scripts"))
@@ -188,6 +189,16 @@ class BucketListing(Base):
         self.rec.results = [listing(["audio/a.m4a", "audio/b.m4a"])]
         self.assertEqual(audiostore.bucket_ids(), {"a", "b"})
         self.assertEqual(len(self.rec.calls), 2)
+
+    def test_a_listing_that_outruns_the_page_ceiling_is_unknown_not_partial(self):
+        self.rec.results = [listing(["audio/a.m4a"], token="t1"),
+                            listing(["audio/b.m4a"], token="t2"),
+                            listing(["audio/c.m4a"], token="t3")]
+        with unittest.mock.patch.object(audiostore, "LIST_MAX_PAGES", 2):
+            self.assertIsNone(audiostore.bucket_ids())
+        self.assertIsNone(audiostore._LIST["ids"], "a partial set was cached as complete")
+        self.rec.results = [listing(["audio/a.m4a"])]
+        self.assertEqual(audiostore.bucket_ids(), {"a"})
 
     def test_a_failed_first_listing_is_unknown_not_empty(self):
         self.rec.results = [FakeProc(returncode=1, stderr="boom")]

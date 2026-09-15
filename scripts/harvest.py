@@ -270,6 +270,13 @@ VERIFY_TOLERANCE_S = 2
 # a hold this long lets it catch up rather than re-picking the same URL every pass.
 NO_AUDIO_HOLD_S = 900
 
+# How long a chunk whose cached file did not match its label is set aside. A DEFERRAL, not a
+# verdict: the mismatch is a defect on the player's side of the hand-over, and the player can
+# repair it -- a re-cut part keeps the same id and the same `#t=` URL, so the same key -- and
+# `done` is never re-fetched. A day costs a permanently wrong file one ffprobe per day and keeps
+# it visible in the issues list; a repaired one is signed on the next look.
+SPAN_MISMATCH_HOLD_S = 24 * 3600
+
 
 def fetch_fallback_on():
     """May the harvester still fetch from the web when an entry has no cached audio?
@@ -639,8 +646,9 @@ def _probe_seconds(path):
     is paid for. Not the check of record: the decoded spool's size is measured again afterwards,
     against the same tolerance, so an absent ffprobe costs one decode and never a wrong answer.
     """
+    ffprobe = os.environ.get("NETRADIO_FFPROBE", "").strip() or "ffprobe"   # as the player does
     try:
-        proc = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+        proc = subprocess.run([ffprobe, "-v", "error", "-show_entries", "format=duration",
                                "-of", "csv=p=0", path], capture_output=True, text=True,
                               timeout=60)
     except (OSError, subprocess.TimeoutExpired):
@@ -1868,22 +1876,55 @@ def queue_duration(url, max_age_s=300):
 #
 # The harvester analyses the PLAYER'S copy of a candidate's audio and asks the web only when there
 # is none. "Has audio" is answered for the whole pending list at once, from one local index read
-# and one bucket listing, both cached for a few minutes; the child re-checks the one file it opens.
+# and one bucket listing, both refreshed together every `audiostore.LIST_TTL_S`; the child
+# re-checks the one file it opens.
 
-_AVAILABLE = {"at": 0.0, "ids": None, "local": {}}
-_NO_AUDIO = {}                  # url -> time until which a "no audio" answer holds it back
+_AVAILABLE = {"at": 0.0, "ids": None, "local": {}, "remote_unknown": False}
+_NO_AUDIO = {}                  # url -> time until which a hold keeps it from being picked
+_LISTING_SAID = {"on": False}   # "the bucket listing failed" has been said for this episode
 
 
 def _availability(max_age_s=audiostore.LIST_TTL_S):
+    """The availability snapshot, refreshed as one unit: the local index and the bucket listing
+    are read together, and the listing is FORCED so the two caches do not stack (a five-minute
+    cache over a five-minute cache lags the bucket by up to ten).
+
+    `remote_unknown` is the honesty bit: the bucket is configured but the listing could not be
+    read even once (a dark CLI, an unreachable endpoint). Unknown is not empty -- see
+    `bucket_listing_unknown`.
+    """
     now = time.time()
     if _AVAILABLE["ids"] is None or now - _AVAILABLE["at"] > max_age_s:
         local = audiostore.local_files()
         ids = set(local)
-        remote = audiostore.bucket_ids()
+        remote = audiostore.bucket_ids(force=True)
         if remote:
             ids |= remote
-        _AVAILABLE.update({"at": now, "ids": ids, "local": local})
+        unknown = audiostore.enabled() and remote is None
+        if not unknown:
+            _LISTING_SAID["on"] = False          # a good listing ends the episode
+        _AVAILABLE.update({"at": now, "ids": ids, "local": local, "remote_unknown": unknown})
     return _AVAILABLE
+
+
+def bucket_listing_unknown():
+    """True when the bucket is configured but its listing cannot be read. Then "has no audio" is
+    not knowable for a bucket-only entry, and the fallback must NOT run: with the bucket
+    unreachable (the endpoint is behind a network path that drops) every bucket-only entry would
+    otherwise read as uncached and be fetched from the web -- the whole queue, twice."""
+    return bool(_availability()["remote_unknown"])
+
+
+def note_listing_unknown(state):
+    """One issues row per episode (not per tick) saying the listing failed. True when it wrote."""
+    if _LISTING_SAID["on"]:
+        return False
+    _LISTING_SAID["on"] = True
+    state["issues"] = ((state.get("issues") or []) + [
+        {"at": _now(), "reason": "bucket_listing",
+         "issue": "the audio bucket's listing cannot be read -- nothing is fetched from the "
+                  "web until it can (an unknown bucket is not an empty one)"}])[-50:]
+    return True
 
 
 def audio_for(url):
@@ -1899,15 +1940,42 @@ def audio_for(url):
     return {"id": item_id, "path": avail["local"].get(item_id)}
 
 
+def hold_url(url, hold_s):
+    """Keep `url` out of both of `pick_next`'s passes for `hold_s` seconds. Expired holds are
+    dropped on the way, so the table never grows past the URLs actually held."""
+    now = time.time()
+    for u in [u for u, until in _NO_AUDIO.items() if until <= now]:
+        del _NO_AUDIO[u]
+    _NO_AUDIO[url] = now + hold_s
+
+
 def hold_no_audio(url, hold_s=NO_AUDIO_HOLD_S):
     """The child found nothing where the availability set said there was audio. Hold the URL
     back for a while rather than pick it again on the next pass -- the set is a snapshot, and the
     next re-read will agree with the child."""
-    _NO_AUDIO[url] = time.time() + hold_s
+    hold_url(url, hold_s)
+
+
+def hold_span_mismatch(url, hold_s=SPAN_MISMATCH_HOLD_S):
+    """The cached file did not match its label. Set aside for the player to repair (see
+    `SPAN_MISMATCH_HOLD_S`); looked at again, same id and key, once the hold passes."""
+    hold_url(url, hold_s)
+
+
+def prune_holds(pending=None):
+    """Drop expired holds, and -- given the pending list -- holds on URLs no longer pending (ruled
+    on, or gone from the player's queue). Returns how many were dropped."""
+    now = time.time()
+    keep = set(pending) if pending is not None else None
+    gone = [u for u, until in _NO_AUDIO.items()
+            if until <= now or (keep is not None and u not in keep)]
+    for u in gone:
+        del _NO_AUDIO[u]
+    return len(gone)
 
 
 def is_held(url):
-    """True while a "no audio" answer is still holding this URL back (see `hold_no_audio`)."""
+    """True while a hold (`hold_no_audio`, `hold_span_mismatch`) keeps this URL back."""
     return _NO_AUDIO.get(url, 0) > time.time()
 
 
@@ -2043,6 +2111,13 @@ def pick_next(pending, state, has_audio=None):
     fallback pass skips it too. Without that the hold only moved the URL from the first pass to
     the second, and the loop re-ran the same child for it with no nap between (the child said
     `no_audio` again, the hold was refreshed, and nothing slept).
+
+    AN UNKNOWN BUCKET IS NOT AN EMPTY ONE. When the bucket is configured but its listing cannot
+    be read, "this entry has no audio" is not knowable, so there is no fallback pass at all
+    (`bucket_listing_unknown`): None, and the caller naps.
+
+    Host rotation is the FALLBACK pass's rule. Cached candidates come out in pending order
+    whatever their hosts, and that is right: a file read touches no host.
     """
     now = time.time()
     last = state.get("hosts", {})
@@ -2066,7 +2141,7 @@ def pick_next(pending, state, has_audio=None):
     with_audio = [i for i, url in enumerate(pending) if has_audio(url)]
     if with_audio:
         return best_of(with_audio, ignore_pacing=True)
-    if not fetch_fallback_on():
+    if not fetch_fallback_on() or bucket_listing_unknown():
         return None
     return best_of(i for i, url in enumerate(pending) if not is_held(url))
 
@@ -2262,6 +2337,7 @@ def run(args):
         if added or dropped:
             _save(QUEUE, q)
             print("listen queue: +%d new, -%d ruled on" % (added, dropped))
+        prune_holds(q["pending"])          # expired holds, and holds on URLs no longer pending
         # Say so ONCE per URL per run. The queue is re-read every pass, so the same refusal comes
         # back every few minutes for as long as the entry sits there; a row per pass would bury
         # the issue list under the one thing about it that is not news.
@@ -2328,6 +2404,9 @@ def run(args):
 
         idx = pick_next(q["pending"], state, has_audio=has_audio)
         if idx is None:
+            if bucket_listing_unknown() and note_listing_unknown(state):
+                print("!! the audio bucket's listing cannot be read -- no web fetch until it can")
+                _save(STATE, state)
             _nap(60)
             continue
         url = q["pending"][idx]
@@ -2394,6 +2473,23 @@ def run(args):
                 state["issues"] = ((state.get("issues") or []) + [
                     {"at": _now(), "url": url, "reason": "no_audio",
                      "issue": "%s -- waiting for the player's copy" % (err or "no audio")}])[-50:]
+                _save(STATE, state)
+            continue
+
+        # A SPAN MISMATCH IS A DEFERRAL TOO. The cached file did not match its label: the
+        # player's side of the hand-over is wrong, and the player can repair it under the same
+        # id and key. Set aside for a day (`SPAN_MISMATCH_HOLD_S`), said once per URL per run,
+        # never filed to `done`. The whole-entry length mismatch below stays a verdict -- a
+        # truncated web fetch has no owner to repair it.
+        if not cached and _LAST_CHILD.get("reason") == "span_mismatch":
+            hold_span_mismatch(url)
+            if url not in said_no_audio:
+                said_no_audio.add(url)
+                print("# span mismatch for %s -- %s; set aside for the player to repair"
+                      % (url, err))
+                state["issues"] = ((state.get("issues") or []) + [
+                    {"at": _now(), "url": url, "reason": "span_mismatch",
+                     "issue": "%s -- set aside a day for the player to re-cut it" % err}])[-50:]
                 _save(STATE, state)
             continue
 
@@ -2472,7 +2568,7 @@ def run(args):
             state["errors"] += 1
             row = {"at": _now(), "url": url, "issue": err or "no signature"}
             if not cached and _LAST_CHILD.get("reason"):
-                row["reason"] = _LAST_CHILD["reason"]       # e.g. span_mismatch: a bad hand-over
+                row["reason"] = _LAST_CHILD["reason"]
             state["issues"] = (state["issues"] + [row])[-50:]
             _save(STATE, state)
             continue
