@@ -545,7 +545,8 @@ class TheChildBoundary(unittest.TestCase):
 
     def test_the_duration_rides_in_the_job_file_beside_the_url(self):
         argv, spec = self._spawn("https://y/a", 21600)
-        self.assertEqual(spec, {"url": "https://y/a", "duration": 21600})
+        self.assertEqual(spec, {"url": "https://y/a", "duration": 21600,
+                                "audio": None, "fetch": True})
         self.assertNotIn("--duration", argv)
 
     def test_nothing_about_the_job_is_on_the_command_line(self):
@@ -560,7 +561,8 @@ class TheChildBoundary(unittest.TestCase):
         """Written as null rather than omitted or zeroed: the child reads "not known", which is
         what `too_long` treats as no evidence of length."""
         _, spec = self._spawn("https://y/a")
-        self.assertEqual(spec, {"url": "https://y/a", "duration": None})
+        self.assertEqual(spec, {"url": "https://y/a", "duration": None,
+                                "audio": None, "fetch": True})
 
     def test_the_child_reads_back_the_same_verdict_that_was_written(self):
         """The round trip through JSON is where a number can quietly change meaning. What has to
@@ -594,7 +596,7 @@ class TheChildBoundary(unittest.TestCase):
         """NETRADIO_HARVEST_CHILD=0 runs the fetch in-process; it must not lose the check."""
         seen = {}
 
-        def _fetch(url, job, duration=None):
+        def _fetch(url, job, duration=None, audio=None, fetch=True):
             seen["duration"] = duration
             return {"ok": False, "error": "nope"}
 

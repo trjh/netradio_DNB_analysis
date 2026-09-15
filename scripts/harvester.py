@@ -105,13 +105,25 @@ def already_held(url):
     return sigstore.enabled() and sigstore.have_remote(_sig_key(url))
 
 
-def _pick(q, hstate, done_set):
-    """The first pending URL whose host is ready — harvest.py's selection, read-only."""
+def _pick(q, hstate, done_set, has_audio=None):
+    """The first pending URL whose host is ready — harvest.py's selection, read-only.
+
+    With `has_audio` (harvest.has_audio: the player's cache holds this entry's audio), a cached
+    candidate comes first and needs no host to be ready -- reading a file asks the host for
+    nothing. The web is asked only when nothing pending is cached, and only while
+    `harvest.fetch_fallback_on()`; with the fallback off, the rest wait.
+    """
     now = time.time()
     best_wait = None
-    for url in q.get("pending") or []:
-        if url in done_set:
-            continue
+    pending = [u for u in (q.get("pending") or []) if u not in done_set]
+    if has_audio is not None:
+        for url in pending:
+            if has_audio(url):
+                host = host_of(url)
+                return url, host, hstate["hosts"].setdefault(host, {}), 0
+        if not harvest.fetch_fallback_on():
+            return None, None, None, None
+    for url in pending:
         host = host_of(url)
         hinfo = hstate["hosts"].setdefault(host, {})
         if hinfo.get("blocked"):
@@ -127,7 +139,7 @@ def work_once(hstate, q):
     """One fetch attempt. Public so tests can step the policy. Returns:
     'fetched' | 'skipped' | 'waiting' | 'idle' | 'halted' | 'stopped'."""
     done_set = set(q.get("done") or [])
-    url, host, hinfo, wait = _pick(q, hstate, done_set)
+    url, host, hinfo, wait = _pick(q, hstate, done_set, has_audio=harvest.has_audio)
     if url is None:
         if wait is not None:
             hstate["session"] = {"phase": "waiting on hosts", "until": time.time() + wait}
@@ -168,6 +180,17 @@ def work_once(hstate, q):
         _save(HSTATE, hstate)
         return "stopped"
 
+    # NO AUDIO IS NOT A VERDICT either (see harvest.run): the cache said the entry had audio and
+    # the child found none, or it has none and the fallback is off. Nothing is submitted -- the
+    # collector would fold it and retire the URL to `done` -- and the URL is held back a while.
+    if c is None and harvest._LAST_CHILD.get("no_audio"):
+        harvest.hold_no_audio(url)
+        hstate["session"] = {"phase": "waiting for the player's copy of %s" % url, "until": 0}
+        hstate["current"] = None
+        hstate["updated"] = _now()
+        _save(HSTATE, hstate)
+        return "waiting"
+
     if is_bot_wall(err):
         hstate["halted"] = {"at": _now(), "host": host, "error": (err or "")[:200]}
         hstate["issues"] = (hstate["issues"] + [{"at": _now(), "host": host,
@@ -190,7 +213,8 @@ def work_once(hstate, q):
         _save(HSTATE, hstate)
         return "waiting"
     hinfo["strikes"] = 0
-    hinfo["next_ok"] = time.time() + gap
+    if harvest._LAST_CHILD.get("source") not in ("file", "bucket"):
+        hinfo["next_ok"] = time.time() + gap         # a cache read spent none of the host's turn
 
     if c is None:
         # SET ASIDE, NOT RETIRED, when the fetch stopped at the two-hour mark: this runtime has
