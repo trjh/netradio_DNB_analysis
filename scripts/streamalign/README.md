@@ -29,8 +29,8 @@ function-by-function tour of how the pieces compose.
   file placed downstream. Skips must be found, not approximated away.
 - **No third-party audio deps in the core.** ffmpeg decodes any container to
   float32 mono @ 16 kHz; numpy does the FFTs. Decoded arrays are cached on disk.
-  (Feature-based original-track↔mix work uses `librosa` in `.venv`; see
-  `requirements-streamalign.txt`.)
+  (Feature-based original-track↔mix work uses `librosa`, imported lazily; `make venv`
+  installs it -- see `requirements-streamalign.txt`.)
 
 ## Modules — three roles
 

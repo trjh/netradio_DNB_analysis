@@ -160,8 +160,8 @@ def track_sync_groundtruth(labels_dir=None):
 # Waveform correlation does not lock original-to-mix (DJ EQ + lossy 16 kHz mix vs a
 # clean source); chroma is robust to timbre/EQ and subsequence-DTW finds where the
 # played excerpt sits in the original, recovering the rate (warp-path slope). librosa
-# is imported lazily so the rest of the module loads under the core (no-librosa)
-# python; run callers with .venv/bin/python.
+# is imported lazily so the rest of the module loads under a bare python3 too (the
+# core needs only numpy); run callers with .venv/bin/python, which has librosa.
 
 # Reliability gate (precision-first): a recovered rate is only trusted when the warp
 # path is BOTH straight (high R²) AND a good chroma match (low per-frame DTW cost).

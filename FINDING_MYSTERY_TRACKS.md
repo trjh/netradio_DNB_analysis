@@ -132,10 +132,10 @@ changed to a real artist/title is *solved*, and the tools will (correctly) stop 
 Then:
 
 ```bash
-set -a && . ./.env_vars && set +a
+set -a && . ./.env && set +a
 
 # what does the engine now consider unsolved-and-searchable?
-PYTHONPATH=scripts .env/bin/python -c \
+PYTHONPATH=scripts .venv/bin/python -c \
   "from streamalign import mystery; print([e['number'] for e in mystery.searchable()])"
 
 # 1. search the originals you already have
@@ -146,7 +146,7 @@ PYTHONPATH=scripts .venv/bin/python scripts/match_queue.py --out /tmp/queue-matc
 
 # 3. a cheap re-check against the commercial catalogues (ACRCloud + AudD). Proven defeated by
 #    the codec on the clips tried so far (see §4), so expect nothing — but catalogues grow and a
-#    cleaner future clip might land, and it costs a few free requests. Needs the API keys in .env_vars.
+#    cleaner future clip might land, and it costs a few free requests. Needs the API keys in .env.
 python3 scripts/identify_by_api.py --query "Mystery Track 8.wav" --windows 8
 
 # 4. build the video to post
@@ -182,7 +182,7 @@ If you can get audio of a *plausible* record, the engine will tell you reliably 
 the mystery:
 
 ```bash
-set -a && . ./.env_vars && set +a
+set -a && . ./.env && set +a
 PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --all-mystery
 PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --pool ~/dnb-candidates
 ```

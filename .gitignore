@@ -38,6 +38,7 @@ dropbox
 Makefile.audio
 alignscore.log
 sheetscript/logs
+# `.env` -- the machine-local variables file (paths, credentials). Copy .env.example.
 .env
 
 # Local/private files — not committed
@@ -48,7 +49,6 @@ sheetscript/logs
 # player repo instead (netradio_DNB_player, under docs/).
 AGENT.md
 .claude/
-.env_vars
 Archive/
 audacity/
 jaz_links

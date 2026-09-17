@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Identify a record from the 1998 stream by CHROMA matching against a candidate pool.
 
-    set -a && . ./.env_vars && set +a
+    set -a && . ./.env && set +a
     PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --query "Mystery Track 7.wav"
     PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --all-mystery
     PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --pool ~/dnb-candidates
@@ -133,7 +133,7 @@ def main(argv=None):
     sources = os.environ.get("NETRADIO_SOURCES_DIR")
     pool_dir = args.pool or sources
     if not pool_dir or not os.path.isdir(pool_dir):
-        sys.exit("no pool: set NETRADIO_SOURCES_DIR in .env_vars, or pass --pool")
+        sys.exit("no pool: set NETRADIO_SOURCES_DIR in .env, or pass --pool")
 
     queries = list(args.query or [])
     if args.all_mystery:

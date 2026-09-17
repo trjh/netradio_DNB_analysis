@@ -389,7 +389,7 @@ def main():
     ap.add_argument("--status", action="store_true")
     args = ap.parse_args()
     if not enabled():
-        print("collector is dark -- set NETRADIO_COLLECTOR=on (.env_vars) to enable the split "
+        print("collector is dark -- set NETRADIO_COLLECTOR=on (.env) to enable the split "
               "collector. Mode A (harvest.py --run) is unaffected.")
         return
     if args.status:

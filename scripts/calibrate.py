@@ -171,7 +171,7 @@ def main():
 
     src = os.environ.get("NETRADIO_SOURCES_DIR")
     if not src or not os.path.isdir(src):
-        sys.exit("NETRADIO_SOURCES_DIR is unset (see .env_vars.example)")
+        sys.exit("NETRADIO_SOURCES_DIR is unset (see .env.example)")
     out = sys.stdout if args.out == "-" else open(args.out, "w", buffering=1)
 
     meta = json.load(open(os.path.join(_gt.REPO_ROOT, "track-metadata.json")))

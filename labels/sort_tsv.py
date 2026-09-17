@@ -11,7 +11,7 @@ import subprocess
 import time
 
 # `labels/` and `scripts/` both sit under the repo root; used to reach streamalign (starter
-# seeding + next_stem) and to source `.env_vars` for the engine steps.
+# seeding + next_stem) and to source `.env` for the engine steps.
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPTS_DIR = os.path.join(REPO_ROOT, "scripts")
 
@@ -606,13 +606,13 @@ def check_output_name(path):
 
 
 def load_env_vars(path=None):
-    """Fold the repo-root `.env_vars` into os.environ so the engine steps see e.g.
+    """Fold the repo-root `.env` into os.environ so the engine steps see e.g.
     NETRADIO_SOURCES_DIR (the Makefile sources it; a bare `python3 sort_tsv.py` did not).
 
-    `.env_vars` is `VAR=value`, `#` comments, no quotes/`export` (per `.env_vars.example`).
+    `.env` is `VAR=value`, `#` comments, no quotes/`export` (per `.env.example`).
     Real environment variables win -- setdefault, never clobber. A missing file is fine.
     """
-    path = path or os.path.join(REPO_ROOT, ".env_vars")
+    path = path or os.path.join(REPO_ROOT, ".env")
     try:
         with open(path) as handle:
             for line in handle:
@@ -626,9 +626,9 @@ def load_env_vars(path=None):
 
 
 def engine_python():
-    """The interpreter that can run the librosa-backed engine (hints/align): the 3.13 `.venv`
+    """The interpreter that can run the librosa-backed engine (hints/align): the repo's `.venv`
     if built, else None. sort_tsv itself is stdlib and runs under whatever launched it, but
-    librosa has no 3.14 wheels -- so the engine step needs `.venv`. None => tell the user."""
+    the engine step needs librosa, which only `.venv` has. None => tell the user."""
     venv = os.path.join(REPO_ROOT, ".venv", "bin", "python")
     return venv if os.path.exists(venv) else None
 
@@ -676,7 +676,7 @@ def prep_next(path, force=False, override=None):
             return
 
     if not py:
-        sys.stderr.write(f"NOTE: the 3.13 .venv isn't built (run `make align-env`). When ready:\n  {cmd}\n")
+        sys.stderr.write(f"NOTE: .venv isn't built (run `make venv`). When ready:\n  {cmd}\n")
         return
     sys.stderr.write(f"Running: {cmd}\n")
     subprocess.run([py, "-m", "streamalign", "hints", nxt],

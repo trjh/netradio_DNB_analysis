@@ -3,14 +3,24 @@ ifeq (, $(PYTHON))
     $(error "PYTHON=$(PYTHON) not found in $(PATH)")
 endif
 
-# librosa -> numba -> llvmlite, which has no Python 3.14 wheels. The alignment venv is
-# therefore pinned to 3.13, independently of whatever `python3` happens to be.
-PYTHON313=$(shell command -v python3.13)
+# The ONE virtualenv is `.venv`. It prefers python3.13 when that is installed -- the interpreter
+# the harvester has run under since 2026-07 -- and falls back to whatever `python3` is. (The
+# 3.13 pin dates from librosa -> numba -> llvmlite having no 3.14 wheels; they do now, so the
+# fallback works, but the tested path is still 3.13.)
+VENV_PYTHON=$(or $(shell command -v python3.13),$(PYTHON))
 
-# Machine-specific paths (NETRADIO_SOURCES_DIR, ...). Gitignored, since this repo is PUBLIC.
-# Written as `VAR=value` so it is both make-includable and shell-sourceable. Optional: the
-# leading `-` means "don't fail if it isn't there".
--include .env_vars
+# Machine-specific paths and credentials (NETRADIO_SOURCES_DIR, ...) live in `.env`, gitignored
+# since this repo is PUBLIC. `VAR=value` lines, so the file is both make-includable and
+# shell-sourceable (`set -a; . ./.env; set +a`). Optional: the leading `-` means "don't fail if
+# it isn't there". Same name and format as the player repo's `.env`, so one block can serve both.
+#
+# Until 2026-09 `.env` was the general virtualenv DIRECTORY and the variables lived in
+# `.env_vars`. `-include` of a directory stops make dead with "Is a directory", so say what
+# happened instead. The old venv is not needed: `.venv` now carries every dependency.
+ifneq (,$(wildcard .env/.))
+    $(error ".env is the retired general virtualenv directory. Remove it -- rm -rf .env -- then: mv .env_vars .env  (or: cp .env.example .env)")
+endif
+-include .env
 export NETRADIO_SOURCES_DIR
 
 #########################################
@@ -19,63 +29,50 @@ export NETRADIO_SOURCES_DIR
 SHELL=bash
 
 .DEFAULT_GOAL := env
-env: venv dep match-tools   ## EVERYTHING the tools need, incl. the align binaries (sonic-annotator + match-vamp)
+env: venv match-tools   ## EVERYTHING the tools need, incl. the align binaries (sonic-annotator + match-vamp)
 
 match-tools:          ## install/build sonic-annotator + the match-vamp plugin (idempotent; macOS)
 	bash scripts/install_match_tools.sh
 
-venv:
-	rm -rf .env
-	$(PYTHON) -m venv .env
-	.env/bin/pip install --upgrade pip
-
-dep-upgrade:
-	pip-review --auto
-	.env/bin/pip freeze -r requirements.txt | grep -B100 "pip freeze" | grep -v "pip freeze" > requirements-latest.txt
-	rm requirements.txt
-	mv requirements-latest.txt requirements.txt
-
-dep: pip
-	PIP_CONFIG_FILE=./env/pip.conf .env/bin/pip install -r requirements.txt --upgrade
-
-pip:
-	.env/bin/pip install --upgrade pip
-
-#########################################
-#####   ALIGNMENT ENGINE VENV (.venv) ###
-#########################################
-# The core engine (groundtruth/align/skips/solve) needs only numpy + ffmpeg and runs under
-# the general `.env` venv. But the original-track <-> mix alignment (track_mix's chroma+DTW,
-# and the origNNN spans in `streamalign hints`) needs librosa, whose numba/llvmlite chain has
-# no Python 3.14 wheels. So librosa lives in a SEPARATE, 3.13-pinned venv: `.venv`.
-#
-# Two venvs, deliberately: `.env` tracks whatever python3 is current; `.venv` stays on 3.13
-# for as long as numba needs it. Run the librosa-backed tools with .venv/bin/python.
-
-align-env:            ## create .venv (python3.13) + install the alignment engine deps (librosa)
-ifeq (, $(PYTHON313))
-	$(error "python3.13 not found — librosa's numba/llvmlite have no 3.14 wheels. brew install python@3.13")
-endif
+# One venv, every dependency: the label tooling (requirements.txt) AND the alignment engine +
+# harvester (requirements-streamalign.txt: librosa, soundfile). Rebuilds from scratch. To add
+# the label tooling to an existing `.venv` without rebuilding it: `make dep`.
+venv:                 ## (re)create .venv with BOTH requirement sets
 	rm -rf .venv
-	$(PYTHON313) -m venv .venv
+	$(VENV_PYTHON) -m venv .venv
 	.venv/bin/pip install --upgrade pip
-	.venv/bin/pip install -r requirements-streamalign.txt
+	.venv/bin/pip install -r requirements.txt -r requirements-streamalign.txt
 	@echo
-	@echo "alignment venv ready. Run the librosa-backed tools with .venv/bin/python, e.g.:"
+	@echo "venv ready ($$(.venv/bin/python --version)). Run every tool with .venv/bin/python, e.g.:"
 	@echo "  PYTHONPATH=scripts .venv/bin/python -m streamalign hints <stem>"
 	@echo "(hints = prep for the file you are ABOUT to label; sort_tsv offers it for the next stem)"
 
-align-check:          ## verify the alignment venv can do the librosa-backed work
+dep: pip              ## install/upgrade both requirement sets into the existing .venv
+	.venv/bin/pip install -r requirements.txt -r requirements-streamalign.txt --upgrade
+
+pip:
+	.venv/bin/pip install --upgrade pip
+
+dep-upgrade:
+	pip-review --auto
+	.venv/bin/pip freeze -r requirements.txt | grep -B100 "pip freeze" | grep -v "pip freeze" > requirements-latest.txt
+	rm requirements.txt
+	mv requirements-latest.txt requirements.txt
+
+align-env: venv       ## alias, kept for muscle memory: the alignment engine now lives in the one venv
+
+align-check:          ## verify the venv can do the librosa-backed work, and the originals resolve
 	@.venv/bin/python -c "import librosa, numpy; print('librosa', librosa.__version__, '/ numpy', numpy.__version__)" \
-	  || { echo "alignment venv missing/incomplete — run: make align-env"; exit 1; }
+	  || { echo "venv missing/incomplete — run: make venv"; exit 1; }
 	@test -n "$(NETRADIO_SOURCES_DIR)" \
-	  || { echo "NETRADIO_SOURCES_DIR unset — set it in .env_vars (see .env_vars.example)"; exit 1; }
+	  || { echo "NETRADIO_SOURCES_DIR unset — set it in .env (see .env.example)"; exit 1; }
 	@test -d "$(NETRADIO_SOURCES_DIR)" \
 	  && echo "originals OK: $(NETRADIO_SOURCES_DIR)" \
 	  || { echo "NETRADIO_SOURCES_DIR does not resolve: $(NETRADIO_SOURCES_DIR)"; exit 1; }
 
+# unittest, not pytest: pytest is in neither requirements file, and CI runs unittest too.
 test:                 ## run the test suite
-	.env/bin/python -m pytest tests/ -q
+	.venv/bin/python -m unittest discover -s tests
 
 # MallocLargeCache=0 tells macOS not to keep freed large blocks inside the process. Without it
 # the harvester's footprint only ever goes up: it frees everything after each candidate, libmalloc
@@ -83,7 +80,7 @@ test:                 ## run the test suite
 # the environment at process start, which is why it is here and not inside the script. Harmless on
 # other platforms (an unknown variable). The fetch child sets it again for itself.
 harvest-run:          ## work the queue (runs for weeks), with the memory bound in place
-	set -a; [ -f .env_vars ] && . ./.env_vars; set +a; \
+	set -a; [ -f .env ] && . ./.env; set +a; \
 	MallocLargeCache=0 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --run
 
 #########################################
@@ -99,14 +96,14 @@ harvest-run:          ## work the queue (runs for weeks), with the memory bound 
 tracklist:            ## resolve artwork into track-metadata.json + render TRACKLIST.md (network)
 	$(PYTHON) scripts/render_tracklist.py
 
-# Both of these need NETRADIO_PLAYER_REPO, which is already in .env_vars alongside every other
-# machine path -- but make does not read .env_vars, so they failed with "set NETRADIO_PLAYER_REPO"
-# even though it was set. Source it here. (`set -a` exports; the `-` before `.` is not needed since
-# .env_vars is required for these targets anyway, but a missing file must not be a syntax error.)
-sync:                 ## cross-repo tracklist sync (3-way, PR-based). Reads NETRADIO_PLAYER_REPO from .env_vars. ARGS=--dry-run
-	set -a; [ -f .env_vars ] && . ./.env_vars; set +a; \
+# Both of these need NETRADIO_PLAYER_REPO, which is already in .env alongside every other
+# machine path -- but make does not export what it -includes, so they failed with "set
+# NETRADIO_PLAYER_REPO" even though it was set. Source it here. (`set -a` exports; `.env` is
+# required for these targets anyway, but a missing file must not be a syntax error.)
+sync:                 ## cross-repo tracklist sync (3-way, PR-based). Reads NETRADIO_PLAYER_REPO from .env. ARGS=--dry-run
+	set -a; [ -f .env ] && . ./.env; set +a; \
 	NETRADIO_ANALYSIS_REPO=$(CURDIR) bash scripts/tracklist_sync.sh $(ARGS)
 
 tracklist-check:      ## report whether the analysis<->player track-metadata.json copies match
-	set -a; [ -f .env_vars ] && . ./.env_vars; set +a; \
+	set -a; [ -f .env ] && . ./.env; set +a; \
 	NETRADIO_ANALYSIS_REPO=$(CURDIR) bash scripts/check_tracklist_sync.sh

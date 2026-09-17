@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Verify the ORIGINALS against AcoustID: confirm what each source file actually is.
 
-    set -a && . ./.env_vars && set +a          # needs ACOUSTID_DEV_API_KEY
-    PYTHONPATH=scripts .env/bin/python scripts/acoustid_check.py            # all of sources/
-    PYTHONPATH=scripts .env/bin/python scripts/acoustid_check.py --mismatch # only disagreements
-    PYTHONPATH=scripts .env/bin/python scripts/acoustid_check.py --file 013-*.mp3
+    set -a && . ./.env && set +a          # needs ACOUSTID_DEV_API_KEY
+    PYTHONPATH=scripts .venv/bin/python scripts/acoustid_check.py            # all of sources/
+    PYTHONPATH=scripts .venv/bin/python scripts/acoustid_check.py --mismatch # only disagreements
+    PYTHONPATH=scripts .venv/bin/python scripts/acoustid_check.py --file 013-*.mp3
 
 It fingerprints each file in `NETRADIO_SOURCES_DIR` the way AcoustID actually wants it -- the
 fingerprint from the START of the recording, paired with its FULL duration -- and reports what
@@ -115,11 +115,11 @@ def main(argv=None):
 
     key = os.environ.get("ACOUSTID_DEV_API_KEY")
     if not key:
-        sys.exit("ACOUSTID_DEV_API_KEY is unset. It belongs in .env_vars (gitignored -- this "
-                 "repo is PUBLIC), then: set -a && . ./.env_vars && set +a")
+        sys.exit("ACOUSTID_DEV_API_KEY is unset. It belongs in .env (gitignored -- this "
+                 "repo is PUBLIC), then: set -a && . ./.env && set +a")
     sources = os.environ.get("NETRADIO_SOURCES_DIR")
     if not sources or not os.path.isdir(sources):
-        sys.exit("NETRADIO_SOURCES_DIR is unset or missing (see .env_vars.example)")
+        sys.exit("NETRADIO_SOURCES_DIR is unset or missing (see .env.example)")
 
     names = sorted(f for f in os.listdir(sources)
                    if f.rsplit(".", 1)[-1].lower() in AUDIO_EXTS)

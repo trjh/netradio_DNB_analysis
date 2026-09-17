@@ -285,7 +285,7 @@ def main():
     ap.add_argument("--status", action="store_true")
     args = ap.parse_args()
     if not enabled():
-        print("harvester is dark -- set NETRADIO_HARVESTER=on (.env_vars) to enable the split "
+        print("harvester is dark -- set NETRADIO_HARVESTER=on (.env) to enable the split "
               "harvester. Mode A (harvest.py --run) is unaffected.")
         return
     if args.status:
