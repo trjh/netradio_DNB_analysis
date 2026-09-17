@@ -49,6 +49,9 @@ sheetscript/logs
 # player repo instead (netradio_DNB_player, under docs/).
 AGENT.md
 .claude/
+# `.env_vars` -- the variables file's OLD name (renamed `.env` 2026-09); still ignored, because
+# every existing clone has one with credentials in it, and a `.env_vars -> .env` bridge link too.
+.env_vars
 Archive/
 audacity/
 jaz_links

@@ -617,6 +617,10 @@ def load_env_vars(path=None):
     """
     path = path or os.path.join(REPO_ROOT, ".env")
     old = os.path.join(os.path.dirname(path), ".env_vars")
+    if os.path.isdir(path):
+        raise SystemExit("%s is the retired general virtualenv directory, not the variables file. "
+                         "Remove it -- rm -rf %s -- then: mv %s %s  (or: cp .env.example .env)"
+                         % (path, path, old, path))
     if not os.path.exists(path) and os.path.isfile(old):
         raise SystemExit(".env_vars is the old name of the variables file; it is no longer read. "
                          "Rename it: mv %s %s" % (old, path))

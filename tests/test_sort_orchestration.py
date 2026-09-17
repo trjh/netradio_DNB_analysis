@@ -86,6 +86,15 @@ class EnvVarsLoading(unittest.TestCase):
         finally:
             os.environ.pop("NETRADIO_SOURCES_DIR", None)
 
+    def test_a_env_directory_is_refused_not_read(self):
+        """Before the rename `.env` was a virtualenv DIRECTORY. Opening it raised
+        IsADirectoryError, an OSError the loader swallowed -- every variable silently missing."""
+        d = tempfile.mkdtemp()
+        os.mkdir(os.path.join(d, ".env"))
+        with self.assertRaises(SystemExit) as cm:
+            sort_tsv.load_env_vars(os.path.join(d, ".env"))
+        self.assertIn("rm -rf", str(cm.exception))
+
     def test_the_makefile_refuses_a_leftover_env_vars_file(self):
         """The same guard at make's parse time, in a scratch copy of the Makefile."""
         import shutil, subprocess

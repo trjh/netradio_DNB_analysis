@@ -7,7 +7,7 @@
 > [HOWTO](../HOWTO.md) (which tool *now*) · [FINDING_MYSTERY_TRACKS](../FINDING_MYSTERY_TRACKS.md)
 > (identifying the unnamed tracks).
 
-One Python: **`.venv/bin/python`**, built by `make venv` from both requirements files —
+One Python: **`.venv/bin/python`**, built by `make venv` from both requirements files (`make dep` installs into an existing one; `make venv-rebuild` deletes and recreates it — stop the harvester and the align server first) —
 the label tooling (numpy, pydub, pyaudacity) and the alignment engine + harvester
 (**librosa**, soundfile). It prefers python3.13, the interpreter the harvester runs under.
 (Until 2026-09 there were two venvs: a general `.env` and the librosa `.venv`. `.env` is now

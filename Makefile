@@ -44,8 +44,11 @@ match-tools:          ## install/build sonic-annotator + the match-vamp plugin (
 # One venv, every dependency: the label tooling (requirements.txt) AND the alignment engine +
 # harvester (requirements-streamalign.txt: librosa, soundfile). Rebuilds from scratch. To add
 # the label tooling to an existing `.venv` without rebuilding it: `make dep`.
-venv:                 ## (re)create .venv with BOTH requirement sets
-	rm -rf .venv
+# `make venv` never deletes an existing `.venv`: the harvester and the align server execute from
+# it, and a bare `make` (default goal `env` -> `venv`) used to reach `rm -rf .venv` under them.
+# Rebuilding from scratch is its own, deliberate verb: `make venv-rebuild`.
+venv:                 ## create .venv with BOTH requirement sets (refuses if it already exists)
+	@test ! -e .venv/bin/python || { echo ".venv already built ($$(.venv/bin/python --version)). make dep installs into it; make venv-rebuild recreates it from scratch."; exit 1; }
 	$(VENV_PYTHON) -m venv .venv
 	.venv/bin/pip install --upgrade pip
 	.venv/bin/pip install -r requirements.txt -r requirements-streamalign.txt
@@ -53,6 +56,10 @@ venv:                 ## (re)create .venv with BOTH requirement sets
 	@echo "venv ready ($$(.venv/bin/python --version)). Run every tool with .venv/bin/python, e.g.:"
 	@echo "  PYTHONPATH=scripts .venv/bin/python -m streamalign hints <stem>"
 	@echo "(hints = prep for the file you are ABOUT to label; sort_tsv offers it for the next stem)"
+
+venv-rebuild:         ## DELETE .venv and create it again (stop the harvester and the align server first)
+	rm -rf .venv
+	$(MAKE) venv
 
 dep: pip              ## install/upgrade both requirement sets into the existing .venv
 	.venv/bin/pip install -r requirements.txt -r requirements-streamalign.txt --upgrade
