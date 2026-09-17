@@ -1,7 +1,7 @@
 """The one-command loop: sort_tsv finishes this file and preps the next.
 
 Covers the pieces that turned five hand-run commands into one -- the mis-named-output warning,
-`.env_vars` loading, and (the load-bearing one) the non-interactive guard that stops publish.py
+`.env` loading, and (the load-bearing one) the non-interactive guard that stops publish.py
 from hanging on the next-file prompt when it runs sort_tsv as a subprocess with no terminal.
 """
 
@@ -51,13 +51,13 @@ class OutputNameWarning(unittest.TestCase):
 class EnvVarsLoading(unittest.TestCase):
     def test_reads_values_without_clobbering_real_env(self):
         d = tempfile.mkdtemp()
-        with open(os.path.join(d, ".env_vars"), "w") as fh:
+        with open(os.path.join(d, ".env"), "w") as fh:
             fh.write("# machine paths\nNETRADIO_SOURCES_DIR=/tmp/originals\n"
                      "NETRADIO_ALREADY_SET=from_file\n\nBAD LINE NO EQUALS\n")
         os.environ.pop("NETRADIO_SOURCES_DIR", None)
         os.environ["NETRADIO_ALREADY_SET"] = "from_env"
         try:
-            sort_tsv.load_env_vars(os.path.join(d, ".env_vars"))
+            sort_tsv.load_env_vars(os.path.join(d, ".env"))
             self.assertEqual(os.environ["NETRADIO_SOURCES_DIR"], "/tmp/originals")
             self.assertEqual(os.environ["NETRADIO_ALREADY_SET"], "from_env")  # real env wins
         finally:
@@ -65,7 +65,49 @@ class EnvVarsLoading(unittest.TestCase):
             os.environ.pop("NETRADIO_ALREADY_SET", None)
 
     def test_missing_file_is_not_an_error(self):
-        sort_tsv.load_env_vars("/no/such/.env_vars")  # must not raise
+        sort_tsv.load_env_vars("/no/such/.env")  # must not raise
+
+    def test_a_leftover_env_vars_file_is_refused_not_ignored(self):
+        """The 2026-09 rename: `.env_vars` -> `.env`. A checkout that still has the old file and
+        no new one must stop with the rename, never run with every variable silently missing."""
+        d = tempfile.mkdtemp()
+        with open(os.path.join(d, ".env_vars"), "w") as fh:
+            fh.write("NETRADIO_SOURCES_DIR=/tmp/originals\n")
+        with self.assertRaises(SystemExit) as cm:
+            sort_tsv.load_env_vars(os.path.join(d, ".env"))
+        self.assertIn("mv ", str(cm.exception))
+        self.assertIn(".env_vars", str(cm.exception))
+        # once renamed, it loads
+        os.rename(os.path.join(d, ".env_vars"), os.path.join(d, ".env"))
+        os.environ.pop("NETRADIO_SOURCES_DIR", None)
+        try:
+            sort_tsv.load_env_vars(os.path.join(d, ".env"))
+            self.assertEqual(os.environ["NETRADIO_SOURCES_DIR"], "/tmp/originals")
+        finally:
+            os.environ.pop("NETRADIO_SOURCES_DIR", None)
+
+    def test_a_env_directory_is_refused_not_read(self):
+        """Before the rename `.env` was a virtualenv DIRECTORY. Opening it raised
+        IsADirectoryError, an OSError the loader swallowed -- every variable silently missing."""
+        d = tempfile.mkdtemp()
+        os.mkdir(os.path.join(d, ".env"))
+        with self.assertRaises(SystemExit) as cm:
+            sort_tsv.load_env_vars(os.path.join(d, ".env"))
+        self.assertIn("rm -rf", str(cm.exception))
+
+    def test_the_makefile_refuses_a_leftover_env_vars_file(self):
+        """The same guard at make's parse time, in a scratch copy of the Makefile."""
+        import shutil, subprocess
+        d = tempfile.mkdtemp()
+        shutil.copy(os.path.join(os.path.dirname(LABELS), "Makefile"), d)
+        with open(os.path.join(d, ".env_vars"), "w") as fh:
+            fh.write("NETRADIO_SOURCES_DIR=/tmp/originals\n")
+        r = subprocess.run(["make", "-n", "venv"], cwd=d, capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("mv .env_vars .env", r.stderr + r.stdout)
+        os.rename(os.path.join(d, ".env_vars"), os.path.join(d, ".env"))
+        r = subprocess.run(["make", "-n", "venv"], cwd=d, capture_output=True, text=True)
+        self.assertNotIn(".env_vars is the old name", r.stderr + r.stdout)
 
 
 class TheHangGuard(unittest.TestCase):

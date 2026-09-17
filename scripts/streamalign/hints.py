@@ -504,10 +504,10 @@ def _anchor_rows(stem, duration, diag, audio_dir=None):
     try:
         import librosa  # noqa: F401
     except ImportError:
-        missing.append("librosa is not installed (run `make align-env`)")
+        missing.append("librosa is not installed (run `make venv`)")
     sources = os.environ.get("NETRADIO_SOURCES_DIR")
     if not sources or not os.path.isdir(sources):
-        missing.append("the originals are not reachable (set NETRADIO_SOURCES_DIR in .env_vars)")
+        missing.append("the originals are not reachable (set NETRADIO_SOURCES_DIR in .env)")
     if missing:
         diag["anchors_blocked"] = missing
         return [_hint(0.0, 0.0,

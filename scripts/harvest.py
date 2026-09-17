@@ -2153,7 +2153,7 @@ def run(args):
                        "  NETRADIO_YTDLP_COOKIES_FROM_BROWSER=chrome   (or firefox/safari/brave/edge)\n"
                        "or export a cookies.txt and set:\n"
                        "  NETRADIO_YTDLP_COOKIES=/path/to/cookies.txt\n"
-                       "Put it in the analysis repo's .env_vars. The cookie is your logged-in "
+                       "Put it in the analysis repo's .env. The cookie is your logged-in "
                        "session -- keep it out of git.",
                 "using_cookies": bool(cookie_args()),
             }
@@ -2346,7 +2346,7 @@ def main():
     if args.migrate_sigs:
         if not sigstore.enabled():
             print("# sigstore is dark -- set NETRADIO_SIG_BUCKET (and profile/endpoint) in "
-                  ".env_vars first.")
+                  ".env first.")
             return
         state = _load(STATE, blank_state())
         qs = queries()

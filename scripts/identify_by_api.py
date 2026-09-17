@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Identify a mystery record by acoustic-fingerprint APIs (ACRCloud + AudD).
 
-    set -a && . ./.env_vars && set +a          # needs the API keys below
+    set -a && . ./.env && set +a          # needs the API keys below
     python3 scripts/identify_by_api.py --query "Mystery Track 4.wav"
     python3 scripts/identify_by_api.py --all-mystery
     python3 scripts/identify_by_api.py --query "Mystery Track 4.wav" --windows 6 --json out.json
@@ -36,7 +36,7 @@ Each service reads only ~10-12 s per request, so we cut several short windows fr
 Every result each service returns is printed -- no consensus, no gate; you audition them all,
 the way the listen/harvest queues are triaged.
 
-Credentials (in `.env_vars`, gitignored)
+Credentials (in `.env`, gitignored)
 -----------------------------------------
   ACRCLOUD_HOST           e.g. identify-eu-west-1.acrcloud.com   (from your ACRCloud project)
   ACRCLOUD_ACCESS_KEY
@@ -278,12 +278,12 @@ def main(argv=None):
     services = resolve_services(args.service)
     if not services:
         sys.exit(
-            "No music-ID credentials set. Add to .env_vars (gitignored):\n"
+            "No music-ID credentials set. Add to .env (gitignored):\n"
             "  AUDD_API_TOKEN=...            # audd.io -- 300 free requests, no card\n"
             "  ACRCLOUD_HOST=...             # identify-<region>.acrcloud.com\n"
             "  ACRCLOUD_ACCESS_KEY=...       # from your ACRCloud project\n"
             "  ACRCLOUD_ACCESS_SECRET=...\n"
-            "then: set -a && . ./.env_vars && set +a")
+            "then: set -a && . ./.env && set +a")
 
     sources = os.environ.get("NETRADIO_SOURCES_DIR")
     queries = list(args.query or [])

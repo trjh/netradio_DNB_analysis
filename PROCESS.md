@@ -62,16 +62,16 @@ Also open an already-placed **overlapping** neighbour, if there is one.
 ### 2. Ask the engine what it thinks (hints)
 
 ```bash
-make align-env        # ONCE per machine: the librosa venv (python3.13)
+make venv        # ONCE per machine: .venv, every dependency incl. librosa
 
-set -a && . ./.env_vars && set +a
+set -a && . ./.env && set +a
 PYTHONPATH=scripts .venv/bin/python -m streamalign hints <stem>
 # -> labels/automated/<stem>.hints.tsv    Audacity: File ▸ Import ▸ Labels
 ```
 
 Warnings:
-- Plain `python3` works but yields everything *except* the sync anchors (chroma needs the
-  venv). `make align-check` says whether you're set up.
+- Plain `python3` works but yields everything *except* the sync anchors (chroma needs
+  librosa, which only `.venv` has). `make align-check` says whether you're set up.
 - This is a deterministic script, not an AI session — same inputs, same hints.
 
 Need-to-know:
@@ -352,7 +352,7 @@ Need-to-know:
 Then mirror to the player:
 
 ```bash
-make sync            # 3-way, PR-based; reads NETRADIO_PLAYER_REPO from .env_vars
+make sync            # 3-way, PR-based; reads NETRADIO_PLAYER_REPO from .env
 make tracklist-check # do the two copies agree?
 ```
 
@@ -439,7 +439,7 @@ the rate difference, solved downstream by `speed = (trackB − trackA) / (origB 
 `harvest.py` streams candidates, reduces each to a chroma signature, discards the audio,
 scores against every unsolved mystery, for weeks. Watch it — and rule — at **`/harvest`**.
 
-Give it a YouTube session — set **one** of these in `.env_vars` (gitignored), then restart:
+Give it a YouTube session — set **one** of these in `.env` (gitignored), then restart:
 
 ```
 NETRADIO_YTDLP_COOKIES=/path/to/cookies.txt        # PREFERRED: Netscape-format export
@@ -452,7 +452,7 @@ Warnings:
   forever, and no number of correct passwords stops it (2026-07-13: four prompts; the real
   fault was a `KeyError` restart loop). Firefox's `cookies.sqlite` is unencrypted — no
   prompt; a `cookies.txt` file has no Keychain involvement at all and works headless.
-- **The cookie is your logged-in session — a credential.** It lives in `.env_vars`, outside
+- **The cookie is your logged-in session — a credential.** It lives in `.env`, outside
   the repo (which is public). Close the browser before profile reads (locked DB).
 - The bot-wall error (`Sign in to confirm you're not a bot`) carries **no 403/429**, so it
   bypasses host-backoff — the harvester **halts** on it by design. Waiting never fixes it;
@@ -474,7 +474,7 @@ Need-to-know:
        mv ~/Downloads/youtube.com_cookies.txt ~/.config/netradio/youtube-cookies.txt
        chmod 600 ~/.config/netradio/youtube-cookies.txt
 
-4. `.env_vars`: `NETRADIO_YTDLP_COOKIES=/Users/<you>/.config/netradio/youtube-cookies.txt`,
+4. `.env`: `NETRADIO_YTDLP_COOKIES=/Users/<you>/.config/netradio/youtube-cookies.txt`,
    then restart the harvester from `/harvest`.
 5. **Close the private window without logging out** — logout rotates the session and kills
    the cookie you just exported.

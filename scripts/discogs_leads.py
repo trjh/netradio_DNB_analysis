@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Find candidate records for the Mystery Tracks: same labels, same era, same styles.
 
-    PYTHONPATH=scripts .env/bin/python scripts/discogs_leads.py --labels
-    PYTHONPATH=scripts .env/bin/python scripts/discogs_leads.py --leads --out /tmp/leads.txt
+    PYTHONPATH=scripts .venv/bin/python scripts/discogs_leads.py --labels
+    PYTHONPATH=scripts .venv/bin/python scripts/discogs_leads.py --leads --out /tmp/leads.txt
 
 The pool is the bottleneck, not the matching. Random 1990s D&B is a weak pool; the records this
 particular DJ actually reached for are a strong one. We already know a lot of them -- 60-odd

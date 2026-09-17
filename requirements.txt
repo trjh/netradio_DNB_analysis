@@ -1,10 +1,8 @@
-# General repo dependencies — the `make env` / Makefile virtualenv installs these.
-# Covers the label tooling, track-metadata build, and Google Sheet backup.
-#
-# The stream-alignment engine has its OWN, separate requirements file:
-# requirements-streamalign.txt (numpy + librosa on python3.13). Use that one only
-# for the track_mix chroma/DTW feature — see its header for the venv recipe.
+# Label-tooling dependencies: the Audacity export tooling, track-metadata build, Google Sheet
+# backup. `make venv` installs this file AND requirements-streamalign.txt (the alignment engine +
+# harvester: librosa, soundfile) into the one virtualenv, `.venv`.
 pyaudacity @ git+https://github.com/bwagner/pyaudacity
 pydub
+audioop-lts; python_version >= "3.13"   # pydub imports audioop, removed from the stdlib in 3.13
 numpy
 pyflakes            # the undefined-name test guard runs in ANY env (fails, never skips)

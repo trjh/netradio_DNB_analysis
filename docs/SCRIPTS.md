@@ -7,23 +7,22 @@
 > [HOWTO](../HOWTO.md) (which tool *now*) · [FINDING_MYSTERY_TRACKS](../FINDING_MYSTERY_TRACKS.md)
 > (identifying the unnamed tracks).
 
-Two Pythons, and it matters:
+One Python: **`.venv/bin/python`**, built by `make venv` from both requirements files (`make dep` installs into an existing one; `make venv-rebuild` deletes and recreates it — stop the harvester and the align server first) —
+the label tooling (numpy, pydub, pyaudacity) and the alignment engine + harvester
+(**librosa**, soundfile). It prefers python3.13, the interpreter the harvester runs under.
+(Until 2026-09 there were two venvs: a general `.env` and the librosa `.venv`. `.env` is now
+the variables *file*, below; an old `.env/` directory must go — `make` says so.)
 
-| | |
-|---|---|
-| **`.env/bin/python`** | the general venv. numpy, pydub, ffmpeg. Everything except the chroma work. |
-| **`.venv/bin/python`** | the alignment venv — **librosa**, pinned to python 3.13 (numba has no 3.14 wheels). Anything doing chroma. `make align-env` builds it. |
-
-Most scripts want `PYTHONPATH=scripts` and the machine paths from `.env_vars`:
+Most scripts want `PYTHONPATH=scripts` and the machine paths from `.env`:
 
 ```bash
-set -a && . ./.env_vars && set +a
+set -a && . ./.env && set +a
 ```
 
 **Running the tests:**
 
 ```bash
-.venv/bin/python3 -m unittest discover -s tests    # the full suite (align venv)
+.venv/bin/python3 -m unittest discover -s tests    # the full suite (or: make test)
 ```
 
 The suite is hermetic on a fresh clone: it parses only committed evidence (the 2017 notes
@@ -32,7 +31,7 @@ the tests that decode/encode real audio **skip** cleanly when `librosa`/`soundfi
 absent. One deliberate exception: the undefined-name guard (`tests/test_harvest_runtime.py`)
 **fails, never skips**, when `pyflakes` is missing — a skip there is how a NameError ships.
 `pip install pyflakes` (it is in both requirements files) and it runs anywhere; the
-audio-dependent tests need the align venv (`make align-env`).
+audio-dependent tests need `.venv` (`make venv`).
 
 ---
 
@@ -56,7 +55,7 @@ audio-dependent tests need the align venv (`make align-env`).
 |---|---|---|
 | `scripts/mkmysteryvideo.sh` | build the "Unknown Track N" video for a track-ID post, locally | when you have a clip to publish. **The highest-yield method — humans have solved 2 of 3.** |
 | `scripts/identify_by_chroma.py` | chroma-match a clip against a pool of candidate records | when you have candidate audio |
-| `scripts/identify_by_api.py` | ask the commercial catalogues (ACRCloud + AudD) to name a clip — searches ~150-160M tracks you don't own, unlike the local chroma pool | when a mystery may be a catalogued release. **Acoustic fingerprinting may be defeated by the 1998 codec/EQ like AcoustID is — it's an experiment; every hit is a lead to confirm by ear.** Needs `ACRCLOUD_*` / `AUDD_API_TOKEN` in `.env_vars` |
+| `scripts/identify_by_api.py` | ask the commercial catalogues (ACRCloud + AudD) to name a clip — searches ~150-160M tracks you don't own, unlike the local chroma pool | when a mystery may be a catalogued release. **Acoustic fingerprinting may be defeated by the 1998 codec/EQ like AcoustID is — it's an experiment; every hit is a lead to confirm by ear.** Needs `ACRCLOUD_*` / `AUDD_API_TOKEN` in `.env` |
 | `scripts/match_queue.py` | chroma-match the mysteries against the listen queue's **downloaded, unlistened** tracks | one-off sweep of what's already on disk |
 | `scripts/harvest.py` | the long-runner: stream candidates → chroma signature → **drop the audio** → score | continuously. See [the harvester](#the-harvester) |
 | `scripts/discogs_leads.py` | read the labels this DJ actually played, ask Discogs what else they released 1994–99 | when the pool needs new leads |
@@ -97,7 +96,7 @@ own original, the change is wrong.
 ```bash
 make harvest-run                                                      # runs for weeks
 
-set -a && . ./.env_vars && set +a
+set -a && . ./.env && set +a
 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --status
 MallocLargeCache=0 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --run
 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --pause        # / --resume
@@ -313,7 +312,7 @@ Jamie Myerson – *Sky Blue***. It takes YouTube's first hit for that name, and 
 hit is *not* the record (0.0867 against our own copy), so it is refused and the live check sits at
 *not checked* forever. Break the deadlock by naming a stream you know is right:
 
-    NETRADIO_CANARY_URL=https://…      # in .env_vars
+    NETRADIO_CANARY_URL=https://…      # in .env
 
 It is still **validated against our own copy** exactly like a searched one — a hand-picked URL is a
 hint, never an override. If it is not the record, it is still refused. `/harvest` reports **PASS**,
