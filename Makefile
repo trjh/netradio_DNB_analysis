@@ -20,6 +20,13 @@ VENV_PYTHON=$(or $(shell command -v python3.13),$(PYTHON))
 ifneq (,$(wildcard .env/.))
     $(error ".env is the retired general virtualenv directory. Remove it -- rm -rf .env -- then: mv .env_vars .env  (or: cp .env.example .env)")
 endif
+# The other half of the same migration: the old directory is gone but the variables still sit in
+# `.env_vars`. Ignoring that file silently would drop every path and credential it holds.
+ifeq (,$(wildcard .env))
+ifneq (,$(wildcard .env_vars))
+    $(error ".env_vars is the old name of the variables file; it is no longer read. Rename it: mv .env_vars .env")
+endif
+endif
 -include .env
 export NETRADIO_SOURCES_DIR
 

@@ -67,6 +67,39 @@ class EnvVarsLoading(unittest.TestCase):
     def test_missing_file_is_not_an_error(self):
         sort_tsv.load_env_vars("/no/such/.env")  # must not raise
 
+    def test_a_leftover_env_vars_file_is_refused_not_ignored(self):
+        """The 2026-09 rename: `.env_vars` -> `.env`. A checkout that still has the old file and
+        no new one must stop with the rename, never run with every variable silently missing."""
+        d = tempfile.mkdtemp()
+        with open(os.path.join(d, ".env_vars"), "w") as fh:
+            fh.write("NETRADIO_SOURCES_DIR=/tmp/originals\n")
+        with self.assertRaises(SystemExit) as cm:
+            sort_tsv.load_env_vars(os.path.join(d, ".env"))
+        self.assertIn("mv ", str(cm.exception))
+        self.assertIn(".env_vars", str(cm.exception))
+        # once renamed, it loads
+        os.rename(os.path.join(d, ".env_vars"), os.path.join(d, ".env"))
+        os.environ.pop("NETRADIO_SOURCES_DIR", None)
+        try:
+            sort_tsv.load_env_vars(os.path.join(d, ".env"))
+            self.assertEqual(os.environ["NETRADIO_SOURCES_DIR"], "/tmp/originals")
+        finally:
+            os.environ.pop("NETRADIO_SOURCES_DIR", None)
+
+    def test_the_makefile_refuses_a_leftover_env_vars_file(self):
+        """The same guard at make's parse time, in a scratch copy of the Makefile."""
+        import shutil, subprocess
+        d = tempfile.mkdtemp()
+        shutil.copy(os.path.join(os.path.dirname(LABELS), "Makefile"), d)
+        with open(os.path.join(d, ".env_vars"), "w") as fh:
+            fh.write("NETRADIO_SOURCES_DIR=/tmp/originals\n")
+        r = subprocess.run(["make", "-n", "venv"], cwd=d, capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("mv .env_vars .env", r.stderr + r.stdout)
+        os.rename(os.path.join(d, ".env_vars"), os.path.join(d, ".env"))
+        r = subprocess.run(["make", "-n", "venv"], cwd=d, capture_output=True, text=True)
+        self.assertNotIn(".env_vars is the old name", r.stderr + r.stdout)
+
 
 class TheHangGuard(unittest.TestCase):
     """publish.py runs `sort_tsv.py <file>` as a subprocess with no terminal. If prep_next

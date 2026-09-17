@@ -610,9 +610,16 @@ def load_env_vars(path=None):
     NETRADIO_SOURCES_DIR (the Makefile sources it; a bare `python3 sort_tsv.py` did not).
 
     `.env` is `VAR=value`, `#` comments, no quotes/`export` (per `.env.example`).
-    Real environment variables win -- setdefault, never clobber. A missing file is fine.
+    Real environment variables win -- setdefault, never clobber. A missing file is fine -- unless
+    the OLD name, `.env_vars`, sits beside it: then the file was never renamed and ignoring it
+    would silently drop every path in it, so refuse with the one-line fix (the Makefile does the
+    same at parse time).
     """
     path = path or os.path.join(REPO_ROOT, ".env")
+    old = os.path.join(os.path.dirname(path), ".env_vars")
+    if not os.path.exists(path) and os.path.isfile(old):
+        raise SystemExit(".env_vars is the old name of the variables file; it is no longer read. "
+                         "Rename it: mv %s %s" % (old, path))
     try:
         with open(path) as handle:
             for line in handle:
