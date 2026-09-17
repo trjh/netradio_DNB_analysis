@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Score every KNOWN stream track against every KNOWN original. The calibration matrix.
 
-    PYTHONPATH=scripts .venv/bin/python scripts/calibrate.py --out /tmp/calibration.md
+    . .venv/bin/activate && python scripts/calibrate.py --out /tmp/calibration.md
 
 Why this exists
 ---------------

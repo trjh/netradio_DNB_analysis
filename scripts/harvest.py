@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Harvest chroma signatures from the internet, slowly, and match them against the Mysteries.
 
-    PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --seed-channel https://www.youtube.com/@back2theoldskoolera999
-    PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --run          # work the queue
-    PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --status
+    . .venv/bin/activate && python scripts/harvest.py --seed-channel https://www.youtube.com/@back2theoldskoolera999
+    . .venv/bin/activate && python scripts/harvest.py --run          # work the queue
+    . .venv/bin/activate && python scripts/harvest.py --status
 
 This runs for WEEKS. It is built to keep its load on other people's servers as low as possible.
 

@@ -7,7 +7,7 @@ loss. See the player repo's docs/PLAN_edge_chroma_fanout.md "Disaster recovery".
 The recipe is `chroma_recipe.recipe_dict()` — the single source of truth for how a signature is
 computed. Run:
 
-    PYTHONPATH=scripts python3 scripts/make_recipe.py > _recipe.json
+    . .venv/bin/activate && python scripts/make_recipe.py > _recipe.json
     # then upload (private bucket/endpoint — see the player runbook):
     aws --endpoint-url <ep> s3 cp _recipe.json s3://<bucket>/chroma/_recipe.json
 """

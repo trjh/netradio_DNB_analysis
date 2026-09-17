@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Chroma-match the Mystery Tracks against the listen queue's DOWNLOADED, UNLISTENED tracks.
 
-    PYTHONPATH=scripts .venv/bin/python scripts/match_queue.py --out /tmp/queue-match.txt
+    . .venv/bin/activate && python scripts/match_queue.py --out /tmp/queue-match.txt
 
 The listen queue is a second candidate pool that already exists on disk. Only the tracks Tim has
 NOT listened to are worth checking: if he had heard it and it were the mystery, it would not be

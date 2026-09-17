@@ -9,7 +9,7 @@ source — a rebuild does not have to reproduce the old bytes, only a fresh cons
 Excerpts are cut from OUR OWN corpus (no rights issue, no external fetch). Source audio is a
 private path, so it is passed in — this script names none:
 
-    PYTHONPATH=scripts python3 scripts/make_canary.py \\
+    . .venv/bin/activate && python scripts/make_canary.py \\
         --source-dir "$NETRADIO_CANARY_SOURCE_DIR" --out ./_canary
     # then upload (private bucket/endpoint — see the player runbook):
     aws --endpoint-url <ep> s3 sync ./_canary s3://<bucket>/chroma/_canary/

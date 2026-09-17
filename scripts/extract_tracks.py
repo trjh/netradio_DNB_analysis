@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Cut every well-defined track OUT of the mix, reassembling across captures where it must.
 
-    PYTHONPATH=scripts .venv/bin/python scripts/extract_tracks.py --out ~/media/netradio-tracks
-    PYTHONPATH=scripts .venv/bin/python scripts/extract_tracks.py --dry-run
+    . .venv/bin/activate && python scripts/extract_tracks.py --out ~/media/netradio-tracks
+    . .venv/bin/activate && python scripts/extract_tracks.py --dry-run
 
 Why
 ---

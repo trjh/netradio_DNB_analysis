@@ -3,11 +3,21 @@ ifeq (, $(PYTHON))
     $(error "PYTHON=$(PYTHON) not found in $(PATH)")
 endif
 
-# The ONE virtualenv is `.venv`. It prefers python3.13 when that is installed -- the interpreter
-# the harvester has run under since 2026-07 -- and falls back to whatever `python3` is. (The
-# 3.13 pin dates from librosa -> numba -> llvmlite having no 3.14 wheels; they do now, so the
-# fallback works, but the tested path is still 3.13.)
-VENV_PYTHON=$(or $(shell command -v python3.13),$(PYTHON))
+# The ONE virtualenv is `.venv`, and uv builds and fills it (Tim, 2026-09-17; before that
+# `python -m venv` + pip). `UV` resolves at parse time to the first uv that runs: the one on
+# PATH, else the Homebrew binary. The fallback exists because an asdf shim can sit first on PATH
+# and answer "No version is set for command uv" (exit 126) in any directory without a
+# `.tool-versions`. Pass a path to skip the search: `make venv UV=/path/to/uv`. When neither
+# runs, `uv-check` stops with the install hint.
+ifndef UV
+UV := $(firstword $(foreach c,uv /opt/homebrew/bin/uv,$(if $(shell $(c) --version 2>/dev/null),$(c))))
+endif
+# The interpreter uv builds `.venv` from. A version request: uv prefers an installed 3.13 and
+# downloads one when none is installed, so there is always a fallback. 3.13 is the interpreter
+# the harvester has run under since 2026-07 and the tested path. (The pin dates from librosa ->
+# numba -> llvmlite having no 3.14 wheels; they do now.) A path works too:
+# `make venv UV_PYTHON=/path/to/python3.14`.
+UV_PYTHON ?= 3.13
 
 # Machine-specific paths and credentials (NETRADIO_SOURCES_DIR, ...) live in `.env`, gitignored
 # since this repo is PUBLIC. `VAR=value` lines, so the file is both make-includable and
@@ -47,37 +57,52 @@ match-tools:          ## install/build sonic-annotator + the match-vamp plugin (
 # `make venv` never deletes an existing `.venv`: the harvester and the align server execute from
 # it, and a bare `make` (default goal `env` -> `venv`) used to reach `rm -rf .venv` under them.
 # Rebuilding from scratch is its own, deliberate verb: `make venv-rebuild`.
-venv:                 ## create .venv with BOTH requirement sets (refuses if it already exists)
+# A uv venv has no pip inside it; `uv pip` is the installer, so there is no `pip` target.
+uv-check:             ## is there a uv that runs? prints which one
+	@test -n "$(UV)" || { echo "uv not found: neither the uv on PATH nor /opt/homebrew/bin/uv runs. Install it: brew install uv   (or: make venv UV=/path/to/uv)"; exit 1; }
+	@echo "uv: $(UV) ($$($(UV) --version))"
+
+venv: uv-check        ## create .venv with BOTH requirement sets (refuses if it already exists)
 	@test ! -e .venv/bin/python || { echo ".venv already built ($$(.venv/bin/python --version)). make dep installs into it; make venv-rebuild recreates it from scratch."; exit 1; }
-	$(VENV_PYTHON) -m venv .venv
-	.venv/bin/pip install --upgrade pip
-	.venv/bin/pip install -r requirements.txt -r requirements-streamalign.txt
+	$(UV) venv .venv --python $(UV_PYTHON)
+	$(UV) pip install --python .venv/bin/python -r requirements.txt -r requirements-streamalign.txt
+	$(MAKE) scripts-pth
 	@echo
-	@echo "venv ready ($$(.venv/bin/python --version)). Run every tool with .venv/bin/python, e.g.:"
-	@echo "  PYTHONPATH=scripts .venv/bin/python -m streamalign hints <stem>"
+	@echo "venv ready ($$(.venv/bin/python --version)). Activate it, then run every tool with python, e.g.:"
+	@echo "  . .venv/bin/activate && python -m streamalign hints <stem>"
 	@echo "(hints = prep for the file you are ABOUT to label; sort_tsv offers it for the next stem)"
 
 venv-rebuild:         ## DELETE .venv and create it again (stop the harvester and the align server first)
 	rm -rf .venv
 	$(MAKE) venv
 
-dep: pip              ## install/upgrade both requirement sets into the existing .venv
-	.venv/bin/pip install -r requirements.txt -r requirements-streamalign.txt --upgrade
+dep: uv-check         ## install/upgrade both requirement sets into the existing .venv (and refresh the .pth)
+	@test -e .venv/bin/python || { echo ".venv is not built. Run: make venv"; exit 1; }
+	$(UV) pip install --python .venv/bin/python --upgrade -r requirements.txt -r requirements-streamalign.txt
+	$(MAKE) scripts-pth
 
-pip:
-	.venv/bin/pip install --upgrade pip
+# `. .venv/bin/activate && python -m streamalign ...` needs `scripts/` on sys.path, and there is
+# no pyproject to install it from. So the venv carries `netradio-scripts.pth` in its site-packages
+# with the absolute path of `scripts/` (Tim, 2026-09-17). It is written here, at make time, so no
+# machine path is committed; `venv` and `dep` both run this, and a venv built by hand gets it from
+# `make scripts-pth`. That is why no recipe below sets PYTHONPATH=scripts any more.
+scripts-pth:          ## put <repo>/scripts on the venv's sys.path (site-packages/netradio-scripts.pth)
+	@.venv/bin/python -c "import os, sys, sysconfig; p = os.path.join(sysconfig.get_paths()['purelib'], 'netradio-scripts.pth'); open(p, 'w').write(sys.argv[1] + chr(10)); print('scripts on sys.path:', p)" "$(CURDIR)/scripts"
 
-dep-upgrade:
-	pip-review --auto
-	.venv/bin/pip freeze -r requirements.txt | grep -B100 "pip freeze" | grep -v "pip freeze" > requirements-latest.txt
-	rm requirements.txt
-	mv requirements-latest.txt requirements.txt
+# `dep` already upgrades within the pins. This one also freezes the result so the pins can be
+# reviewed. It does not overwrite requirements.txt any more: that file is hand-maintained (the
+# git source, the 3.13 marker, the comments), and a freeze lost all three.
+dep-upgrade: dep      ## upgrade, then freeze the venv to requirements-latest.txt for review
+	$(UV) pip freeze --python .venv/bin/python > requirements-latest.txt
+	@echo "requirements-latest.txt is the frozen venv; requirements*.txt stay hand-maintained. Update the pins from it."
 
 align-env: venv       ## alias, kept for muscle memory: the alignment engine now lives in the one venv
 
 align-check:          ## verify the venv can do the librosa-backed work, and the originals resolve
 	@.venv/bin/python -c "import librosa, numpy; print('librosa', librosa.__version__, '/ numpy', numpy.__version__)" \
 	  || { echo "venv missing/incomplete — run: make venv"; exit 1; }
+	@.venv/bin/python -c "import streamalign; print('streamalign from', streamalign.__path__[0])" \
+	  || { echo "scripts/ is not on the venv's sys.path. Run: make scripts-pth"; exit 1; }
 	@test -n "$(NETRADIO_SOURCES_DIR)" \
 	  || { echo "NETRADIO_SOURCES_DIR unset — set it in .env (see .env.example)"; exit 1; }
 	@test -d "$(NETRADIO_SOURCES_DIR)" \
@@ -95,7 +120,7 @@ test:                 ## run the test suite
 # other platforms (an unknown variable). The fetch child sets it again for itself.
 harvest-run:          ## work the queue (runs for weeks), with the memory bound in place
 	set -a; [ -f .env ] && . ./.env; set +a; \
-	MallocLargeCache=0 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --run
+	MallocLargeCache=0 .venv/bin/python scripts/harvest.py --run
 
 #########################################
 #####          TRACKLIST            #####

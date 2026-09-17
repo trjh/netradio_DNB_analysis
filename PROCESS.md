@@ -65,7 +65,7 @@ Also open an already-placed **overlapping** neighbour, if there is one.
 make venv        # ONCE per machine: .venv, every dependency incl. librosa
 
 set -a && . ./.env && set +a
-PYTHONPATH=scripts .venv/bin/python -m streamalign hints <stem>
+. .venv/bin/activate && python -m streamalign hints <stem>
 # -> labels/automated/<stem>.hints.tsv    Audacity: File ▸ Import ▸ Labels
 ```
 
@@ -91,7 +91,7 @@ Need-to-know:
 ### 3. Place the file
 
 ```bash
-PYTHONPATH=scripts python3 -m streamalign align <placed-neighbour> <this-file>
+. .venv/bin/activate && python -m streamalign align <placed-neighbour> <this-file>
 # master_start(this) = master_start(neighbour) + offset
 ```
 
@@ -108,9 +108,9 @@ Need-to-know:
 ### 4. Certify the skips
 
 ```bash
-PYTHONPATH=scripts python3 -m streamalign skip-clips          # detect + render review clips
-PYTHONPATH=scripts python3 -m streamalign skip-confirm <id>   # writes into your hand labels
-PYTHONPATH=scripts python3 -m streamalign skip-reject  <id>   # engine stops re-proposing it
+. .venv/bin/activate && python -m streamalign skip-clips          # detect + render review clips
+. .venv/bin/activate && python -m streamalign skip-confirm <id>   # writes into your hand labels
+. .venv/bin/activate && python -m streamalign skip-reject  <id>   # engine stops re-proposing it
 ```
 
 Warnings:
@@ -160,15 +160,15 @@ Done by `sort_tsv.py` in step 6 (writes `<next>.starter.labels.tsv`, gitignored,
 linked neighbour). To re-seed by hand after editing links:
 
 ```bash
-PYTHONPATH=scripts python3 -m streamalign starter <this-stem>
+. .venv/bin/activate && python -m streamalign starter <this-stem>
 ```
 
 ### 8. Identify the tracks
 
 ```bash
-PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --all-mystery
-PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --pool ~/dnb-candidates
-PYTHONPATH=scripts .venv/bin/python scripts/acoustid_check.py --mismatch   # verify the ORIGINALS
+. .venv/bin/activate && python scripts/identify_by_chroma.py --all-mystery
+. .venv/bin/activate && python scripts/identify_by_chroma.py --pool ~/dnb-candidates
+. .venv/bin/activate && python scripts/acoustid_check.py --mismatch   # verify the ORIGINALS
 ```
 
 Warnings:
@@ -224,8 +224,8 @@ Two passes: the engine **proposes** the paired sync points; you **verify** every
 **Pass 1 — propose (`match-hints`):**
 
 ```bash
-PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> <NNN> [<NNN> …]
-PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> --all   # batch: every overlapping track with an original
+. .venv/bin/activate && python -m streamalign match-hints <stem> <NNN> [<NNN> …]
+. .venv/bin/activate && python -m streamalign match-hints <stem> --all   # batch: every overlapping track with an original
 ```
 
 Each track gets a **paired** hints file in `labels/automated/`:
@@ -251,12 +251,14 @@ and `sync-audit --only-unchecked` will keep listing it).
 what you accept in your hand labels, export/sort via step 6 as usual, then:
 
 ```bash
-PYTHONPATH=scripts .venv/bin/python -m streamalign sync-audit --tracks <n> [<n> …]  # re-grade every point
-PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix  --tracks <n> [<n> …]  # grade the rate
+. .venv/bin/activate && python -m streamalign sync-audit --tracks <n> [<n> …]  # re-grade every point
+. .venv/bin/activate && python -m streamalign track-mix  --tracks <n> [<n> …]  # grade the rate
 ```
 
 Warnings:
-- `PYTHONPATH=scripts` is required — without it: `No module named streamalign`.
+- Activate the venv first (`. .venv/bin/activate`): it puts `scripts/` on the path
+  (`netradio-scripts.pth`, written by `make venv` and `make dep`). Without it:
+  `No module named streamalign`.
 - `--sources` is a **flag** (default `sources_local`); `NETRADIO_SOURCES_DIR` is not read by
   these subcommands.
 - **Don't chase the track's start/end** — records are blended; there is no objective "begins"
@@ -327,7 +329,7 @@ interactively — but nothing downstream needs it, and no step of the loop asks 
 
 ```bash
 python3 scripts/build_track_metadata.py --seed track-metadata.json     # labels + remainder.tsv → JSON
-PYTHONPATH=scripts .venv/bin/python -m streamalign validate            # audio vs hand labels
+. .venv/bin/activate && python -m streamalign validate            # audio vs hand labels
 ```
 
 Warnings:

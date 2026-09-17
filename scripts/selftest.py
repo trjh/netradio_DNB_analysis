@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Canary self-tests — is the matcher still RIGHT, and is the live pipeline still WORKING?
 
-    PYTHONPATH=scripts .venv/bin/python scripts/selftest.py --offline
-    PYTHONPATH=scripts .venv/bin/python scripts/selftest.py --live
+    . .venv/bin/activate && python scripts/selftest.py --offline
+    . .venv/bin/activate && python scripts/selftest.py --live
 
 Why this exists
 ---------------

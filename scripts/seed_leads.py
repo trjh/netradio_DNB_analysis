@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Test the Discogs leads cheaply: queue each for SIGNATURE extraction, not acquisition.
 
-    PYTHONPATH=scripts .venv/bin/python scripts/seed_leads.py --leads docs/DISCOGS_LEADS.md
-    PYTHONPATH=scripts .venv/bin/python scripts/seed_leads.py --dry-run
+    . .venv/bin/activate && python scripts/seed_leads.py --leads docs/DISCOGS_LEADS.md
+    . .venv/bin/activate && python scripts/seed_leads.py --dry-run
 
 This is NOT an acquisition path. `DISCOGS_LEADS.md` is a want-list of records worth having; this
 queues a stream of each so the harvester can compute its chroma **signature** and test the
