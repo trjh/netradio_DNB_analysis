@@ -2,6 +2,7 @@
 
 Offline: the recipe runs for real on synthetic audio; ffmpeg is stubbed for the canary builder.
 """
+import hashlib
 import io
 import json
 import os
@@ -117,6 +118,13 @@ class TestMakeCanary(unittest.TestCase):
         arr = np.load(io.BytesIO(npy1))
         self.assertEqual(arr.dtype, np.dtype("float16"))
         self.assertEqual(shape, list(arr.shape))
+        # The digest is of the .npy FILE bytes (header included) -- what the stored
+        # expected-<id>.npy hashes to -- not of the raw float16 samples. The canary test in
+        # test_chroma_tuning hashed the raw samples until 2026-09-17 and could never pass.
+        self.assertEqual(sha1, hashlib.sha256(npy1).hexdigest())
+        self.assertNotEqual(sha1, hashlib.sha256(arr.tobytes()).hexdigest())
+        self.assertEqual(make_canary.pack(np.load(io.BytesIO(npy1)).astype("float32")),
+                         (npy1, sha1))                        # pack() is what sign() hashes through
 
     def test_build_produces_consistent_manifest(self):
         """End-to-end with ffmpeg stubbed: decode -> sign -> flac -> manifest, and the manifest's
@@ -144,7 +152,6 @@ class TestMakeCanary(unittest.TestCase):
             self.assertEqual(m["tolerance"], chroma_recipe.TOLERANCE)
             # the manifest sha must match the committed expected .npy AND a fresh signing
             expected = open(os.path.join(out, item["expected"]), "rb").read()
-            import hashlib
             self.assertEqual(item["sha256_expected"], hashlib.sha256(expected).hexdigest())
             self.assertEqual(item["sha256_expected"], make_canary.sign(y)[1])
             self.assertTrue(os.path.exists(os.path.join(out, item["audio"])))

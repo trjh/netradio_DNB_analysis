@@ -40,6 +40,7 @@ sys.path.insert(0, SCRIPTS)
 
 import numpy as np                      # noqa: E402
 import chroma_recipe                    # noqa: E402
+import make_canary                      # noqa: E402
 
 # chroma_recipe imports librosa LAZILY, so this module imports fine on a bare clone and the
 # classes that actually compute chroma skip instead of erroring at call time.
@@ -355,9 +356,9 @@ class AgainstRealAudio(unittest.TestCase):
                 got = chroma_recipe.compute_chroma(y32)
                 expected = item.get("sha256_expected") or item.get("sha256")
                 if expected:
-                    self.assertEqual(
-                        hashlib.sha256(got.astype(chroma_recipe.STORE_DTYPE).tobytes()).hexdigest(),
-                        expected)
+                    # The manifest's digest is of the serialised .npy file (numpy header
+                    # included), so hash through make_canary's own packer, not `.tobytes()`.
+                    self.assertEqual(make_canary.pack(got)[1], expected)
                 self.assertTrue(np.array_equal(got, _whole_file_chroma(y32)))
 
     def test_real_audio_multiblock(self):
