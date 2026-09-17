@@ -66,8 +66,8 @@ forward-equivalent positions (≈ 25471 … 32014 s), once L is pinned.
 ## Usage
 
 ```
-PYTHONPATH=scripts python3 -m streamalign tail-solve            # report (default)
-PYTHONPATH=scripts python3 -m streamalign tail-solve --emit     # write <stem>.auto.labels.tsv
+. .venv/bin/activate && python -m streamalign tail-solve            # report (default)
+. .venv/bin/activate && python -m streamalign tail-solve --emit     # write <stem>.auto.labels.tsv
 ```
 
 `--emit` writes AUTO GENERATED labels for the **14 corroborated Session-B files only**

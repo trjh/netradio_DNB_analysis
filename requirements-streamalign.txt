@@ -1,5 +1,6 @@
 # Stream Alignment Engine + harvester dependencies. `make venv` installs this file together
-# with requirements.txt into the one virtualenv, `.venv`; run every tool with .venv/bin/python.
+# with requirements.txt into the one virtualenv, `.venv`; activate it (. .venv/bin/activate) and
+# run every tool with python.
 #
 # Core engine (P0-P4: groundtruth/audio/align/skips/graph/solve) needs only numpy
 # plus a system ffmpeg on PATH. The original-track <-> mix feature alignment (track_mix,

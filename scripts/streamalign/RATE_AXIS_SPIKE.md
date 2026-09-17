@@ -75,7 +75,7 @@ it by `align_track` / `batch_align` (the `track-mix` CLI). Documented results (s
 So the *idea* — chroma+DTW recovers the original↔mix rate where correlation can't — is **proven
 on more than one or two hand-synced tracks**; it is validated across the whole synced set with a
 working precision gate. (A *fresh* run needs the librosa `.venv` —
-`PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix` — which is not installed on every
+`. .venv/bin/activate && python -m streamalign track-mix` — which is not installed on every
 machine; the figures above are the engine's own recorded validation against Tim's sync points.)
 
 ## What's actually still open (→ scope for A7b)

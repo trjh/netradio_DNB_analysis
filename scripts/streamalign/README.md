@@ -81,12 +81,12 @@ verification.
 ## Usage
 
 ```
-PYTHONPATH=scripts python3 -m streamalign groundtruth          # the hand answer key
-PYTHONPATH=scripts python3 -m streamalign align d000-018 d001-026b
-PYTHONPATH=scripts python3 -m streamalign --labels <dir> validate
-PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix \
+. .venv/bin/activate && python -m streamalign groundtruth          # the hand answer key
+. .venv/bin/activate && python -m streamalign align d000-018 d001-026b
+. .venv/bin/activate && python -m streamalign --labels <dir> validate
+. .venv/bin/activate && python -m streamalign track-mix \
     --meta track-metadata.json --sources sources_local        # G2 1st pass (needs librosa)
-PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints d376-395 72 --dry-run
+. .venv/bin/activate && python -m streamalign match-hints d376-395 72 --dry-run
 ```
 
 - **`groundtruth`** — prints each file's resolved hand master-start (seconds) and

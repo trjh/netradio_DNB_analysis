@@ -670,8 +670,9 @@ def prep_next(path, force=False, override=None):
         return
 
     py = engine_python()
-    shown = ".venv/bin/python" if py else "python3"
-    cmd = f"PYTHONPATH=scripts {shown} -m streamalign hints {nxt}"
+    # The venv puts scripts/ on sys.path (netradio-scripts.pth); without it PYTHONPATH still has to.
+    prefix = ". .venv/bin/activate && python" if py else "PYTHONPATH=scripts python3"
+    cmd = f"{prefix} -m streamalign hints {nxt}"
     sys.stderr.write(f"\nNext file looks like {nxt}  [{why}].\n")
 
     if not force:

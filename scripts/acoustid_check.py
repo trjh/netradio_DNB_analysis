@@ -2,9 +2,9 @@
 """Verify the ORIGINALS against AcoustID: confirm what each source file actually is.
 
     set -a && . ./.env && set +a          # needs ACOUSTID_DEV_API_KEY
-    PYTHONPATH=scripts .venv/bin/python scripts/acoustid_check.py            # all of sources/
-    PYTHONPATH=scripts .venv/bin/python scripts/acoustid_check.py --mismatch # only disagreements
-    PYTHONPATH=scripts .venv/bin/python scripts/acoustid_check.py --file 013-*.mp3
+    . .venv/bin/activate && python scripts/acoustid_check.py            # all of sources/
+    . .venv/bin/activate && python scripts/acoustid_check.py --mismatch # only disagreements
+    . .venv/bin/activate && python scripts/acoustid_check.py --file 013-*.mp3
 
 It fingerprints each file in `NETRADIO_SOURCES_DIR` the way AcoustID actually wants it -- the
 fingerprint from the START of the recording, paired with its FULL duration -- and reports what

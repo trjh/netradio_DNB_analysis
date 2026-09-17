@@ -81,7 +81,7 @@ forward, so the next file's analysis starts from them instead of a blank slate?
 where its neighbour begins, via the `file_<other>:` link):
 
 ```bash
-PYTHONPATH=scripts python3 -m streamalign starter <owner-stem>   # writes <other>.start-unprocessed.labels.tsv seed(s)
+. .venv/bin/activate && python -m streamalign starter <owner-stem>   # writes <other>.start-unprocessed.labels.tsv seed(s)
 ```
 
 **What you get:** a `<other>.start-unprocessed.labels.tsv` for the *next* capture — the owner's
@@ -127,9 +127,9 @@ work — what do I run, and how do I read the result?
 **A:**
 
 ```bash
-PYTHONPATH=scripts python3 -m streamalign groundtruth     # dump resolved hand master-starts
-PYTHONPATH=scripts python3 -m streamalign validate        # align every hand-verified pair and score
-PYTHONPATH=scripts python3 -m streamalign align <a> <b>   # align two specific captures
+. .venv/bin/activate && python -m streamalign groundtruth     # dump resolved hand master-starts
+. .venv/bin/activate && python -m streamalign validate        # align every hand-verified pair and score
+. .venv/bin/activate && python -m streamalign align <a> <b>   # align two specific captures
 ```
 
 **What each prints** (all **read-only** — none of them touch `track-metadata.json`):
@@ -159,9 +159,9 @@ verify labels.
 **A:**
 
 ```bash
-PYTHONPATH=scripts python3 -m streamalign skip-clips                  # detect skips over verified overlaps + clips
-PYTHONPATH=scripts python3 -m streamalign skip-confirm <id>           # confirm → owner's hand .labels.tsv
-PYTHONPATH=scripts python3 -m streamalign skip-reject  <id> --note …  # reject → labels/skip-rejections.tsv
+. .venv/bin/activate && python -m streamalign skip-clips                  # detect skips over verified overlaps + clips
+. .venv/bin/activate && python -m streamalign skip-confirm <id>           # confirm → owner's hand .labels.tsv
+. .venv/bin/activate && python -m streamalign skip-reject  <id> --note …  # reject → labels/skip-rejections.tsv
 ```
 
 - **`skip-clips`** — finds candidate skips over your verified overlaps and **writes short audio
@@ -181,8 +181,8 @@ span, rebuild the JSON afterwards.
 **A:** Two passes ([PROCESS.md step 9](./PROCESS.md#9-align-the-originals)):
 
 ```bash
-PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> <NNN>   # Pass 1: propose
-PYTHONPATH=scripts .venv/bin/python -m streamalign match-hints <stem> --all   # batch: every overlapping track with an original
+. .venv/bin/activate && python -m streamalign match-hints <stem> <NNN>   # Pass 1: propose
+. .venv/bin/activate && python -m streamalign match-hints <stem> --all   # batch: every overlapping track with an original
 ```
 
 **What you get:** a paired hints file per track in `labels/automated/` —
@@ -214,7 +214,7 @@ optional manual cross-check.
 **A:**
 
 ```bash
-PYTHONPATH=scripts .venv/bin/python -m streamalign track-mix --tracks <NNN>   # original↔mix rate (G2; needs librosa)
+. .venv/bin/activate && python -m streamalign track-mix --tracks <NNN>   # original↔mix rate (G2; needs librosa)
 ```
 
 **What you get:** a printed report of each original's measured rate/offset vs the mix (add

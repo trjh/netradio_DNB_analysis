@@ -254,7 +254,7 @@ def record_2h_fixture(path=FIXTURE_2H):
     This is the ~10 GB run the change exists to remove, so it is not part of any suite. Run it on
     an arm64 Mac with at least 12 GB free:
 
-        PYTHONPATH=scripts .venv/bin/python tests/test_chroma_tuning.py --record
+        . .venv/bin/activate && python tests/test_chroma_tuning.py --record
     """
     y32 = synthetic_signal(TWO_HOURS_S)
     ref_t = estimate_tuning(y=y32, sr=SR, bins_per_octave=chroma_recipe.TUNING_BPO)

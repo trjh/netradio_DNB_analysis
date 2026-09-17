@@ -135,14 +135,14 @@ Then:
 set -a && . ./.env && set +a
 
 # what does the engine now consider unsolved-and-searchable?
-PYTHONPATH=scripts .venv/bin/python -c \
+. .venv/bin/activate && python -c \
   "from streamalign import mystery; print([e['number'] for e in mystery.searchable()])"
 
 # 1. search the originals you already have
-PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --all-mystery
+. .venv/bin/activate && python scripts/identify_by_chroma.py --all-mystery
 
 # 2. search the listen queue's downloaded, UNLISTENED tracks (slow — runs for hours)
-PYTHONPATH=scripts .venv/bin/python scripts/match_queue.py --out /tmp/queue-match.txt
+. .venv/bin/activate && python scripts/match_queue.py --out /tmp/queue-match.txt
 
 # 3. a cheap re-check against the commercial catalogues (ACRCloud + AudD). Proven defeated by
 #    the codec on the clips tried so far (see §4), so expect nothing — but catalogues grow and a
@@ -183,8 +183,8 @@ the mystery:
 
 ```bash
 set -a && . ./.env && set +a
-PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --all-mystery
-PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --pool ~/dnb-candidates
+. .venv/bin/activate && python scripts/identify_by_chroma.py --all-mystery
+. .venv/bin/activate && python scripts/identify_by_chroma.py --pool ~/dnb-candidates
 ```
 
 **Validated:** given 90 s of the *1998 stream* where Dead Calm's *Urban Style* plays, matched

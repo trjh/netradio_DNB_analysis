@@ -13,7 +13,7 @@ Two deliberately opposite cases:
 - **Track 066, point A** in `d336-355` — the record's **entrance, buried under the
   outgoing record** ("first four-note").
 
-Reproduce: `PYTHONPATH=scripts .venv/bin/python -m streamalign sync-sweep 7 A --json out.json`
+Reproduce: `. .venv/bin/activate && python -m streamalign sync-sweep 7 A --json out.json`
 (and `66 A`; see the seat-correction note below).
 
 ## How to read the numbers (plain-language definitions)

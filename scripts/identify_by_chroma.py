@@ -2,9 +2,9 @@
 """Identify a record from the 1998 stream by CHROMA matching against a candidate pool.
 
     set -a && . ./.env && set +a
-    PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --query "Mystery Track 7.wav"
-    PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --all-mystery
-    PYTHONPATH=scripts .venv/bin/python scripts/identify_by_chroma.py --pool ~/dnb-candidates
+    . .venv/bin/activate && python scripts/identify_by_chroma.py --query "Mystery Track 7.wav"
+    . .venv/bin/activate && python scripts/identify_by_chroma.py --all-mystery
+    . .venv/bin/activate && python scripts/identify_by_chroma.py --pool ~/dnb-candidates
 
 This is the method that WORKS on this material. AcoustID does not, and cannot -- see
 `Archive/LESSON_acoustid_stream.md`: the same record taken from the 1998 broadcast has a

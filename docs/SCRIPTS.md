@@ -7,16 +7,18 @@
 > [HOWTO](../HOWTO.md) (which tool *now*) · [FINDING_MYSTERY_TRACKS](../FINDING_MYSTERY_TRACKS.md)
 > (identifying the unnamed tracks).
 
-One Python: **`.venv/bin/python`**, built by `make venv` from both requirements files (`make dep` installs into an existing one; `make venv-rebuild` deletes and recreates it — stop the harvester and the align server first) —
+One Python: **`.venv`**, built with uv by `make venv` from both requirements files (`make dep` installs into an existing one; `make venv-rebuild` deletes and recreates it — stop the harvester and the align server first) —
 the label tooling (numpy, pydub, pyaudacity) and the alignment engine + harvester
 (**librosa**, soundfile). It prefers python3.13, the interpreter the harvester runs under.
 (Until 2026-09 there were two venvs: a general `.env` and the librosa `.venv`. `.env` is now
 the variables *file*, below; an old `.env/` directory must go — `make` says so.)
 
-Most scripts want `PYTHONPATH=scripts` and the machine paths from `.env`:
+Most scripts want the venv active and the machine paths from `.env`. Activating puts `scripts/` on
+the path (`netradio-scripts.pth`, written by `make venv` and `make dep`), so no `PYTHONPATH`:
 
 ```bash
 set -a && . ./.env && set +a
+. .venv/bin/activate
 ```
 
 **Running the tests:**
@@ -97,15 +99,15 @@ own original, the change is wrong.
 make harvest-run                                                      # runs for weeks
 
 set -a && . ./.env && set +a
-PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --status
-MallocLargeCache=0 PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --run
-PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --pause        # / --resume
-PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --purge-audio  # throw every retained excerpt away
-PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --forget 7     # drop MT7's leads + pairings
-PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --rescan       # score every cached signature
+. .venv/bin/activate && python scripts/harvest.py --status
+. .venv/bin/activate && MallocLargeCache=0 python scripts/harvest.py --run
+. .venv/bin/activate && python scripts/harvest.py --pause        # / --resume
+. .venv/bin/activate && python scripts/harvest.py --purge-audio  # throw every retained excerpt away
+. .venv/bin/activate && python scripts/harvest.py --forget 7     # drop MT7's leads + pairings
+. .venv/bin/activate && python scripts/harvest.py --rescan       # score every cached signature
                                                                       # against every mystery it has
                                                                       # not met yet (no network)
-PYTHONPATH=scripts .venv/bin/python scripts/harvest.py --requeue-missing-sigs
+. .venv/bin/activate && python scripts/harvest.py --requeue-missing-sigs
                                                                       # re-fetch done URLs whose
                                                                       # signature is LOST (refuses
                                                                       # while a writer runs)
