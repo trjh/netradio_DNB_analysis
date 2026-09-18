@@ -222,8 +222,8 @@ signatures** — and the audio never has to touch the disk at all:
 yt-dlp -o - <url> | ffmpeg -i - -ac 1 -ar 16000 -f wav - | chroma → .npy → discard audio
 ```
 
-`scripts/match_queue.py` already caches signatures this way (`.chroma-cache/`, content-addressed,
-float16). Extending it to *stream* rather than read a local file is a small change, and it is the
+`scripts/match_queue.py` already caches signatures this way (content-addressed, float16, through
+the `chroma` cache of `scripts/cache_budget.py`). Extending it to *stream* rather than read a local file is a small change, and it is the
 only way this scales.
 
 **Be a good citizen.** Rate-limit, back off hard on any refusal, and stop when told to. We do

@@ -395,6 +395,19 @@ TWIN_A="$ANALYSIS/scripts/cache_budget.py"
 if [ -f "$TWIN_P" ] || [ -f "$TWIN_A" ]; then
   if cmp -s "$TWIN_P" "$TWIN_A"; then
     say "self-check: cache_budget.py identical in both repos ✓"
+  elif [ ! -f "$TWIN_P" ] || [ ! -f "$TWIN_A" ]; then
+    # One side has the module and the other has not adopted it yet. That is the window between
+    # the two twin PRs merging, not a drift: telling the operator to copy a file over a missing
+    # one would leave an untracked module in a checkout. Name the state instead.
+    {
+      say "ERROR: only one repo carries cache_budget.py:"
+      if [ -f "$TWIN_P" ]; then say "  present: $TWIN_P"; else say "  MISSING: $TWIN_P"; fi
+      if [ -f "$TWIN_A" ]; then say "  present: $TWIN_A"; else say "  MISSING: $TWIN_A"; fi
+      say ""
+      say "The two are one file (PLAN_data_tiering.md §2). Land the twin PR in BOTH repos and"
+      say "fast-forward both checkouts, then re-run."
+    } >&2
+    exit 1
   else
     {
       say "ERROR: cache_budget.py differs between the two repos:"

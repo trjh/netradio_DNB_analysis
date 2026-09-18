@@ -7,10 +7,13 @@ The listen queue is a second candidate pool that already exists on disk. Only th
 NOT listened to are worth checking: if he had heard it and it were the mystery, it would not be
 a mystery any more.
 
-Chroma, not fingerprints -- see Archive/LESSON_acoustid_stream.md. Signatures are cached to
-`.chroma-cache/` (a 12xN float16 matrix, ~50KB a track) so a re-run is instant and, more to the
-point, so that the SIGNATURE can outlive the audio: the cache is the thing worth keeping, not
-the file. That is the basis for scaling this to material we cannot afford to store.
+Chroma, not fingerprints -- see Archive/LESSON_acoustid_stream.md. A signature is a 12xN float16
+matrix, about 50 KB a track, and it is cached through the `chroma` cache of the policy
+(cache_budget.py: NETRADIO_CHROMA_CACHE_DIR, else $NETRADIO_CACHE_ROOT/chroma; with the root unset
+this script keeps nothing at all, because the repo-local .harvest/chroma fallback belongs to the
+harvester). A re-run is then instant and, more to the point, the SIGNATURE outlives the audio:
+the cache is the thing worth keeping, not the file. That is the basis for scaling this to
+material we cannot afford to store.
 """
 
 import argparse
