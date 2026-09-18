@@ -236,9 +236,8 @@ class ExcerptsRespectTheFloor(unittest.TestCase):
         """The floor pass ranks across caches and runs under the MACHINE lock, which only the
         root gives. With the root unset a commit must not reach into another cache: `reserve`
         refusing past the floor, and the run's age and cap passes, are the bound there."""
-        import tempfile as _tf
-        cand = _tf.mkdtemp()
-        chroma = _tf.mkdtemp()
+        cand = tempfile.mkdtemp()
+        chroma = tempfile.mkdtemp()
         landed = os.path.join(cand, "MT4-0.0500-abcd.wav")
         victim = os.path.join(chroma, "u123.npy")
         for path in (landed, victim):
@@ -260,6 +259,12 @@ class ExcerptsRespectTheFloor(unittest.TestCase):
             self.assertTrue(os.path.exists(landed))
             self.assertEqual(cb.reserve("candidates", 10, os.path.join(cand, "x")),
                              (False, "floor"))                    # the floor still refuses writes
+            # A root NAMED BUT ABSENT is as dark as an unset one: the run skips it and lock_path
+            # hands out the per-cache lock, so the floor pass must stay away here too.
+            os.environ["NETRADIO_CACHE_ROOT"] = os.path.join(chroma, "nowhere")
+            self.assertEqual(cb.run()["skipped"], "root-missing")
+            self.assertEqual(cb.commit("candidates", landed), (True, None))
+            self.assertTrue(os.path.exists(victim))
         finally:
             cb.disk_usage = saved
             cb._registry.clear()

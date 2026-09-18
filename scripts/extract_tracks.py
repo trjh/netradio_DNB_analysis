@@ -208,8 +208,9 @@ def main():
             try:
                 for i, (stem, a, b) in enumerate(pieces):
                     p = os.path.join(pdir, "%s.part%d.wav" % (stem_name, i))
-                    cut(stem, a, b, starts[stem], p)
-                    parts.append(p)
+                    parts.append(p)          # named BEFORE the cut: ffmpeg truncates its output
+                    cut(stem, a, b, starts[stem], p)      # as it starts, so a failed cut leaves a
+                                                          # file, and the finally must know it
                 with open(lst, "w") as fh:
                     for p in parts:
                         fh.write("file '%s'\n" % p.replace("'", "'\\''"))
