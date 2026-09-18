@@ -40,7 +40,13 @@ _verified = {}                      # key -> remote size
 
 def _pinned(entry):
     """A signature whose bucket copy is not verified is the only copy: never evicted, by the
-    policy's run or by anything else. With the store dark, every signature is pinned."""
+    policy's run or by anything else. With the store dark, every signature is pinned.
+
+    COST: a key not already in `_verified` costs one HEAD, once per key per process. That is
+    nothing on this machine (a handful of signatures) but it is one aws call per unverified
+    entry on a worker whose cache holds thousands, and an eviction run asks about every entry
+    while it holds the machine lock. If that ever bites, seed `_verified` from one prefix LIST
+    the way the player's thumbs cache seeds its bucket records."""
     return not (enabled() and remote_size(os.path.basename(entry.path)) == entry.bytes)
 
 

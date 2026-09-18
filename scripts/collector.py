@@ -97,14 +97,16 @@ def _score_new(state, url, c, samples, qs):
             continue                       # not good enough to displace anyone
         excerpt = os.path.join(KEEP, "MT%d-%.4f-%s.wav"
                                % (num, cost, hashlib.sha1(url.encode()).hexdigest()[:8]))
-        if not os.path.exists(excerpt):
+        kept = os.path.exists(excerpt)
+        if not kept:
             if samples is None:            # no retained audio -> a lead without a clip
                 continue
-            write_excerpt(samples, at or 0, excerpt)
-            state["kept"] += 1
+            kept = write_excerpt(samples, at or 0, excerpt)   # False: the policy refused it
+            if kept:
+                state["kept"] += 1
         hit = {"at": _now(), "mystery": num, "cost": round(cost, 4),
                "semitones": shift, "at_s": round(at or 0, 1), "url": url,
-               "audio": excerpt,
+               "audio": excerpt if kept else None,
                "verdict": "MATCH" if cost <= MATCH_COST else "near"}
         state["matches"].append(hit)
         evict_overfull(state, num)

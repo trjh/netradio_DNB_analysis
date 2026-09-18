@@ -128,7 +128,10 @@ def load_audio(name, sr=SR, mono=True, use_cache=True, audio_dir=None):
     # failed write (ENOSPC, a race) must never fail the decode -- just return the signal.
     ok, _why = cache_budget.reserve("streamalign", signal.nbytes + 128, cache_path)
     if ok:
-        tmp = cache_path + ".part"            # `.part` is never counted as an entry
+        # The pid keeps two processes decoding the same source (the align server's inspect
+        # worker and a CLI run) off one temp name; `.part` stays LAST so the entry filter,
+        # which reads the suffix, still skips it.
+        tmp = "%s.%d.part" % (cache_path, os.getpid())
         try:
             with open(tmp, "wb") as handle:  # file handle => np.save won't append .npy
                 np.save(handle, signal)

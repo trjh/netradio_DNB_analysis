@@ -1004,7 +1004,12 @@ EXCERPT_S = 30.0
 
 def write_excerpt(samples, at_s, path):
     """Write ~EXCERPT_S seconds of `samples` centred on the matched instant. In memory in, file
-    out -- no second fetch. A brief excerpt for aural verification, swept after KEEP_TTL_DAYS."""
+    out -- no second fetch. A brief excerpt for aural verification, swept after KEEP_TTL_DAYS.
+
+    Returns True when the excerpt is on disk and False when it is not: nothing to write, the
+    cache dark, or the policy refusing the write (past the disk floor, or the board all pinned).
+    The caller must not count a refused excerpt as kept or record it as the lead's audio -- the
+    lead survives, the audio was only ever the evidence."""
     import soundfile as sf
     lo = max(0, int((at_s - EXCERPT_S / 2) * _audio.SR))
     hi = min(len(samples), lo + int(EXCERPT_S * _audio.SR))
@@ -1020,20 +1025,21 @@ def write_excerpt(samples, at_s, path):
     if len(clip) > cap:
         clip = clip[:cap]
     if len(clip) == 0:
-        return                                   # nothing to hear; do not leave an empty file
+        return False                             # nothing to hear; do not leave an empty file
 
     if not cache_budget.ensure_dir("candidates"):
-        return                                   # dark (the root unset or absent): not kept
+        return False                             # dark (the root unset or absent): not kept
     # A planned-size write into the `candidates` cache: 16-bit PCM, so two bytes a sample. The
     # policy makes room by score (the worst of a mystery's twelve first) and refuses past the
     # disk floor; a refused excerpt is simply not kept -- the lead survives, the audio was only
     # ever the evidence.
     ok, _why = cache_budget.reserve("candidates", len(clip) * 2 + 64, path)
     if not ok:
-        return
+        return False
     sf.write(path, clip, _audio.SR)
     cache_budget.commit("candidates", path, reason="harvester")
     _write_provenance()
+    return True
 
 
 def purge_audio():
@@ -1450,7 +1456,11 @@ def sweep_excerpts():
     """The cache policy's run over this process's two caches: kept excerpts older than
     KEEP_TTL_DAYS (NETRADIO_CANDIDATES_CACHE_MAX_AGE_DAYS) and signatures past their age go, and
     either cache found over its cap is brought under it. A lead you haven't listened to in a
-    month is not a lead. One run at a time per machine: a run the player holds is skipped."""
+    month is not a lead. One run at a time: a run whose lock is already held is skipped.
+
+    It works with NETRADIO_CACHE_ROOT unset too, which is the harvester's own fallback
+    configuration: both caches then live under the repo's `.harvest/`, and the run takes its
+    lock inside each cache's directory instead of the machine-wide one under the root."""
     return cache_budget.run(reason="harvest", names=("candidates", "chroma"))
 
 
@@ -2292,14 +2302,19 @@ def run(args):
 
             excerpt = os.path.join(_keep_dir(), "MT%d-%.4f-%s.wav"
                                    % (num, cost, hashlib.sha1(url.encode()).hexdigest()[:8]))
-            if not os.path.exists(excerpt):
+            kept = os.path.exists(excerpt)
+            if not kept:
                 if samples is None:            # cached signature, no audio in hand -> can't excerpt
                     continue
-                write_excerpt(samples, at or 0, excerpt)      # from memory; NO second fetch
-                state["kept"] += 1
+                # A refused excerpt (past the disk floor, or the board all pinned) is not on
+                # disk, so it is neither counted as kept nor named as the lead's audio: the
+                # lead itself survives and `/harvest` plays it from the source embed.
+                kept = write_excerpt(samples, at or 0, excerpt)   # from memory; NO second fetch
+                if kept:
+                    state["kept"] += 1
             hit = {"at": _now(), "mystery": num, "cost": round(cost, 4),
                    "semitones": shift, "at_s": round(at or 0, 1), "url": url,
-                   "audio": excerpt,
+                   "audio": excerpt if kept else None,
                    "verdict": "MATCH" if cost <= MATCH_COST else "near"}
             state["matches"].append(hit)
 

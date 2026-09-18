@@ -194,12 +194,19 @@ def main():
             stem, a, b = pieces[0]
             cut(stem, a, b, starts[stem], out)
         else:
+            # The concat parts are scratch, not entries. They are PCM .wav (ffmpeg reads the
+            # format from the extension, so they cannot carry a `.part` suffix) and they sit in
+            # the cache directory, so they go in a DOT-prefixed subdirectory: the policy's walk
+            # skips those, and a concurrent run's cap pass can neither count nor evict them.
+            pdir = os.path.join(os.path.dirname(out) or ".", ".parts")
+            os.makedirs(pdir, exist_ok=True)
+            stem_name = os.path.basename(out)
             parts = []
             for i, (stem, a, b) in enumerate(pieces):
-                p = out + ".part%d.wav" % i
+                p = os.path.join(pdir, "%s.part%d.wav" % (stem_name, i))
                 cut(stem, a, b, starts[stem], p)
                 parts.append(p)
-            lst = out + ".txt"
+            lst = os.path.join(pdir, stem_name + ".txt")
             with open(lst, "w") as fh:
                 for p in parts:
                     fh.write("file '%s'\n" % p.replace("'", "'\\''"))

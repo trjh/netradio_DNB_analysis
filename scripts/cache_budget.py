@@ -30,21 +30,40 @@ THE FOUR CALLS
                                      reason, updates the accounting.
   run() / periodic() / startup()     the eviction run (§2.3): max_age, over-cap by each cache's
                                      order, then the disk floor with the cross-cache ranking.
-                                     One run at a time per machine (a kernel flock under the
-                                     cache root); a run that finds the lock held is skipped and
+                                     One run at a time per machine (a kernel flock, see THE
+                                     LOCK); a run that finds the lock held is skipped and
                                      recorded, never queued.
+
+THE LOCK
+--------
+One eviction at a time per directory, so a cache is never evicted from twice at once — and that
+covers the eviction a WRITER triggers inside `reserve` and `commit`, not just the periodic run.
+Where the lock file sits follows one rule (Tim, 2026-09-18):
+
+  NETRADIO_CACHE_ROOT set     `$NETRADIO_CACHE_ROOT/.eviction.lock`, one lock for the machine.
+  NETRADIO_CACHE_ROOT unset   `<cache dir>/.eviction.lock`, one lock per live cache.
+
+A writer that finds the lock held never waits: `reserve` admits an unplanned write (its length
+is not the caller's to give up) and refuses a planned one with `why="locked"`, and the next
+periodic run corrects any overflow.
 
 DARK
 ----
-NETRADIO_CACHE_ROOT has NO default in code. Unset, the module is dark throughout: `cache_root()`
-is None, a cache with no directory of its own resolves to None, `reserve` refuses, the run is
-skipped, the event log and the lock (both under the root) are never written, and nothing is ever
-derived from `~` or created on disk. The value a machine runs with (`~/Netradio/cache` on the
+NETRADIO_CACHE_ROOT has NO default in code. Unset, nothing is derived from `~` and nothing is
+created: `cache_root()` is None, a cache with no directory of ITS OWN resolves to None and
+`reserve` refuses it, and the event log, the machine lock and `.eviction-last.json` — all three
+under the root — are never written. The value a machine runs with (`~/Netradio/cache` on the
 mini after the move) is set in `.env`, never assumed here, so a worktree, CI or a test process
-that forgets the variable cannot touch the real machine's caches. A registered cache whose
-directory does not exist is dark the same way: status shows it as missing, the run never touches
-it, reserve refuses. Registration itself creates nothing. Tests set the variables to temporary
-directories they own.
+that forgets the variable cannot touch the real machine's caches.
+
+A cache whose OWNER supplies a directory (thumbs under the download root, streamalign under
+NETRADIO_ALIGN_CACHE, the harvester's `.harvest/`) is live whether or not the root is set, and
+so is its eviction: with the root unset `run()` walks every registered cache that has a live
+directory, takes that cache's own lock, and applies its age and its cap. The cross-cache floor
+pass needs the ranking over every cache at once, so it stays root-only. A registered cache whose
+directory does not exist is dark: status shows it as missing, the run never touches it, reserve
+refuses. Registration itself creates nothing. Tests set the variables to temporary directories
+they own.
 
 ENFORCE
 -------
@@ -53,6 +72,7 @@ no-ops on it. The listening and harvest caches register that way in PR 1 and PR 
 fetch/analyse plan flips them (their eviction needs the bucket as the refill path first).
 """
 
+import contextlib
 import fcntl
 import json
 import os
@@ -488,6 +508,48 @@ def prune_events(days=None):
     return dropped
 
 
+# --- the eviction lock (§2.3) ---------------------------------------------------------------
+
+def lock_path(name=None):
+    """Where the eviction lock for `name` lives, or None when there is nothing to lock.
+
+    With NETRADIO_CACHE_ROOT set it is the machine lock, `$ROOT/.eviction.lock`, shared by every
+    cache. With the root unset the caches that are live anyway lock in their OWN directories, so
+    their eviction still runs one at a time (Tim, 2026-09-18). The file is a dot-file inside a
+    directory its owner already writes, and `_is_entry` never counts it."""
+    root = cache_root()
+    if root and os.path.isdir(root):
+        return os.path.join(root, LOCK_FILE)
+    d = dir_of(name) if name else None
+    return os.path.join(d, LOCK_FILE) if d and os.path.isdir(d) else None
+
+
+@contextlib.contextmanager
+def _locked(path):
+    """Hold the eviction lock at `path` for the block, never waiting for it (§2.3: a run that
+    finds it held is skipped, never queued). Yields (held, why): (True, None) when it is ours,
+    (False, "locked") when another process holds it, (False, "lock-unopenable") when the file
+    cannot be opened, and (True, None) when `path` is None — there is no lock to take, and
+    nothing that could be contending for it."""
+    if not path:
+        yield True, None
+        return
+    try:
+        fh = open(path, "a")
+    except OSError:
+        yield False, "lock-unopenable"
+        return
+    try:
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            yield False, "locked"
+            return
+        yield True, None
+    finally:
+        fh.close()          # closing the descriptor releases the kernel lock
+
+
 # --- reserve / commit / remove (§2.1, §2.3) ---------------------------------------------------
 
 def _delete(rec, entry, event, reason):
@@ -555,7 +617,11 @@ def reserve(name, nbytes, path=None):
             _hold(path)
             return True, None
         need = lambda freed: size - freed >= cap   # noqa: E731
-        _evicted, _freed, _pinned, ok = _evict_until(rec, need, "by-cap")
+        with _locked(lock_path(name)) as (held, _why):
+            if not held:            # someone else is evicting here: an unplanned write is still
+                _hold(path)         # admitted, and their run (or the next one) corrects the cap
+                return True, None
+            _evicted, _freed, _pinned, ok = _evict_until(rec, need, "by-cap")
         if ok:
             _hold(path)
             return True, None
@@ -564,7 +630,13 @@ def reserve(name, nbytes, path=None):
     if nbytes > limit:
         return False, "larger-than-cap"
     need = lambda freed: size - freed + nbytes > limit   # noqa: E731
-    _evicted, _freed, _pinned, ok = _evict_until(rec, need, "by-cap")
+    if not need(0):                           # it fits as things stand: nothing to evict, no lock
+        _hold(path)
+        return True, None
+    with _locked(lock_path(name)) as (held, _why):
+        if not held:                # a planned write needs room MADE, and making it is exactly
+            return False, "locked"  # what the other process is doing: refuse, and let it finish
+        _evicted, _freed, _pinned, ok = _evict_until(rec, need, "by-cap")
     if ok:
         _hold(path)
         return True, None
@@ -602,10 +674,15 @@ def commit(name, path, reason=None):
         return True, None
     _invalidate_status()
     cap = cap_of(name)
-    if cap is not None and size_of(name) > cap:
-        _evict_cache(rec, "by-cap", exclude=path)
-    if over_floor(root):
-        _floor_run(exclude=path)
+    over_cap = cap is not None and size_of(name) > cap
+    past_floor = over_floor(root)
+    if over_cap or past_floor:
+        with _locked(lock_path(name)) as (held, _why):
+            if held:            # held elsewhere: that run is already evicting here, and the
+                if over_cap:    # next periodic one corrects whatever overflow is left
+                    _evict_cache(rec, "by-cap", exclude=path)
+                if past_floor:
+                    _floor_run(exclude=path)
     return True, None
 
 
@@ -741,26 +818,23 @@ def _record_run(summary):
 
 
 def run(reason="periodic", names=None):
-    """The eviction run. Returns its summary; {"skipped": why} when it did not run."""
+    """The eviction run. Returns its summary; {"skipped": why} when it did not run.
+
+    With NETRADIO_CACHE_ROOT set this is the machine-wide pass: every registered cache (or the
+    `names` asked for) under the one machine lock, then the cross-cache floor pass. With the root
+    unset the caches that are live anyway are swept just the same, each under its own directory's
+    lock — see THE LOCK and DARK in the module docstring."""
     global _last_skip
     root = cache_root()
     if not root:
-        _last_skip = {"at": now(), "why": "root-unset"}
-        return {"skipped": "root-unset", "root": None}
+        return _run_unrooted(reason, names)
     if not os.path.isdir(root):
         _last_skip = {"at": now(), "why": "root-missing"}
         return {"skipped": "root-missing", "root": root}
-    try:
-        fh = open(os.path.join(root, LOCK_FILE), "a")
-    except OSError as exc:
-        _last_skip = {"at": now(), "why": "lock-unopenable"}
-        return {"skipped": "lock-unopenable", "detail": str(exc)[:80]}
-    try:
-        try:
-            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            _last_skip = {"at": now(), "why": "locked"}
-            return {"skipped": "locked"}
+    with _locked(lock_path()) as (held, why):
+        if not held:
+            _last_skip = {"at": now(), "why": why}
+            return {"skipped": why}
         started = now()
         summary = {"reason": reason, "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                    "caches": [], "root": root}
@@ -778,11 +852,43 @@ def run(reason="periodic", names=None):
         with _lock:
             _last_run.clear()
             _last_run.update(summary)
-        _record_run(summary)
+        if not names:               # a scoped run is not the machine's last full pass, and must
+            _record_run(summary)    # not make the next server's start pass skip its own (§2.3)
         _invalidate_status()
         return summary
-    finally:
-        fh.close()          # closing the descriptor releases the kernel lock
+
+
+def _run_unrooted(reason, names):
+    """The run with NETRADIO_CACHE_ROOT unset: every registered cache that HAS a live directory
+    of its own, each under a lock in that directory, for its age and its cap. No floor pass (it
+    ranks across caches, which the root is what defines), no event log and no recorded run: both
+    files live under the root. {"skipped": "root-unset"} when no cache has a directory — the
+    fully dark case, where this changes nothing."""
+    global _last_skip
+    live = [rec for rec in registered()
+            if (not names or rec.name in names) and rec.enforce
+            and dir_of(rec.name) and os.path.isdir(dir_of(rec.name))]
+    if not live:
+        _last_skip = {"at": now(), "why": "root-unset"}
+        return {"skipped": "root-unset", "root": None}
+    started = now()
+    summary = {"reason": reason, "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+               "caches": [], "root": None}
+    for rec in live:
+        with _locked(lock_path(rec.name)) as (held, why):
+            if not held:
+                summary["caches"].append({"name": rec.name, "skipped": why})
+                continue
+            try:
+                summary["caches"].append(_evict_cache(rec, reason))
+            except CacheConfigError as exc:
+                summary["caches"].append({"name": rec.name, "error": str(exc)})
+    summary["seconds"] = round(now() - started, 3)
+    with _lock:
+        _last_run.clear()
+        _last_run.update(summary)
+    _invalidate_status()
+    return summary
 
 
 def periodic():

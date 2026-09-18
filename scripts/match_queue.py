@@ -54,7 +54,10 @@ def chroma_of(path, min_seconds=45.0):
     cdir = cache_dir()
     cached = os.path.join(cdir, key + ".npy") if cdir else None
     if cached and os.path.exists(cached):
-        return np.load(cached).astype("float32")
+        try:
+            return np.load(cached).astype("float32")
+        except (OSError, ValueError):
+            pass            # torn or corrupt (an eviction mid-write, a crash): re-compute it
     import librosa
     try:
         y = _audio.load_audio(path)

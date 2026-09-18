@@ -43,8 +43,8 @@ class TheTwin(unittest.TestCase):
                 mods.update(a.name.split(".")[0] for a in node.names)
             elif isinstance(node, ast.ImportFrom) and node.module:
                 mods.add(node.module.split(".")[0])
-        self.assertEqual(mods, {"fcntl", "json", "os", "re", "shutil", "threading", "time",
-                                "collections", "datetime"})
+        self.assertEqual(mods, {"contextlib", "fcntl", "json", "os", "re", "shutil", "threading",
+                                "time", "collections", "datetime"})
 
     def test_the_sync_self_check_covers_the_twin(self):
         sh = open(os.path.join(SCRIPTS, "tracklist_sync.sh"), encoding="utf-8").read()
@@ -204,6 +204,77 @@ class ExcerptsRespectTheFloor(unittest.TestCase):
                 self.assertEqual(cb.read_events()[0]["event"], "landed")
             finally:
                 cb.disk_usage = saved
+
+    def test_write_excerpt_says_whether_it_kept_the_excerpt(self):
+        """The caller counts `kept` and records the lead's audio from this answer: a refused
+        excerpt must not be counted, and must not name a file that is not there (review #146)."""
+        try:
+            import harvest
+            import numpy as np
+            import soundfile  # noqa: F401
+        except ImportError as exc:
+            self.skipTest("needs the venv: %s" % exc)
+        tmp = tempfile.mkdtemp()
+        root = tempfile.mkdtemp()
+        saved = cb.disk_usage
+        with mock.patch.dict(os.environ, {"NETRADIO_CACHE_ROOT": root,
+                                          "NETRADIO_CANDIDATES_CACHE_DIR": tmp,
+                                          "NETRADIO_DISK_MAX_PCT": "82"}):
+            try:
+                path = os.path.join(tmp, "MT4-0.0500-abcd.wav")
+                cb.disk_usage = lambda p: Usage(100, 90, 10)            # past the floor
+                self.assertFalse(harvest.write_excerpt(
+                    np.zeros(16000 * 40, dtype="float32"), 20.0, path))
+                cb.disk_usage = lambda p: Usage(100, 10, 90)            # under it
+                self.assertTrue(harvest.write_excerpt(
+                    np.zeros(16000 * 40, dtype="float32"), 20.0, path))
+                self.assertFalse(harvest.write_excerpt(np.zeros(0, dtype="float32"), 0.0, path))
+            finally:
+                cb.disk_usage = saved
+
+    def test_an_owner_dir_cache_is_swept_with_the_root_unset(self):
+        """Should fix 2 of #146 (the twin's Should fix 3): `sweep_excerpts` is a scoped run, and
+        with NETRADIO_CACHE_ROOT unset the caches are live under `.harvest/` anyway. The run
+        applies their age, taking a lock in each cache's own directory, and creates nothing
+        under `~`."""
+        import time
+        tmp = tempfile.mkdtemp()
+        old = os.path.join(tmp, "MT4-0.9000-old.wav")
+        young = os.path.join(tmp, "MT4-0.1000-new.wav")
+        for path, age_days in ((old, 40), (young, 1)):
+            with open(path, "wb") as fh:
+                fh.write(b"x" * 10)
+            os.utime(path, (time.time() - age_days * 86400,) * 2)
+        home = os.path.expanduser("~")
+        before = set(os.listdir(home))
+        registry = dict(cb._registry)
+        saved = cb.disk_usage
+        env = {k: os.environ.get(k) for k in os.environ if k.startswith("NETRADIO_")}
+        try:
+            for k in list(os.environ):
+                if k.startswith("NETRADIO_"):
+                    os.environ.pop(k)
+            os.environ["NETRADIO_CANDIDATES_CACHE_DIR"] = tmp
+            os.environ["NETRADIO_CHROMA_CACHE_DIR"] = tempfile.mkdtemp()   # keep the repo's
+            cb.disk_usage = lambda p: Usage(100, 10, 90)                   # .harvest/ out of it
+            import harvest                              # registers `candidates` at import
+            self.assertIsNotNone(cb.record("candidates"))
+            summary = harvest.cache_budget.run(names=("candidates", "chroma"))
+            self.assertIsNone(summary["root"])
+            self.assertEqual(summary["caches"][0]["aged"], 1)
+            self.assertFalse(os.path.exists(old))
+            self.assertTrue(os.path.exists(young))
+            self.assertTrue(os.path.exists(os.path.join(tmp, cb.LOCK_FILE)))
+        finally:
+            cb.disk_usage = saved
+            cb._registry.clear()
+            cb._registry.update(registry)
+            for k in list(os.environ):
+                if k.startswith("NETRADIO_"):
+                    os.environ.pop(k)
+            os.environ.update({k: v for k, v in env.items() if v is not None})
+        self.assertEqual(sorted(set(os.listdir(home)) - before), [],
+                         "the scoped run created something under the real $HOME")
 
 
 class TestFixtureIsolation(unittest.TestCase):
