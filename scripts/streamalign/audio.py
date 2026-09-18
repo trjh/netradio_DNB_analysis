@@ -27,18 +27,25 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 AUDIO_DIR = os.environ.get(
     "NETRADIO_AUDIO_DIR", os.path.join(_REPO_ROOT, "jaz_links"))
 
-# Decoded-array cache (keyed by source path + size + mtime + params).
-CACHE_DIR = os.environ.get(
-    "NETRADIO_ALIGN_CACHE",
-    os.path.join(os.path.expanduser("~"), ".cache", "netradio-streamalign"))
+# Decoded-array cache (keyed by source path + size + mtime + params): the `streamalign` cache of
+# the cache policy (cache_budget.py, the player plan PLAN_data_tiering.md §5.1). Bounded by the
+# policy, not by this module: 4 GB by default (NETRADIO_STREAMALIGN_CACHE_GB), oldest-added
+# first, 14 days (NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS), and the disk floor
+# NETRADIO_DISK_MAX_PCT above every cap. The directory is NETRADIO_STREAMALIGN_CACHE_DIR, else
+# the older NETRADIO_ALIGN_CACHE, else $NETRADIO_CACHE_ROOT/streamalign. The two fractions of the
+# disk this module used to read (a cap fraction and a disk-full fraction) are gone: a cache's
+# useful size is fixed by its corpus, not by the volume it sits on.
+import cache_budget
 
-# The cache is bounded, because it wasn't and grew to 26 GiB. The key includes the source's
-# size+mtime, so every re-transcode ORPHANS the old .npy -- and nothing ever evicted them. Two
-# guards, both safe because the cache is pure regenerable performance state:
-#   * never let it exceed CACHE_MAX_FRAC of the whole disk (evict oldest to make room);
-#   * never add to it once the disk is DISK_FULL_FRAC full -- starving the cache beats ENOSPC.
-CACHE_MAX_FRAC = float(os.environ.get("NETRADIO_ALIGN_CACHE_MAX_FRAC", "0.05"))
-DISK_FULL_FRAC = float(os.environ.get("NETRADIO_ALIGN_CACHE_DISK_FULL_FRAC", "0.95"))
+cache_budget.register("streamalign",
+                      dir_default=lambda: os.environ.get("NETRADIO_ALIGN_CACHE", "").strip() or None,
+                      max_age_default=14, refill="re-decode",
+                      is_entry=lambda path: path.endswith(".npy"))
+
+
+def cache_dir():
+    return cache_budget.dir_of("streamalign")
+
 
 # Preference order when a label names a file without (or with a different)
 # extension: lossless originals first, transcode last.
@@ -91,60 +98,6 @@ def _ffmpeg_decode(path, sr, mono):
     return np.ascontiguousarray(data)
 
 
-def _disk_full():
-    """True when the filesystem holding the cache is >= DISK_FULL_FRAC full."""
-    try:
-        u = shutil.disk_usage(CACHE_DIR)
-    except OSError:
-        return False                     # can't tell -> don't block (write will fail safely)
-    return u.total and (u.total - u.free) / u.total >= DISK_FULL_FRAC
-
-
-def _cache_entries():
-    """[(path, size, mtime)] for every cached .npy, tolerant of concurrent removals."""
-    out = []
-    try:
-        names = os.listdir(CACHE_DIR)
-    except OSError:
-        return out
-    for name in names:
-        if not name.endswith(".npy"):
-            continue
-        path = os.path.join(CACHE_DIR, name)
-        try:
-            st = os.stat(path)
-        except OSError:
-            continue                     # raced with another pruner
-        out.append((path, st.st_size, st.st_mtime))
-    return out
-
-
-def _prune_cache(headroom_bytes=0):
-    """Evict the oldest entries until the cache fits CACHE_MAX_FRAC of disk, less `headroom`.
-
-    Oldest-first (by mtime) is a FIFO proxy for LRU that doesn't depend on atime being enabled;
-    an evicted-but-still-wanted array simply re-decodes next time. Safe under concurrency: a
-    file another process already removed is skipped.
-    """
-    try:
-        total = shutil.disk_usage(CACHE_DIR).total
-    except OSError:
-        return
-    cap = max(0, int(total * CACHE_MAX_FRAC) - headroom_bytes)
-    entries = _cache_entries()
-    size = sum(e[1] for e in entries)
-    if size <= cap:
-        return
-    for path, nbytes, _mtime in sorted(entries, key=lambda e: e[2]):
-        try:
-            os.remove(path)
-        except OSError:
-            continue
-        size -= nbytes
-        if size <= cap:
-            break
-
-
 def load_audio(name, sr=SR, mono=True, use_cache=True, audio_dir=None):
     """Load a capture as a float32 numpy array (mono, normalized to ~[-1, 1]).
 
@@ -158,25 +111,33 @@ def load_audio(name, sr=SR, mono=True, use_cache=True, audio_dir=None):
     if not use_cache:
         return _ffmpeg_decode(path, sr, mono)
 
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    cache_path = os.path.join(CACHE_DIR, _cache_key(path, sr, mono) + ".npy")
+    cdir = cache_dir()
+    os.makedirs(cdir, exist_ok=True)
+    cache_path = os.path.join(cdir, _cache_key(path, sr, mono) + ".npy")
     if os.path.isfile(cache_path):
         try:
             return np.load(cache_path, mmap_mode="r")
         except (OSError, ValueError):
             pass  # corrupt cache; re-decode
     signal = _ffmpeg_decode(path, sr, mono)
-    # Cache is optional: skip it if the disk is nearly full, and keep it under its size cap.
-    # A failed write (ENOSPC, a race) must never fail the decode -- just return the signal.
-    if not _disk_full():
-        _prune_cache(headroom_bytes=signal.nbytes)   # make room for this entry within the cap
+    # The cache is optional. A planned-size reserve makes room by the policy's order and refuses
+    # when it cannot (past the disk floor, everything pinned); the decode is returned either way.
+    # The path is pinned from the reserve to the commit, so no other run evicts it mid-write. A
+    # failed write (ENOSPC, a race) must never fail the decode -- just return the signal.
+    ok, _why = cache_budget.reserve("streamalign", signal.nbytes + 128, cache_path)
+    if ok:
+        tmp = cache_path + ".part"            # `.part` is never counted as an entry
         try:
-            tmp = cache_path + ".tmp%d" % os.getpid()
             with open(tmp, "wb") as handle:  # file handle => np.save won't append .npy
                 np.save(handle, signal)
             os.replace(tmp, cache_path)
+            cache_budget.commit("streamalign", cache_path, reason="decode")
         except OSError:
-            pass
+            cache_budget.release("streamalign", cache_path)
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
     return signal
 
 

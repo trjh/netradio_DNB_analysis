@@ -65,6 +65,7 @@ from streamalign import chroma_match as _cm          # noqa: E402
 from streamalign import groundtruth as _gt           # noqa: E402
 from streamalign import mystery as _mystery          # noqa: E402
 
+import cache_budget                                  # noqa: E402  (the cache policy; twin of the player's)
 import chroma_recipe                                 # noqa: E402  (THE recipe, single source)
 import memwatch                                      # noqa: E402  (footprint + allocator canary)
 import selftest                                      # noqa: E402  (the canary; see run())
@@ -75,8 +76,28 @@ STATE_DIR = os.path.join(HOME, ".harvest")
 STATE = os.path.join(STATE_DIR, "state.json")
 QUEUE = os.path.join(STATE_DIR, "queue.json")
 PAUSE = os.path.join(STATE_DIR, "PAUSED")
-CACHE = os.path.join(HOME, ".chroma-cache")
-KEEP = os.path.join(os.path.expanduser("~"), "media", "netradio-candidates")
+# The two caches this process writes, both registered with the cache policy (cache_budget.py;
+# the player plan PLAN_data_tiering.md §5.10, §5.12). CACHE is the signature working cache, the
+# `chroma` cache sigstore registers ($NETRADIO_CACHE_ROOT/chroma, or NETRADIO_CHROMA_CACHE_DIR);
+# KEEP is the `candidates` cache: the best twelve excerpts per mystery, 250 MB, the worst of a
+# mystery's twelve evicted first, 30 days ($NETRADIO_CACHE_ROOT/candidates, or
+# NETRADIO_CANDIDATES_CACHE_DIR). Neither is a fixed path any more (Tim, 2026-09-16).
+CACHE = cache_budget.dir_of("chroma")
+KEEP = cache_budget.dir_of("candidates")
+
+
+def _excerpt_score(entry):
+    """`MT<n>-<cost>-<hash>.wav`: the cost is the score, and the highest cost is the worst."""
+    try:
+        return float(os.path.basename(entry.path).split("-")[1])
+    except (IndexError, ValueError):
+        return 0.0
+
+
+cache_budget.register("candidates", dir_default=lambda: KEEP, cap_default="0.25",
+                      max_age_default=30, order="by-score", score=_excerpt_score,
+                      refill="re-cut",
+                      is_entry=lambda path: path.lower().endswith((".wav", ".mp3", ".flac", ".m4a")))
 
 # THE queue/state writer lock. queue.json and state.json have exactly ONE writer at a time:
 # collector.run() in split mode, run() in Mode A, or the on-demand --requeue-missing-sigs.
@@ -127,7 +148,8 @@ KEEP_TOP = 12
 # against 3 mysteries is only ~3 minutes of CPU, so there is no hurry.
 RESCAN_PER_PASS = 25
 KEEP_CEILING = 0.130      # never retain an excerpt worse than the worst plausible true match
-KEEP_TTL_DAYS = 30        # a lead not listened to in a month is not a lead -- swept
+KEEP_TTL_DAYS = 30        # a lead not listened to in a month is not a lead -- swept by the
+                          # `candidates` cache's age (NETRADIO_CANDIDATES_CACHE_MAX_AGE_DAYS)
 # A reported MATCH still needs cost AND margin. The populations OVERLAP (true match up to 0.0971,
 # non-match down to 0.0376), so no cost alone can separate them: RANK is the reliable signal, and
 # the margin test is what actually carries the gate. 40 of 41 tracks rank #1 against their own
@@ -795,7 +817,13 @@ def _decode_and_sign(url, job, duration=None):
         return {"ok": False, "error": "stopped"}
 
     os.makedirs(CACHE, exist_ok=True)
-    np.save(sig_path(url), c.astype(chroma_recipe.STORE_DTYPE))
+    # The signature is the harvester's PRODUCT, not a copy of anything, and its bucket copy is
+    # taken from this file: so it is written whatever the policy answers, and the reserve/commit
+    # pair is the accounting (an overflow runs the eviction on OTHER entries at once).
+    sig = sig_path(url)
+    cache_budget.reserve("chroma", None, sig)
+    np.save(sig, c.astype(chroma_recipe.STORE_DTYPE))
+    cache_budget.commit("chroma", sig, reason="harvester")
     # The bucket is the signature's long-term home (see sigstore). Upload now, verified; on
     # failure the local file simply stays -- eviction never fires for an unverified key, so a
     # flaky upload costs disk space, never data.
@@ -966,7 +994,15 @@ def write_excerpt(samples, at_s, path):
         return                                   # nothing to hear; do not leave an empty file
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    # A planned-size write into the `candidates` cache: 16-bit PCM, so two bytes a sample. The
+    # policy makes room by score (the worst of a mystery's twelve first) and refuses past the
+    # disk floor; a refused excerpt is simply not kept -- the lead survives, the audio was only
+    # ever the evidence.
+    ok, _why = cache_budget.reserve("candidates", len(clip) * 2 + 64, path)
+    if not ok:
+        return
     sf.write(path, clip, _audio.SR)
+    cache_budget.commit("candidates", path, reason="harvester")
     _write_provenance()
 
 
@@ -990,11 +1026,12 @@ def purge_audio():
                 continue                      # leave PROVENANCE.txt alone
             path = os.path.join(KEEP, name)
             try:
-                freed += os.path.getsize(path)
-                os.unlink(path)
-                n += 1
+                size = os.path.getsize(path)
             except OSError:
-                pass
+                continue
+            if cache_budget.remove("candidates", path, reason="purge-audio")[0]:
+                freed += size
+                n += 1
 
     state = _load(STATE, blank_state())
     for m in state.get("matches") or []:
@@ -1075,8 +1112,11 @@ def _load_sig(url):
     exists in neither (i.e. this URL genuinely needs its audio fetched)."""
     path = sig_path(url)
     if not os.path.exists(path) and sigstore.enabled():
+        cache_budget.reserve("chroma", None, path)        # accounting; see the signature write
         if not sigstore.fetch(_sig_key(url), CACHE):
+            cache_budget.release("chroma", path)
             return None
+        cache_budget.commit("chroma", path, reason="bucket-fetcher")
     try:
         return np.load(path).astype("float32")
     except (OSError, ValueError):
@@ -1346,11 +1386,10 @@ def evict_overfull(state, num):
         path = dead.get("audio")
         if not path:
             continue
-        try:
-            os.unlink(path)
+        # Through the policy's one door: a path outside the cache or already gone is refused
+        # quietly, and a deletion is recorded with its reason.
+        if cache_budget.remove("candidates", path, reason="board-overfull") == (True, None):
             state["kept"] -= 1
-        except OSError:
-            pass
 
 
 def _write_provenance():
@@ -1373,20 +1412,11 @@ def _write_provenance():
 
 
 def sweep_excerpts():
-    """Delete kept excerpts older than KEEP_TTL_DAYS. A lead you haven't listened to in a month
-    is not a lead, and holding it any longer serves no purpose."""
-    if not os.path.isdir(KEEP):
-        return
-    cutoff = time.time() - KEEP_TTL_DAYS * 86400
-    for name in os.listdir(KEEP):
-        if not name.endswith(".wav"):
-            continue
-        path = os.path.join(KEEP, name)
-        try:
-            if os.path.getmtime(path) < cutoff:
-                os.unlink(path)
-        except OSError:
-            pass
+    """The cache policy's run over this process's two caches: kept excerpts older than
+    KEEP_TTL_DAYS (NETRADIO_CANDIDATES_CACHE_MAX_AGE_DAYS) and signatures past their age go, and
+    either cache found over its cap is brought under it. A lead you haven't listened to in a
+    month is not a lead. One run at a time per machine: a run the player holds is skipped."""
+    return cache_budget.run(reason="harvest", names=("candidates", "chroma"))
 
 
 def drop_ruled_excerpts(state, retired):
@@ -1406,11 +1436,8 @@ def drop_ruled_excerpts(state, retired):
         path = m.pop("audio", None) if m.get("url") in retired else None
         if not path:
             continue
-        try:
-            os.unlink(path)
-        except OSError:
-            pass                       # already gone -- the row still stops carrying it
-        state["kept"] = max(0, state.get("kept", 0) - 1)
+        cache_budget.remove("candidates", path, reason="ruled-on")   # already gone: the row
+        state["kept"] = max(0, state.get("kept", 0) - 1)             # still stops carrying it
         dropped += 1
     return dropped
 

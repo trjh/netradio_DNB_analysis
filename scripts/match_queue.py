@@ -25,11 +25,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from streamalign import audio as _audio          # noqa: E402
 
+import cache_budget                               # noqa: E402  (the cache policy)
 import chroma_recipe                              # noqa: E402  (THE recipe)
 
 HOP = chroma_recipe.HOP
-CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                     ".chroma-cache")
+CACHE = cache_budget.dir_of("chroma")             # the harvester's signature working cache
 AUDIO_EXTS = (".m4a", ".opus", ".mp3", ".webm", ".flac", ".wav", ".ogg", ".wv", ".aac")
 
 

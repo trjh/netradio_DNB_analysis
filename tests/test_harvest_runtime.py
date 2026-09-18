@@ -115,7 +115,11 @@ class ExcerptsAreExcerpts(unittest.TestCase):
         from streamalign import audio as _audio
         import soundfile as sf
         path = os.path.join(tempfile.mkdtemp(), "x.wav")
-        harvest.write_excerpt(np.zeros(int(samples_s * _audio.SR), dtype="float32"), at_s, path)
+        # The excerpt lands in the `candidates` cache (cache_budget): that cache is this test's
+        # directory here, and the disk floor is not its subject.
+        with unittest.mock.patch.object(harvest, "KEEP", os.path.dirname(path)), \
+                unittest.mock.patch.dict(os.environ, {"NETRADIO_DISK_MAX_PCT": "100"}):
+            harvest.write_excerpt(np.zeros(int(samples_s * _audio.SR), dtype="float32"), at_s, path)
         return sf.info(path).duration if os.path.exists(path) else 0.0
 
     def test_a_long_mix_yields_a_short_excerpt(self):
@@ -229,6 +233,11 @@ class ARulingSpendsTheExcerpt(unittest.TestCase):
 
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        # A ruled lead's audio leaves through `cache_budget.remove`, which refuses a path outside
+        # the `candidates` cache: that cache is this test's directory.
+        p = unittest.mock.patch.object(harvest, "KEEP", self.dir)
+        p.start()
+        self.addCleanup(p.stop)
 
     def _wav(self, name):
         path = os.path.join(self.dir, name)

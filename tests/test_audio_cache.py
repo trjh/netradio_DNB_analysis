@@ -1,8 +1,9 @@
-"""The decoded-audio cache stays bounded (it once grew to 26 GiB, unevicted).
+"""The decoded-audio cache stays bounded, through the cache policy (it once grew to 26 GiB).
 
-Two guards, both exercised here with a fake disk + a stubbed decoder (no ffmpeg, no real disk):
-the cache never exceeds CACHE_MAX_FRAC of the filesystem, and nothing is written once the disk
-is DISK_FULL_FRAC full. A skipped/evicted entry is always safe -- it just re-decodes.
+`streamalign/audio.py` writes the `streamalign` cache of `cache_budget.py`: a planned-size
+reserve before every decode is cached, a commit after. Exercised here with a fake disk and a
+stubbed decoder (no ffmpeg, no real disk): the cache never exceeds its cap, nothing is written
+past the disk floor, and a skipped or evicted entry is always safe -- it just re-decodes.
 
 Sizes are chosen so a `.npy`'s ~128-byte numpy header is negligible against the entry, as it is
 for the real MB-sized arrays; the cap then holds ~2 entries so eviction is actually exercised.
@@ -18,6 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
                                 "scripts"))
 
 import numpy as np  # noqa: E402
+import cache_budget  # noqa: E402
 from streamalign import audio  # noqa: E402
 
 Usage = collections.namedtuple("Usage", "total used free")
@@ -28,18 +30,23 @@ ENTRY_FLOATS = 2000                  # -> 8000 data bytes + ~128 header per .npy
 class CacheBounding(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
-        self._saved = (audio.CACHE_DIR, audio.shutil.disk_usage, audio._ffmpeg_decode,
-                       audio.CACHE_MAX_FRAC, audio.DISK_FULL_FRAC)
-        audio.CACHE_DIR = self.dir
+        self.root = tempfile.mkdtemp()
+        self._env = {k: os.environ.get(k) for k in
+                     ("NETRADIO_CACHE_ROOT", "NETRADIO_STREAMALIGN_CACHE_DIR",
+                      "NETRADIO_STREAMALIGN_CACHE_GB", "NETRADIO_DISK_MAX_PCT")}
+        os.environ["NETRADIO_CACHE_ROOT"] = self.root
+        os.environ["NETRADIO_STREAMALIGN_CACHE_DIR"] = self.dir
+        os.environ["NETRADIO_STREAMALIGN_CACHE_GB"] = "0.00002"      # 20 000 bytes (~2 entries)
+        os.environ["NETRADIO_DISK_MAX_PCT"] = "95"
+        self._saved = (cache_budget.disk_usage, audio._ffmpeg_decode)
         self._free = [DISK]
-        audio.shutil.disk_usage = lambda p: Usage(DISK, DISK - self._free[0], self._free[0])
-        audio.CACHE_MAX_FRAC = 0.05                       # cap = 20 000 bytes (~2 entries)
-        audio.DISK_FULL_FRAC = 0.95
+        cache_budget.disk_usage = lambda p: Usage(DISK, DISK - self._free[0], self._free[0])
         audio._ffmpeg_decode = lambda path, sr, mono: np.zeros(ENTRY_FLOATS, dtype="<f4")
 
     def tearDown(self):
-        (audio.CACHE_DIR, audio.shutil.disk_usage, audio._ffmpeg_decode,
-         audio.CACHE_MAX_FRAC, audio.DISK_FULL_FRAC) = self._saved
+        cache_budget.disk_usage, audio._ffmpeg_decode = self._saved
+        for k, v in self._env.items():
+            os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
 
     def _npy(self):
         return [n for n in os.listdir(self.dir) if n.endswith(".npy")]
@@ -53,8 +60,15 @@ class CacheBounding(unittest.TestCase):
             h.write(b"x")
         return audio.load_audio(src)
 
+    def test_the_registration(self):
+        rec = cache_budget.record("streamalign")
+        self.assertIsNotNone(rec)
+        self.assertEqual(cache_budget.max_age_of("streamalign"), 14)
+        self.assertEqual(rec.refill, "re-decode")
+        self.assertEqual(audio.cache_dir(), self.dir)
+
     def test_disk_full_writes_nothing(self):
-        self._free[0] = 10_000                            # 97.5% used -> above the 95% guard
+        self._free[0] = 10_000                            # 97.5% used -> past the 95% floor
         out = self._load_distinct(0)
         self.assertEqual(len(out), ENTRY_FLOATS)          # still returns the signal
         self.assertEqual(self._npy(), [])                 # but cached nothing
@@ -62,16 +76,16 @@ class CacheBounding(unittest.TestCase):
     def test_cache_never_exceeds_the_cap(self):
         for i in range(8):
             self._load_distinct(i)
-        self.assertLessEqual(self._cache_bytes(), int(DISK * audio.CACHE_MAX_FRAC))  # <= cap
+        self.assertLessEqual(self._cache_bytes(), 20_000)  # <= cap
         self.assertGreaterEqual(len(self._npy()), 1)      # yet it does cache
 
-    def test_prune_evicts_oldest_first(self):
+    def test_reserve_evicts_oldest_first(self):
         for i in range(3):
             p = os.path.join(self.dir, "%d.npy" % i)
             with open(p, "wb") as h:
                 h.write(b"\x00" * 8000)                    # 3 * 8000 = 24 000 > 20 000 cap
             os.utime(p, (100 + i, 100 + i))               # ascending mtime: 0 oldest
-        audio._prune_cache(headroom_bytes=0)
+        self._load_distinct(9)                            # one more entry: room is made first
         survivors = set(self._npy())
         self.assertNotIn("0.npy", survivors)              # oldest evicted first
         self.assertIn("2.npy", survivors)                 # newest kept
@@ -84,6 +98,13 @@ class CacheBounding(unittest.TestCase):
         second = audio.load_audio(src)
         self.assertEqual(len(first), len(second))
         self.assertEqual(len(self._npy()), n)
+
+    def test_the_old_fractions_are_gone(self):
+        for name in ("CACHE_MAX_FRAC", "DISK_FULL_FRAC", "_prune_cache", "_disk_full", "CACHE_DIR"):
+            self.assertFalse(hasattr(audio, name), name)
+        src = open(audio.__file__, encoding="utf-8").read()
+        self.assertNotIn("NETRADIO_ALIGN_CACHE_MAX_FRAC", src)
+        self.assertNotIn("NETRADIO_ALIGN_CACHE_DISK_FULL_FRAC", src)
 
 
 if __name__ == "__main__":

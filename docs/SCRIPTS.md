@@ -68,7 +68,7 @@ audio-dependent tests need `.venv` (`make venv`).
 
 | Script | What | When |
 |---|---|---|
-| `scripts/extract_tracks.py` | cut every well-defined track **out of the mix**, reassembling across captures. Refuses anything it cannot place precisely. | once; **re-run whenever a capture gains precise timing or a track's span changes** |
+| `scripts/extract_tracks.py` | cut every well-defined track **out of the mix** as flac, reassembling across captures, into the `stream_tracks` cache (`cache_budget.py`: 2 GB, 14 days; `--out` overrides the directory). Refuses anything it cannot place precisely, and a cut the cache refuses (past the disk floor) | once; **re-run whenever a capture gains precise timing or a track's span changes** |
 | `scripts/calibrate.py` | score every known mix track against every known original → `docs/CALIBRATION.md` | **whenever the matcher changes.** It is the regression test for the whole matching stack |
 | `scripts/selftest.py` | the **canary**: re-identify a track we already know and demand cost, rank **and** margin — offline (small pool) and live (real stream) | continuously, by the harvester. Surfaced at `/harvest`. See [below](#the-canary-does-the-matcher-still-work) |
 
@@ -84,7 +84,9 @@ own original, the change is wrong.
 | `scripts/enrich_musicbrainz.py`, `enrich_mb_links.py`, `enrich_album_covers.py`, `enrich_covers_links.py` | fill artwork/links on `track-metadata.json` (network) |
 | `scripts/merge_track_sources.py`, `g4_missing_sources.py`, `find_streaming_links.py` | source inventory: what we have, what's missing, where to get it |
 | `scripts/backup_sheet.py` | back up the Google Sheet |
-| `scripts/tracklist_sync.sh`, `check_tracklist_sync.sh` | cross-repo sync of `track-metadata.json` (PR-based) |
+| `scripts/tracklist_sync.sh`, `check_tracklist_sync.sh` | cross-repo sync of `track-metadata.json` (PR-based); the sync's self-check also requires `cache_budget.py` to be byte-identical in both repos |
+| `scripts/cache_budget.py` | the cache policy, a byte-identical twin of the player repo's module: one registry, `reserve`/`commit`/`remove`, one eviction run (cap, age, the `NETRADIO_DISK_MAX_PCT` floor). This repo registers `streamalign` (`streamalign/audio.py`), `chroma` (`sigstore.py`), `candidates` (`harvest.py`) and `stream_tracks` (`extract_tracks.py`); the variables are the `NETRADIO_<NAME>_CACHE_*` block in `.env.example` |
+| `scripts/env_check.py` (`make env-check`) | the `NETRADIO_*` names the code reads against `.env.example` and `.env`: a name set but read by nothing, or read but not listed, fails it |
 
 ## Retired
 

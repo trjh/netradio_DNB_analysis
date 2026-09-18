@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Cut every well-defined track OUT of the mix, reassembling across captures where it must.
 
-    . .venv/bin/activate && python scripts/extract_tracks.py --out ~/media/netradio-tracks
+    . .venv/bin/activate && python scripts/extract_tracks.py
     . .venv/bin/activate && python scripts/extract_tracks.py --dry-run
+
+The output is the `stream_tracks` cache of the cache policy (cache_budget.py; the player plan
+PLAN_data_tiering.md §5.11): flac, under $NETRADIO_CACHE_ROOT/stream_tracks (or
+NETRADIO_STREAM_TRACKS_CACHE_DIR, or --out), 2 GB, oldest-added first, 14 days. A cut that would
+not fit under the cap or past the disk floor is refused with the reason, like an imprecise one.
 
 Why
 ---
@@ -50,11 +55,17 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import cache_budget                              # noqa: E402  (the cache policy)
 from streamalign import audio as _audio          # noqa: E402
 from streamalign import groundtruth as _gt       # noqa: E402
 from streamalign import tracklist2017 as _tl     # noqa: E402
 
 MIN_S = 30.0
+OUT_RATE, OUT_CHANNELS = 44100, 2
+PCM_BYTES_PER_S = OUT_RATE * OUT_CHANNELS * 2    # the planned size: 16-bit PCM, the flac's ceiling
+
+cache_budget.register("stream_tracks", cap_default="2", max_age_default=14, refill="re-extract",
+                      is_entry=lambda path: path.lower().endswith((".flac", ".wav")))
 
 
 def imprecise(stem):
@@ -102,11 +113,13 @@ def plan(mb, me, places):
 
 
 def cut(stem, m_from, m_to, cstart, out_path):
+    """One piece of a capture to `out_path`; the container follows its extension (flac for the
+    track, wav for a part that is concatenated afterwards)."""
     src = _audio.find_audio_file(stem)
     lo = m_from - cstart
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "%.4f" % lo,
                     "-t", "%.4f" % (m_to - m_from), "-i", src,
-                    "-ac", "2", "-ar", "44100", out_path], check=True)
+                    "-ac", str(OUT_CHANNELS), "-ar", str(OUT_RATE), out_path], check=True)
 
 
 def safe(name):
@@ -116,7 +129,8 @@ def safe(name):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", default=os.path.expanduser("~/media/netradio-tracks"))
+    ap.add_argument("--out", default=None,
+                    help="output directory (default: the stream_tracks cache's directory)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--only", type=int, action="append")
     args = ap.parse_args()
@@ -127,8 +141,12 @@ def main():
     places = {s: windows(s, v) for s, v in starts.items()}
     print("# %d capture(s) with PRECISE timing and audio on disk\n" % len(places))
 
+    if args.out:
+        os.environ["NETRADIO_STREAM_TRACKS_CACHE_DIR"] = os.path.expanduser(args.out)
+    args.out = cache_budget.dir_of("stream_tracks")
     if not args.dry_run:
         os.makedirs(args.out, exist_ok=True)
+        cache_budget.run(reason="extract-start", names=("stream_tracks",))   # the age, the cap
 
     made = skipped = joined = 0
     for num, e in sorted(tracks.items(), key=lambda kv: int(kv[0]) if kv[0].isdigit() else 1e9):
@@ -149,7 +167,7 @@ def main():
         if pieces is None:
             print("  %3s SKIP  %-42s %s" % (num, title[:42], why)); skipped += 1; continue
 
-        name = "%03d - %s.wav" % (int(num), safe(title))
+        name = "%03d - %s.flac" % (int(num), safe(title))
         out = os.path.join(args.out, name)
         tag = "" if len(pieces) == 1 else "  [%d pieces: %s]" % (
             len(pieces), " + ".join(p[0] for p in pieces))
@@ -160,6 +178,13 @@ def main():
         if args.dry_run:
             continue
 
+        # Make room, then add (the policy's rule): the planned size is the PCM ceiling of the
+        # cut, and a refusal names why (past the disk floor, nothing evictable) like any SKIP.
+        ok, why = cache_budget.reserve("stream_tracks", int((me - mb) * PCM_BYTES_PER_S), out)
+        if not ok:
+            print("  %3s SKIP  %-42s cache refused the write (%s)" % (num, title[:42], why))
+            skipped += 1
+            continue
         if len(pieces) == 1:
             stem, a, b = pieces[0]
             cut(stem, a, b, starts[stem], out)
@@ -173,10 +198,12 @@ def main():
             with open(lst, "w") as fh:
                 for p in parts:
                     fh.write("file '%s'\n" % p.replace("'", "'\\''"))
+            # Encoded, not stream-copied: the parts are PCM and the track is flac.
             subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0",
-                            "-i", lst, "-c", "copy", out], check=True)
+                            "-i", lst, "-c:a", "flac", out], check=True)
             for p in parts + [lst]:
                 os.unlink(p)
+        cache_budget.commit("stream_tracks", out, reason="extract")
         made += 1
 
     print("\n# %d extracted (%d needed reassembly across captures), %d refused"

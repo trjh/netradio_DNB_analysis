@@ -53,6 +53,11 @@ class Base(unittest.TestCase):
         self.addCleanup(self._restore)
         os.environ["NETRADIO_SIG_BUCKET"] = "test-bucket"
         os.environ["NETRADIO_AWS_CLI"] = self.aws
+        # The working cache is the `chroma` cache of the cache policy: evict_cold deletes through
+        # `cache_budget.remove`, which refuses a path outside the registered directory, so the
+        # registry must point at this test's directory.
+        os.environ["NETRADIO_CHROMA_CACHE_DIR"] = self.tmp.name
+        self.addCleanup(os.environ.pop, "NETRADIO_CHROMA_CACHE_DIR", None)
 
     def _restore(self):
         for k, v in self._env.items():

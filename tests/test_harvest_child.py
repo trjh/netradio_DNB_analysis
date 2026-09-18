@@ -347,7 +347,11 @@ class ChildBoundary(unittest.TestCase):
 
         a = os.path.join(self.tmp, "a.wav")
         b = os.path.join(self.tmp, "b.wav")
-        with mock.patch.object(harvest, "_write_provenance", lambda: None):
+        # The excerpt lands in the `candidates` cache (cache_budget): that cache is this test's
+        # directory here, and the disk floor is not its subject.
+        with mock.patch.object(harvest, "_write_provenance", lambda: None), \
+                mock.patch.object(harvest, "KEEP", self.tmp), \
+                mock.patch.dict(os.environ, {"NETRADIO_DISK_MAX_PCT": "100"}):
             harvest.write_excerpt(samples, 20.0, a)
             harvest.write_excerpt(np.frombuffer(pcm, dtype="float32"), 20.0, b)
         self.assertTrue(np.array_equal(sf.read(a)[0], sf.read(b)[0]))

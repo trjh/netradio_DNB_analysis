@@ -27,6 +27,8 @@ import shutil
 import subprocess
 import tempfile
 
+import cache_budget
+
 # The one seam through which every aws invocation passes — swappable in tests.
 _run = subprocess.run
 
@@ -34,6 +36,26 @@ PREFIX = "chroma/"                  # bucket prefix for signatures (same keys as
 
 # Session memory: keys HEAD-verified this run, so eviction sweeps don't re-HEAD every pass.
 _verified = {}                      # key -> remote size
+
+
+def _pinned(entry):
+    """A signature whose bucket copy is not verified is the only copy: never evicted, by the
+    policy's run or by anything else. With the store dark, every signature is pinned."""
+    return not (enabled() and remote_size(os.path.basename(entry.path)) == entry.bytes)
+
+
+# The local working cache is the `chroma` cache of the cache policy (cache_budget.py; the player
+# plan PLAN_data_tiering.md §5.10): 4 GB, oldest-added first, 14 days
+# (NETRADIO_CHROMA_CACHE_MAX_AGE_DAYS), directory NETRADIO_CHROMA_CACHE_DIR else
+# $NETRADIO_CACHE_ROOT/chroma. `evict_cold` below is the lifecycle exit and goes through
+# `cache_budget.remove`; the pin above keeps the policy's own run to the same rule.
+cache_budget.register("chroma", max_age_default=14, refill="bucket:chroma/", pinned=_pinned,
+                      is_entry=lambda path: (os.path.basename(path).startswith("u")
+                                             and path.endswith(".npy")))
+
+
+def cache_dir():
+    return cache_budget.dir_of("chroma")
 
 
 def _bucket():
@@ -214,8 +236,12 @@ def evict_cold(cache_dir, scored, qkeys):
         if evictable(path, name, scored, qkeys):
             try:
                 size = os.path.getsize(path)
-                os.remove(path)
             except OSError:
+                continue
+            # Through the policy's one door (every deletion of a cache entry does): it refuses a
+            # path outside the registered directory, and records the event with the reason.
+            ok, _why = cache_budget.remove("chroma", path, reason="cold-verified")
+            if not ok:
                 continue
             evicted += 1
             freed += size

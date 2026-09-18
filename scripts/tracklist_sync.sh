@@ -309,7 +309,8 @@ reconcile_player() {
   reconcile_main "$PLAYER" player \
     "metadata/track-metadata.json" "metadata/listen_queue.json" "metadata/listen_queue" \
     "metadata/subscriptions.json" "metadata/queue_chapters" "metadata/queue_info" \
-    "metadata/source-inventory.json" "SOURCES.md" "data/harvest-queue.json"
+    "metadata/source-inventory.json" "SOURCES.md" "data/harvest-queue.json" \
+    "data/harvest-state.json"
 }
 
 # --- catch up before the self-check ------------------------------------------------------------
@@ -382,6 +383,29 @@ fi
 if ! cmp -s "$0" "$SELF_P" && ! cmp -s "$0" "$SELF_A"; then
   say "ERROR: this run's script ($0) matches neither repo's copy — run it from a repo root (make sync)" >&2
   exit 1
+fi
+
+# --- self-check 2: cache_budget.py is a twin too -------------------------------------------------
+# The cache policy module (PLAN_data_tiering.md §2) is one file both repos import: the player's
+# `cache_budget.py` at its root and the analysis repo's `scripts/cache_budget.py`. Same rule as
+# the script above: copies drift silently, and two machines evicting under different rules from one
+# directory is worse than a blocked run. A PR that edits one edits both.
+TWIN_P="$PLAYER/cache_budget.py"
+TWIN_A="$ANALYSIS/scripts/cache_budget.py"
+if [ -f "$TWIN_P" ] || [ -f "$TWIN_A" ]; then
+  if cmp -s "$TWIN_P" "$TWIN_A"; then
+    say "self-check: cache_budget.py identical in both repos ✓"
+  else
+    {
+      say "ERROR: cache_budget.py differs between the two repos:"
+      diff -u "$TWIN_A" "$TWIN_P" | head -40 || true
+      say ""
+      say "Copy the version you just edited over the other, PR it in BOTH repos, then re-run:"
+      say "  cp '$TWIN_P' '$TWIN_A'    # player copy wins"
+      say "  cp '$TWIN_A' '$TWIN_P'    # analysis copy wins"
+    } >&2
+    exit 1
+  fi
 fi
 
 # --- track-metadata.json: 3-way sync between the canonical (analysis) and the mirror (player) ---

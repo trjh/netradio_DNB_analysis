@@ -63,6 +63,10 @@ class Base(unittest.TestCase):
         self.addCleanup(lambda: [p.stop() for p in self._patches])
         os.makedirs(os.path.join(t, "cache"), exist_ok=True)
         os.makedirs(os.path.join(t, "keep"), exist_ok=True)
+        # The excerpts land in the `candidates` cache (cache_budget), `keep` above through the
+        # patched KEEP; the host's disk floor is not this test's subject.
+        os.environ["NETRADIO_DISK_MAX_PCT"] = "100"
+        self.addCleanup(os.environ.pop, "NETRADIO_DISK_MAX_PCT", None)
         # sigstore dark by default in tests.
         os.environ.pop("NETRADIO_SIG_BUCKET", None)
 

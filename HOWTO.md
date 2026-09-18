@@ -310,3 +310,4 @@ runs `GithubImport()`), else it prints the **Reload Data** reminder.
 | **rebuild `track-metadata.json`** | `build_track_metadata.py` | **build** | **`track-metadata.json`** |
 | refresh missing-originals inventory | `g4_missing_sources.py` | build/sourcing | inventory |
 | publish finished labels + refresh sheet | `publish.py <stem>` · manual: `sort_tsv` + `git commit`/`push` + Reload Data | publish | git + sheet |
+| check `.env` against what the code reads | `make env-check` | any | — (read-only; exit 1 on a stale or missing name) |

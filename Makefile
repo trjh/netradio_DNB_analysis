@@ -146,3 +146,6 @@ sync:                 ## cross-repo tracklist sync (3-way, PR-based). Reads NETR
 tracklist-check:      ## report whether the analysis<->player track-metadata.json copies match
 	set -a; [ -f .env ] && . ./.env; set +a; \
 	NETRADIO_ANALYSIS_REPO=$(CURDIR) bash scripts/check_tracklist_sync.sh
+
+env-check:            ## NETRADIO_* variables: set in .env but read by nothing (stale), or read but missing from .env.example. Exit 1 on either
+	$(PYTHON) scripts/env_check.py

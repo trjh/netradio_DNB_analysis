@@ -42,6 +42,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import cache_budget                                 # noqa: E402  (the cache policy)
 from streamalign import audio as _audio          # noqa: E402
 from streamalign import chroma_match as _cm      # noqa: E402
 from streamalign import groundtruth as _gt       # noqa: E402
@@ -121,8 +122,7 @@ def build_cases(tracks, starts, src):
                     break
         # a clean extract, if extract_tracks.py has made one
         ex = None
-        exdir = os.path.expanduser(os.environ.get("NETRADIO_TRACKS_DIR",
-                                                  "~/media/netradio-tracks"))
+        exdir = cache_budget.dir_of("stream_tracks")   # extract_tracks.py's output (flac)
         if os.path.isdir(exdir):
             for f in os.listdir(exdir):
                 if f.startswith("%03d - " % int(num)):
