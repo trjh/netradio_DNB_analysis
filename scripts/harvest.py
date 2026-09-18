@@ -110,8 +110,19 @@ cache_budget.register("candidates", dir_default=_candidates_dir, cap_default="0.
                       max_age_default=30, order="by-score", score=_excerpt_score,
                       refill="re-cut",
                       is_entry=lambda path: path.lower().endswith((".wav", ".mp3", ".flac", ".m4a")))
-CACHE = cache_budget.dir_of("chroma")
+CACHE = _CACHE_AT_IMPORT = cache_budget.dir_of("chroma")
 KEEP = _KEEP_AT_IMPORT = cache_budget.dir_of("candidates")
+
+
+def _chroma_dir():
+    """The signature cache's directory, resolved NOW through the registry: a root configured
+    after import is honoured. A CACHE set by hand (or patched by a test) wins."""
+    return CACHE if CACHE != _CACHE_AT_IMPORT else (cache_budget.dir_of("chroma") or CACHE)
+
+
+def _keep_dir():
+    """The candidates cache's directory, resolved NOW (see `_candidates_dir`)."""
+    return cache_budget.dir_of("candidates") or KEEP
 
 # THE queue/state writer lock. queue.json and state.json have exactly ONE writer at a time:
 # collector.run() in split mode, run() in Mode A, or the on-demand --requeue-missing-sigs.
@@ -352,7 +363,7 @@ def _hours(seconds):
 def sig_path(url):
     # The fragment stays IN the url here, and that is the point: it is what gives each chunk of one
     # master its own key, its own cached signature and its own job directory.
-    return os.path.join(CACHE, "u" + hashlib.sha1(url.encode()).hexdigest()[:20] + ".npy")
+    return os.path.join(_chroma_dir(), "u" + hashlib.sha1(url.encode()).hexdigest()[:20] + ".npy")
 
 
 # --- YouTube wants to know you are a person -------------------------------------------------------
@@ -834,7 +845,7 @@ def _decode_and_sign(url, job, duration=None):
         # The root is named but absent (run() refuses to start that way; the child can still be
         # asked by hand): nothing is created under it, and the signature is not kept.
         return {"ok": False, "error": "signature cache dark: NETRADIO_CACHE_ROOT does not exist"}
-    os.makedirs(CACHE, exist_ok=True)          # the policy admitted the directory; CACHE is it
+    os.makedirs(_chroma_dir(), exist_ok=True)   # the policy admitted the directory
     # The signature is the harvester's PRODUCT, not a copy of anything, and its bucket copy is
     # taken from this file: so it is written whatever the policy answers, and the reserve/commit
     # pair is the accounting (an overflow runs the eviction on OTHER entries at once).
@@ -1039,11 +1050,12 @@ def purge_audio():
     candidate will ever be downloaded twice.
     """
     freed = n = 0
-    if os.path.isdir(KEEP):
-        for name in os.listdir(KEEP):
+    keep = _keep_dir()
+    if os.path.isdir(keep):
+        for name in os.listdir(keep):
             if not name.lower().endswith((".wav", ".mp3", ".flac", ".m4a")):
                 continue                      # leave PROVENANCE.txt alone
-            path = os.path.join(KEEP, name)
+            path = os.path.join(keep, name)
             try:
                 size = os.path.getsize(path)
             except OSError:
@@ -1134,7 +1146,7 @@ def _load_sig(url):
         if not cache_budget.ensure_dir("chroma"):
             return None                                   # dark: nothing is created under an absent root
         cache_budget.reserve("chroma", None, path)        # accounting; see the signature write
-        if not sigstore.fetch(_sig_key(url), CACHE):
+        if not sigstore.fetch(_sig_key(url), _chroma_dir()):
             cache_budget.release("chroma", path)
             return None
         cache_budget.commit("chroma", path, reason="bucket-fetcher")
@@ -2119,7 +2131,7 @@ def run(args):
         elif sigstore.enabled():
             # Rescan backlog empty = every cached signature is scored vs every current mystery,
             # which is exactly when cold ones may leave the disk (verified-remote only).
-            n_ev, freed = sigstore.evict_cold(CACHE, state.get("scored") or {},
+            n_ev, freed = sigstore.evict_cold(_chroma_dir(), state.get("scored") or {},
                                               [qk for _, _, qk in qs])
             if n_ev:
                 print("evicted %d cold signature(s) to the bucket (%.1f MB freed)"
@@ -2278,7 +2290,7 @@ def run(args):
             if len(board) >= KEEP_TOP and cost >= board[-1]["cost"]:
                 continue                       # not good enough to displace anyone
 
-            excerpt = os.path.join(KEEP, "MT%d-%.4f-%s.wav"
+            excerpt = os.path.join(_keep_dir(), "MT%d-%.4f-%s.wav"
                                    % (num, cost, hashlib.sha1(url.encode()).hexdigest()[:8]))
             if not os.path.exists(excerpt):
                 if samples is None:            # cached signature, no audio in hand -> can't excerpt
@@ -2406,11 +2418,12 @@ def main():
             return
         state = _load(STATE, blank_state())
         qs = queries()
-        names = sorted(n for n in os.listdir(CACHE)
-                       if n.startswith("u") and n.endswith(".npy")) if os.path.isdir(CACHE) else []
+        cache = _chroma_dir()
+        names = sorted(n for n in os.listdir(cache)
+                       if n.startswith("u") and n.endswith(".npy")) if os.path.isdir(cache) else []
         up = failed = 0
         for name in names:
-            path = os.path.join(CACHE, name)
+            path = os.path.join(cache, name)
             try:
                 local = os.path.getsize(path)
             except OSError:
@@ -2421,7 +2434,7 @@ def main():
                 up += 1
             else:
                 failed += 1
-        n_ev, freed = sigstore.evict_cold(CACHE, state.get("scored") or {},
+        n_ev, freed = sigstore.evict_cold(cache, state.get("scored") or {},
                                           [qk for _, _, qk in qs])
         left = len(names) - n_ev
         print("# migrate: %d uploaded, %d upload failure(s); %d evicted (%.1f MB freed); "

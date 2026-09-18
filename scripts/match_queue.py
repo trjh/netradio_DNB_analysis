@@ -31,7 +31,13 @@ import chroma_recipe                              # noqa: E402  (THE recipe)
 HOP = chroma_recipe.HOP
 import sigstore                                   # noqa: E402  (registers the chroma cache)
 
-CACHE = cache_budget.dir_of("chroma")             # the harvester's signature working cache
+
+
+def cache_dir():
+    """The harvester's signature working cache, resolved NOW through the registry (a root
+    configured after import is honoured): NETRADIO_CHROMA_CACHE_DIR, else the cache root's
+    chroma/, else the harvester's repo-local fallback (which this script never writes into)."""
+    return cache_budget.dir_of("chroma")
 AUDIO_EXTS = (".m4a", ".opus", ".mp3", ".webm", ".flac", ".wav", ".ogg", ".wv", ".aac")
 
 
@@ -45,8 +51,9 @@ def chroma_of(path, min_seconds=45.0):
     st = os.stat(path)
     key = hashlib.sha1(("%s|%d|%d" % (os.path.basename(path), st.st_size,
                                       int(st.st_mtime))).encode()).hexdigest()[:20]
-    cached = os.path.join(CACHE, key + ".npy")
-    if os.path.exists(cached):
+    cdir = cache_dir()
+    cached = os.path.join(cdir, key + ".npy") if cdir else None
+    if cached and os.path.exists(cached):
         return np.load(cached).astype("float32")
     import librosa
     try:
@@ -61,8 +68,7 @@ def chroma_of(path, min_seconds=45.0):
     # without keeping it. With NETRADIO_CACHE_ROOT unset this one-off matcher keeps nothing at
     # all (the repo-local .harvest/ fallback is the harvester's, not this script's), and nothing
     # is created under a root that is named but absent.
-    if cache_budget.cache_root() and cache_budget.ensure_dir("chroma"):
-        os.makedirs(CACHE, exist_ok=True)     # the policy admitted the directory; CACHE is it
+    if cached and cache_budget.cache_root() and cache_budget.ensure_dir("chroma"):
         ok, _why = cache_budget.reserve("chroma", c.nbytes // 2 + 128, cached)
         if ok:
             np.save(cached, c.astype("float16"))  # float16: half the disk, no loss that matters

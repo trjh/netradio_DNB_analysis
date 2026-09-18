@@ -306,7 +306,7 @@ class DarkRootCreatesNothing(unittest.TestCase):
                                lambda p: np.zeros(60 * match_queue._audio.SR, dtype="float32")), \
                 mock.patch.object(match_queue.chroma_recipe, "compute_chroma",
                                   lambda y: np.zeros((12, 4), dtype="float32")), \
-                mock.patch.object(match_queue, "CACHE", os.path.join(self.absent, "chroma")):
+                mock.patch.dict(os.environ, {}):
             c = match_queue.chroma_of(src)
         self.assertEqual(c.shape, (12, 4))
         self.assertFalse(os.path.exists(self.absent))
@@ -320,16 +320,16 @@ class DarkRootCreatesNothing(unittest.TestCase):
         os.environ.pop("NETRADIO_CACHE_ROOT")
         src = os.path.join(self.tmp, "cand.wav")
         open(src, "wb").write(b"x")
-        local = os.path.join(self.tmp, "repo-local-chroma")
+        local = os.path.join(ROOT, ".harvest", "chroma")
+        before = set(os.listdir(local)) if os.path.isdir(local) else set()
         with mock.patch.object(match_queue._audio, "load_audio",
                                lambda p: np.zeros(60 * match_queue._audio.SR, dtype="float32")), \
                 mock.patch.object(match_queue.chroma_recipe, "compute_chroma",
-                                  lambda y: np.zeros((12, 4), dtype="float32")), \
-                mock.patch.object(match_queue, "CACHE", local):
+                                  lambda y: np.zeros((12, 4), dtype="float32")):
             c = match_queue.chroma_of(src)
         self.assertEqual(c.shape, (12, 4))
-        self.assertFalse(os.path.exists(local))
-        self.assertFalse(os.path.exists(os.path.join(ROOT, ".harvest", "chroma", "x")))
+        after = set(os.listdir(local)) if os.path.isdir(local) else set()
+        self.assertEqual(after - before, set())                      # the repo-local dir untouched
 
     def test_match_queue_writes_through_the_policy_when_live(self):
         try:
@@ -346,12 +346,42 @@ class DarkRootCreatesNothing(unittest.TestCase):
                                lambda p: np.zeros(60 * match_queue._audio.SR, dtype="float32")), \
                 mock.patch.object(match_queue.chroma_recipe, "compute_chroma",
                                   lambda y: np.zeros((12, 4), dtype="float32")), \
-                mock.patch.object(match_queue, "CACHE", os.path.join(self.absent, "chroma")), \
                 mock.patch.object(cb, "reserve", lambda *a, **k: calls.append("reserve") or real_reserve(*a, **k)), \
                 mock.patch.object(cb, "commit", lambda *a, **k: calls.append("commit") or real_commit(*a, **k)):
             match_queue.chroma_of(src)
         self.assertEqual(calls, ["reserve", "commit"])
         self.assertEqual(len(os.listdir(os.path.join(self.absent, "chroma"))), 1)
+
+    def test_a_root_configured_after_import_is_where_every_writer_lands(self):
+        """The writers were imported with no root (the TestFixtureIsolation case, and any script
+        that loads .env late); a root set afterwards is where every path resolves, and every
+        write is inside the policy's directory and accounted for."""
+        try:
+            import numpy as np
+            import harvest
+            import match_queue
+        except ImportError as exc:
+            self.skipTest("needs the venv: %s" % exc)
+        os.environ.pop("NETRADIO_CACHE_ROOT")
+        self.assertIsNone(cb.cache_root())
+        root = os.path.join(self.tmp, "late-root")
+        os.makedirs(root)
+        os.environ["NETRADIO_CACHE_ROOT"] = root
+        self.assertEqual(harvest._chroma_dir(), os.path.join(root, "chroma"))
+        self.assertEqual(harvest._keep_dir(), os.path.join(root, "candidates"))
+        self.assertTrue(harvest.sig_path("https://x/y").startswith(os.path.join(root, "chroma")))
+        self.assertEqual(match_queue.cache_dir(), os.path.join(root, "chroma"))
+        src = os.path.join(self.tmp, "cand.wav")
+        open(src, "wb").write(b"x")
+        with mock.patch.object(match_queue._audio, "load_audio",
+                               lambda p: np.zeros(60 * match_queue._audio.SR, dtype="float32")), \
+                mock.patch.object(match_queue.chroma_recipe, "compute_chroma",
+                                  lambda y: np.zeros((12, 4), dtype="float32")):
+            match_queue.chroma_of(src)
+        written = os.listdir(os.path.join(root, "chroma"))
+        self.assertEqual(len(written), 1)
+        landed = [e for e in cb.read_events() if e["event"] == "landed"]
+        self.assertEqual(landed[0]["path"], os.path.join(root, "chroma", written[0]))
 
     def test_an_excerpt_under_an_absent_root_is_not_kept(self):
         try:

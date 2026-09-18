@@ -528,8 +528,10 @@ def _evict_until(rec, need, reason, exclude=None):
 def reserve(name, nbytes, path=None):
     """Make room for `nbytes` (None: unplanned length), then admit. Returns (ok, why).
 
-    `path`, when given, is pinned from now until commit()/release() — the file being written
-    is never evicted from under its writer (§5's "the file being decoded")."""
+    `path`, when given, must lie inside the cache's directory as resolved NOW (a path built from
+    an import-time idea of the directory is refused) and is pinned from now until
+    commit()/release() — the file being written is never evicted from under its writer (§5's
+    "the file being decoded")."""
     rec = record(name)
     if rec is None:
         return False, "unregistered"
@@ -539,6 +541,8 @@ def reserve(name, nbytes, path=None):
     root = dir_of(name)
     if not root or not os.path.isdir(root):
         return False, "dark"
+    if path and not _contained(path, root):
+        return False, "outside"          # a writer's stale idea of the directory is refused
     if over_floor(root):
         return False, "floor"
     cap = cap_of(name)
