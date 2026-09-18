@@ -297,6 +297,7 @@ class DarkRootCreatesNothing(unittest.TestCase):
     def test_match_queue_returns_the_chroma_and_keeps_nothing(self):
         try:
             import numpy as np
+            import librosa  # noqa: F401  (chroma_of imports it inline; CI has no librosa)
             import match_queue
         except ImportError as exc:
             self.skipTest("needs the venv: %s" % exc)
@@ -314,6 +315,7 @@ class DarkRootCreatesNothing(unittest.TestCase):
     def test_match_queue_with_the_root_unset_keeps_nothing(self):
         try:
             import numpy as np
+            import librosa  # noqa: F401  (chroma_of imports it inline; CI has no librosa)
             import match_queue
         except ImportError as exc:
             self.skipTest("needs the venv: %s" % exc)
@@ -334,6 +336,7 @@ class DarkRootCreatesNothing(unittest.TestCase):
     def test_match_queue_writes_through_the_policy_when_live(self):
         try:
             import numpy as np
+            import librosa  # noqa: F401  (chroma_of imports it inline; CI has no librosa)
             import match_queue
         except ImportError as exc:
             self.skipTest("needs the venv: %s" % exc)
@@ -358,6 +361,7 @@ class DarkRootCreatesNothing(unittest.TestCase):
         write is inside the policy's directory and accounted for."""
         try:
             import numpy as np
+            import librosa  # noqa: F401  (chroma_of imports it inline; CI has no librosa)
             import harvest
             import match_queue
         except ImportError as exc:
