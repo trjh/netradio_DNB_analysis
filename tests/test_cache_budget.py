@@ -76,6 +76,10 @@ class TheRegistrations(unittest.TestCase):
         with mock.patch.dict(os.environ, {"NETRADIO_ALIGN_CACHE": "/legacy", "NETRADIO_CACHE_ROOT": "/cr"}):
             self.assertEqual(cb.dir_of("streamalign"), "/legacy")
             self.assertEqual(cb.dir_of("chroma"), "/cr/chroma")
+        with mock.patch.dict(os.environ, {"NETRADIO_ALIGN_CACHE": "", "NETRADIO_CACHE_ROOT": ""}):
+            self.assertIsNone(cb.dir_of("streamalign"))               # dark: every load decodes
+            self.assertIsNone(audio.cache_dir())
+            self.assertEqual(cb.dir_of("chroma"), os.path.join(ROOT, ".harvest", "chroma"))
 
     def test_chroma_pins_what_the_bucket_has_not_verified(self):
         import sigstore
@@ -200,6 +204,146 @@ class ExcerptsRespectTheFloor(unittest.TestCase):
                 self.assertEqual(cb.read_events()[0]["event"], "landed")
             finally:
                 cb.disk_usage = saved
+
+
+class TestFixtureIsolation(unittest.TestCase):
+    """With NETRADIO_CACHE_ROOT unset the module and its owners must never touch the real home
+    directory (the 2026-09-18 leak: a suite run created ~/Netradio/cache on the live machine).
+    Runs against the REAL $HOME, imports every owner, calls every entry point, and FAILS (never
+    skips) if anything appears there. The harvester's unset fallback is the repo's own
+    .harvest/, which is asserted too."""
+
+    def test_nothing_touches_the_real_home_with_the_root_unset(self):
+        home = os.path.expanduser("~")
+        saved = {k: os.environ.get(k) for k in os.environ if k.startswith("NETRADIO_")}
+        before = set(os.listdir(home))
+        target = os.path.join(home, "Netradio")
+        existed = os.path.exists(target)
+        registry = dict(cb._registry)
+        try:
+            for k in list(os.environ):
+                if k.startswith("NETRADIO_"):
+                    os.environ.pop(k)
+            import sigstore                       # noqa: F401
+            from streamalign import audio         # noqa: F401
+            import extract_tracks                 # noqa: F401
+            self.assertIsNone(cb.cache_root())
+            self.assertIsNone(cb.dir_of("streamalign"))
+            self.assertIsNone(cb.dir_of("stream_tracks"))
+            self.assertTrue(cb.dir_of("chroma").startswith(ROOT))
+            for rec in cb.registered():
+                cb.reserve(rec.name, 10, os.path.join(home, "Netradio", "x"))
+                cb.commit(rec.name, os.path.join(home, "Netradio", "x"))
+                cb.remove(rec.name, os.path.join(home, "Netradio", "x"), "test")
+            cb.log_event("chroma", "landed", "/nowhere", 1, "test")
+            cb.run()
+            cb.startup()
+            cb.status(force=True)
+            cb.prune_events()
+        finally:
+            cb._registry.clear()
+            cb._registry.update(registry)
+            for k in list(os.environ):
+                if k.startswith("NETRADIO_"):
+                    os.environ.pop(k)
+            os.environ.update({k: v for k, v in saved.items() if v is not None})
+        self.assertEqual(sorted(set(os.listdir(home)) - before), [],
+                         "the suite created something under the real $HOME")
+        if not existed:
+            self.assertFalse(os.path.exists(target), "~/Netradio was created by the module")
+
+
+class DarkRootCreatesNothing(unittest.TestCase):
+    """A root that is named but absent is as dark as an unset one: no writer's makedirs may
+    create the cache under it and then have reserve admit the write."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.absent = os.path.join(self.tmp, "absent-root")
+        self._env = {k: os.environ.get(k) for k in os.environ
+                     if k.startswith("NETRADIO_") and ("_CACHE_" in k or k in
+                                                        ("NETRADIO_CACHE_ROOT", "NETRADIO_DISK_MAX_PCT",
+                                                         "NETRADIO_ALIGN_CACHE"))}
+        for k in self._env:
+            os.environ.pop(k)
+        os.environ["NETRADIO_CACHE_ROOT"] = self.absent
+        self._du = cb.disk_usage
+        cb.disk_usage = lambda p: Usage(100, 10, 90)
+
+    def tearDown(self):
+        cb.disk_usage = self._du
+        for k in list(os.environ):
+            if k.startswith("NETRADIO_") and ("_CACHE_" in k or k in ("NETRADIO_CACHE_ROOT",)):
+                os.environ.pop(k)
+        os.environ.update({k: v for k, v in self._env.items() if v is not None})
+
+    def test_ensure_dir_refuses_under_an_absent_root(self):
+        import sigstore    # noqa: F401
+        for name in ("chroma", "streamalign", "stream_tracks", "candidates"):
+            self.assertIsNone(cb.ensure_dir(name), name)
+        self.assertFalse(os.path.exists(self.absent))
+        os.makedirs(self.absent)
+        self.assertEqual(cb.ensure_dir("stream_tracks"), os.path.join(self.absent, "stream_tracks"))
+
+    def test_audio_decodes_without_caching_and_creates_nothing(self):
+        import numpy as np
+        from streamalign import audio
+        src = os.path.join(self.tmp, "src.bin")
+        open(src, "wb").write(b"x")
+        with mock.patch.object(audio, "_ffmpeg_decode", lambda p, sr, mono: np.zeros(8, dtype="<f4")):
+            self.assertEqual(len(audio.load_audio(src)), 8)
+        self.assertFalse(os.path.exists(self.absent))
+
+    def test_match_queue_returns_the_chroma_and_keeps_nothing(self):
+        try:
+            import numpy as np
+            import match_queue
+        except ImportError as exc:
+            self.skipTest("needs the venv: %s" % exc)
+        src = os.path.join(self.tmp, "cand.wav")
+        open(src, "wb").write(b"x")
+        with mock.patch.object(match_queue._audio, "load_audio",
+                               lambda p: np.zeros(60 * match_queue._audio.SR, dtype="float32")), \
+                mock.patch.object(match_queue.chroma_recipe, "compute_chroma",
+                                  lambda y: np.zeros((12, 4), dtype="float32")), \
+                mock.patch.object(match_queue, "CACHE", os.path.join(self.absent, "chroma")):
+            c = match_queue.chroma_of(src)
+        self.assertEqual(c.shape, (12, 4))
+        self.assertFalse(os.path.exists(self.absent))
+
+    def test_match_queue_writes_through_the_policy_when_live(self):
+        try:
+            import numpy as np
+            import match_queue
+        except ImportError as exc:
+            self.skipTest("needs the venv: %s" % exc)
+        os.makedirs(self.absent)                                     # the root exists now
+        src = os.path.join(self.tmp, "cand.wav")
+        open(src, "wb").write(b"x")
+        calls = []
+        real_reserve, real_commit = cb.reserve, cb.commit
+        with mock.patch.object(match_queue._audio, "load_audio",
+                               lambda p: np.zeros(60 * match_queue._audio.SR, dtype="float32")), \
+                mock.patch.object(match_queue.chroma_recipe, "compute_chroma",
+                                  lambda y: np.zeros((12, 4), dtype="float32")), \
+                mock.patch.object(match_queue, "CACHE", os.path.join(self.absent, "chroma")), \
+                mock.patch.object(cb, "reserve", lambda *a, **k: calls.append("reserve") or real_reserve(*a, **k)), \
+                mock.patch.object(cb, "commit", lambda *a, **k: calls.append("commit") or real_commit(*a, **k)):
+            match_queue.chroma_of(src)
+        self.assertEqual(calls, ["reserve", "commit"])
+        self.assertEqual(len(os.listdir(os.path.join(self.absent, "chroma"))), 1)
+
+    def test_an_excerpt_under_an_absent_root_is_not_kept(self):
+        try:
+            import harvest
+            import numpy as np
+            import soundfile  # noqa: F401
+        except ImportError as exc:
+            self.skipTest("needs the venv: %s" % exc)
+        path = os.path.join(self.absent, "candidates", "MT4-0.0500-abcd.wav")
+        with mock.patch.object(harvest, "KEEP", os.path.dirname(path)):
+            harvest.write_excerpt(np.zeros(16000 * 40, dtype="float32"), 20.0, path)
+        self.assertFalse(os.path.exists(self.absent))
 
 
 class EnvCheck(unittest.TestCase):

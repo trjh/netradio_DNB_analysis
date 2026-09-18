@@ -49,7 +49,19 @@ def _pinned(entry):
 # (NETRADIO_CHROMA_CACHE_MAX_AGE_DAYS), directory NETRADIO_CHROMA_CACHE_DIR else
 # $NETRADIO_CACHE_ROOT/chroma. `evict_cold` below is the lifecycle exit and goes through
 # `cache_budget.remove`; the pin above keeps the policy's own run to the same rule.
-cache_budget.register("chroma", max_age_default=14, refill="bucket:chroma/", pinned=_pinned,
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _local_default():
+    """With NETRADIO_CACHE_ROOT set the cache is `$NETRADIO_CACHE_ROOT/chroma` (None here lets
+    the registry fall through to the root). Unset, it is the repo's own gitignored
+    `.harvest/chroma`, never anything under `~`: a harvester run on a machine that has not set
+    the root keeps its signatures beside its state."""
+    return None if cache_budget.cache_root() else os.path.join(_REPO_ROOT, ".harvest", "chroma")
+
+
+cache_budget.register("chroma", dir_default=_local_default, max_age_default=14,
+                      refill="bucket:chroma/", pinned=_pinned,
                       is_entry=lambda path: (os.path.basename(path).startswith("u")
                                              and path.endswith(".npy")))
 

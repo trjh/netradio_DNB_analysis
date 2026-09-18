@@ -36,10 +36,15 @@ THE FOUR CALLS
 
 DARK
 ----
-A registered cache whose directory does not exist is dark: status shows it as missing, the run
-never touches it, reserve refuses. A machine with no NETRADIO_CACHE_ROOT directory (a worktree,
-CI) runs dark throughout, and the event log and the lock live under that root, so nothing is
-written anywhere. Tests set the variables and use temporary directories.
+NETRADIO_CACHE_ROOT has NO default in code. Unset, the module is dark throughout: `cache_root()`
+is None, a cache with no directory of its own resolves to None, `reserve` refuses, the run is
+skipped, the event log and the lock (both under the root) are never written, and nothing is ever
+derived from `~` or created on disk. The value a machine runs with (`~/Netradio/cache` on the
+mini after the move) is set in `.env`, never assumed here, so a worktree, CI or a test process
+that forgets the variable cannot touch the real machine's caches. A registered cache whose
+directory does not exist is dark the same way: status shows it as missing, the run never touches
+it, reserve refuses. Registration itself creates nothing. Tests set the variables to temporary
+directories they own.
 
 ENFORCE
 -------
@@ -77,7 +82,6 @@ MB = 1_000_000
 DEFAULT_CAP_GB = "4"
 DEFAULT_DISK_MAX_PCT = 82
 DEFAULT_EVENTS_DAYS = 30
-DEFAULT_ROOT = "~/Netradio/cache"
 START_SKIP_S = 300          # a second server start within five minutes of a recorded run skips
 EVENTS_FILE = "events.jsonl"
 LOCK_FILE = ".eviction.lock"
@@ -169,7 +173,9 @@ def var(name, field):
 
 
 def cache_root():
-    return os.path.expanduser(os.environ.get("NETRADIO_CACHE_ROOT", "").strip() or DEFAULT_ROOT)
+    """The root every cache defaults under, or None when NETRADIO_CACHE_ROOT is unset (dark)."""
+    raw = os.environ.get("NETRADIO_CACHE_ROOT", "").strip()
+    return os.path.expanduser(raw) if raw else None
 
 
 def _parse_cap(raw, variable):
@@ -203,7 +209,8 @@ def dir_of(name):
         default = default()
     if default:
         return os.path.expanduser(default)
-    return os.path.join(cache_root(), name)
+    root = cache_root()
+    return os.path.join(root, name) if root else None
 
 
 def cap_of(name):
@@ -236,8 +243,15 @@ def max_age_of(name):
 
 
 def disk_max_pct():
+    """The floor, a real percentage: 1..100. Outside that range the backstop would never fire
+    (101) or refuse everything (0), so the grammar refuses the value instead."""
     raw = os.environ.get("NETRADIO_DISK_MAX_PCT", "").strip()
-    return _parse_int(raw, "NETRADIO_DISK_MAX_PCT") if raw else DEFAULT_DISK_MAX_PCT
+    if not raw:
+        return DEFAULT_DISK_MAX_PCT
+    pct = _parse_int(raw, "NETRADIO_DISK_MAX_PCT")
+    if not 1 <= pct <= 100:
+        raise CacheConfigError("NETRADIO_DISK_MAX_PCT=%r: expected a percentage from 1 to 100" % raw)
+    return pct
 
 
 def events_days():
@@ -265,8 +279,28 @@ def validate():
     return [resolve(rec.name) for rec in registered()]
 
 
+def ensure_dir(name):
+    """Create the cache's directory for a writer, WITHOUT defeating dark mode: a directory named
+    by the owner or by `NETRADIO_<NAME>_CACHE_DIR` is created; a directory that only follows
+    from `NETRADIO_CACHE_ROOT` is created only when that root already exists (a root that is
+    named but absent stays dark, like an unset one). Returns the directory, or None when dark."""
+    d = dir_of(name)
+    if not d:
+        return None
+    root = cache_root()
+    if root and os.path.realpath(d) == os.path.realpath(os.path.join(root, name)) \
+            and not os.path.isdir(root):
+        return None
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        return None
+    return d
+
+
 def is_dark(name):
-    return not os.path.isdir(dir_of(name))
+    root = dir_of(name)
+    return not root or not os.path.isdir(root)
 
 
 # --- the disk floor (§2.1, §2.3; assumption 22) ---------------------------------------------
@@ -299,7 +333,7 @@ def entries(name):
     rec = record(name)
     root = dir_of(name)
     out = []
-    if rec is None or not os.path.isdir(root):
+    if rec is None or not root or not os.path.isdir(root):
         return out
     for dirpath, dirs, files in os.walk(root):
         dirs[:] = [d for d in dirs if not d.startswith(".")]
@@ -369,6 +403,8 @@ def _rank_of(rec, entry):
 
 
 def _contained(path, root):
+    if not root:
+        return False
     rp = os.path.realpath(path)
     rr = os.path.realpath(root)
     return rp == rr or rp.startswith(rr.rstrip(os.sep) + os.sep)
@@ -377,7 +413,8 @@ def _contained(path, root):
 # --- the event log (§2.5) -------------------------------------------------------------------
 
 def events_path():
-    return os.path.join(cache_root(), EVENTS_FILE)
+    root = cache_root()
+    return os.path.join(root, EVENTS_FILE) if root else None
 
 
 def log_event(cache, event, path, nbytes=None, reason=None):
@@ -386,7 +423,7 @@ def log_event(cache, event, path, nbytes=None, reason=None):
     if event not in EVENTS:
         raise ValueError("event %r is not one of %s" % (event, EVENTS))
     root = cache_root()
-    if not os.path.isdir(root):
+    if not root or not os.path.isdir(root):
         return False
     rec = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"), "cache": cache,
            "event": event, "path": path, "bytes": nbytes, "reason": reason}
@@ -404,6 +441,8 @@ def read_events(hours=24, limit=None):
     path = events_path()
     cutoff = datetime.fromtimestamp(now() - hours * 3600, timezone.utc).isoformat(timespec="seconds")
     out = []
+    if not path:
+        return out
     try:
         with open(path, "r", encoding="utf-8") as fh:
             for line in fh:
@@ -424,6 +463,8 @@ def prune_events(days=None):
     Returns the number dropped."""
     days = events_days() if days is None else days
     path = events_path()
+    if not path:
+        return 0
     cutoff = datetime.fromtimestamp(now() - days * 86400, timezone.utc).isoformat(timespec="seconds")
     try:
         with open(path, "r", encoding="utf-8") as fh:
@@ -496,7 +537,7 @@ def reserve(name, nbytes, path=None):
         _hold(path)
         return True, None
     root = dir_of(name)
-    if not os.path.isdir(root):
+    if not root or not os.path.isdir(root):
         return False, "dark"
     if over_floor(root):
         return False, "floor"
@@ -553,7 +594,7 @@ def commit(name, path, reason=None):
     except OSError:
         return False, "missing"
     log_event(name, "landed", path, nbytes, reason)
-    if not rec.enforce or not os.path.isdir(root):
+    if not rec.enforce or not root or not os.path.isdir(root):
         return True, None
     _invalidate_status()
     cap = cap_of(name)
@@ -572,7 +613,7 @@ def remove(name, path, reason, event="expired"):
         return False, "unregistered"
     root = dir_of(name)
     if not _contained(path, root) or os.path.realpath(path) == os.path.realpath(root):
-        return False, "outside"
+        return False, "outside"          # a dark cache (no directory) refuses every path
     try:
         st = os.stat(path)
     except FileNotFoundError:
@@ -598,7 +639,7 @@ def _evict_cache(rec, reason, exclude=None):
     out = {"name": rec.name, "aged": 0, "evicted": 0, "freed": 0, "pinned": 0, "over_cap": False,
            "all_pinned": False}
     root = dir_of(rec.name)
-    if not rec.enforce or not os.path.isdir(root):
+    if not rec.enforce or not root or not os.path.isdir(root):
         return out
     age = max_age_of(rec.name)
     if age is not None and reason != "by-cap":
@@ -633,7 +674,8 @@ def _floor_run(exclude=None):
     in its own order, until every live cache's volume is under the floor."""
     out = {"floor_evicted": 0, "floor_freed": 0, "floor_pinned": 0, "floor_breached": False,
            "floor_cleared": True}
-    live = [rec for rec in registered() if rec.enforce and os.path.isdir(dir_of(rec.name))]
+    live = [rec for rec in registered()
+            if rec.enforce and dir_of(rec.name) and os.path.isdir(dir_of(rec.name))]
     breached = [rec for rec in live if over_floor(dir_of(rec.name))]
     if not breached:
         return out
@@ -665,13 +707,17 @@ def _floor_run(exclude=None):
 
 
 def _last_run_path():
-    return os.path.join(cache_root(), LAST_RUN_FILE)
+    root = cache_root()
+    return os.path.join(root, LAST_RUN_FILE) if root else None
 
 
 def last_run_recorded():
     """The last run any process on this machine recorded, or None."""
+    path = _last_run_path()
+    if not path:
+        return None
     try:
-        with open(_last_run_path(), "r", encoding="utf-8") as fh:
+        with open(path, "r", encoding="utf-8") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else None
     except (OSError, ValueError):
@@ -679,6 +725,8 @@ def last_run_recorded():
 
 
 def _record_run(summary):
+    if not _last_run_path():
+        return
     tmp = _last_run_path() + ".tmp"
     try:
         with open(tmp, "w", encoding="utf-8") as fh:
@@ -692,6 +740,9 @@ def run(reason="periodic", names=None):
     """The eviction run. Returns its summary; {"skipped": why} when it did not run."""
     global _last_skip
     root = cache_root()
+    if not root:
+        _last_skip = {"at": now(), "why": "root-unset"}
+        return {"skipped": "root-unset", "root": None}
     if not os.path.isdir(root):
         _last_skip = {"at": now(), "why": "root-missing"}
         return {"skipped": "root-missing", "root": root}
@@ -756,7 +807,8 @@ def _invalidate_status():
 
 def _row(rec):
     root = dir_of(rec.name)
-    row = {"name": rec.name, "dir": root, "exists": os.path.isdir(root), "enforce": rec.enforce,
+    row = {"name": rec.name, "dir": root, "exists": bool(root and os.path.isdir(root)),
+           "enforce": rec.enforce,
            "refill": rec.refill, "rank": rec.rank if not callable(rec.rank) else "per-entry",
            "order": rec.order if isinstance(rec.order, str) else "custom",
            "last_run": _last_run.get("at"), "evicted_since_start": _evicted_since_start.get(rec.name, 0)}
@@ -789,7 +841,8 @@ def status(force=False):
     cached = _status_cache["value"]
     if cached is not None and not force and now() - _status_cache["at"] < STATUS_TTL_S:
         return cached
-    out = {"root": cache_root(), "root_exists": os.path.isdir(cache_root()),
+    root = cache_root()
+    out = {"root": root, "root_exists": bool(root and os.path.isdir(root)),
            "floor_pct": disk_max_pct(), "last_run": dict(_last_run) if _last_run else None,
            "last_skip": _last_skip, "caches": [_row(rec) for rec in registered()]}
     _status_cache["value"], _status_cache["at"] = out, now()

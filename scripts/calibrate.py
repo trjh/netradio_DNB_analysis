@@ -123,7 +123,7 @@ def build_cases(tracks, starts, src):
         # a clean extract, if extract_tracks.py has made one
         ex = None
         exdir = cache_budget.dir_of("stream_tracks")   # extract_tracks.py's output (flac)
-        if os.path.isdir(exdir):
+        if exdir and os.path.isdir(exdir):
             for f in os.listdir(exdir):
                 if f.startswith("%03d - " % int(num)):
                     ex = os.path.join(exdir, f)

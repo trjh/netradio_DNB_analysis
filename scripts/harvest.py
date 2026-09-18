@@ -82,8 +82,19 @@ PAUSE = os.path.join(STATE_DIR, "PAUSED")
 # KEEP is the `candidates` cache: the best twelve excerpts per mystery, 250 MB, the worst of a
 # mystery's twelve evicted first, 30 days ($NETRADIO_CACHE_ROOT/candidates, or
 # NETRADIO_CANDIDATES_CACHE_DIR). Neither is a fixed path any more (Tim, 2026-09-16).
-CACHE = cache_budget.dir_of("chroma")
-KEEP = cache_budget.dir_of("candidates")
+# With NETRADIO_CACHE_ROOT unset both fall back to the repo's own gitignored `.harvest/`, never to
+# anything under `~` (sigstore's registration carries the same rule for CACHE). A root that is
+# named but absent resolves under it and stays dark: `cache_budget.ensure_dir` creates nothing.
+_KEEP_FALLBACK = os.path.join(STATE_DIR, "candidates")
+
+
+def _candidates_dir():
+    """The registry's default for the candidates cache: a KEEP set by hand (or patched by a
+    test) wins; otherwise `$NETRADIO_CACHE_ROOT/candidates` through the root, or the repo-local
+    fallback when the root is unset."""
+    if KEEP != _KEEP_AT_IMPORT:
+        return KEEP
+    return None if cache_budget.cache_root() else _KEEP_FALLBACK
 
 
 def _excerpt_score(entry):
@@ -94,10 +105,13 @@ def _excerpt_score(entry):
         return 0.0
 
 
-cache_budget.register("candidates", dir_default=lambda: KEEP, cap_default="0.25",
+KEEP = _KEEP_AT_IMPORT = None
+cache_budget.register("candidates", dir_default=_candidates_dir, cap_default="0.25",
                       max_age_default=30, order="by-score", score=_excerpt_score,
                       refill="re-cut",
                       is_entry=lambda path: path.lower().endswith((".wav", ".mp3", ".flac", ".m4a")))
+CACHE = cache_budget.dir_of("chroma")
+KEEP = _KEEP_AT_IMPORT = cache_budget.dir_of("candidates")
 
 # THE queue/state writer lock. queue.json and state.json have exactly ONE writer at a time:
 # collector.run() in split mode, run() in Mode A, or the on-demand --requeue-missing-sigs.
@@ -816,7 +830,11 @@ def _decode_and_sign(url, job, duration=None):
     if _stop_requested():                      # nothing half-decoded reaches the cache
         return {"ok": False, "error": "stopped"}
 
-    os.makedirs(CACHE, exist_ok=True)
+    if not cache_budget.ensure_dir("chroma"):
+        # The root is named but absent (run() refuses to start that way; the child can still be
+        # asked by hand): nothing is created under it, and the signature is not kept.
+        return {"ok": False, "error": "signature cache dark: NETRADIO_CACHE_ROOT does not exist"}
+    os.makedirs(CACHE, exist_ok=True)          # the policy admitted the directory; CACHE is it
     # The signature is the harvester's PRODUCT, not a copy of anything, and its bucket copy is
     # taken from this file: so it is written whatever the policy answers, and the reserve/commit
     # pair is the accounting (an overflow runs the eviction on OTHER entries at once).
@@ -993,7 +1011,8 @@ def write_excerpt(samples, at_s, path):
     if len(clip) == 0:
         return                                   # nothing to hear; do not leave an empty file
 
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if not cache_budget.ensure_dir("candidates"):
+        return                                   # dark (the root unset or absent): not kept
     # A planned-size write into the `candidates` cache: 16-bit PCM, so two bytes a sample. The
     # policy makes room by score (the worst of a mystery's twelve first) and refuses past the
     # disk floor; a refused excerpt is simply not kept -- the lead survives, the audio was only
@@ -1112,6 +1131,8 @@ def _load_sig(url):
     exists in neither (i.e. this URL genuinely needs its audio fetched)."""
     path = sig_path(url)
     if not os.path.exists(path) and sigstore.enabled():
+        if not cache_budget.ensure_dir("chroma"):
+            return None                                   # dark: nothing is created under an absent root
         cache_budget.reserve("chroma", None, path)        # accounting; see the signature write
         if not sigstore.fetch(_sig_key(url), CACHE):
             cache_budget.release("chroma", path)
@@ -1398,7 +1419,8 @@ def _write_provenance():
     note = os.path.join(KEEP, "PROVENANCE.txt")
     if os.path.exists(note):
         return
-    os.makedirs(KEEP, exist_ok=True)
+    if not cache_budget.ensure_dir("candidates"):
+        return
     with open(note, "w", encoding="utf-8") as fh:
         fh.write(
             "These are SHORT EXCERPTS (~%ds), retained TEMPORARILY so a human can listen and "
@@ -1961,6 +1983,12 @@ def run(args):
         return
     if note_no_queries(state, qs):
         _save(STATE, state)                   # searchable again -> the state stands down NOW
+    root = cache_budget.cache_root()
+    if root and not os.path.isdir(root):
+        print("NETRADIO_CACHE_ROOT is set to %s but that directory does not exist: the signature "
+              "and candidate caches would be dark and every fetch would fail. Create it (or fix "
+              ".env) and start again." % root)
+        return
     print("# searching for Mystery Tracks %s" % ", ".join(str(n) for n, _, _ in qs))
     print("# work %s, idle %s, rotating hosts, jittered. Ctrl-C or SIGTERM stops cleanly: state "
           "is saved, yt-dlp and ffmpeg are stopped too." % ("4-5h", "40-120m"))

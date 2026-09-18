@@ -29,6 +29,8 @@ import cache_budget                               # noqa: E402  (the cache polic
 import chroma_recipe                              # noqa: E402  (THE recipe)
 
 HOP = chroma_recipe.HOP
+import sigstore                                   # noqa: E402  (registers the chroma cache)
+
 CACHE = cache_budget.dir_of("chroma")             # the harvester's signature working cache
 AUDIO_EXTS = (".m4a", ".opus", ".mp3", ".webm", ".flac", ".wav", ".ogg", ".wv", ".aac")
 
@@ -54,8 +56,15 @@ def chroma_of(path, min_seconds=45.0):
     if len(y) < min_seconds * _audio.SR:
         return None
     c = chroma_recipe.compute_chroma(y)             # THE recipe (chroma_recipe.py)
-    os.makedirs(CACHE, exist_ok=True)
-    np.save(cached, c.astype("float16"))          # float16: half the disk, no loss that matters
+    # Into the shared `chroma` cache through the policy (sigstore registers it): make room, then
+    # add; a refusal (dark, past the disk floor, everything pinned) returns the computed chroma
+    # without keeping it, and nothing is created under an absent root.
+    if cache_budget.ensure_dir("chroma"):
+        os.makedirs(CACHE, exist_ok=True)     # the policy admitted the directory; CACHE is it
+        ok, _why = cache_budget.reserve("chroma", c.nbytes // 2 + 128, cached)
+        if ok:
+            np.save(cached, c.astype("float16"))  # float16: half the disk, no loss that matters
+            cache_budget.commit("chroma", cached, reason="match_queue")
     return c
 
 

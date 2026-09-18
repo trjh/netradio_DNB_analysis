@@ -32,7 +32,8 @@ AUDIO_DIR = os.environ.get(
 # policy, not by this module: 4 GB by default (NETRADIO_STREAMALIGN_CACHE_GB), oldest-added
 # first, 14 days (NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS), and the disk floor
 # NETRADIO_DISK_MAX_PCT above every cap. The directory is NETRADIO_STREAMALIGN_CACHE_DIR, else
-# the older NETRADIO_ALIGN_CACHE, else $NETRADIO_CACHE_ROOT/streamalign. The two fractions of the
+# the older NETRADIO_ALIGN_CACHE, else $NETRADIO_CACHE_ROOT/streamalign; with none of the three
+# set the cache is dark and every load decodes (nothing is derived from `~`). The two fractions of the
 # disk this module used to read (a cap fraction and a disk-full fraction) are gone: a cache's
 # useful size is fixed by its corpus, not by the volume it sits on.
 import cache_budget
@@ -111,8 +112,9 @@ def load_audio(name, sr=SR, mono=True, use_cache=True, audio_dir=None):
     if not use_cache:
         return _ffmpeg_decode(path, sr, mono)
 
-    cdir = cache_dir()
-    os.makedirs(cdir, exist_ok=True)
+    cdir = cache_budget.ensure_dir("streamalign")  # None when dark: the root unset or absent
+    if not cdir:
+        return _ffmpeg_decode(path, sr, mono)     # no cache, nothing created
     cache_path = os.path.join(cdir, _cache_key(path, sr, mono) + ".npy")
     if os.path.isfile(cache_path):
         try:

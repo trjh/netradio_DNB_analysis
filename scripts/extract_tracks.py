@@ -144,8 +144,13 @@ def main():
     if args.out:
         os.environ["NETRADIO_STREAM_TRACKS_CACHE_DIR"] = os.path.expanduser(args.out)
     args.out = cache_budget.dir_of("stream_tracks")
+    if not args.out:
+        sys.exit("extract_tracks: nowhere to write. Set NETRADIO_CACHE_ROOT (or "
+                 "NETRADIO_STREAM_TRACKS_CACHE_DIR) in .env, or pass --out.")
     if not args.dry_run:
-        os.makedirs(args.out, exist_ok=True)
+        if not cache_budget.ensure_dir("stream_tracks"):
+            sys.exit("extract_tracks: NETRADIO_CACHE_ROOT names a directory that does not exist; "
+                     "create it (or pass --out).")
         cache_budget.run(reason="extract-start", names=("stream_tracks",))   # the age, the cap
 
     made = skipped = joined = 0
