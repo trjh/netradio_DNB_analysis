@@ -61,13 +61,23 @@ def decode(ffmpeg, src, offset, seconds):
     return np.frombuffer(p.stdout, dtype="float32")
 
 
-def sign(y):
-    """samples -> (expected .npy bytes, sha256, shape). The stored form is float16 — the same
-    cast the pool uses — so a worker recomputing on the same audio gets the same bytes."""
-    c = chroma_recipe.compute_chroma(y).astype(chroma_recipe.STORE_DTYPE)
+def pack(chroma):
+    """chroma (float32) -> (expected .npy bytes, sha256). The stored form is float16 — the same
+    cast the pool uses — so a worker recomputing on the same audio gets the same bytes. The
+    digest is of the serialised .npy FILE, numpy header included: what `expected-<id>.npy` on
+    disk hashes to, NOT the raw sample bytes. Anything that checks a canary against
+    `sha256_expected` hashes through here, so the test and the script cannot drift apart."""
+    c = np.asarray(chroma).astype(chroma_recipe.STORE_DTYPE)
     buf = io.BytesIO()
     np.save(buf, c)
-    return buf.getvalue(), hashlib.sha256(buf.getvalue()).hexdigest(), list(c.shape)
+    return buf.getvalue(), hashlib.sha256(buf.getvalue()).hexdigest()
+
+
+def sign(y):
+    """samples -> (expected .npy bytes, sha256, shape), via `pack`."""
+    c = chroma_recipe.compute_chroma(y)
+    npy, sha = pack(c)
+    return npy, sha, list(c.shape)
 
 
 def build(source_dir, out_dir, ffmpeg, count, seconds, offset, exts=(".mp3", ".flac", ".wav",
