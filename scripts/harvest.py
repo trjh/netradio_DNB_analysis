@@ -1416,10 +1416,11 @@ def evict_overfull(state, num):
 def _write_provenance():
     """State, in plain words, what the kept files are -- so nobody, including a future me, ever
     mistakes this directory for a music library."""
-    note = os.path.join(KEEP, "PROVENANCE.txt")
-    if os.path.exists(note):
+    keep = cache_budget.ensure_dir("candidates")      # the registry's directory, resolved now
+    if not keep:
         return
-    if not cache_budget.ensure_dir("candidates"):
+    note = os.path.join(keep, "PROVENANCE.txt")
+    if os.path.exists(note):
         return
     with open(note, "w", encoding="utf-8") as fh:
         fh.write(

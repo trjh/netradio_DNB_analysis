@@ -58,8 +58,10 @@ def chroma_of(path, min_seconds=45.0):
     c = chroma_recipe.compute_chroma(y)             # THE recipe (chroma_recipe.py)
     # Into the shared `chroma` cache through the policy (sigstore registers it): make room, then
     # add; a refusal (dark, past the disk floor, everything pinned) returns the computed chroma
-    # without keeping it, and nothing is created under an absent root.
-    if cache_budget.ensure_dir("chroma"):
+    # without keeping it. With NETRADIO_CACHE_ROOT unset this one-off matcher keeps nothing at
+    # all (the repo-local .harvest/ fallback is the harvester's, not this script's), and nothing
+    # is created under a root that is named but absent.
+    if cache_budget.cache_root() and cache_budget.ensure_dir("chroma"):
         os.makedirs(CACHE, exist_ok=True)     # the policy admitted the directory; CACHE is it
         ok, _why = cache_budget.reserve("chroma", c.nbytes // 2 + 128, cached)
         if ok:

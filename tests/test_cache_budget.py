@@ -311,6 +311,26 @@ class DarkRootCreatesNothing(unittest.TestCase):
         self.assertEqual(c.shape, (12, 4))
         self.assertFalse(os.path.exists(self.absent))
 
+    def test_match_queue_with_the_root_unset_keeps_nothing(self):
+        try:
+            import numpy as np
+            import match_queue
+        except ImportError as exc:
+            self.skipTest("needs the venv: %s" % exc)
+        os.environ.pop("NETRADIO_CACHE_ROOT")
+        src = os.path.join(self.tmp, "cand.wav")
+        open(src, "wb").write(b"x")
+        local = os.path.join(self.tmp, "repo-local-chroma")
+        with mock.patch.object(match_queue._audio, "load_audio",
+                               lambda p: np.zeros(60 * match_queue._audio.SR, dtype="float32")), \
+                mock.patch.object(match_queue.chroma_recipe, "compute_chroma",
+                                  lambda y: np.zeros((12, 4), dtype="float32")), \
+                mock.patch.object(match_queue, "CACHE", local):
+            c = match_queue.chroma_of(src)
+        self.assertEqual(c.shape, (12, 4))
+        self.assertFalse(os.path.exists(local))
+        self.assertFalse(os.path.exists(os.path.join(ROOT, ".harvest", "chroma", "x")))
+
     def test_match_queue_writes_through_the_policy_when_live(self):
         try:
             import numpy as np
