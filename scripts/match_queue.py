@@ -56,8 +56,10 @@ def chroma_of(path, min_seconds=45.0):
     if cached and os.path.exists(cached):
         try:
             return np.load(cached).astype("float32")
-        except (OSError, ValueError):
-            pass            # torn or corrupt (an eviction mid-write, a crash): re-compute it
+        except (OSError, ValueError, EOFError):
+            pass            # torn, empty or corrupt (a crash mid-write): re-compute it. EOFError
+                            # is the zero-byte shape: np.save truncates the target before the
+                            # header lands, so an interrupted write leaves an empty .npy
     import librosa
     try:
         y = _audio.load_audio(path)

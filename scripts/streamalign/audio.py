@@ -119,8 +119,8 @@ def load_audio(name, sr=SR, mono=True, use_cache=True, audio_dir=None):
     if os.path.isfile(cache_path):
         try:
             return np.load(cache_path, mmap_mode="r")
-        except (OSError, ValueError):
-            pass  # corrupt cache; re-decode
+        except (OSError, ValueError, EOFError):
+            pass  # corrupt, or zero-byte from an interrupted write; re-decode
     signal = _ffmpeg_decode(path, sr, mono)
     # The cache is optional. A planned-size reserve makes room by the policy's order and refuses
     # when it cannot (past the disk floor, everything pinned); the decode is returned either way.

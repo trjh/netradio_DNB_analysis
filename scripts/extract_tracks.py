@@ -201,20 +201,27 @@ def main():
             pdir = os.path.join(os.path.dirname(out) or ".", ".parts")
             os.makedirs(pdir, exist_ok=True)
             stem_name = os.path.basename(out)
-            parts = []
-            for i, (stem, a, b) in enumerate(pieces):
-                p = os.path.join(pdir, "%s.part%d.wav" % (stem_name, i))
-                cut(stem, a, b, starts[stem], p)
-                parts.append(p)
-            lst = os.path.join(pdir, stem_name + ".txt")
-            with open(lst, "w") as fh:
-                for p in parts:
-                    fh.write("file '%s'\n" % p.replace("'", "'\\''"))
-            # Encoded, not stream-copied: the parts are PCM and the track is flac.
-            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0",
-                            "-i", lst, "-c:a", "flac", out], check=True)
-            for p in parts + [lst]:
-                os.unlink(p)
+            parts, lst = [], os.path.join(pdir, stem_name + ".txt")
+            # The scratch is invisible to the policy, so nothing else will ever reclaim it: every
+            # exit path from here removes it, a failed ffmpeg and a Ctrl-C included. A part is
+            # PCM, about 176 KB a second, and no run resumes one.
+            try:
+                for i, (stem, a, b) in enumerate(pieces):
+                    p = os.path.join(pdir, "%s.part%d.wav" % (stem_name, i))
+                    cut(stem, a, b, starts[stem], p)
+                    parts.append(p)
+                with open(lst, "w") as fh:
+                    for p in parts:
+                        fh.write("file '%s'\n" % p.replace("'", "'\\''"))
+                # Encoded, not stream-copied: the parts are PCM and the track is flac.
+                subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0",
+                                "-i", lst, "-c:a", "flac", out], check=True)
+            finally:
+                for p in parts + [lst]:
+                    try:
+                        os.unlink(p)
+                    except OSError:
+                        pass
         cache_budget.commit("stream_tracks", out, reason="extract")
         made += 1
 

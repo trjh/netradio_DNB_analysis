@@ -232,6 +232,43 @@ class ExcerptsRespectTheFloor(unittest.TestCase):
             finally:
                 cb.disk_usage = saved
 
+    def test_commit_never_runs_the_floor_pass_without_the_root(self):
+        """The floor pass ranks across caches and runs under the MACHINE lock, which only the
+        root gives. With the root unset a commit must not reach into another cache: `reserve`
+        refusing past the floor, and the run's age and cap passes, are the bound there."""
+        import tempfile as _tf
+        cand = _tf.mkdtemp()
+        chroma = _tf.mkdtemp()
+        landed = os.path.join(cand, "MT4-0.0500-abcd.wav")
+        victim = os.path.join(chroma, "u123.npy")
+        for path in (landed, victim):
+            with open(path, "wb") as fh:
+                fh.write(b"x" * 10)
+        registry = dict(cb._registry)
+        saved = cb.disk_usage
+        env = {k: os.environ.get(k) for k in os.environ if k.startswith("NETRADIO_")}
+        try:
+            for k in list(os.environ):
+                if k.startswith("NETRADIO_"):
+                    os.environ.pop(k)
+            os.environ["NETRADIO_CANDIDATES_CACHE_DIR"] = cand
+            os.environ["NETRADIO_CHROMA_CACHE_DIR"] = chroma
+            cb.disk_usage = lambda p: Usage(100, 90, 10)          # 90 %: past the floor
+            import harvest        # noqa: F401  (registers candidates; sigstore registers chroma)
+            self.assertEqual(cb.commit("candidates", landed), (True, None))
+            self.assertTrue(os.path.exists(victim))               # no cross-cache eviction
+            self.assertTrue(os.path.exists(landed))
+            self.assertEqual(cb.reserve("candidates", 10, os.path.join(cand, "x")),
+                             (False, "floor"))                    # the floor still refuses writes
+        finally:
+            cb.disk_usage = saved
+            cb._registry.clear()
+            cb._registry.update(registry)
+            for k in list(os.environ):
+                if k.startswith("NETRADIO_"):
+                    os.environ.pop(k)
+            os.environ.update({k: v for k, v in env.items() if v is not None})
+
     def test_an_owner_dir_cache_is_swept_with_the_root_unset(self):
         """Should fix 2 of #146 (the twin's Should fix 3): `sweep_excerpts` is a scoped run, and
         with NETRADIO_CACHE_ROOT unset the caches are live under `.harvest/` anyway. The run

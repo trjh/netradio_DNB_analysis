@@ -43,6 +43,9 @@ Where the lock file sits follows one rule (Tim, 2026-09-18):
   NETRADIO_CACHE_ROOT set     `$NETRADIO_CACHE_ROOT/.eviction.lock`, one lock for the machine.
   NETRADIO_CACHE_ROOT unset   `<cache dir>/.eviction.lock`, one lock per live cache.
 
+The cross-cache floor pass runs only under the machine lock, so it is root-only wherever it is
+reached: in the run, and in the `commit` of a write that finds the volume past the floor.
+
 A writer that finds the lock held never waits: `reserve` admits an unplanned write (its length
 is not the caller's to give up) and refuses a planned one with `why="locked"`, and the next
 periodic run corrects any overflow.
@@ -657,7 +660,12 @@ def release(name, path):
 
 def commit(name, path, reason=None):
     """Record a write ("landed") and, when the cache is over cap or the volume past the floor,
-    run the eviction at once on OTHER entries. Returns (ok, why)."""
+    run the eviction at once on OTHER entries. Returns (ok, why).
+
+    The floor pass here is root-only, like the run's: it evicts across caches by the ranking, and
+    the lock this call holds is one cache's. Without the root there is no machine-wide lock to
+    serialise the other caches' deletions against, so `reserve`'s refusal past the floor and the
+    next run's age and cap passes are what bounds a rootless machine."""
     rec = record(name)
     release(name, path)
     if rec is None:
@@ -675,7 +683,7 @@ def commit(name, path, reason=None):
     _invalidate_status()
     cap = cap_of(name)
     over_cap = cap is not None and size_of(name) > cap
-    past_floor = over_floor(root)
+    past_floor = bool(cache_root()) and over_floor(root)
     if over_cap or past_floor:
         with _locked(lock_path(name)) as (held, _why):
             if held:            # held elsewhere: that run is already evicting here, and the

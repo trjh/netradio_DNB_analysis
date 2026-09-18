@@ -1158,8 +1158,8 @@ def _load_sig(url):
         cache_budget.commit("chroma", path, reason="bucket-fetcher")
     try:
         return np.load(path).astype("float32")
-    except (OSError, ValueError):
-        return None
+    except (OSError, ValueError, EOFError):
+        return None                     # corrupt, or zero-byte from an interrupted write
 
 
 def unscored_pairs(state, q, retired, qs, limit=None):
