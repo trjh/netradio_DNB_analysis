@@ -346,7 +346,8 @@ fi
 # weeks behind, missing the QUEUE_VIEW.md derive). Refuse to run on divergent copies — data
 # synced by two different versions of the sync is worse than a blocked run. Fix = copy the
 # version you just edited over the other and PR it in BOTH repos.
-# Each entry is <player path>=<analysis path>; a file that becomes a twin later is added here.
+# Each entry is <path under one checkout>=<path under the other> — the loop maps each side to
+# its checkout; a file that becomes a twin later is added here.
 # A pair absent from both checkouts is skipped with a line; a pair on disk in one and not the
 # other is a half-landed twin and refuses — unless a dry run can see both origin/main copies
 # already agree, in which case a real run's catch-up fast-forwards the checkout that is behind
@@ -375,14 +376,22 @@ for twin in "${TWINS[@]}"; do
     # missing — where a real run would have fast-forwarded them first. What decides the real
     # run is the two origin/main copies.
     say "[dry-run] self-check: $prel differs or is missing on disk, but both origin/main copies match —"
-    say "          a real run fast-forwards first and passes"
+    say "          a real run fast-forwards first and passes when its catch-up can move the checkout"
     continue
   fi
   if [ ! -e "$pfile" ] || [ ! -e "$afile" ]; then
     say "ERROR: $prel is on disk in one repo but not the other — a shared file lands in BOTH or neither." >&2
-    say "  player:   $pfile" >&2
-    say "  analysis: $afile" >&2
-    say "Merge the missing half's PR, or pull the checkout that is behind, then re-run." >&2
+    if [ -e "$pfile" ]; then say "  on disk:  $pfile" >&2; else say "  missing:  $pfile" >&2; fi
+    if [ -e "$afile" ]; then say "  on disk:  $afile" >&2; else say "  missing:  $afile" >&2; fi
+    if [ -n "$BLOCKED" ] && [ -n "$op" ] && [ "$op" = "$oa" ]; then
+      # Not half-landed after all: both origin/main copies hold the file and agree, and the
+      # checkout without it is one the catch-up could not move (see above). The merge is done;
+      # the catch-up is the remedy — the same reasoning as the differing case below.
+      say "The catch-up could not fast-forward:${BLOCKED} (see above). Fix that, then re-run." >&2
+      say "Both origin/main copies already match, so no copy is needed." >&2
+    else
+      say "Merge the missing half's PR, or pull the checkout that is behind, then re-run." >&2
+    fi
     exit 1
   fi
   {
