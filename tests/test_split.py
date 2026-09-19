@@ -375,6 +375,50 @@ class TestCollector(Base):
         self.assertEqual(q3.get("retry_later"), [URL])            # reconciled DURABLY
         self.assertEqual(q3.get("done") or [], [])
 
+    def test_once_refuses_a_dark_cache_instead_of_crashing_on_a_match(self):
+        """`--once` is the cron entry point, not a test seam: with the cache policy dark it
+        must refuse exactly as run() does, before a matching result reaches an excerpt
+        path that is None. A queued MATCH and a dark cache, and the one-shot pass folds
+        nothing and crashes nothing."""
+        q = self._harvested()                 # a real job dir + a spooled ok result
+        saved = {k: os.environ.get(k) for k in list(os.environ)
+                 if k.startswith("NETRADIO_") and ("CACHE" in k or
+                                                   k in ("NETRADIO_CACHE_ROOT",
+                                                         "NETRADIO_DOWNLOAD_ROOT",
+                                                         "NETRADIO_DISK_MAX_PCT",
+                                                         "NETRADIO_CACHE_EVENTS_DAYS"))}
+        for k in saved:
+            os.environ.pop(k, None)
+        import cache_budget
+        registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+
+        def restore():
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(registry[1])
+            for k, v in saved.items():
+                os.environ[k] = v
+        self.addCleanup(restore)
+        harvest.register_caches()             # re-read: both caches are dark
+        self.assertIsNone(harvest._keep_dir())
+
+        collector.STATE = os.path.join(self.tmp.name, "state2.json")
+        with unittest.mock.patch.object(collector, "_cm") as cm, \
+                unittest.mock.patch.object(collector, "queries",
+                                          lambda state=None: (_ for _ in ()).throw(
+                                              AssertionError("refused before queries"))), \
+                unittest.mock.patch.dict(os.environ, {"NETRADIO_COLLECTOR": "on"}), \
+                unittest.mock.patch.object(sys, "argv", ["collector.py", "--once"]):
+            cm.match.return_value = (0.031, 2, 12.0)     # a MATCH, waiting to be folded
+            collector.main()
+        self.assertFalse(os.path.exists(collector.STATE),
+                         "the one-shot pass folded nothing: no state was written")
+        self.assertEqual(q["pending"], [URL], "the queued URL was left where it was")
+        self.assertEqual(os.listdir(collector.RESULTS) if os.path.isdir(collector.RESULTS)
+                         else [], [harvest._sig_key(URL) + ".json"],
+                         "the spool keeps its record: nothing crashed, nothing was lost")
+
     def test_no_retained_audio_scores_but_cannot_excerpt(self):
         q = self._harvested()
         key = harvest._sig_key(URL)

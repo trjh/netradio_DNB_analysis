@@ -346,11 +346,27 @@ def refresh_dashboard_state(state):
     return qs, changed
 
 
+def _caches_ready():
+    """(True, None) when the signature cache and the excerpt board are registered, else
+    (False, the refusal to print). While NETRADIO_CACHE_ROOT is unset (or a registration
+    was refused) this runtime has nowhere to keep a signature or an excerpt, so neither the
+    fold loop nor a one-shot pass may run: a matching result would reach a directory that
+    does not exist and crash before it could be reported. Shared by run() and --once,
+    because --once is the cron entry point, not a test seam."""
+    dark = [n for n, d in ((harvest.CHROMA_CACHE, harvest._chroma_dir()),
+                           (harvest.CANDIDATES_CACHE, harvest._keep_dir())) if d is None]
+    if not dark:
+        return True, None
+    return False, ("the %s cache %s dark (NETRADIO_CACHE_ROOT unset, or the registration "
+                   "was refused): this runtime has nowhere to keep a signature or an excerpt. "
+                   "Set NETRADIO_CACHE_ROOT in .env (see .env.example) and start again."
+                   % (" and the ".join(dark), "is" if len(dark) == 1 else "are"))
+
+
 def run():
-    if harvest._chroma_dir() is None or harvest._keep_dir() is None:
-        print("the signature cache or the excerpt board is dark (NETRADIO_CACHE_ROOT unset, or "
-              "a registration refused): this runtime has nowhere to keep a signature or an "
-              "excerpt. Set NETRADIO_CACHE_ROOT in .env (see .env.example) and start again.")
+    ok, why = _caches_ready()
+    if not ok:
+        print(why)
         return
     os.makedirs(STATE_DIR, exist_ok=True)
     lock = harvest.acquire_writer_lock()
@@ -412,6 +428,10 @@ def main():
                           "updated": s.get("updated")}, indent=1))
         return
     if args.once:
+        ok, why = _caches_ready()
+        if not ok:
+            print(why)
+            return
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})
         print(collect_once(state, q, queries()))
