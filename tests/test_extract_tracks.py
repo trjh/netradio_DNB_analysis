@@ -1,13 +1,15 @@
 """extract_tracks.py: flac cuts, the variable's directory, and the policy's door.
 
-The cuts land in the `stream_tracks` cache as FLAC (ffmpeg picks the codec from the
-extension; the argv names none), the output directory comes from
+The cuts land in the `stream_tracks` cache as FLAC (the argv names `-f flac` itself -- the
+in-flight `.tmp` name's extension would name no container), the output directory comes from
 NETRADIO_STREAM_TRACKS_CACHE_DIR (else $NETRADIO_CACHE_ROOT/stream_tracks), and each cut
 that lands inside the registered cache goes through the policy: `reserve` before the
 write, `commit` after. All synthetic: ffmpeg never runs (the subprocess seam is stubbed),
 so the whole thing works on a bare checkout.
 """
 
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -95,11 +97,28 @@ class TheTracksCache(unittest.TestCase):
         # an explicit --out is the operator's own directory: kept, with no policy
         out, why = extract_tracks.resolve_out(os.path.join(self.tmp, "my-tracks"))
         self.assertEqual((out, why), (os.path.join(self.tmp, "my-tracks"), None))
-        # and the refusal exits the tool before anything is cut
-        argv = [sys.executable, os.path.join(SCRIPTS, "extract_tracks.py"), "--dry-run"]
+        # and the refusal exits a real run before anything is cut
+        argv = [sys.executable, os.path.join(SCRIPTS, "extract_tracks.py")]
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=120)
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("did not register on the policy", proc.stdout + proc.stderr)
+
+    def test_a_dry_run_plans_without_a_directory(self):
+        """--dry-run writes nothing, so it needs no resolvable directory: the module's own
+        docstring offers it as the first thing to try on a bare clone, where no root and no
+        --out exist yet. It must plan the cuts, not refuse with the message a real run gets.
+        No capture is placed, so every track skips -- the point is that the run completes."""
+        os.environ.pop("NETRADIO_CACHE_ROOT")
+        os.environ.pop("NETRADIO_STREAM_TRACKS_CACHE_DIR", None)
+        self.assertIsNone(extract_tracks.resolve_out()[0], "the dark policy: no directory")
+        argv = ["extract_tracks.py", "--dry-run"]
+        with unittest.mock.patch.object(sys, "argv", argv), \
+                unittest.mock.patch.object(extract_tracks, "positions", lambda: {}), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            extract_tracks.main()               # planning only: must not sys.exit on the refusal
+        self.assertIn("capture(s) with PRECISE timing", out.getvalue())
+        self.assertNotIn("no tracks directory", out.getvalue(),
+                         "the dry run reached the directory refusal a real run gets")
 
     def test_the_registration(self):
         rec = cache_budget.register("stream_tracks",

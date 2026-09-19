@@ -117,6 +117,14 @@ def _excerpt_score(path):
         return 0.0
 
 
+def _excerpt_pinned(path):
+    """The board's PROVENANCE.txt is pinned. Its name parses to no cost, so the by-score order
+    counts it as an ordinary entry, and a cap-, floor- or age-driven eviction run could take
+    it -- while `_write_provenance` would not restore it until the next kept excerpt. The note
+    is the directory's one line of "this is not a music library"; it never leaves."""
+    return os.path.basename(path) == "PROVENANCE.txt"
+
+
 def register_caches():
     """(Re-)register the two caches on the cache policy, reading the environment now -- call it
     again to re-read it. While the policy is dark (NETRADIO_CACHE_ROOT unset) both stay
@@ -132,6 +140,7 @@ def register_caches():
                          refill="bucket:chroma/", rank=4)
     cache_budget.register("candidates", cap=CANDIDATES_CACHE_CAP, order="by-score",
                          score=_excerpt_score, max_age=KEEP_TTL_DAYS,
+                         pinned=_excerpt_pinned,
                          refill="re-cut", rank=10)
     CACHE = _CACHE_AT_IMPORT = cache_budget.dir_of(CHROMA_CACHE)
     KEEP = _KEEP_AT_IMPORT = cache_budget.dir_of(CANDIDATES_CACHE)
@@ -2574,6 +2583,13 @@ def main():
             print("# %s" % res["why"])
         return
     if args.rescan:
+        # The same refusal every cache-reading mode makes: unscored_pairs would count the
+        # pairs (a bucket-held signature reads as held), _load_sig would answer None for every
+        # one, and the run would stamp `rescan_pending` to 0 over "Every cached signature has
+        # now met every mystery" -- a completion claim about work that never ran.
+        if _chroma_dir() is None:
+            print("# the signature cache is dark -- set NETRADIO_CACHE_ROOT in .env first.")
+            return
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})
         qs = queries()

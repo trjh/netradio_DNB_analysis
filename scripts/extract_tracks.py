@@ -175,7 +175,11 @@ def cut(stem, m_from, m_to, cstart, out_path):
     explicitly; the final keeps the cut's `.flac` name. After the commit the cut verifies its
     own landing: a bounded cache may lose any entry at any time, and an eviction run that
     starts between the rename and the commit can take a cut not yet recorded -- what a
-    writer must never do is report success over a path that is not there."""
+    writer must never do is report success over a path that is not there.
+
+    A refusal returns False and the caller prints the reason: the disk past its floor, or
+    the cap with nothing evictable -- the two things `reserve` can refuse for.
+    """
     src = _audio.find_audio_file(stem)
     lo = m_from - cstart
     policy = _on_policy(out_path)
@@ -242,7 +246,8 @@ def resolve_out(explicit_out=None):
     into it unbounded -- no cap, no age sweep, no accounting -- is the growth this tool's
     cache exists to end; refuse and name the setting, as the harvester refuses to run on a
     cache that did not register. An explicit --out is the operator's own directory and may
-    be anywhere, accounted or not."""
+    be anywhere, accounted or not. A --dry-run never reaches a directory at all (main()
+    lets it past this refusal: it plans cuts, it writes none)."""
     out = explicit_out or tracks_dir()
     if not out:
         return None, ("no tracks directory: set NETRADIO_CACHE_ROOT (or "
@@ -267,7 +272,9 @@ def main():
     ap.add_argument("--only", type=int, action="append")
     args = ap.parse_args()
     args.out, why = resolve_out(args.out)
-    if why:
+    if why and not args.dry_run:
+        # --dry-run writes nothing, so it needs no directory: the module's own docstring
+        # offers it as the first thing to try on a bare clone, before any settings exist.
         sys.exit(why)
 
     meta = json.load(open(os.path.join(_gt.REPO_ROOT, "track-metadata.json")))
@@ -298,8 +305,6 @@ def main():
         if pieces is None:
             print("  %3s SKIP  %-42s %s" % (num, title[:42], why)); skipped += 1; continue
 
-        name = "%03d - %s.flac" % (int(num), safe(title))
-        out = os.path.join(args.out, name)
         tag = "" if len(pieces) == 1 else "  [%d pieces: %s]" % (
             len(pieces), " + ".join(p[0] for p in pieces))
         if len(pieces) > 1:
@@ -308,6 +313,8 @@ def main():
               % (num, title[:42], me - mb, pieces[0][0], tag))
         if args.dry_run:
             continue
+        name = "%03d - %s.flac" % (int(num), safe(title))
+        out = os.path.join(args.out, name)
 
         # One policy gate per track: a direct cut reserves and commits itself; the
         # reassembly lands its assembled file under the same gate (its parts stay outside
@@ -318,8 +325,9 @@ def main():
         else:
             landed = assemble_track(pieces, starts, out)
         if not landed:
-            print("  %3s SKIP  %-42s the cache policy refused the room (the disk is past "
-                  "its floor)" % (num, title[:42]))
+            print("  %3s SKIP  %-42s the cache policy refused the room: the disk is past its "
+                  "floor, or the tracks cache is over its cap with nothing evictable"
+                  % (num, title[:42]))
             skipped += 1
             continue
         made += 1

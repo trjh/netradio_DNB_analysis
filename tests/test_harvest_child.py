@@ -12,6 +12,7 @@ is a fake `Popen`, and the two things worth being careful about are pinned:
     argv ever gained that flag, the supervisor would adopt a child that lives for one track.
 """
 
+import contextlib
 import io
 import json
 import os
@@ -614,6 +615,37 @@ class NoSignatureFromAPartialDecode(unittest.TestCase):
         self.assertTrue(result["ok"], result)
         self.assertFalse(os.path.exists(os.path.dirname(missing)))
 
+    def test_a_dark_signature_cache_refuses_the_fetch_and_writes_nothing(self):
+        """The child's own dark-cache gate. `--fetch-one` runs before any parent gate, so
+        the fetch itself must refuse honestly when the signature has nowhere to live:
+        name the setting, write no signature, upload nothing -- and carry no word a parent
+        reads as a host problem, so the URL's recovery (requeue_missing_sigs) owns it."""
+        saved_env = {k: os.environ.get(k) for k in list(os.environ)
+                     if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
+        for k in saved_env:
+            os.environ.pop(k, None)
+        registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        attrs = (harvest.CACHE, harvest.KEEP, harvest._CACHE_AT_IMPORT,
+                 harvest._KEEP_AT_IMPORT)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        harvest.register_caches()         # the policy dark: the signature has nowhere to live
+        self.assertIsNone(harvest.sig_path(self.url))
+        try:
+            result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        finally:
+            for name, value in zip(("CACHE", "KEEP", "_CACHE_AT_IMPORT",
+                                    "_KEEP_AT_IMPORT"), attrs):
+                setattr(harvest, name, value)
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(registry[1])
+            for k, v in saved_env.items():
+                os.environ[k] = v
+        self._assert_no_signature(result, "the signature cache is dark")
+        self.assertIn("NETRADIO_CACHE_ROOT", result["error"])
+
 
 @unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
 class TheTwoHourStop(unittest.TestCase):
@@ -840,6 +872,28 @@ class RetryLaterIsNotDone(unittest.TestCase):
                                   lambda *a, **k: (0, 0, None)):
             harvest.run(None)
         return harvest._load(harvest.QUEUE, {}), harvest._load(harvest.STATE, {})
+
+    def test_run_refuses_to_start_on_a_dark_cache(self):
+        """Mode A's own gate: run() refuses before the canary, the recovery or any fetch,
+        naming the setting -- the same refusal --once and the split fetch half make. Without
+        it, a dark cache grinds the whole queue into done, failing every URL the same way.
+        The hand-set None is the test seam the module documents: a dark cache has no
+        directory for anything else to stand in for."""
+        qs = [(4, np.zeros((12, 8), dtype="float32"), "4:f00")]
+        out = io.StringIO()
+        with mock.patch.object(harvest, "CACHE", None), \
+                mock.patch.object(harvest, "KEEP", None), \
+                mock.patch.object(harvest, "queries", lambda state=None: qs), \
+                mock.patch.object(harvest.memwatch, "allocator_canary",
+                                  lambda *a, **k: (0, 0, None)), \
+                mock.patch.object(harvest.selftest, "offline",
+                                  lambda: (_ for _ in ()).throw(
+                                      AssertionError("refused before the canary"))), \
+                contextlib.redirect_stdout(out):
+            harvest.run(None)
+        text = out.getvalue()
+        self.assertIn("the chroma and the candidates cache are dark", text)
+        self.assertIn("NETRADIO_CACHE_ROOT", text)
 
     def test_run_sets_the_url_aside_instead_of_retiring_it(self):
         q, state = self._one_pass({"pending": [self.url], "done": []})

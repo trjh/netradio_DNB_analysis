@@ -130,10 +130,18 @@ def build_cases(tracks, starts, src):
             root = cache_budget.root()      # None while the cache policy is dark
             exdir = os.path.join(root, "stream_tracks") if root else None
         if exdir and os.path.isdir(exdir):
-            for f in os.listdir(exdir):
-                if f.startswith("%03d - " % int(num)):
-                    ex = os.path.join(exdir, f)
-                    break
+            # The .flac re-cut wins over any .wav the old tool left beside it: during the
+            # cut-over both exist for a track, and raw listdir order is filesystem order,
+            # which could read one track's .wav and another's .flac in the same run. The
+            # same cut either way -- this is for determinism, and the wav still serves a
+            # directory the re-cut has not reached yet.
+            matches = sorted(f for f in os.listdir(exdir)
+                             if f.startswith("%03d - " % int(num)))
+            flac = [f for f in matches if f.endswith(".flac")]
+            if flac:
+                ex = os.path.join(exdir, flac[0])
+            elif matches:
+                ex = os.path.join(exdir, matches[0])
         if cap or ex:
             cases.append({"num": int(num), "orig": orig,
                           "cap": cap[0] if cap else None,

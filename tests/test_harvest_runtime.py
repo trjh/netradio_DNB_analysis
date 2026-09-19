@@ -14,6 +14,8 @@ a pyflakes pass over the scripts — cheap, and it would have caught it. The res
 added alongside: the excerpt hard cap, and the bot-wall halt.
 """
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -495,6 +497,88 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         self.assertFalse(os.path.exists(self.keep_dir) and
                          "PROVENANCE.txt" in os.listdir(self.keep_dir),
                          "a landing that did not survive writes no board note")
+
+    def test_the_boards_provenance_note_is_pinned(self):
+        """PROVENANCE.txt's name parses to no cost, so the by-score order counts it as an
+        ordinary entry -- an age-, cap- or floor-driven eviction run could take the
+        directory's one line of "this is not a music library", and `_write_provenance`
+        would not restore it until the next kept excerpt. The registration pins it instead."""
+        old = self._excerpt("MT4-0.0600-old.wav", 100, age_s=40 * 86400)
+        note = os.path.join(self.keep_dir, "PROVENANCE.txt")
+        with open(note, "w") as fh:
+            fh.write("note")
+        t = time.time() - 40 * 86400                       # as old as anything it outlives
+        os.utime(note, (t, t))
+        cache_budget.run_eviction("candidates")
+        self.assertFalse(os.path.exists(old),
+                         "the run really evicted -- the note survived for a reason")
+        self.assertTrue(os.path.exists(note),
+                        "the pinned entry is never an eviction's to take")
+        removals = [e for e in self._events() if e["event"] == "evict"]
+        self.assertEqual([e["entry"] for e in removals], ["MT4-0.0600-old.wav"],
+                         "the policy's own record: the note was never a candidate")
+
+
+@unittest.skipIf(harvest is None, "needs the librosa venv")
+class TheOnDemandRescanRefusesADarkPolicy(unittest.TestCase):
+    """`--rescan` is the one cache-reading mode that used to run dark: `unscored_pairs`
+    counted the pairs (a bucket-held signature reads as held), `_load_sig` answered None for
+    every one, and the run stamped `rescan_pending` to 0 over "Every cached signature has now
+    met every mystery" -- a completion claim about work that never ran, where every sibling
+    mode refuses (run(), the collector's two gates, --migrate-sigs, --requeue-missing-sigs).
+    It refuses now, before the query set is even read, with the message --migrate-sigs uses."""
+
+    def test_rescan_refuses_before_the_query_set_is_read(self):
+        tmp = tempfile.mkdtemp(prefix="rescan-dark-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        paths = harvest.STATE_DIR, harvest.STATE, harvest.QUEUE
+        harvest.STATE_DIR = os.path.join(tmp, "harvest")
+        harvest.STATE = os.path.join(tmp, "state.json")
+        harvest.QUEUE = os.path.join(tmp, "queue.json")
+        self.addCleanup(lambda: (setattr(harvest, "STATE_DIR", paths[0]),
+                                  setattr(harvest, "STATE", paths[1]),
+                                  setattr(harvest, "QUEUE", paths[2])))
+        saved = {k: os.environ.get(k) for k in list(os.environ)
+                 if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
+        for k in saved:
+            os.environ.pop(k, None)
+        registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        attrs = (harvest.CACHE, harvest.KEEP, harvest._CACHE_AT_IMPORT,
+                 harvest._KEEP_AT_IMPORT)
+
+        def restore():
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(registry[1])
+            for k, v in saved.items():
+                os.environ[k] = v
+            for name, value in zip(("CACHE", "KEEP", "_CACHE_AT_IMPORT",
+                                    "_KEEP_AT_IMPORT"), attrs):
+                setattr(harvest, name, value)
+        self.addCleanup(restore)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        harvest.register_caches()             # re-read: the signature cache is dark
+        self.assertIsNone(harvest._chroma_dir())
+
+        def refused(what):
+            return lambda *a, **k: (_ for _ in ()).throw(
+                AssertionError("the refusal must come before the %s is read" % what))
+
+        argv = ["harvest.py", "--rescan"]
+        with unittest.mock.patch.object(sys, "argv", argv), \
+                unittest.mock.patch.object(harvest, "queries",
+                                          refused("query set")), \
+                unittest.mock.patch.object(harvest, "listen_queue_split",
+                                          refused("player's queue")), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            harvest.main()
+        self.assertIn("the signature cache is dark", out.getvalue())
+        self.assertIn("NETRADIO_CACHE_ROOT", out.getvalue())
+        self.assertFalse(os.path.exists(harvest.STATE),
+                         "a refused rescan writes no state: rescan_pending was never "
+                         "stamped to a completion it did not do")
 
 
 if __name__ == "__main__":

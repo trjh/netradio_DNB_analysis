@@ -121,7 +121,9 @@ bounded by the policy — a 14-day age on signatures (the bucket is their long-t
 250 MB cap on the board that gives up the worst excerpt of a mystery first, and the policy's
 shared disk floor. With `NETRADIO_CACHE_ROOT` unset there is no cache directory at all and the
 harvester **refuses to start**, naming the setting: a signature it cannot keep is network cost
-paid for nothing. Set the root in `.env` (see `.env.example`). The tracks cut by
+paid for nothing. The on-demand `--rescan` refuses the same way: it reads the same cache, and
+scoring nothing would stamp a completion that never happened. Set the root in `.env` (see
+`.env.example`). The tracks cut by
 `extract_tracks.py` are the policy's `stream_tracks` cache, cut as **FLAC** now: each cut is
 written whole under a temporary name the policy holds, and renamed into its final `.flac`
 name once ffmpeg has it.
