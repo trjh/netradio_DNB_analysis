@@ -1720,7 +1720,6 @@ def _ruled(url, ruled):
     return isinstance(url, str) and _sig_key(url) in ruled
 
 
-
 def _load_queue_items():
     """The listen queue's flat items list, whatever layout NETRADIO_LISTEN_QUEUE points at.
 

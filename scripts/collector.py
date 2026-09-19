@@ -381,8 +381,8 @@ def run():
     while True:
         # The retired set is the rulings file's, here as in Mode A -- and it is read FIRST,
         # before anything on the pass scores: a pass that cannot read it must propose nothing,
-        # not even a result already on the spool, and stands down instead. (`--once`, which
-        # never scores the backlog, needs no gate.)
+        # not even a result already on the spool, and stands down instead. (`--once` makes the
+        # same gate at its own entry point.)
         ruled = harvest.load_rulings()
         if ruled is None:
             print("the rulings file (%s) is absent or unreadable -- this runtime has no way to "
