@@ -24,8 +24,9 @@
 # stashed) — so a sync run leaves no repo needing the stash/pull/pop dance afterwards. The player
 # checkout is touched only with the player known to be down. See reconcile_main below.
 #
-# The SELF-CHECK then requires both repos' copies of this script to be byte-identical, otherwise
-# the sync refuses to run (copies have drifted before; see the check for the fix).
+# The SELF-CHECK then requires every file the two repos share byte for byte (TWINS, in the
+# check) to be byte-identical in both repos, otherwise the sync refuses to run (copies have
+# drifted before; see the check for the fix).
 #
 #   track-metadata.json copies equal      -> verify each repo's main has it (re-PR any that lag)
 #   only player changed since baseline     -> winner = player; land it on BOTH mains
@@ -275,7 +276,7 @@ reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to 
 }
 
 # The live data files each checkout's running process rewrites, set aside around every fast-forward.
-reconcile_analysis() { reconcile_main "$ANALYSIS" analysis "track-metadata.json" "TRACKLIST.md"; }
+reconcile_analysis() { reconcile_main "$ANALYSIS" "$LBL_A" "track-metadata.json" "TRACKLIST.md"; }
 # EVERY path queue_sync commits must be listed here, or the ff-merge aborts on it and the player
 # repo is left un-reconciled. `metadata/queue_chapters` and `metadata/queue_info` were missing
 # until 2026-09-11 — a live `make sync` failed with "Your local changes to the following files
@@ -302,11 +303,11 @@ reconcile_player() {
        && ! player_is_down; then
       say "  player: the player is running, or its launcher cannot tell — leaving the checkout alone;"
       say "          run make sync from the player repo, which stops the player first"
-      BLOCKED="$BLOCKED player"
+      BLOCKED="$BLOCKED $LBL_P"
       return 0
     fi
   fi
-  reconcile_main "$PLAYER" player \
+  reconcile_main "$PLAYER" "$LBL_P" \
     "metadata/track-metadata.json" "metadata/listen_queue.json" "metadata/listen_queue" \
     "metadata/subscriptions.json" "metadata/queue_chapters" "metadata/queue_info" \
     "metadata/source-inventory.json" "SOURCES.md" "data/harvest-queue.json"
@@ -320,6 +321,8 @@ reconcile_player() {
 # If that changed THIS script, re-run the new version: finishing a sync with old code is how the
 # copies drifted in the first place. The running bash is unaffected until the exec, because git
 # replaces a file rather than writing into it.
+LBL_A="analysis"; LBL_P="player"   # the labels a reconcile appends to BLOCKED; the self-check
+                                    # matches them to tell WHICH checkout a blockage names
 BLOCKED=""   # labels of the checkouts a reconcile left behind origin/main
 self_sum="$(cksum < "$0")"
 # A re-run carries the checksum of the script it re-ran into. Any other value is a leftover in the
@@ -339,44 +342,88 @@ if [ "$new_sum" != "$self_sum" ]; then
   exec bash "$0" "$@"
 fi
 
-# --- self-check: this script must be byte-identical in both repos ---------------------------
-# Each repo carries a copy of scripts/tracklist_sync.sh, and copies drift silently (it
-# happened: the analysis copy sat weeks behind, missing the QUEUE_VIEW.md derive). Refuse to
-# run on divergent copies — data synced by two different versions of the sync is worse than a
-# blocked run. Fix = copy the version you just edited over the other and PR it in BOTH repos.
+# --- self-check: every twin file must be byte-identical in both repos ------------------------
+# Some files are shared byte for byte between the two repos — TWINS below, this script the
+# first of them — and copies drift silently (it happened: the analysis copy of this script sat
+# weeks behind, missing the QUEUE_VIEW.md derive). Refuse to run on divergent copies — data
+# synced by two different versions of the sync is worse than a blocked run. Fix = copy the
+# version you just edited over the other and PR it in BOTH repos.
+# Each entry is <path under one checkout>=<path under the other> — the loop maps each side to
+# its checkout; a file that becomes a twin later is added here.
+# A pair absent from both checkouts is skipped with a line; a pair on disk in one and not the
+# other is a half-landed twin and refuses — unless a dry run can see both origin/main copies
+# already agree, in which case a real run's catch-up fast-forwards the checkout that is behind
+# and passes (the same rule the differing case has always had).
+TWINS=(
+  "scripts/tracklist_sync.sh=scripts/tracklist_sync.sh"
+  "cache_budget.py=scripts/cache_budget.py"
+)
 SELF_P="$PLAYER/scripts/tracklist_sync.sh"
 SELF_A="$ANALYSIS/scripts/tracklist_sync.sh"
-origin_copy() { git -C "$1" rev-parse -q --verify "origin/main:scripts/tracklist_sync.sh" 2>/dev/null || true; }
-if cmp -s "$SELF_P" "$SELF_A"; then
-  say "self-check: tracklist_sync.sh identical in both repos ✓"
-else
-  op="$(origin_copy "$PLAYER")"; oa="$(origin_copy "$ANALYSIS")"
+origin_copy() { git -C "$1" rev-parse -q --verify "origin/main:$2" 2>/dev/null || true; }
+for twin in "${TWINS[@]}"; do
+  prel="${twin%%=*}"; arel="${twin#*=}"
+  pfile="$PLAYER/$prel"; afile="$ANALYSIS/$arel"
+  if [ ! -e "$pfile" ] && [ ! -e "$afile" ]; then
+    say "self-check: $prel is in neither checkout — skipped"
+    continue
+  fi
+  if [ -e "$pfile" ] && [ -e "$afile" ] && cmp -s "$pfile" "$afile"; then
+    say "self-check: $prel identical in both repos ✓"
+    continue
+  fi
+  op="$(origin_copy "$PLAYER" "$prel")"; oa="$(origin_copy "$ANALYSIS" "$arel")"
   if $DRY && [ -n "$op" ] && [ "$op" = "$oa" ]; then
-    # A dry run skipped the catch-up, so the copies on disk can still differ where a real run would
-    # have fast-forwarded them first. What decides the real run is the two origin/main copies.
-    say "[dry-run] self-check: the copies on disk differ, but both origin/main copies match —"
-    say "          a real run fast-forwards first and passes"
-  else
-    {
-      say "ERROR: scripts/tracklist_sync.sh differs between the two repos:"
-      diff -u "$SELF_A" "$SELF_P" | head -40 || true
-      say ""
-      if [ -n "$BLOCKED" ]; then
-        # The catch-up could not move a checkout, so the difference may be nothing more than that
-        # checkout being behind. Copying one script over the other would hide the real fault.
-        say "The catch-up could not fast-forward:${BLOCKED} (see above). Fix that, then re-run."
-        if [ -n "$op" ] && [ "$op" = "$oa" ]; then
-          say "Both origin/main copies already match, so no copy is needed."
-        fi
-      else
-        say "Copy the version you just edited over the other, PR it in BOTH repos, then re-run:"
-        say "  cp '$SELF_P' '$SELF_A'    # player copy wins"
-        say "  cp '$SELF_A' '$SELF_P'    # analysis copy wins"
-      fi
-    } >&2
+    # A dry run skipped the catch-up, so the copies on disk can still differ — or one be
+    # missing — where a real run would have fast-forwarded them first. What decides the real
+    # run is the two origin/main copies.
+    say "[dry-run] self-check: $prel differs or is missing on disk, but both origin/main copies match —"
+    say "          a real run fast-forwards first and passes when its catch-up can move the checkout"
+    continue
+  fi
+  if [ ! -e "$pfile" ] || [ ! -e "$afile" ]; then
+    say "ERROR: $prel is on disk in one repo but not the other — a shared file lands in BOTH or neither." >&2
+    if [ -e "$pfile" ]; then say "  on disk:  $pfile" >&2; else say "  missing:  $pfile" >&2; fi
+    if [ -e "$afile" ]; then say "  on disk:  $afile" >&2; else say "  missing:  $afile" >&2; fi
+    # Which checkout is missing its copy? (exactly one: both-missing was skipped above)
+    mlabel="$LBL_A"; [ ! -e "$pfile" ] && mlabel="$LBL_P"
+    # The catch-up remedy repairs only a checkout it could not move, and $BLOCKED's labels
+    # name exactly those — so the advice is true only when the side missing the file is
+    # itself in the list. A blocked OTHER checkout explains nothing about this pair: a
+    # checkout that is current while its copy was deleted locally is repaired by restoring
+    # the file, not by any fast-forward (local review 3 reproduced the crossed state).
+    mblocked=false
+    case " $BLOCKED " in *" $mlabel "*) mblocked=true ;; esac
+    if $mblocked && [ -n "$op" ] && [ "$op" = "$oa" ]; then
+      # Not half-landed after all: both origin/main copies hold the file and agree, and the
+      # checkout without it is one the catch-up could not move (see above). The merge is done;
+      # the catch-up is the remedy — the same reasoning as the differing case below.
+      say "The catch-up could not fast-forward:${BLOCKED} (see above). Fix that, then re-run." >&2
+      say "Both origin/main copies already match, so no copy is needed." >&2
+    else
+      say "Merge the missing half's PR, or pull the checkout that is behind, then re-run." >&2
+    fi
     exit 1
   fi
-fi
+  {
+    say "ERROR: $prel differs between the two repos:"
+    diff -u "$afile" "$pfile" | head -40 || true
+    say ""
+    if [ -n "$BLOCKED" ]; then
+      # The catch-up could not move a checkout, so the difference may be nothing more than that
+      # checkout being behind. Copying one twin over the other would hide the real fault.
+      say "The catch-up could not fast-forward:${BLOCKED} (see above). Fix that, then re-run."
+      if [ -n "$op" ] && [ "$op" = "$oa" ]; then
+        say "Both origin/main copies already match, so no copy is needed."
+      fi
+    else
+      say "Copy the version you just edited over the other, PR it in BOTH repos, then re-run:"
+      say "  cp '$pfile' '$afile'    # player copy wins"
+      say "  cp '$afile' '$pfile'    # analysis copy wins"
+    fi
+  } >&2
+  exit 1
+done
 # The copies agree, but THIS run's code must be one of them: a copy run from anywhere else could be
 # older than both and still pass the comparison above.
 if ! cmp -s "$0" "$SELF_P" && ! cmp -s "$0" "$SELF_A"; then

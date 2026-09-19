@@ -85,6 +85,7 @@ own original, the change is wrong.
 | `scripts/merge_track_sources.py`, `g4_missing_sources.py`, `find_streaming_links.py` | source inventory: what we have, what's missing, where to get it |
 | `scripts/backup_sheet.py` | back up the Google Sheet |
 | `scripts/tracklist_sync.sh`, `check_tracklist_sync.sh` | cross-repo sync of `track-metadata.json` (PR-based) |
+| `scripts/cache_budget.py` | the one cache policy: a registry of size-bounded local caches, `reserve` before every write, an eviction run, one disk floor — a library the cache-holding scripts register with (dark until `NETRADIO_CACHE_ROOT` is set). A byte-identical copy of a module shared with the companion checkout |
 
 ## Retired
 
