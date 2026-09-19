@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build an "Unknown Track N" video for a track-ID post -- locally, no website.
 #
-#   scripts/mkmysteryvideo.sh "~/Downloads/Netradio/mystery-uploads/Mystery Track 6.wav" 6
-#   scripts/mkmysteryvideo.sh <audio> <n> [outdir]
+#   scripts/mkmysteryvideo.sh "../mystery-uploads/Mystery Track 6.wav" 6
+#   scripts/mkmysteryvideo.sh <audio> <n> [outdir]   # outdir: mystery-uploads beside the repo
 #
 # Reproduces the format of the Mystery Track 3 upload
 # (https://www.youtube.com/watch?v=jKEt_2jLzYo) from primitives:
@@ -28,9 +28,9 @@ set -euo pipefail
 
 AUDIO="${1:?usage: mkmysteryvideo.sh <audio> <n> [outdir]}"
 N="${2:?usage: mkmysteryvideo.sh <audio> <n> [outdir]}"
-OUTDIR="${3:-$HOME/Downloads/Netradio/mystery-uploads}"
 FPS="${FPS:-30}"     # the reference is 60; 30 looks identical for bars and halves the encode.
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+OUTDIR="${3:-$(dirname "$REPO")/mystery-uploads}"
 LOGO="$REPO/logo/logo.jpg"
 FONT="${FONT:-/System/Library/Fonts/Supplemental/Futura.ttc}"
 

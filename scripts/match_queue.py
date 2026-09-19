@@ -75,15 +75,14 @@ def cost(q, c):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--queue", default=None, help="listen_queue.json")
+    ap.add_argument("--queue", required=True, help="the listen queue, as one JSON file")
     ap.add_argument("--root", default=None, help="NETRADIO_DOWNLOAD_ROOT")
     ap.add_argument("--out", default="-")
     ap.add_argument("--include-listened", action="store_true")
     args = ap.parse_args()
 
     root = args.root or os.path.expanduser(os.environ.get("NETRADIO_DOWNLOAD_ROOT", ""))
-    queue = args.queue or os.path.expanduser(
-        "~/Downloads/Netradio/player/metadata/listen_queue.json")
+    queue = os.path.expanduser(args.queue)
     src = os.environ.get("NETRADIO_SOURCES_DIR")
     out = sys.stdout if args.out == "-" else open(args.out, "w", buffering=1)
 
