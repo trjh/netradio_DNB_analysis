@@ -10,6 +10,7 @@ so the whole thing works on a bare checkout.
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -156,6 +157,65 @@ class TheTracksCache(unittest.TestCase):
             self.assertTrue(extract_tracks.cut("d000-018", 0.0, 30.0, 0.0, out))
         self.assertTrue(os.path.isfile(out))
         self.assertEqual(cache_budget.status()["caches"][0]["entries"], 0)
+
+    def test_reassembly_parts_live_outside_the_cache_and_survive_a_full_one(self):
+        """A multi-piece track's parts are written in a scratch directory OUTSIDE the cache,
+        so the run that makes room for the assembled file evicts old ENTRIES, never the parts
+        it is about to read. A concat that lost a part mid-flight would leave a partial track
+        wearing the final name."""
+        tracks_dir = os.path.join(self.tmp, "stream_tracks")
+        os.makedirs(tracks_dir, exist_ok=True)
+        old = []
+        for name in ("001 - Old - One.flac", "001 - Old - Two.flac", "001 - Old - Three.flac"):
+            path = os.path.join(tracks_dir, name)
+            with open(path, "wb") as fh:
+                fh.write(b"x" * 300 * self.KB)     # three old entries, 900 KB together
+            old.append(path)
+        os.environ["NETRADIO_STREAM_TRACKS_CACHE_GB"] = "0.0007"   # 700 KB: the cache is full
+        extract_tracks.register_cache()
+        out = os.path.join(tracks_dir, "002 - A - B.flac")
+        parts_seen_by_concat = []
+
+        def fake_cut(stem, m_from, m_to, cstart, out_path):
+            self.assertNotEqual(os.path.dirname(out_path), tracks_dir,
+                                "a part is scratch, written outside the cache")
+            with open(out_path, "wb") as fh:
+                fh.write(b"fLaC" * 75000)          # a 300 KB part
+            return True
+
+        def fake_concat(argv, **kwargs):
+            lst = argv[argv.index("-i") + 1]
+            with open(lst) as fh:
+                names = [line.split("'")[1] for line in fh if line.startswith("file ")]
+            parts_seen_by_concat.extend(names)
+            for name in names:
+                self.assertTrue(os.path.isfile(name),
+                                "every part is still on disk when concat reads it")
+            with open(argv[-1], "wb") as fh:
+                fh.write(b"fLaC" * 150000)         # the assembled track, 600 KB
+            return unittest.mock.Mock(returncode=0)
+
+        pieces = [("d000-018", 0.0, 30.0), ("d001-026b", 30.0, 60.0)]
+        with unittest.mock.patch.object(extract_tracks, "cut", fake_cut), \
+                unittest.mock.patch.object(extract_tracks.subprocess, "run", fake_concat):
+            self.assertTrue(extract_tracks.assemble_track(
+                pieces, {"d000-018": 0.0, "d001-026b": 0.0}, out))
+        self.assertTrue(os.path.isfile(out), "the assembled track landed")
+        self.assertEqual(len(parts_seen_by_concat), 2)
+        self.assertFalse([p for p in old if os.path.exists(p)],
+                         "the old entries went, so the assembled track fits")
+        self.assertEqual([n for n in os.listdir(tracks_dir) if n.startswith("001")], [],
+                         "no part or list file is left in the cache")
+
+    def test_the_help_names_the_variable_the_code_reads(self):
+        """The --out help is the operator-facing spelling of the default's override; a name
+        that differs by one letter silently gets the default instead."""
+        proc = subprocess.run([sys.executable,
+                               os.path.join(SCRIPTS, "extract_tracks.py"), "--help"],
+                              capture_output=True, text=True, timeout=120)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("NETRADIO_STREAM_TRACKS_CACHE_DIR", proc.stdout)
+        self.assertNotIn("NETRUDIO", proc.stdout)
 
 
 if __name__ == "__main__":

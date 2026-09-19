@@ -156,6 +156,10 @@ class TestEvict(Base):
         cache_budget._STATS.clear()
         cache_budget.register("chroma", dir=self.tmp.name)
         self.addCleanup(self._restore)
+        # An empty volume: the disk floor never trips, so a near-cap eviction is what the
+        # tests ask for and nothing else.
+        self.addCleanup(setattr, cache_budget, "_disk_usage", cache_budget._disk_usage)
+        cache_budget._disk_usage = lambda _p: (100 * 1000 * 1000, 0, 100 * 1000 * 1000)
 
     def _restore(self):
         import shutil
@@ -188,6 +192,25 @@ class TestEvict(Base):
         self.assertEqual(n, 0)
         self.assertTrue(os.path.exists(path))
 
+    def test_an_active_download_survives_an_eviction_run(self):
+        """A bucket pull lands inside the registered `chroma` cache under a name ending
+        `.part` -- the policy's write-in-progress mark -- so the run another writer's
+        `reserve` triggers evicts old entries, never an active download out from under its
+        own atomic replace."""
+        old1, _ = self._sig("u" + "7" * 20 + ".npy", size=300 * 1000)  # entries to give up
+        old2, _ = self._sig("u" + "8" * 20 + ".npy", size=300 * 1000)
+        key = "u" + "9" * 20 + ".npy"
+        part = os.path.join(self.tmp.name, key + ".abc123.part")    # fetch()'s temp, fresh
+        with open(part, "wb") as fh:
+            fh.write(b"x" * 100)
+        os.environ["NETRADIO_CHROMA_CACHE_GB"] = "0.0005"     # 500 KB: the cache is over
+        cache_budget.register("chroma", dir=self.tmp.name)   # re-read: the lowered cap applies
+        self.assertTrue(cache_budget.reserve("chroma", 250 * 1000), "room was made")
+        self.assertFalse(os.path.exists(old1), "the oldest entry went")
+        self.assertFalse(os.path.exists(old2), "and the next oldest, until it fit")
+        self.assertTrue(os.path.exists(part),
+                        "the active download is held by the policy, never evicted")
+
     def test_fetch_downloads_via_temp_then_renames(self):
         dest_dir = os.path.join(self.tmp.name, "cache")
         key = "u" + "4" * 20 + ".npy"
@@ -201,7 +224,10 @@ class TestEvict(Base):
         out = sigstore.fetch(key, dest_dir)
         self.assertEqual(out, os.path.join(dest_dir, key))
         self.assertTrue(os.path.exists(out))
-        self.assertIn(".part-", self.rec.calls[0][-2])             # download went via a temp name
+        self.assertIn(".part", self.rec.calls[0][-2])              # download went via a temp name
+        self.assertTrue(self.rec.calls[0][-2].endswith(".part"),
+                        "the temp is the cache policy's write-in-progress mark, so no eviction "
+                        "run takes an active download")
         self.assertEqual([n for n in os.listdir(dest_dir)], [key]) # no temp left behind
 
     def test_failed_fetch_leaves_no_partial_and_retry_succeeds(self):

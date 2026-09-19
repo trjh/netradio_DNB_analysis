@@ -127,8 +127,11 @@ def fetch(key, dest_dir):
     dest = os.path.join(dest_dir, key)
     # A UNIQUE temp per invocation (mkstemp), same directory so the final rename stays atomic.
     # PID alone is not enough -- two threads of one process fetching the same key must not
-    # share a pathname.
-    fd, tmp = tempfile.mkstemp(dir=dest_dir, prefix=key + ".part-")
+    # share a pathname. The name ENDS .part, the cache policy's write-in-progress mark: a
+    # bucket pull lands inside the registered `chroma` cache, and a policy run answering
+    # another writer's `reserve` must hold a fresh download, not evict it out from under the
+    # replace (past an hour it reads as a download that died part-way, and is evicted).
+    fd, tmp = tempfile.mkstemp(dir=dest_dir, prefix=key + ".", suffix=".part")
     os.close(fd)
     cmd = _base_cmd() + ["s3", "cp", "s3://%s/%s%s" % (_bucket(), PREFIX, key), tmp,
                          "--no-progress"]

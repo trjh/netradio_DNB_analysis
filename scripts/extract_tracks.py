@@ -49,8 +49,10 @@ future bug will hide.
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -158,21 +160,17 @@ def plan(mb, me, places):
     return pieces, None
 
 
-def cut(stem, m_from, m_to, cstart, out_path, account=True):
+def cut(stem, m_from, m_to, cstart, out_path):
     """Cut [m_from, m_to) of the master out of `stem` into `out_path`, as flac where the name
     says flac (ffmpeg picks the codec from the extension; the argv names none).
 
     Through the cache policy when the cut lands inside the registered tracks cache: `reserve`
     first (the cut's length is not known until ffmpeg has run, so an unplanned one -- admitted
     while the cache is under its cap) and `commit` after. A refusal (the disk past its floor,
-    the cap with nothing evictable) skips the cut and returns False.
-
-    `account=False` names this writer's own scratch: the reassembly's part files, written and
-    unlinked within the same pass, never committed -- exempt from the policy's door like any
-    writer's own half-made file."""
+    the cap with nothing evictable) skips the cut and returns False."""
     src = _audio.find_audio_file(stem)
     lo = m_from - cstart
-    policy = account and _on_policy(out_path)
+    policy = _on_policy(out_path)
     if policy and not cache_budget.reserve(STREAM_TRACKS_CACHE, None):
         return False
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "%.4f" % lo,
@@ -181,6 +179,39 @@ def cut(stem, m_from, m_to, cstart, out_path, account=True):
     if policy:
         cache_budget.commit(STREAM_TRACKS_CACHE, out_path)
     return True
+
+
+def assemble_track(pieces, starts, out):
+    """Reassemble a track that straddles capture boundaries into `out`, and land it under
+    the same policy gate a direct cut uses: one `reserve` before the assembled file, one
+    `commit` after. Returns False when the policy refuses the room.
+
+    The part files and the concat list live in a scratch directory OUTSIDE the cache: a
+    policy run may evict anything inside the cache's directory to make room, and an active
+    part is not an entry to give up -- a concat that lost a part mid-flight would leave a
+    partial track wearing the final name. Only the assembled track lands in the cache."""
+    scratch = tempfile.mkdtemp(prefix="stream-tracks-parts-")
+    try:
+        parts = []
+        for i, (stem, a, b) in enumerate(pieces):
+            p = os.path.join(scratch, "part%d.flac" % i)
+            if not cut(stem, a, b, starts[stem], p):
+                return False
+            parts.append(p)
+        lst = os.path.join(scratch, "concat.txt")
+        with open(lst, "w") as fh:
+            for p in parts:
+                fh.write("file '%s'\n" % p.replace("'", "'\\''"))
+        policy = _on_policy(out)
+        if policy and not cache_budget.reserve(STREAM_TRACKS_CACHE, None):
+            return False
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0",
+                        "-i", lst, "-c", "copy", out], check=True)
+        if policy:
+            cache_budget.commit(STREAM_TRACKS_CACHE, out)
+        return True
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
 
 
 def safe(name):
@@ -192,7 +223,7 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", default=None,
                     help="where the cuts land (default: the stream_tracks cache -- "
-                         "NETRUDIO_STREAM_TRACKS_CACHE_DIR, else $NETRADIO_CACHE_ROOT/stream_tracks)")
+                         "NETRADIO_STREAM_TRACKS_CACHE_DIR, else $NETRADIO_CACHE_ROOT/stream_tracks)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--only", type=int, action="append")
     args = ap.parse_args()
@@ -240,40 +271,19 @@ def main():
         if args.dry_run:
             continue
 
+        # One policy gate per track: a direct cut reserves and commits itself; the
+        # reassembly lands its assembled file under the same gate (its parts stay outside
+        # the cache -- see assemble_track).
         if len(pieces) == 1:
             stem, a, b = pieces[0]
-            if not cut(stem, a, b, starts[stem], out):
-                print("  %3s SKIP  %-42s the cache policy refused the room (the disk is past "
-                      "its floor)" % (num, title[:42]))
-                skipped += 1
-                continue
+            landed = cut(stem, a, b, starts[stem], out)
         else:
-            # The reassembly writes its part files as this writer's own scratch -- never
-            # committed, unlinked in this same pass -- and lands the assembled track under the
-            # same gate a direct cut uses: one reserve before the final file, one commit after.
-            parts = []
-            for i, (stem, a, b) in enumerate(pieces):
-                p = out + ".part%d.flac" % i
-                cut(stem, a, b, starts[stem], p, account=False)
-                parts.append(p)
-            lst = out + ".txt"
-            with open(lst, "w") as fh:
-                for p in parts:
-                    fh.write("file '%s'\n" % p.replace("'", "'\\''"))
-            policy = _on_policy(out)
-            if policy and not cache_budget.reserve(STREAM_TRACKS_CACHE, None):
-                for p in parts + [lst]:
-                    os.unlink(p)
-                print("  %3s SKIP  %-42s the cache policy refused the room (the disk is past "
-                      "its floor)" % (num, title[:42]))
-                skipped += 1
-                continue
-            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0",
-                            "-i", lst, "-c", "copy", out], check=True)
-            if policy:
-                cache_budget.commit(STREAM_TRACKS_CACHE, out)
-            for p in parts + [lst]:
-                os.unlink(p)
+            landed = assemble_track(pieces, starts, out)
+        if not landed:
+            print("  %3s SKIP  %-42s the cache policy refused the room (the disk is past "
+                  "its floor)" % (num, title[:42]))
+            skipped += 1
+            continue
         made += 1
 
     print("\n# %d extracted (%d needed reassembly across captures), %d refused"
