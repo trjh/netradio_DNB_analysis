@@ -875,7 +875,7 @@ class RetryLaterIsNotDone(unittest.TestCase):
 
     def test_run_refuses_to_start_on_a_dark_cache(self):
         """Mode A's own gate: run() refuses before the canary, the recovery or any fetch,
-        naming the setting -- the same refusal --once and the split fetch half make. Without
+        naming the setting -- the same refusal every cache-reading mode makes. Without
         it, a dark cache grinds the whole queue into done, failing every URL the same way.
         The hand-set None is the test seam the module documents: a dark cache has no
         directory for anything else to stand in for."""

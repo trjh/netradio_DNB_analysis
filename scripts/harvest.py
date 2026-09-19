@@ -164,11 +164,13 @@ def _keep_dir():
     cache is dark."""
     return KEEP if KEEP is not _KEEP_AT_IMPORT else cache_budget.dir_of(CANDIDATES_CACHE)
 
-# THE queue/state writer lock. queue.json and state.json have exactly ONE writer at a time:
-# run(), or the on-demand --requeue-missing-sigs. Each takes this flock for its lifetime, so
-# a second writer refuses loudly instead of interleaving. The path keeps its historic name
-# (collector.lock) -- the split runtime's collector shared it -- so a writer still running
-# under an old binary and this one still exclude each other.
+# THE queue/state writer lock. run() and the on-demand --requeue-missing-sigs -- the two paths
+# that take it -- each hold this flock for their lifetime, so a second of them refuses loudly
+# instead of interleaving their writes of queue.json and state.json. The rare hand tool --forget
+# also rewrites state.json, with no lock: use it on a stopped run, since beside a live one it can
+# interleave. The path keeps its historic name (collector.lock) -- the split runtime's collector
+# shared it -- so a writer still running under an old binary and this one still exclude each
+# other.
 WRITER_LOCK = os.path.join(STATE_DIR, "collector.lock")
 
 
@@ -1014,7 +1016,7 @@ def _run_fetch_child(url, job, duration=None):
 
 
 # The last fetch child's result.json. The memory rows (see `record_memory`) want the child's peak
-# footprint, and stream_chroma's three callers want its three-tuple unchanged, so the extra fields
+# footprint, and stream_chroma's two callers want its three-tuple unchanged, so the extra fields
 # ride here rather than on the return value.
 _LAST_CHILD = {}
 
