@@ -183,11 +183,13 @@ def _keep_dir():
     cache is dark."""
     return KEEP if KEEP is not _KEEP_AT_IMPORT else cache_budget.dir_of(CANDIDATES_CACHE)
 
-# THE ledger/state writer lock. ledger.json and state.json have exactly ONE writer at a time:
-# run(), or the on-demand --sign-one. Each takes this flock for its lifetime, so a second
-# writer refuses loudly instead of interleaving. The path keeps its historic name
-# (collector.lock) -- the split runtime's collector shared it -- so a writer still running
-# under an old binary and this one still exclude each other.
+# THE ledger/state writer lock. run() and the on-demand --sign-one -- the two paths that take
+# it -- each hold this flock for their lifetime, so a second of them refuses loudly instead of
+# interleaving their writes of ledger.json and state.json. The rare hand tool --forget also
+# rewrites state.json, with no lock: use it on a stopped run, since beside a live one it can
+# interleave. The path keeps its historic name (collector.lock) -- the split runtime's collector
+# shared it -- so a writer still running under an old binary and this one still exclude each
+# other.
 WRITER_LOCK = os.path.join(STATE_DIR, "collector.lock")
 
 

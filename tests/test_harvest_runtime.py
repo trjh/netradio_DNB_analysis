@@ -699,7 +699,21 @@ class TheRunTakesTheWriterLock(unittest.TestCase):
             raise _Past()
 
         first.close()
-        with unittest.mock.patch.object(harvest, "queries", boom), \
+        # run() opens the lock file itself on the way in; the boom raised out of queries()
+        # would leave that handle open (a ResourceWarning over the temp lock file), so this
+        # phase takes the lock through a recorder and the cleanup closes whatever it got.
+        real_acquire = harvest.acquire_writer_lock
+        acquired = []
+        self.addCleanup(lambda: [fh.close() for fh in acquired])
+
+        def record_then_return():
+            fh = real_acquire()
+            if fh is not None:
+                acquired.append(fh)
+            return fh
+
+        with unittest.mock.patch.object(harvest, "acquire_writer_lock", record_then_return), \
+                unittest.mock.patch.object(harvest, "queries", boom), \
                 contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaises(_Past):
                 harvest.run(None)
