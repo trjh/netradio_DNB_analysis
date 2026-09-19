@@ -886,9 +886,30 @@ def _reconcile_cap():
 
 # --- the scan -----------------------------------------------------------------------------------
 
-def _dirs():
-    """The configured directories, in the order they are named, empties dropped."""
-    return [d for d in (os.path.expanduser(p.strip()) for p in HARVEST_DIRS.split(":")) if d]
+def _dirs(issues=None, said=None):
+    """The configured directories, in the order they are named, empties dropped.
+
+    ABSOLUTE paths only. A relative entry would resolve against whatever directory the
+    process happens to start from -- a hand-off that signs a different directory than the
+    one the configuration names -- so it is refused with an issue row, not silently
+    resolved. (`issues` collects the refusals, deduped per run through `said`, exactly like
+    the scan's own.)"""
+    out = []
+    for p in HARVEST_DIRS.split(":"):
+        p = os.path.expanduser(p.strip())
+        if not p:
+            continue
+        if not os.path.isabs(p):
+            if issues is not None and (said is None or p not in said):
+                if said is not None:
+                    said.add(p)
+                issues.append({"at": _now(), "dir": p,
+                               "issue": "NETRADIO_HARVEST_DIRS names %r, which is not an "
+                                        "absolute path -- skipped; the contract's paths "
+                                        "are absolute" % p})
+            continue
+        out.append(p)
+    return out
 
 
 def scan_directories(ledger, issues=None, said=None):
@@ -910,7 +931,7 @@ def scan_directories(ledger, issues=None, said=None):
     """
     todo, covered = [], []
     said = said if said is not None else set()
-    for d in _dirs():
+    for d in _dirs(issues=issues, said=said):
         if not os.path.isdir(d):
             if d not in said and issues is not None:
                 said.add(d)
@@ -1011,9 +1032,18 @@ def sign_file(path, expect_s=None, issues=None):
     key = file_key(path)
     sidecar_path = os.path.join(os.path.dirname(path), key + ".json")
     sidecar = _load(sidecar_path, None)
-    if (not isinstance(sidecar, dict) or sidecar.get("key") != key
-            or not sidecar.get("fed_at")):
-        return None, None                    # no complete sidecar: not this function's business
+    if not isinstance(sidecar, dict) or sidecar.get("key") != key:
+        return None, None                    # torn or mismatched: the scan's refusals cover it
+    if not sidecar.get("fed_at"):
+        # The one required field, missing at the last moment: the same refusal the scan
+        # makes, visible from this path too -- the hand tool must not tell the operator to
+        # consult an issues list it never wrote to.
+        if issues is not None:
+            issues.append({"at": _now(), "key": key,
+                           "issue": "refused %s: its sidecar carries no fed_at -- the one "
+                                    "required field it is missing"
+                                    % os.path.basename(path)})
+        return None, None
     if expect_s is None:
         expect_s = _expect_s(sidecar)
     try:
@@ -1106,7 +1136,8 @@ def find_file(key):
             if not (os.path.isfile(path) and os.path.isfile(sidecar)):
                 continue
             data = _load(sidecar, None)
-            if isinstance(data, dict) and data.get("key") == key:
+            if (isinstance(data, dict) and data.get("key") == key
+                    and data.get("fed_at")):
                 return path
     return None
 

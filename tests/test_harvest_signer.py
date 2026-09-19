@@ -486,15 +486,41 @@ class TheScan(_SignerCase):
 
     def test_the_hand_tool_refuses_the_same_sidecar(self):
         """--sign-one goes through sign_file's own check, so the hand tool cannot sign past
-        the rule the scan enforces."""
+        the rule the scan enforces -- and its refusal is VISIBLE: the hand tool must not
+        tell the operator to consult an issues list it never wrote to."""
         key = _key("https://y/hand-fed-at")
         path = self._feed(key, sidecar={"fed_at": None})
+        issues = []
         spawned = []
         self._run_patches(lambda argv, **kw: spawned.append(argv) or _FakeProc(argv))
-        c, samples = harvest.sign_file(path, 60.0)
+        c, samples = harvest.sign_file(path, 60.0, issues=issues)
         self.assertEqual((c, samples), (None, None))
         self.assertEqual(spawned, [])
         self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
+        self.assertTrue(any("no fed_at" in r["issue"] for r in issues),
+                        "the refusal lands in the issues list, like the scan's")
+
+    def test_find_file_wants_a_complete_sidecar(self):
+        """The hand tool's finder asks the same of a sidecar as everything else: a key that
+        matches and the one required field. A file that fails either is not a candidate for
+        --sign-one, and the scan's refusal (not a silent skip) is what names it."""
+        key = _key("https://y/findable")
+        path = self._feed(key)
+        self.assertEqual(harvest.find_file(key), path)
+        os.unlink(os.path.join(self.audio, key + ".json"))
+        self._feed(key, sidecar={"fed_at": None})
+        self.assertIsNone(harvest.find_file(key))
+
+    def test_a_relative_directory_is_refused_visibly(self):
+        """The contract's paths are absolute. A relative entry would resolve against
+        whatever directory the process started from -- a hand-off that signs a different
+        directory than the configuration names -- so it is refused with an issue row, not
+        silently resolved."""
+        harvest.HARVEST_DIRS = "not-absolute"
+        issues = []
+        todo, covered = harvest.scan_directories({}, issues=issues)
+        self.assertEqual((todo, covered), ([], []))
+        self.assertTrue(any("not an absolute path" in r["issue"] for r in issues))
 
     def test_a_stem_that_is_not_a_keys_shape_is_refused(self):
         """The pool's own listing admits only `u` + 20 hex, so a signature filed under any
