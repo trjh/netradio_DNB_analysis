@@ -65,6 +65,7 @@ from streamalign import chroma_match as _cm          # noqa: E402
 from streamalign import groundtruth as _gt           # noqa: E402
 from streamalign import mystery as _mystery          # noqa: E402
 
+import cache_budget                                  # noqa: E402  (the machine's one cache policy)
 import chroma_recipe                                 # noqa: E402  (THE recipe, single source)
 import memwatch                                      # noqa: E402  (footprint + allocator canary)
 import selftest                                      # noqa: E402  (the canary; see run())
@@ -75,8 +76,87 @@ STATE_DIR = os.path.join(HOME, ".harvest")
 STATE = os.path.join(STATE_DIR, "state.json")
 QUEUE = os.path.join(STATE_DIR, "queue.json")
 PAUSE = os.path.join(STATE_DIR, "PAUSED")
-CACHE = os.path.join(HOME, ".chroma-cache")
-KEEP = os.path.join(os.path.expanduser("~"), "media", "netradio-candidates")
+
+# --- the harvester's two caches, on the machine's one cache policy (cache_budget.py) ----------
+#
+# `chroma` is the signature working cache: the chroma signature of every candidate analysed so
+# far, a small derived matrix that the signature bucket takes over as each one is verified there
+# (sigstore). `candidates` is the excerpt board: the best few ~30-second excerpts per mystery,
+# cut where the matcher flagged so a person can rule on them by ear, and swept after
+# KEEP_TTL_DAYS. Both hold only audio this project fetched or derived itself.
+#
+# Neither is a fixed path any more. Each registers on the cache policy at import, so its
+# directory comes from the machine's settings: NETRADIO_CHROMA_CACHE_DIR /
+# NETRADIO_CANDIDATES_CACHE_DIR, defaulting to $NETRADIO_CACHE_ROOT/<name>. The policy bounds
+# them: `chroma` by a 14-day age (each entry is used the moment it is computed, and the bucket
+# is its long-term home), `candidates` by a 250 MB cap evicting the worst excerpt of a mystery
+# first -- the same rule KEEP_TOP applies to the board -- and by the same 30-day age. While
+# NETRADIO_CACHE_ROOT is unset there is no cache directory at all: the harvester refuses to
+# run rather than fetch tracks whose signatures it then cannot keep.
+CHROMA_CACHE = "chroma"
+CANDIDATES_CACHE = "candidates"
+CHROMA_CACHE_MAX_AGE_DAYS = 14     # the bucket is the signature's long-term home
+CANDIDATES_CACHE_CAP = 250 * cache_budget.MB   # a dozen ~30s excerpts per mystery are small
+
+# The resolved directories, read at import and re-read by register_caches(). They stay module
+# attributes because the code -- and the tests -- steer the harvester by setting them.
+CACHE = None
+KEEP = None
+_CACHE_AT_IMPORT = None
+_KEEP_AT_IMPORT = None
+
+
+def _excerpt_score(path):
+    """The excerpt board's `by-score` order: `MT<n>-<cost>-<hash>.wav` names its cost, and the
+    cost is how good the excerpt is (lower = better). The policy evicts the LOWEST score first,
+    so the score is the cost negated -- the worst excerpt of a mystery, the one a full board
+    would drop for a better candidate, is the first to go."""
+    try:
+        return -float(os.path.basename(path).split("-")[1])
+    except (IndexError, ValueError):
+        return 0.0
+
+
+def _excerpt_pinned(path):
+    """The board's PROVENANCE.txt is pinned. Its name parses to no cost, so the by-score order
+    counts it as an ordinary entry, and a cap-, floor- or age-driven eviction run could take
+    it -- while `_write_provenance` would not restore it until the next kept excerpt. The note
+    is the directory's one line of "this is not a music library"; it never leaves."""
+    return os.path.basename(path) == "PROVENANCE.txt"
+
+
+def register_caches():
+    """(Re-)register the two caches on the cache policy, reading the environment now -- call it
+    again to re-read it. While the policy is dark (NETRADIO_CACHE_ROOT unset) both stay
+    unregistered and their directories are None; the same is true of either cache whose
+    registration the policy refuses (a directory that overlaps another cache's)."""
+    global CACHE, KEEP, _CACHE_AT_IMPORT, _KEEP_AT_IMPORT
+    # rank 4 / rank 10: of the caches sharing the policy's floor, the signatures give up
+    # entries fourth (each refills from the bucket by key) and the excerpt board tenth (each
+    # excerpt is re-cut if its candidate is ever fetched again). The literal names, not the
+    # constants above, so env_check.py's code scan sees the registrations and counts their
+    # variable families as read.
+    cache_budget.register("chroma", max_age=CHROMA_CACHE_MAX_AGE_DAYS,
+                         refill="bucket:chroma/", rank=4)
+    cache_budget.register("candidates", cap=CANDIDATES_CACHE_CAP, order="by-score",
+                         score=_excerpt_score, max_age=KEEP_TTL_DAYS,
+                         pinned=_excerpt_pinned,
+                         refill="re-cut", rank=10)
+    CACHE = _CACHE_AT_IMPORT = cache_budget.dir_of(CHROMA_CACHE)
+    KEEP = _KEEP_AT_IMPORT = cache_budget.dir_of(CANDIDATES_CACHE)
+
+
+def _chroma_dir():
+    """The signature cache's directory, resolved through the registry at each call -- a root
+    configured after import is honoured. A CACHE set by hand, or patched by a test, still
+    wins. None while the cache is dark."""
+    return CACHE if CACHE is not _CACHE_AT_IMPORT else cache_budget.dir_of(CHROMA_CACHE)
+
+
+def _keep_dir():
+    """The excerpt board's directory, resolved the same way as `_chroma_dir`. None while the
+    cache is dark."""
+    return KEEP if KEEP is not _KEEP_AT_IMPORT else cache_budget.dir_of(CANDIDATES_CACHE)
 
 # THE queue/state writer lock. queue.json and state.json have exactly ONE writer at a time:
 # collector.run() in split mode, run() in Mode A, or the on-demand --requeue-missing-sigs.
@@ -133,6 +213,8 @@ KEEP_TTL_DAYS = 30        # a lead not listened to in a month is not a lead -- s
 # the margin test is what actually carries the gate. 40 of 41 tracks rank #1 against their own
 # original, so the margin is real.
 MATCH_COST = 0.050
+
+register_caches()                 # at import: the wrapper sources .env before any import
 
 # --- load discipline -------------------------------------------------------------------------
 # Work for hours, then rest, so sustained load over a day stays low. No quiet hours (Tim's call);
@@ -315,8 +397,11 @@ def _hours(seconds):
 
 def sig_path(url):
     # The fragment stays IN the url here, and that is the point: it is what gives each chunk of one
-    # master its own key, its own cached signature and its own job directory.
-    return os.path.join(CACHE, "u" + hashlib.sha1(url.encode()).hexdigest()[:20] + ".npy")
+    # master its own key, its own cached signature and its own job directory. None while the
+    # signature cache is dark: no directory, no path -- callers must treat that as "not held
+    # locally", never as a crash.
+    d = _chroma_dir()
+    return None if d is None else os.path.join(d, _sig_key(url))
 
 
 # --- YouTube wants to know you are a person -------------------------------------------------------
@@ -794,13 +879,46 @@ def _decode_and_sign(url, job, duration=None):
     if _stop_requested():                      # nothing half-decoded reaches the cache
         return {"ok": False, "error": "stopped"}
 
-    os.makedirs(CACHE, exist_ok=True)
-    np.save(sig_path(url), c.astype(chroma_recipe.STORE_DTYPE))
+    # The signature is the harvester's product, so its write goes through the cache policy like
+    # every other write into the `chroma` cache: `reserve` makes room (a planned size -- the
+    # matrix is in hand) and refuses past the disk floor, `commit` records the entry and runs
+    # the eviction at once if the cache went over its cap. A refusal means the signature is NOT
+    # written and the fetch reports a failure -- the URL's recovery is requeue_missing_sigs',
+    # which will offer it again once the disk has room.
+    sig = sig_path(url)
+    if sig is None:
+        return {"ok": False,
+                "error": "the signature cache is dark: NETRADIO_CACHE_ROOT is unset -- set it "
+                         "in .env (see .env.example) and start again"}
+    nbytes = int(c.size * np.dtype(chroma_recipe.STORE_DTYPE).itemsize)
+    if not cache_budget.reserve(CHROMA_CACHE, nbytes):
+        return {"ok": False,
+                "error": "the cache policy refused room for the signature: the disk is past its "
+                         "floor, or the chroma cache is over its cap with nothing evictable"}
+    os.makedirs(_chroma_dir(), exist_ok=True)
+    # A .tmp name, written whole and renamed into place: the policy never evicts a fresh
+    # .tmp, so a parent running an eviction while this child writes cannot delete the
+    # half-written entry (np.save is handed a file handle so it cannot rename .tmp to .npy).
+    tmp = "%s.%d.tmp" % (sig, os.getpid())
+    with open(tmp, "wb") as fh:
+        np.save(fh, c.astype(chroma_recipe.STORE_DTYPE))
+    os.replace(tmp, sig)
+    cache_budget.commit(CHROMA_CACHE, sig)
+    if not os.path.isfile(sig):
+        # THE LANDING CHECK. The rename and the commit are two calls, and a bounded cache may
+        # lose any entry at any time -- an eviction run that starts between them can take a
+        # signature that has not been recorded yet. What a writer must never do is report a
+        # success whose entry is not there; the lost-signature recovery offers this URL again.
+        return {"ok": False,
+                "error": "the signature did not survive its own landing: an eviction run "
+                         "took it before the policy recorded it"}
     # The bucket is the signature's long-term home (see sigstore). Upload now, verified; on
-    # failure the local file simply stays -- eviction never fires for an unverified key, so a
-    # flaky upload costs disk space, never data.
+    # failure the local file stays until the cache policy's age limit takes it (the `chroma`
+    # cache has no pins -- requeue_missing_sigs offers the URL again once its signature is
+    # gone from cache and bucket alike), while sigstore's own cold eviction still refuses any
+    # key the bucket has not verified, so a flaky upload costs disk space, never data.
     if sigstore.enabled():
-        sigstore.put(sig_path(url), _sig_key(url))
+        sigstore.put(sig, _sig_key(url))
     # The float32 chroma, for the parent's matcher. NOT the float16 round-trip: the matcher scores
     # float32 today, and a float16 cast and back moves values by an ULP, which is enough to move a
     # borderline verdict. Not a signature change either way -- the signature is the file above.
@@ -947,7 +1065,12 @@ EXCERPT_S = 30.0
 
 def write_excerpt(samples, at_s, path):
     """Write ~EXCERPT_S seconds of `samples` centred on the matched instant. In memory in, file
-    out -- no second fetch. A brief excerpt for aural verification, swept after KEEP_TTL_DAYS."""
+    out -- no second fetch. A brief excerpt for aural verification, swept after KEEP_TTL_DAYS.
+
+    Returns True when the excerpt is on disk, False when it is not: nothing to write, or the
+    cache policy refusing the write (the disk past its floor, the board's cap with nothing
+    evictable). A refused excerpt is simply not kept -- the LEAD survives with its numbers, and
+    the caller must not count a refusal as kept or name the path as the lead's audio."""
     import soundfile as sf
     lo = max(0, int((at_s - EXCERPT_S / 2) * _audio.SR))
     hi = min(len(samples), lo + int(EXCERPT_S * _audio.SR))
@@ -963,11 +1086,27 @@ def write_excerpt(samples, at_s, path):
     if len(clip) > cap:
         clip = clip[:cap]
     if len(clip) == 0:
-        return                                   # nothing to hear; do not leave an empty file
+        return False                            # nothing to hear; do not leave an empty file
 
+    if not cache_budget.reserve(CANDIDATES_CACHE, len(clip) * 2 + 64):
+        # A planned size: 16-bit PCM, two bytes a sample. The policy makes room by score (the
+        # worst excerpt of a mystery first) and refuses past the disk floor.
+        return False
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    sf.write(path, clip, _audio.SR)
+    # A .tmp name, written whole and renamed into place, so no eviction this process or another
+    # runs can delete the half-written entry (the policy holds a fresh .tmp for an hour).
+    tmp = "%s.%d.tmp" % (path, os.getpid())
+    with open(tmp, "wb") as fh:
+        sf.write(fh, clip, _audio.SR, format="WAV")
+    os.replace(tmp, path)
+    cache_budget.commit(CANDIDATES_CACHE, path)
+    if not os.path.isfile(path):
+        # THE LANDING CHECK (see the signature write for the reason): an eviction run that
+        # starts between the rename and the commit can take an excerpt not yet recorded.
+        # Not kept, not counted -- the lead survives its numbers.
+        return False
     _write_provenance()
+    return True
 
 
 def purge_audio():
@@ -984,17 +1123,23 @@ def purge_audio():
     candidate will ever be downloaded twice.
     """
     freed = n = 0
-    if os.path.isdir(KEEP):
-        for name in os.listdir(KEEP):
+    keep = _keep_dir()
+    if keep and os.path.isdir(keep):
+        # Through the policy's one door, like every deletion of a cache entry: each removal is
+        # checked against the cache's directory and recorded with its reason. While the policy
+        # is dark there is no registered directory and nothing to delete -- the state half
+        # below still runs.
+        for name in os.listdir(keep):
             if not name.lower().endswith((".wav", ".mp3", ".flac", ".m4a")):
                 continue                      # leave PROVENANCE.txt alone
-            path = os.path.join(KEEP, name)
+            path = os.path.join(keep, name)
             try:
-                freed += os.path.getsize(path)
-                os.unlink(path)
-                n += 1
+                size = os.path.getsize(path)
             except OSError:
-                pass
+                continue
+            if cache_budget.remove(CANDIDATES_CACHE, path, "purge-audio"):
+                freed += size
+                n += 1
 
     state = _load(STATE, blank_state())
     for m in state.get("matches") or []:
@@ -1006,8 +1151,10 @@ def purge_audio():
 
 
 def _sig_key(url):
-    """The signature's filename — a stable id for "this candidate's chroma", 20 chars not a URL."""
-    return os.path.basename(sig_path(url))
+    """The signature's filename — a stable id for "this candidate's chroma", 20 chars not a
+    URL. The DIRECTORY is not its business (the job dirs want the name alone), so it never
+    reads the cache."""
+    return "u" + hashlib.sha1(url.encode()).hexdigest()[:20] + ".npy"
 
 
 _REMOTE_KEYS = {"at": 0.0, "keys": None}     # session cache of the bucket's key listing
@@ -1072,11 +1219,19 @@ def stamp_pool(state):
 
 def _load_sig(url):
     """A signature by hook or by crook: the working cache first, then the bucket. None if it
-    exists in neither (i.e. this URL genuinely needs its audio fetched)."""
+    exists in neither (i.e. this URL genuinely needs its audio fetched). While the signature
+    cache is dark there is no local signature and nowhere to land a pulled one, so None."""
     path = sig_path(url)
+    if path is None:
+        return None
     if not os.path.exists(path) and sigstore.enabled():
-        if not sigstore.fetch(_sig_key(url), CACHE):
+        # A bucket pull is a write into the chroma cache: through the policy, so a refusal
+        # (past the floor) leaves the pair for a later pass instead of filling the disk.
+        if not cache_budget.reserve(CHROMA_CACHE, None):
             return None
+        if not sigstore.fetch(_sig_key(url), _chroma_dir()):
+            return None
+        cache_budget.commit(CHROMA_CACHE, path)
     try:
         return np.load(path).astype("float32")
     except (OSError, ValueError):
@@ -1109,7 +1264,9 @@ def unscored_pairs(state, q, retired, qs, limit=None):
                 continue
             # A signature counts as HELD if it is in the working cache OR the bucket -- eviction
             # (sigstore) moves cold ones out of the cache, and _load_sig pulls them back to score.
-            if not os.path.exists(sig_path(url)):
+            # A dark cache holds nothing at all, so only the bucket can answer.
+            path = sig_path(url)
+            if path is None or not os.path.exists(path):
                 remote = _remote_keys()
                 if remote is None or key not in remote:
                     continue
@@ -1165,14 +1322,25 @@ def requeue_missing_sigs(state, q, retired):
     if not done:
         return dict(res, why="nothing in done to check")
 
+    # A dark signature cache has no local half to check, so EVERY signature would read as lost
+    # and the whole corpus would be requeued. That is the same epistemic refusal as the
+    # unlistable bucket below: cannot tell, do nothing.
+    if _chroma_dir() is None:
+        return dict(res, why="the signature cache is dark (NETRADIO_CACHE_ROOT unset) -- cannot "
+                             "tell a lost signature from a held one, so nothing was requeued; "
+                             "set the root in .env and re-check")
+
     remote = _remote_keys()
     if sigstore.enabled() and remote is None:
         return dict(res, why="bucket listing unavailable -- cannot tell lost from evicted, "
                              "so nothing was requeued; fix the store and re-check")
     remote = remote or set()
 
-    missing = [u for u in done
-               if not os.path.exists(sig_path(u)) and _sig_key(u) not in remote]
+    missing = []
+    for u in done:
+        path = sig_path(u)
+        if (path is None or not os.path.exists(path)) and _sig_key(u) not in remote:
+            missing.append(u)
     res["missing"] = len(missing)
 
     if not missing:
@@ -1346,20 +1514,23 @@ def evict_overfull(state, num):
         path = dead.get("audio")
         if not path:
             continue
-        try:
-            os.unlink(path)
+        # Through the policy's one door: the removal is recorded with its reason, refuses a
+        # path outside the cache, and -- while the policy is dark -- deletes nothing (a refused
+        # `kept` count is honest either way: the row is gone, and the file stays where it is).
+        if cache_budget.remove(CANDIDATES_CACHE, path, "board-overfull"):
             state["kept"] -= 1
-        except OSError:
-            pass
 
 
 def _write_provenance():
     """State, in plain words, what the kept files are -- so nobody, including a future me, ever
     mistakes this directory for a music library."""
-    note = os.path.join(KEEP, "PROVENANCE.txt")
+    keep = _keep_dir()
+    if not keep:
+        return                                 # the cache is dark: no directory, no note
+    note = os.path.join(keep, "PROVENANCE.txt")
     if os.path.exists(note):
         return
-    os.makedirs(KEEP, exist_ok=True)
+    os.makedirs(keep, exist_ok=True)
     with open(note, "w", encoding="utf-8") as fh:
         fh.write(
             "These are SHORT EXCERPTS (~%ds), retained TEMPORARILY so a human can listen and "
@@ -1373,18 +1544,23 @@ def _write_provenance():
 
 
 def sweep_excerpts():
-    """Delete kept excerpts older than KEEP_TTL_DAYS. A lead you haven't listened to in a month
-    is not a lead, and holding it any longer serves no purpose."""
-    if not os.path.isdir(KEEP):
+    """Delete kept excerpts older than KEEP_TTL_DAYS -- the cache's own age limit, applied by
+    the harvester's own backstop sweep (the board's age is registered on the policy too, so
+    any eviction run over `candidates` reaches the same files). A lead you haven't listened to
+    in a month is not a lead, and holding it any longer serves no purpose. Each deletion goes
+    through the policy's one door, so it is recorded with its reason; while the policy is dark
+    there is no registered directory and nothing is swept."""
+    keep = _keep_dir()
+    if not keep or not os.path.isdir(keep):
         return
     cutoff = time.time() - KEEP_TTL_DAYS * 86400
-    for name in os.listdir(KEEP):
+    for name in os.listdir(keep):
         if not name.endswith(".wav"):
             continue
-        path = os.path.join(KEEP, name)
+        path = os.path.join(keep, name)
         try:
             if os.path.getmtime(path) < cutoff:
-                os.unlink(path)
+                cache_budget.remove(CANDIDATES_CACHE, path, "expired")
         except OSError:
             pass
 
@@ -1406,10 +1582,10 @@ def drop_ruled_excerpts(state, retired):
         path = m.pop("audio", None) if m.get("url") in retired else None
         if not path:
             continue
-        try:
-            os.unlink(path)
-        except OSError:
-            pass                       # already gone -- the row still stops carrying it
+        # The row stops carrying its audio whatever the policy answers (already gone, dark,
+        # pinned): the ruling is the reason the audio existed, and that reason is spent. The
+        # removal itself is the policy's to make and to record.
+        cache_budget.remove(CANDIDATES_CACHE, path, "ruled-on")
         state["kept"] = max(0, state.get("kept", 0) - 1)
         dropped += 1
     return dropped
@@ -1934,6 +2110,17 @@ def run(args):
         return
     if note_no_queries(state, qs):
         _save(STATE, state)                   # searchable again -> the state stands down NOW
+    # THE CACHES MUST EXIST before the first fetch: a signature the harvester cannot keep is
+    # network cost paid for nothing, and every URL would be retired to `done` failing the same
+    # way. Refuse here, naming the setting, rather than grinding the queue on a dark policy.
+    dark = [n for n, d in ((CHROMA_CACHE, _chroma_dir()), (CANDIDATES_CACHE, _keep_dir()))
+            if d is None]
+    if dark:
+        print("the %s cache %s dark (NETRADIO_CACHE_ROOT unset, or the registration was "
+              "refused): the harvester has nowhere to keep a signature or an excerpt.\n"
+              "Set NETRADIO_CACHE_ROOT in .env (see .env.example) and start again."
+              % (" and the ".join(dark), "is" if len(dark) == 1 else "are"))
+        return
     print("# searching for Mystery Tracks %s" % ", ".join(str(n) for n, _, _ in qs))
     print("# work %s, idle %s, rotating hosts, jittered. Ctrl-C or SIGTERM stops cleanly: state "
           "is saved, yt-dlp and ffmpeg are stopped too." % ("4-5h", "40-120m"))
@@ -2063,7 +2250,7 @@ def run(args):
         elif sigstore.enabled():
             # Rescan backlog empty = every cached signature is scored vs every current mystery,
             # which is exactly when cold ones may leave the disk (verified-remote only).
-            n_ev, freed = sigstore.evict_cold(CACHE, state.get("scored") or {},
+            n_ev, freed = sigstore.evict_cold(_chroma_dir(), state.get("scored") or {},
                                               [qk for _, _, qk in qs])
             if n_ev:
                 print("evicted %d cold signature(s) to the bucket (%.1f MB freed)"
@@ -2222,16 +2409,22 @@ def run(args):
             if len(board) >= KEEP_TOP and cost >= board[-1]["cost"]:
                 continue                       # not good enough to displace anyone
 
-            excerpt = os.path.join(KEEP, "MT%d-%.4f-%s.wav"
+            excerpt = os.path.join(_keep_dir(), "MT%d-%.4f-%s.wav"
                                    % (num, cost, hashlib.sha1(url.encode()).hexdigest()[:8]))
-            if not os.path.exists(excerpt):
+            kept = os.path.exists(excerpt)
+            if not kept:
                 if samples is None:            # cached signature, no audio in hand -> can't excerpt
                     continue
-                write_excerpt(samples, at or 0, excerpt)      # from memory; NO second fetch
-                state["kept"] += 1
+                # A refused excerpt (past the disk floor, the board's cap with nothing
+                # evictable) is not on disk, so it is neither counted as kept nor named as
+                # the lead's audio: the lead itself survives and /harvest plays it from the
+                # source embed.
+                kept = write_excerpt(samples, at or 0, excerpt)   # from memory; NO second fetch
+                if kept:
+                    state["kept"] += 1
             hit = {"at": _now(), "mystery": num, "cost": round(cost, 4),
                    "semitones": shift, "at_s": round(at or 0, 1), "url": url,
-                   "audio": excerpt,
+                   "audio": excerpt if kept else None,
                    "verdict": "MATCH" if cost <= MATCH_COST else "near"}
             state["matches"].append(hit)
 
@@ -2348,13 +2541,17 @@ def main():
             print("# sigstore is dark -- set NETRADIO_SIG_BUCKET (and profile/endpoint) in "
                   ".env first.")
             return
+        cache = _chroma_dir()
+        if cache is None:
+            print("# the signature cache is dark -- set NETRADIO_CACHE_ROOT in .env first.")
+            return
         state = _load(STATE, blank_state())
         qs = queries()
-        names = sorted(n for n in os.listdir(CACHE)
-                       if n.startswith("u") and n.endswith(".npy")) if os.path.isdir(CACHE) else []
+        names = sorted(n for n in os.listdir(cache)
+                       if n.startswith("u") and n.endswith(".npy")) if os.path.isdir(cache) else []
         up = failed = 0
         for name in names:
-            path = os.path.join(CACHE, name)
+            path = os.path.join(cache, name)
             try:
                 local = os.path.getsize(path)
             except OSError:
@@ -2365,7 +2562,7 @@ def main():
                 up += 1
             else:
                 failed += 1
-        n_ev, freed = sigstore.evict_cold(CACHE, state.get("scored") or {},
+        n_ev, freed = sigstore.evict_cold(cache, state.get("scored") or {},
                                           [qk for _, _, qk in qs])
         left = len(names) - n_ev
         print("# migrate: %d uploaded, %d upload failure(s); %d evicted (%.1f MB freed); "
@@ -2386,6 +2583,13 @@ def main():
             print("# %s" % res["why"])
         return
     if args.rescan:
+        # The same refusal every cache-reading mode makes: unscored_pairs would count the
+        # pairs (a bucket-held signature reads as held), _load_sig would answer None for every
+        # one, and the run would stamp `rescan_pending` to 0 over "Every cached signature has
+        # now met every mystery" -- a completion claim about work that never ran.
+        if _chroma_dir() is None:
+            print("# the signature cache is dark -- set NETRADIO_CACHE_ROOT in .env first.")
+            return
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})
         qs = queries()

@@ -114,6 +114,20 @@ set -a && . ./.env && set +a
                                                                       # while a writer runs)
 ```
 
+**The harvester's caches live on the machine's cache policy.** The signature working cache and
+the excerpt board (`chroma` and `candidates`) are no longer fixed paths: each lives under
+`NETRADIO_CACHE_ROOT` (`NETRADIO_CHROMA_CACHE_DIR` / `NETRADIO_CANDIDATES_CACHE_DIR` to override),
+bounded by the policy — a 14-day age on signatures (the bucket is their long-term home), a
+250 MB cap on the board that gives up the worst excerpt of a mystery first, and the policy's
+shared disk floor. With `NETRADIO_CACHE_ROOT` unset there is no cache directory at all and the
+harvester **refuses to start**, naming the setting: a signature it cannot keep is network cost
+paid for nothing. The on-demand `--rescan` refuses the same way: it reads the same cache, and
+scoring nothing would stamp a completion that never happened. Set the root in `.env` (see
+`.env.example`). The tracks cut by
+`extract_tracks.py` are the policy's `stream_tracks` cache, cut as **FLAC** now: each cut is
+written whole under a temporary name the policy holds, and renamed into its final `.flac`
+name once ffmpeg has it.
+
 **Clip formats: `.wav`, `.wv`, `.flac`, `.m4a`, `.mp3`** — lossless preferred, in that order
 (everything decodes through ffmpeg, which reads WavPack natively). `.wv` earned its place the
 hard way: Mystery Track 4's clip was wavpack-compacted and silently **left the query set** —

@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
                                 "scripts"))
 
 import sigstore  # noqa: E402
+import cache_budget  # noqa: E402  (evict_cold deletes through the chroma cache's policy)
 
 
 class FakeProc:
@@ -130,7 +131,48 @@ class TestRemote(Base):
         self.assertIn("--starting-token", self.rec.calls[1])
 
 
+# The cache-policy names only (the same set tests/test_cache_budget.py saves and restores):
+# the sigstore settings Base.setUp has already placed stay.
+CACHE_ENV = ("NETRADIO_CACHE_ROOT", "NETRADIO_DOWNLOAD_ROOT", "NETRADIO_DISK_MAX_PCT",
+             "NETRADIO_CACHE_EVENTS_DAYS")
+
+
 class TestEvict(Base):
+    def setUp(self):
+        super().setUp()
+        # evict_cold deletes cache entries, so it goes through the cache policy's door: the
+        # `chroma` cache must be registered over this test's directory for a removal to pass.
+        # The policy's root must live OUTSIDE it (no cache may hold the root), so a second
+        # throwaway directory serves.
+        self._saved_env = {k: os.environ.get(k) for k in list(os.environ)
+                           if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
+        for k in self._saved_env:
+            os.environ.pop(k, None)
+        self._root = tempfile.mkdtemp(prefix="sigstore-policy-root-")
+        os.environ["NETRADIO_CACHE_ROOT"] = self._root
+        os.environ["NETRADIO_CHROMA_CACHE_DIR"] = self.tmp.name
+        self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        cache_budget.register("chroma", dir=self.tmp.name)
+        self.addCleanup(self._restore)
+        # An empty volume: the disk floor never trips, so a near-cap eviction is what the
+        # tests ask for and nothing else.
+        self.addCleanup(setattr, cache_budget, "_disk_usage", cache_budget._disk_usage)
+        cache_budget._disk_usage = lambda _p: (100 * 1000 * 1000, 0, 100 * 1000 * 1000)
+
+    def _restore(self):
+        import shutil
+        cache_budget._REGISTRY.clear()
+        cache_budget._REGISTRY.update(self._registry[0])
+        cache_budget._STATS.clear()
+        cache_budget._STATS.update(self._registry[1])
+        for k in [k for k in list(os.environ)
+                  if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)]:
+            os.environ.pop(k, None)
+        os.environ.update(self._saved_env)
+        shutil.rmtree(self._root, ignore_errors=True)
+
     def test_evicts_only_verified_and_fully_scored(self):
         p1, k1 = self._sig("u" + "1" * 20 + ".npy", size=10)    # scored both, verified -> goes
         p2, k2 = self._sig("u" + "2" * 20 + ".npy", size=10)    # missing one mystery -> stays
@@ -150,6 +192,25 @@ class TestEvict(Base):
         self.assertEqual(n, 0)
         self.assertTrue(os.path.exists(path))
 
+    def test_an_active_download_survives_an_eviction_run(self):
+        """A bucket pull lands inside the registered `chroma` cache under a name ending
+        `.part` -- the policy's write-in-progress mark -- so the run another writer's
+        `reserve` triggers evicts old entries, never an active download out from under its
+        own atomic replace."""
+        old1, _ = self._sig("u" + "7" * 20 + ".npy", size=300 * 1000)  # entries to give up
+        old2, _ = self._sig("u" + "8" * 20 + ".npy", size=300 * 1000)
+        key = "u" + "9" * 20 + ".npy"
+        part = os.path.join(self.tmp.name, key + ".abc123.part")    # fetch()'s temp, fresh
+        with open(part, "wb") as fh:
+            fh.write(b"x" * 100)
+        os.environ["NETRADIO_CHROMA_CACHE_GB"] = "0.0005"     # 500 KB: the cache is over
+        cache_budget.register("chroma", dir=self.tmp.name)   # re-read: the lowered cap applies
+        self.assertTrue(cache_budget.reserve("chroma", 250 * 1000), "room was made")
+        self.assertFalse(os.path.exists(old1), "the oldest entry went")
+        self.assertFalse(os.path.exists(old2), "and the next oldest, until it fit")
+        self.assertTrue(os.path.exists(part),
+                        "the active download is held by the policy, never evicted")
+
     def test_fetch_downloads_via_temp_then_renames(self):
         dest_dir = os.path.join(self.tmp.name, "cache")
         key = "u" + "4" * 20 + ".npy"
@@ -163,7 +224,10 @@ class TestEvict(Base):
         out = sigstore.fetch(key, dest_dir)
         self.assertEqual(out, os.path.join(dest_dir, key))
         self.assertTrue(os.path.exists(out))
-        self.assertIn(".part-", self.rec.calls[0][-2])             # download went via a temp name
+        self.assertIn(".part", self.rec.calls[0][-2])              # download went via a temp name
+        self.assertTrue(self.rec.calls[0][-2].endswith(".part"),
+                        "the temp is the cache policy's write-in-progress mark, so no eviction "
+                        "run takes an active download")
         self.assertEqual([n for n in os.listdir(dest_dir)], [key]) # no temp left behind
 
     def test_failed_fetch_leaves_no_partial_and_retry_succeeds(self):

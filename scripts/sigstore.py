@@ -27,6 +27,8 @@ import shutil
 import subprocess
 import tempfile
 
+import cache_budget                                 # the chroma cache's policy: deletions go through it
+
 # The one seam through which every aws invocation passes — swappable in tests.
 _run = subprocess.run
 
@@ -125,8 +127,11 @@ def fetch(key, dest_dir):
     dest = os.path.join(dest_dir, key)
     # A UNIQUE temp per invocation (mkstemp), same directory so the final rename stays atomic.
     # PID alone is not enough -- two threads of one process fetching the same key must not
-    # share a pathname.
-    fd, tmp = tempfile.mkstemp(dir=dest_dir, prefix=key + ".part-")
+    # share a pathname. The name ENDS .part, the cache policy's write-in-progress mark: a
+    # bucket pull lands inside the registered `chroma` cache, and a policy run answering
+    # another writer's `reserve` must hold a fresh download, not evict it out from under the
+    # replace (past an hour it reads as a download that died part-way, and is evicted).
+    fd, tmp = tempfile.mkstemp(dir=dest_dir, prefix=key + ".", suffix=".part")
     os.close(fd)
     cmd = _base_cmd() + ["s3", "cp", "s3://%s/%s%s" % (_bucket(), PREFIX, key), tmp,
                          "--no-progress"]
@@ -201,7 +206,11 @@ def evictable(path, key, scored, qkeys):
 
 
 def evict_cold(cache_dir, scored, qkeys):
-    """Delete every cold signature from the working cache. Returns (evicted, bytes_freed)."""
+    """Delete every cold signature from the working cache. Returns (evicted, bytes_freed).
+
+    Each deletion goes through the cache policy's one door, so it is refused (and recorded)
+    for a path outside the registered `chroma` cache, and while the policy is dark nothing is
+    deleted at all -- the callers refuse to run dark, so that is a belt, not a behaviour."""
     evicted, freed = 0, 0
     try:
         names = sorted(os.listdir(cache_dir))
@@ -214,9 +223,9 @@ def evict_cold(cache_dir, scored, qkeys):
         if evictable(path, name, scored, qkeys):
             try:
                 size = os.path.getsize(path)
-                os.remove(path)
             except OSError:
                 continue
-            evicted += 1
-            freed += size
+            if cache_budget.remove("chroma", path, "cold-verified"):
+                evicted += 1
+                freed += size
     return evicted, freed

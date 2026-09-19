@@ -113,6 +113,14 @@ align-check:          ## verify the venv can do the librosa-backed work, and the
 test:                 ## run the test suite
 	.venv/bin/python -m unittest discover -s tests
 
+# The environment contract's one check (scripts/env_check.py): every NETRADIO_* name set in
+# .env that no code reads (a stale name, a typo), and every name the code reads that .env
+# leaves unset, with the code's default. Names only, never values. Runs against .env by
+# default; pass ENV=path to check another file (the tests run it against .env.example, so an
+# example never carries a dead name).
+env-check:            ## list NETRADIO_* names set in .env that no code reads, and names the code reads that .env leaves unset (with defaults). ENV=path to check another file
+	$(PYTHON) scripts/env_check.py "$(or $(ENV),.env)"
+
 # MallocLargeCache=0 tells macOS not to keep freed large blocks inside the process. Without it
 # the harvester's footprint only ever goes up: it frees everything after each candidate, libmalloc
 # holds the pages anyway, and under pressure they end up compressed and swapped. It has to be in
