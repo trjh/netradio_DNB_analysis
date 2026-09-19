@@ -93,7 +93,10 @@ Why a cache: a global solve reads each ~20-min file many times; decoding once an
 `np.load(mmap)`-ing thereafter keeps the inner loops fast. The cache is bounded on
 the machine's cache policy — every entry re-decodes in seconds, so the policy may
 evict any entry at any time; without a policy configured (`NETRADIO_CACHE_ROOT`)
-there is no cache at all and every load decodes. No third-party audio
+there is no cache at all and every load decodes. The cache's previous default
+directory (`~/.cache/netradio-streamalign`) is retired with the fraction rules it
+ran under: its keys embed paths that no longer exist, and it is safe to delete.
+No third-party audio
 libraries — `ffmpeg` handles every container/endianness, numpy does the rest.
 
 ---
