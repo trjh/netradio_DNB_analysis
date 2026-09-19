@@ -152,12 +152,25 @@ class TestRemote(Base):
         k2 = "u" + "2" * 20 + ".npy"
         page1 = json.dumps([[["chroma/" + k1, '"e-1"'],
                              ["chroma/_recipe.json", '"x"'],
-                             ["chroma/_canary/manifest.json", '"x"']], "TOK"])
+                             ["chroma/_canary/manifest.json", '"x"'],
+                             ["chroma/upload.npy", '"x"'],
+                             ["chroma/u123.npy", '"x"']], "TOK"])
         page2 = json.dumps([[["chroma/" + k2, "e-2"]], None])
         self.rec.results = [FakeProc(stdout=page1), FakeProc(stdout=page2)]
         objects = sigstore.list_objects()
         self.assertEqual(objects, {k1: "e-1", k2: "e-2"})
         self.assertIn("--starting-token", self.rec.calls[1])
+
+    def test_the_listing_admits_only_keys_shapes(self):
+        # The scan refuses any stem that is not `u` + 20 hex, so an object named any other way
+        # could never be satisfied by a local file: admitting it would seed a ledger row that
+        # no feeder can cover, and the pool's count would disagree with the scan.
+        page = json.dumps([[["chroma/upload.npy", '"x"'],
+                            ["chroma/u123.npy", '"x"'],
+                            ["chroma/" + "u" + "g" * 20 + ".npy", '"x"'],
+                            ["chroma/_recipe.json", '"x"']], None])
+        self.rec.results = [FakeProc(stdout=page)]
+        self.assertEqual(sigstore.list_objects(), {})
 
     def test_list_keys_is_the_listings_names(self):
         k1 = "u" + "1" * 20 + ".npy"

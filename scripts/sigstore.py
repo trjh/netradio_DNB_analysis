@@ -23,6 +23,7 @@ after import).
 """
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -33,6 +34,12 @@ import cache_budget                                 # the chroma cache's policy:
 _run = subprocess.run
 
 PREFIX = "chroma/"                  # bucket prefix for signatures (same keys as the local cache)
+
+# The key's shape, the one rule everywhere the pool writes a name (`u` + 20 hex -- see
+# docs/HARVEST_FEED.md). The listing admits nothing else under the prefix: the scan refuses
+# any stem that is not this shape, so a misnamed object would seed a ledger row no local
+# file can ever satisfy, and the pool's count would say one thing while the scan says another.
+_KEY_NAME = re.compile(r"u[0-9a-f]{20}\.npy", re.ASCII)
 
 # Session memory: keys HEAD-verified this run, so eviction sweeps don't re-HEAD every pass.
 _verified = {}                      # key -> remote size
@@ -208,7 +215,7 @@ def list_objects():
                 name, etag = entry[0][len(PREFIX):], entry[1]
             except (TypeError, IndexError):
                 continue                    # a shape the contract does not describe: skip it
-            if name.startswith("u") and name.endswith(".npy") and "/" not in name:
+            if _KEY_NAME.fullmatch(name):
                 objects[name] = (etag or "").strip('"') or None
         if not token:
             return objects

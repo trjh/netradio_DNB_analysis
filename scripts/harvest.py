@@ -494,12 +494,16 @@ def _last_line(chunks, prefix=""):
     return (prefix + lines[-1])[:160] if lines else ""
 
 
-def _wait(proc, poll_s=1.0):
+def _wait(proc, poll_s=1.0, spool=None, cap_bytes=None):
     """Wait for a subprocess a second at a time, so a stop is acted on during a long decode.
 
     A decode can run for hours; the poll is what lets a stop reach it, and the spool is
-    unlinked by the stop path either way. Returns the exit status, or None when a stop was
-    asked for.
+    unlinked by the stop path either way. `spool` with `cap_bytes` bounds the decode itself:
+    once the spool holds more than `cap_bytes`, the file's length has passed the caller's
+    backstop and the refusal is already decided, so the process is stopped here instead of
+    spooling hours more of a file that will be refused anyway -- the caller's own measured
+    check below the wait speaks the verdict. Returns the exit status, or None when a stop
+    was asked for.
     """
     while True:
         try:
@@ -507,6 +511,13 @@ def _wait(proc, poll_s=1.0):
         except subprocess.TimeoutExpired:
             if _stop_requested():
                 return None
+            if spool is not None and cap_bytes is not None:
+                try:
+                    past = os.path.getsize(spool) > cap_bytes
+                except OSError:
+                    past = False
+                if past:
+                    _end(proc)
 
 
 def job_dir(key):
@@ -536,8 +547,10 @@ def _decode_and_sign(path, job, expect_s=None):
 
     ffmpeg reads the FILE, whole: no `-ss`, no `-t`, no fragment -- a part's file is already
     on the part's own clock, and the harvester parses no fragment (docs/HARVEST_FEED.md).
-    `expect_s` is the sidecar's declared `duration_s`, carried across the fork in the job
-    file, so the length check inside the child weighs the same facts the scan weighed.
+    `expect_s` is the sidecar's declared `duration_s` as the sign read it beside the file
+    (`sign_file` re-reads the sidecar rather than trusting the scan's copy), carried across
+    the fork in the job file, so the length check inside the child weighs the claim the sign
+    itself weighed.
 
     The decoded PCM goes to a FILE in the job directory, written by ffmpeg itself: one
     allocation at the size the decode turned out to be, read back as a memory map so an
@@ -570,7 +583,14 @@ def _decode_and_sign(path, job, expect_s=None):
             drains = [threading.Thread(target=_drain, args=(ff.stderr, ff_err), daemon=True)]
             for t in drains:
                 t.start()
-            _wait(ff)
+            # THE SPOOL'S BACKSTOP. A sidecar that declares no length closes the first door
+            # above, so decoding in full is the only way the four-hour backstop can be
+            # answered -- and before this bound, a 20-hour file spooled every hour of itself
+            # (4.6 GB) before the refusal below. Once the spool holds more than the cap, the
+            # decode's own measure has already answered, so ffmpeg is stopped and the
+            # measured-mark refusal below speaks the verdict: nothing is truncated, and a
+            # file with no claim costs the cap to refuse, not its whole length.
+            _wait(ff, spool=part, cap_bytes=MAX_DURATION_S * _audio.SR * 4)
             for t in drains:
                 t.join(timeout=5)
         _STOP["procs"] = []
@@ -802,7 +822,9 @@ def reconcile_ledger(state=None):
       * more than the cap of signed rows would lose their etags -> the STORE broke, not the
         rows. Report (a standing `state["sig_alert"]`) and touch nothing: a mass drop would
         put every key back on the feeder's list for days over a configuration fault, exactly
-        the loss the old recovery's cap existed to prevent.
+        the loss the old recovery's cap existed to prevent. The alert stands down on the
+        first later reconcile that does not report: an alarm that outlives the healed store
+        it was raised over is a page reporting a break that is gone.
 
     Mutates the caller's `state` when it keeps one (run does); loads its own otherwise.
     Returns {"seeded", "dropped", "restored", "reported", "cleared", "why"}.
@@ -859,8 +881,11 @@ def reconcile_ledger(state=None):
             res["dropped"] += 1
     if res["dropped"] or res["restored"]:
         _save(LEDGER, ledger)
-    if gone and state.pop("sig_alert", None) is not None:
-        res["cleared"] = True                 # the loss was dealt with -- stand down
+    # ANY reconcile that did not report stands the alert down: `gone` can be empty here with
+    # the alert still standing (a mis-listed bucket, fixed between starts), and a clear that
+    # waits for a later loss would report a healed store as broken forever.
+    if not res["reported"] and state.pop("sig_alert", None) is not None:
+        res["cleared"] = True                 # the store healed -- stand down
     why = ("dropped the etag of %d signed row(s) whose object is gone; restored %d missing "
            "etag(s) whose object is back; every other signed row still points at its object"
            % (res["dropped"], res["restored"])) if (res["dropped"] or res["restored"]) else \
@@ -915,9 +940,11 @@ def _dirs(issues=None, said=None):
 def scan_directories(ledger, issues=None, said=None):
     """The files that want a sign, oldest first. Returns `(todo, covered)`.
 
-    `todo` is a list of `{"key", "path", "duration_s"}` records; `covered` counts the keys
-    whose row already matches their file -- the scan skips them, and the caller counts each
-    once per run (`state["skipped_cached"]`).
+    `todo` is a list of `{"key", "path"}` records, oldest first, one per key (a key that
+    sits in more than one configured directory is proposed once, for its oldest copy -- a
+    row covers only one file's bytes); `covered` counts the keys whose row already matches
+    their file -- the scan skips them, and the caller counts each once per run
+    (`state["skipped_cached"]`).
 
     THE COMPLETENESS RULE: a file with no sidecar beside it is not finished, and is neither
     read nor logged. The sidecar is how the harvester knows the feeder is done with the file;
@@ -926,6 +953,9 @@ def scan_directories(ledger, issues=None, said=None):
     sidecar whose `key` differs from the file's stem, and a stem that is not a key's shape
     (`u` + 20 hex). Both land in `issues` (deduped per run through `said`) -- a silent refusal
     of a file the feeder thinks it delivered is a wall the feeder cannot see.
+
+    A name ending in `.part` is skipped without a row, whatever its stem: it is a download
+    still in progress, feeder state rather than a feeder bug.
 
     The TOP LEVEL only: a subdirectory is never read, whatever it holds.
     """
@@ -950,6 +980,8 @@ def scan_directories(ledger, issues=None, said=None):
                 continue                     # never a subdirectory, however tempting
             if name.endswith(".json"):
                 continue                     # a sidecar is not audio
+            if name.endswith(".part"):
+                continue                     # a download in progress: feeder state, not a bug
             stem = name.rsplit(".", 1)[0]
             if not _KEY.fullmatch(stem):
                 if path not in said and issues is not None:
@@ -997,15 +1029,26 @@ def scan_directories(ledger, issues=None, said=None):
                 if stem not in covered:
                     covered.append(stem)      # the ledger already covers these exact bytes
                 continue
-            todo.append({"key": stem, "path": path, "duration_s": _expect_s(sidecar)})
+            todo.append({"key": stem, "path": path})
     todo.sort(key=lambda rec: os.path.getmtime(rec["path"]) if os.path.exists(rec["path"])
               else 0)
-    return todo, covered
+    # ONE CANDIDATE PER KEY, the oldest copy of it: the same key can sit in more than one
+    # configured directory, and a row covers only one file's bytes -- two candidates for one
+    # key in a single pass is a ping-pong in the making (whichever copy is signed, the other
+    # is wanted again the next pass, and back). The feeder that leaves two differing copies
+    # under one key must take one of them away; the scan proposes one at a time, oldest first.
+    seen, one_per_key = set(), []
+    for rec in todo:
+        if rec["key"] in seen:
+            continue
+        seen.add(rec["key"])
+        one_per_key.append(rec)
+    return one_per_key, covered
 
 
 # --- signing ------------------------------------------------------------------------------------
 
-def sign_file(path, expect_s=None, issues=None):
+def sign_file(path, issues=None):
     """Sign one audio file: decode it (in the child), upload the signature and the sidecar
     beside it in the bucket, and write the ledger row. Returns `(chroma, samples)` when the
     file is signed -- the chroma to score, the decoded samples as a memory map so the caller
@@ -1025,8 +1068,15 @@ def sign_file(path, expect_s=None, issues=None):
       * a file whose sidecar is unreadable at sign time -- it was complete when the scan saw
         it and is not now, which is the mid-write state the completeness rule already covers.
 
-    `expect_s` is the sidecar's declared `duration_s`; when the caller passes None, the
-    sidecar's own value is read (and the same validation applied).
+    THE LENGTH CLAIM IS THE SIDECAR AS IT READS NOW, never the scan's copy. A re-offer
+    replaces a file under a key that already has a sidecar (docs/HARVEST_FEED.md), and the
+    scan can list the directory inside that window -- new bytes beside the OLD sidecar,
+    whose `key` matches and whose `fed_at` is present, so the file reads as finished.
+    Weighed against the old claim, the new bytes take a `length_mismatch` on a verdict they
+    never earned -- and the row, carrying the new bytes' own size and mtime, would cover
+    the file for good. The claim this sign weighs is the one beside the file when the sign
+    starts; the contract's half of the same rule is to take the old sidecar away before the
+    new audio lands.
     """
     _LAST_CHILD.clear()
     key = file_key(path)
@@ -1044,8 +1094,10 @@ def sign_file(path, expect_s=None, issues=None):
                                     "required field it is missing"
                                     % os.path.basename(path)})
         return None, None
-    if expect_s is None:
-        expect_s = _expect_s(sidecar)
+    # Not the scan's copy: the sidecar as it reads now, validated by `_expect_s` (a claim that
+    # is not a length makes no claim, and no claim is never a mismatch) -- the docstring's
+    # last paragraph is the why.
+    expect_s = _expect_s(sidecar)
     try:
         st = os.stat(path)
     except OSError:
@@ -1920,8 +1972,7 @@ def run(args):
         rec_file = todo_files[0]
         state["current"] = rec_file["key"]
         _save(STATE, state)
-        c, samples = sign_file(rec_file["path"], rec_file["duration_s"],
-                               issues=state["issues"])
+        c, samples = sign_file(rec_file["path"], issues=state["issues"])
         # A stop is never a verdict, and it arrives by either route: this process was signalled
         # (the flag), or only the decode child was (the sentinel error). Checking one and not
         # the other is not a guard -- the row's writer is right below.
@@ -2112,6 +2163,11 @@ def main():
             return
         rec = reconcile_ledger(state)
         print("# ledger: %s" % rec["why"])
+        # The same save a run makes after its reconcile, and for the same reason: an alert it
+        # raised -- or stood down -- must reach the state file even when this hand sign then
+        # finds no file and returns early below.
+        if rec["seeded"] or rec["dropped"] or rec["restored"] or rec["reported"] or rec["cleared"]:
+            _save(STATE, state)
         moved = migrate_matches(state)
         if moved:
             _save(STATE, state)

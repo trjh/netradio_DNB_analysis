@@ -234,7 +234,7 @@ class SignFileWritesTheRow(_SignerCase):
         path = self._feed(key, url="https://y/one#t=0,60")
         self._store_on()
         self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
-        c, samples = harvest.sign_file(path, 60.0)
+        c, samples = harvest.sign_file(path)
 
         self.assertIsNotNone(c)                       # the chroma, for scoring
         self.assertEqual(len(samples), LONG_ENOUGH)  # the memmap, for an excerpt
@@ -263,7 +263,7 @@ class SignFileWritesTheRow(_SignerCase):
         path = self._feed(key, sidecar={"duration_s": 3600})
         self._store_on()
         self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))   # 60s decoded, 3600 declared
-        c, samples = harvest.sign_file(path, 3600.0)
+        c, samples = harvest.sign_file(path)
         self.assertEqual((c, samples), (None, None))
         row = harvest._load(harvest.LEDGER, {})[key]
         self.assertEqual((row["status"], row["reason"]), ("delayed", "length_mismatch"))
@@ -276,9 +276,25 @@ class SignFileWritesTheRow(_SignerCase):
         path = self._feed(key)                     # duration_s matches the bytes
         self._store_on()
         self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH - SR)))   # one second short of 60
-        c, _ = harvest.sign_file(path, 60.0)
+        c, _ = harvest.sign_file(path)
         self.assertIsNotNone(c)
         self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["status"], "signed")
+
+    def test_a_duration_that_is_not_a_length_makes_no_claim(self):
+        """The sidecar's `duration_s` is unbounded JSON: a bool (which `isinstance(x, int)`
+        accepts), a string, a zero, a negative -- none of them is evidence of length, and
+        taken literally `0` is how a source with no length to declare reads, which would
+        refuse every file over ten seconds. The sign validates the claim it weighs: a value
+        that is not a length is no claim at all, and no claim is never a mismatch."""
+        self._store_on()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        for bad in (True, "an hour", 0, -30):
+            with self.subTest(bad=bad):
+                key = _key("https://y/bad-duration-%r" % (bad,))
+                path = self._feed(key, sidecar={"duration_s": bad})
+                c, _samples = harvest.sign_file(path)
+                self.assertIsNotNone(c)
+                self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["status"], "signed")
 
     def test_the_four_hour_cap_is_refused_before_anything_is_spawned(self):
         """A declared length over the cap is refused on the sidecar's own claim: four hours of
@@ -287,7 +303,7 @@ class SignFileWritesTheRow(_SignerCase):
         path = self._feed(key, sidecar={"duration_s": 5 * 3600})
         spawned = []
         self._run_patches(lambda argv, **kw: spawned.append(argv) or _FakeProc(argv))
-        c, samples = harvest.sign_file(path, 5 * 3600.0)
+        c, samples = harvest.sign_file(path)
         self.assertEqual((c, samples), (None, None))
         self.assertEqual(spawned, [], "ffmpeg never ran")
         row = harvest._load(harvest.LEDGER, {})[key]
@@ -300,19 +316,41 @@ class SignFileWritesTheRow(_SignerCase):
         path = self._feed(key, sidecar={"duration_s": None})
         self._store_on()
         self._run_patches(fake_decode(pcm=_pcm((4 * 3600 + 60) * SR)))
-        c, samples = harvest.sign_file(path, None)
+        c, samples = harvest.sign_file(path)
         self.assertEqual((c, samples), (None, None))
         row = harvest._load(harvest.LEDGER, {})[key]
         self.assertEqual((row["status"], row["reason"]), ("delayed", "too_long"))
         self.assertEqual(self.put, [])
         self.assertFalse(os.path.exists(os.path.join(self.chroma_dir, key + ".npy")))
 
+    def test_an_undeclared_over_long_file_is_stopped_at_the_cap_not_decoded_whole(self):
+        """The spool's own backstop: a sidecar that declares no length closes the first door,
+        so the decode in full is the only thing that can answer the four-hour backstop -- and
+        before the bound, a 20-hour file spooled every hour of itself (4.6 GB) before the
+        refusal. Once the spool passes the cap the verdict is made, so ffmpeg is stopped and
+        the measured-mark refusal speaks it: nothing is truncated, and a file with no claim
+        costs the cap to refuse, not its whole length."""
+        key = _key("https://y/spooling")
+        path = self._feed(key, sidecar={"duration_s": None})
+        order = []
+        self._store_on()
+        self._run_patches(fake_slow_decode([_pcm(2 * SR), _pcm(2 * SR)], order=order))
+        with mock.patch.object(harvest, "MAX_DURATION_S", 3):   # a three-second cap, for the test
+            c, samples = harvest.sign_file(path)
+        self.assertEqual((c, samples), (None, None))
+        self.assertIn("ffmpeg", order, "the decode was stopped once the spool passed the cap")
+        row = harvest._load(harvest.LEDGER, {})[key]
+        self.assertEqual((row["status"], row["reason"]), ("delayed", "too_long"))
+        self.assertIn("too long", harvest._LAST_CHILD["error"])
+        self.assertFalse(os.path.exists(harvest.JOBS) and os.listdir(harvest.JOBS),
+                         "the spool was swept with the job")
+
     def test_a_failed_decode_is_a_verdict_not_a_crash(self):
         key = _key("https://y/corrupt")
         path = self._feed(key)
         self._store_on()
         self._run_patches(fake_decode(rc=1, stderr=b"pipe:0: Invalid data found\n"))
-        c, samples = harvest.sign_file(path, 60.0)
+        c, samples = harvest.sign_file(path)
         self.assertEqual((c, samples), (None, None))
         row = harvest._load(harvest.LEDGER, {})[key]
         self.assertEqual((row["status"], row["reason"]), ("delayed", "decode_failed"))
@@ -323,7 +361,7 @@ class SignFileWritesTheRow(_SignerCase):
         self._store_on()
         self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
         with mock.patch.object(harvest.cache_budget, "reserve", lambda *a, **k: False):
-            c, samples = harvest.sign_file(path, 60.0)
+            c, samples = harvest.sign_file(path)
         self.assertEqual((c, samples), (None, None))
         row = harvest._load(harvest.LEDGER, {})[key]
         self.assertEqual((row["status"], row["reason"]), ("delayed", "no_space"))
@@ -344,7 +382,7 @@ class SignFileWritesTheRow(_SignerCase):
             self.put.append((os.path.basename(p), k))
             return "etag-abc" if k.endswith(".npy") else None
         with mock.patch.object(harvest.sigstore, "put", _flaky_sidecar):
-            c, samples = harvest.sign_file(path, 60.0, issues=issues)
+            c, samples = harvest.sign_file(path, issues=issues)
         self.assertEqual((c, samples), (None, None))
         self.assertEqual(harvest._load(harvest.LEDGER, {}), {}, "no row was written")
         self.assertTrue(any("did not upload" in r["issue"] for r in issues))
@@ -352,7 +390,7 @@ class SignFileWritesTheRow(_SignerCase):
         todo, _covered = harvest.scan_directories(harvest._load(harvest.LEDGER, {}))
         self.assertEqual([r["key"] for r in todo], [key])
         # and the next sign, with both uploads landing, writes the row
-        c, _samples = harvest.sign_file(path, 60.0, issues=issues)
+        c, _samples = harvest.sign_file(path, issues=issues)
         self.assertIsNotNone(c)
         row = harvest._load(harvest.LEDGER, {})[key]
         self.assertEqual(row["status"], "signed")
@@ -369,7 +407,7 @@ class SignFileWritesTheRow(_SignerCase):
         self._store_on()
         self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
         with mock.patch.object(harvest.sigstore, "put", lambda p, k: None):
-            c, samples = harvest.sign_file(path, 60.0, issues=issues)
+            c, samples = harvest.sign_file(path, issues=issues)
         self.assertEqual((c, samples), (None, None))
         self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
         self.assertTrue(any("the signature did not upload" in r["issue"] for r in issues))
@@ -384,7 +422,7 @@ class SignFileWritesTheRow(_SignerCase):
         path = self._feed(key)
         self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
         with mock.patch.object(harvest.sigstore, "enabled", lambda: False):
-            c, samples = harvest.sign_file(path, 60.0)
+            c, samples = harvest.sign_file(path)
         self.assertIsNotNone(c)
         row = harvest._load(harvest.LEDGER, {})[key]
         self.assertEqual((row["status"], row["uploaded_etag"]), ("signed", None))
@@ -398,7 +436,7 @@ class SignFileWritesTheRow(_SignerCase):
         path = self._feed(key)
         issues = []
         self._run_patches(fake_decode(vanish=path, rc=1))
-        c, samples = harvest.sign_file(path, 60.0, issues=issues)
+        c, samples = harvest.sign_file(path, issues=issues)
         self.assertEqual((c, samples), (None, None))
         self.assertEqual(harvest._load(harvest.LEDGER, {}), {}, "no row was written")
         self.assertEqual(self.put, [])
@@ -411,7 +449,7 @@ class SignFileWritesTheRow(_SignerCase):
         for _ in range(2):
             self._feed(key, name=key + ".mp3")      # the feeder puts it back...
             self._run_patches(fake_decode(vanish=os.path.join(self.audio, key + ".mp3"), rc=1))
-            harvest.sign_file(os.path.join(self.audio, key + ".mp3"), 60.0, issues=issues)
+            harvest.sign_file(os.path.join(self.audio, key + ".mp3"), issues=issues)
         self.assertEqual(len([r for r in issues if "left while" in r["issue"]]), 1)
 
     def test_a_stop_is_never_a_verdict(self):
@@ -420,7 +458,7 @@ class SignFileWritesTheRow(_SignerCase):
         self._run_patches(fake_slow_decode([_pcm(SR), _pcm(SR)]))
         harvest._STOP["signum"] = signal.SIGTERM     # the flag, as the handler raises it
         try:
-            c, samples = harvest.sign_file(path, 60.0)
+            c, samples = harvest.sign_file(path)
         finally:
             harvest._STOP["signum"] = 0
         self.assertEqual((c, samples), (None, None))
@@ -432,7 +470,7 @@ class SignFileWritesTheRow(_SignerCase):
         os.unlink(os.path.join(self.audio, key + ".json"))
         spawned = []
         self._run_patches(lambda argv, **kw: spawned.append(argv) or _FakeProc(argv))
-        c, samples = harvest.sign_file(path, 60.0)
+        c, samples = harvest.sign_file(path)
         self.assertEqual((c, samples), (None, None))
         self.assertEqual(spawned, [])
         self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
@@ -450,6 +488,20 @@ class TheScan(_SignerCase):
         self.assertEqual(todo, [])
         self.assertEqual(covered, [])
         self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
+
+    def test_a_part_file_is_skipped_silently(self):
+        """A `<key>.mp3.part` is a download still in progress -- routine feeder state, not a
+        feeder bug. The stem-shape check would otherwise refuse it by name, once per run,
+        for as long as the download takes."""
+        key = _key("https://y/in-progress")
+        with open(os.path.join(self.audio, key + ".mp3.part"), "wb") as fh:
+            fh.write(_pcm(SR))
+        with open(os.path.join(self.audio, key + ".json"), "w") as fh:
+            json.dump({"key": key, "fed_at": "now"}, fh)
+        issues = []
+        todo, covered = harvest.scan_directories({}, issues=issues)
+        self.assertEqual((todo, covered), ([], []))
+        self.assertEqual(issues, [], "an unfinished download earns no refusal")
 
     def test_a_subdirectory_file_is_never_read(self):
         key = _key("https://y/buried")
@@ -493,7 +545,7 @@ class TheScan(_SignerCase):
         issues = []
         spawned = []
         self._run_patches(lambda argv, **kw: spawned.append(argv) or _FakeProc(argv))
-        c, samples = harvest.sign_file(path, 60.0, issues=issues)
+        c, samples = harvest.sign_file(path, issues=issues)
         self.assertEqual((c, samples), (None, None))
         self.assertEqual(spawned, [])
         self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
@@ -552,6 +604,26 @@ class TheScan(_SignerCase):
                          [_key("https://y/old"), _key("https://y/new")])
         self.assertEqual(covered, [])
 
+    def test_one_key_in_two_directories_is_proposed_once_oldest_copy_first(self):
+        """A row covers only one file's bytes, so two differing copies of one key can never
+        both be satisfied; the scan proposes one candidate per key -- the oldest copy, so a
+        pass's choice is deterministic -- and the feeder that leaves two copies must take
+        one of them away."""
+        other = os.path.join(self.tmp, "more-audio")
+        os.makedirs(other)
+        harvest.HARVEST_DIRS = self.audio + os.pathsep + other
+        key = _key("https://y/twice")
+        old = self._feed(key, mtime=1000)
+        new = os.path.join(other, key + ".mp3")
+        with open(new, "wb") as fh:
+            fh.write(_pcm(SR))
+        os.utime(new, (2000, 2000))
+        with open(os.path.join(other, key + ".json"), "w") as fh:
+            json.dump({"key": key, "fed_at": "now"}, fh)
+        todo, covered = harvest.scan_directories({})
+        self.assertEqual([r["key"] for r in todo], [key])
+        self.assertEqual(todo[0]["path"], old)
+
     def test_a_row_that_covers_the_file_means_no_sign(self):
         key = _key("https://y/done")
         path = self._feed(key)
@@ -585,17 +657,6 @@ class TheScan(_SignerCase):
         todo, covered = harvest.scan_directories({key: row})
         self.assertEqual([r["key"] for r in todo], [key])
         self.assertEqual(covered, [])
-
-    def test_the_sidecars_duration_is_carried_validated(self):
-        key = _key("https://y/duration")
-        self._feed(key, sidecar={"duration_s": 61})
-        for bad in (True, "an hour", 0, -30):
-            with self.subTest(bad=bad):
-                self._feed(_key("https://y/bad-%r" % (bad,)), sidecar={"duration_s": bad})
-        todo, _ = harvest.scan_directories({})
-        self.assertEqual(sorted(str(r["duration_s"]) for r in todo), ["61.0", "None", "None",
-                                                                    "None", "None"],
-                         "a claim that is not a length makes no claim")
 
     def test_only_the_top_level_of_each_directory_is_read(self):
         """`:`-separated directories, each its own top level."""
@@ -635,6 +696,10 @@ class TheLedger(_SignerCase):
                 self.assertIsNone(row["signed_at"], "when it was signed is not known")
                 self.assertEqual(row["uploaded_etag"], "e-%s" % key[:6],
                                   "the object is there: the seed's evidence is the listing")
+                # and nothing the sidecar would have carried either: a seeded row has never
+                # seen a sidecar, and the contract says so
+                for field in ("url", "title", "artist", "duration_s"):
+                    self.assertIsNone(row[field])
 
     def test_a_gone_object_loses_its_etag(self):
         key = "u" + "a" * 20
@@ -697,6 +762,31 @@ class TheLedger(_SignerCase):
                          "nothing was dropped over a loss that size")
         self.assertIn("sig_alert", state)
         self.assertTrue(any(r.get("issue", "").startswith("ledger:") for r in state["issues"]))
+
+    def test_a_healed_store_stands_the_alert_down(self):
+        """The alert is standing, not permanent: a start with a mis-listed bucket raises it,
+        and the store that heals must bring it down -- or the page reports a broken store
+        forever, and an operator re-fixes a configuration that is already fixed. Any reconcile
+        that does not report clears it."""
+        keys = [("u" + ("%02d" % i) * 10) for i in range(10)]
+        rows = {k: harvest._row(k, 1, 1.0, "signed", None, "then", "e-%s" % k, {})
+                for k in keys}
+        harvest._save(harvest.LEDGER, rows)
+        state = {"issues": []}
+        # the listing holds only one of the ten: the store broke, not the rows
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900: self._objects(keys[0] + ".npy")):
+            first = harvest.reconcile_ledger(state)
+        self.assertTrue(first["reported"])
+        self.assertIn("sig_alert", state)
+        # the configuration is fixed: the next start's listing holds every object again
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900:
+                               self._objects(*(k + ".npy" for k in keys))):
+            second = harvest.reconcile_ledger(state)
+        self.assertFalse(second["reported"])
+        self.assertTrue(second["cleared"], "the loss is gone, and the alert went with it")
+        self.assertNotIn("sig_alert", state)
 
     def test_the_cap_is_env_overridable_for_a_deliberate_drop(self):
         key = "u" + "a" * 20
@@ -794,8 +884,8 @@ class SignOneIsTheHandTool(_SignerCase):
                                {"seeded": 0, "dropped": 0, "restored": 0, "reported": False,
                                 "cleared": False, "why": ""}), \
                 mock.patch.object(harvest, "sign_file",
-                                  side_effect=lambda p, e=None, issues=None:
-                                      calls.append((p, e)) or (None, None)) as sign:
+                                  side_effect=lambda p, issues=None:
+                                      calls.append(p) or (None, None)) as sign:
             argv = ["harvest.py", "--sign-one", key]
             with mock.patch.object(sys, "argv", argv), \
                     contextlib.redirect_stdout(io.StringIO()) as out:
@@ -805,6 +895,27 @@ class SignOneIsTheHandTool(_SignerCase):
         self.assertEqual(calls[0], "reconcile", "the hand tool reconciles first, like a run")
         self.assertEqual(harvest._load(harvest.LEDGER, {}), {},
                          "the patched sign_file wrote nothing; the lock was the point")
+
+    def test_a_hand_sign_persists_the_alert_it_raises(self):
+        """A hand sign reconciles like a run, and the alert a reconcile raises is standing
+        state, not this command's output: it must reach the state file even when the key turns
+        out to be absent and the tool returns early -- or a store that broke between runs
+        leaves the page unwarned by the one writer that saw it."""
+        keys = [("u" + ("%02d" % i) * 10) for i in range(10)]
+        rows = {k: harvest._row(k, 1, 1.0, "signed", None, "then", "e-%s" % k, {})
+                for k in keys}
+        harvest._save(harvest.LEDGER, rows)
+        objects = {keys[0] + ".npy": "e-1"}        # one of ten: the store broke, not the rows
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900: objects), \
+                mock.patch.object(sys, "argv",
+                                  ["harvest.py", "--sign-one", _key("https://y/absent")]), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            harvest.main()
+        self.assertIn("no file for key", out.getvalue())
+        state = harvest._load(harvest.STATE, {})
+        self.assertIn("sig_alert", state,
+                      "the alert survived the early return that named the missing key")
 
     def test_it_refuses_while_a_writer_holds_the_lock(self):
         key = _key("https://y/hand")
@@ -835,7 +946,7 @@ class TheHarvesterOwnsNothingButItsOwnFiles(_SignerCase):
         before = sorted(os.listdir(self.audio))
         self._store_on()
         self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
-        c, samples = harvest.sign_file(path, 60.0)
+        c, samples = harvest.sign_file(path)
         samples = None
         self.assertEqual(sorted(os.listdir(self.audio)), before,
                          "the audio and its sidecar are exactly as the feeder left them")
@@ -847,7 +958,7 @@ class TheHarvesterOwnsNothingButItsOwnFiles(_SignerCase):
         before = sorted(os.listdir(self.audio))
         self._store_on()
         self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
-        harvest.sign_file(path, 3600.0)
+        harvest.sign_file(path)
         self.assertEqual(sorted(os.listdir(self.audio)), before)
 
     def test_no_code_path_builds_a_ytdlp_argv(self):
@@ -911,6 +1022,46 @@ class TheLoopSignsAndScores(_SignerCase):
         self.assertTrue(naps)
         self.assertEqual(sorted(os.listdir(self.audio)),
                          sorted([key + ".mp3", key + ".json"]))
+
+    def test_a_sidecar_landed_between_the_scan_and_the_sign_is_the_one_weighed(self):
+        """The re-offer race: the scan can list a directory in the window between a
+        re-offered file's new bytes and its new sidecar, and the old sidecar's claim must not
+        become the new file's verdict. The length check weighs the sidecar as it reads at
+        sign time -- and a wrong `length_mismatch` would be worse than a wrong skip, because
+        the row carries the new bytes' own size and mtime and would cover the file for good.
+        (The contract's half of the rule: take the old sidecar away before the new audio
+        lands, docs/HARVEST_FEED.md.)"""
+        key = _key("https://y/re-offered")
+        path = self._feed(key, sidecar={"duration_s": 3600})   # old sidecar, new bytes
+        harvest._save(harvest.RULINGS, {})
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))  # the 60 s the file really is
+        real_scan = harvest.scan_directories
+
+        def _scan_then_the_new_sidecar_lands(ledger, issues=None, said=None):
+            todo, covered = real_scan(ledger, issues=issues, said=said)
+            with open(os.path.join(self.audio, key + ".json"), "w") as fh:
+                json.dump({"key": key, "url": "https://y/x", "title": "a set",
+                           "artist": "someone", "duration_s": 60.0,
+                           "fed_at": "2026-09-19T00:00:00+00:00"}, fh)
+            return todo, covered
+
+        _exc, naps, _nap = self._run(stop_after_naps=1)
+        with mock.patch.object(harvest, "scan_directories",
+                               _scan_then_the_new_sidecar_lands), \
+                mock.patch.object(harvest, "queries", lambda state=None: []), \
+                mock.patch.object(harvest, "_remote_objects",
+                                  lambda max_age_s=900: None), \
+                mock.patch.object(harvest, "_nap", _nap), \
+                mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
+                mock.patch.object(harvest.memwatch, "allocator_canary",
+                                  lambda *a, **k: (0, 0, None)):
+            harvest.run(None)
+        row = harvest._load(harvest.LEDGER, {})[key]
+        self.assertEqual((row["status"], row["reason"]), ("signed", None),
+                         "the claim weighed was the one beside the file at sign time, not "
+                         "the stale copy the scan read")
+        self.assertEqual(row["duration_s"], 60.0,
+                         "and the row carries the sidecar the sign weighed")
 
     def test_the_second_pass_counts_the_covered_file_once(self):
         key = _key("https://y/counted")

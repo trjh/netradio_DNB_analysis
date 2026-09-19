@@ -41,6 +41,8 @@ every object already in the signature bucket is this rule, and it never changes.
 * The key's shape is checked: `u` followed by 20 hex characters. A file whose stem is not a
   key's shape is refused, because a signature filed under any other name is invisible to the
   pool's own listing.
+* A name ending in `.part` is skipped, whatever its stem, with no row: it is the usual mark
+  of a download still in progress — feeder state, not a feeder bug.
 
 ## The sidecar
 
@@ -59,10 +61,10 @@ take the file for unfinished).
 
 **No sidecar, no signature.** A file without a sidecar is not complete, and the harvester
 does not read it, sign it, or record it — the sidecar is how the harvester knows the feed is
-finished. Two sidecars are refused outright, with no row and a row in the issues list, so a
-feeder bug is visible rather than silent: one whose `key` differs from the audio file's stem,
-and one missing its required `fed_at`. A torn or unreadable sidecar is neither — it is the
-mid-write state again, retried on the next pass.
+finished. Two sidecar errors are refused outright, so a feeder bug is visible rather than
+silent — no ledger row, one row in the issues list: one whose `key` differs from the audio
+file's stem, and one missing its required `fed_at`. A torn or unreadable sidecar is neither —
+it is the mid-write state again, retried on the next pass.
 
 ## What the harvester does with a file
 
@@ -95,6 +97,15 @@ the four-hour backstop applies to it.
 **A file that changes is signed again.** A file whose size or modification time no longer
 matches its row is re-signed, whatever the row said before — so a re-cut part can be offered
 again under the same key, and a `no_space` delay is retried without any action from the feed.
+
+**A re-offer takes the old sidecar away first.** When you replace a file under a key that
+already has a sidecar, remove the old sidecar before the new audio's final rename, and write
+the new sidecar after it. In the window between the two, the old sidecar would vouch for
+bytes it never described: the harvester reads the pair as a finished feed, and its length
+check can pin a wrong `length_mismatch` on the new file — a verdict whose row then covers
+those bytes for good. With the old sidecar gone, the file reads as unfinished for exactly
+that window, and the first complete pair the harvester can see is the new audio with its own
+sidecar.
 
 ## The ledger
 
@@ -130,9 +141,10 @@ written only by the harvester.
 | `url`, `title`, `artist`, `duration_s` | carried from the sidecar, unchanged |
 
 **The ledger is seeded at the harvester's first start**: one `signed` row for every key the
-signature bucket already holds, with `size`, `mtime` and `signed_at` empty — so the ledger is
-the complete record of the pool from its first day. On every later start the rows are
-reconciled against the bucket's listing: a `signed` row whose object is gone loses its
+signature bucket already holds, with `size`, `mtime`, `signed_at`, `url`, `title`, `artist`
+and `duration_s` all empty — a seeded row has no file to name and no sidecar to carry — so the
+ledger is the complete record of the pool from its first day. On every later start the rows
+are reconciled against the bucket's listing: a `signed` row whose object is gone loses its
 `uploaded_etag`, and a `signed` row missing its etag whose object is present gains it.
 
 ### What a feed reads
@@ -142,8 +154,10 @@ The ledger is the one thing the feed reads back:
 * **`signed` with an `uploaded_etag`** — the signature and its sidecar are in the bucket; the
   file is done with.
 * **`signed` without an `uploaded_etag`** — the signature object is not in the bucket: the
-  reconciliation found it gone (and the harvester never writes such a row for a live sign —
-  a sign whose upload failed gets no row and is tried again). The key can be fed again.
+  reconciliation found it gone, or the signer is running with no store configured and
+  signed locally. With the store configured the harvester never writes this row for a live
+  sign — a sign whose upload failed gets no row and is tried again. The key can be fed
+  again.
 * **`delayed`, any reason but `no_space`** — a verdict on the file as fed. Feed the key again
   only when the file would differ: a re-cut part has a new size and modification time, and the
   harvester signs a changed file again.

@@ -119,8 +119,8 @@ mark: one row per key, `signed` or `delayed` with a reason. The full contract, w
 whatever fills the directories (the key encoding, the sidecar schema, the completeness rule,
 the ledger and what a feed reads from it), is
 [docs/HARVEST_FEED.md](HARVEST_FEED.md). The harvester never reads a queue or an index to
-decide what to work on, and nothing in this repo fetches from the web: what arrives in the
-directories is signed; what never arrives is not missed.
+decide what to work on, and nothing that runs in this repo fetches from the web: what arrives
+in the directories is signed; what never arrives is not missed.
 
 **The harvester's caches live on the machine's cache policy.** The signature working cache and
 the excerpt board (`chroma` and `candidates`) are no longer fixed paths: each lives under
@@ -163,8 +163,9 @@ contract the harvester seeds one `signed` row per key the bucket already holds (
 listing was the only record of what is signed), and on every start it reconciles the rows
 against that listing: a `signed` row whose object is gone loses its `uploaded_etag`, so the
 feeder feeds that key again. Past a safety cap (`NETRADIO_RECONCILE_DROP_CAP`, default 10% of
-the signed corpus) the reconciliation **reports** — a standing `sig_alert` in the state — and
-touches nothing: a mass drop means the store broke, not the rows, and would put the whole pool
+the signed corpus) the reconciliation **reports** — a standing `sig_alert` in the state, one
+that stands down by itself on the first start that finds the loss gone — and touches
+nothing: a mass drop means the store broke, not the rows, and would put the whole pool
 back on the feeder's list over a configuration fault. **One writer, enforced:** both writer
 paths (`--run`, `--sign-one`) hold the same flock (`harvest.WRITER_LOCK`, under its historic
 `collector.lock` name) for their lifetime — a second writer, including the hand tool under a

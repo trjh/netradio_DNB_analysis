@@ -189,7 +189,7 @@ class ChildBoundary(unittest.TestCase):
             return _FakeChild(argv)
 
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
-            harvest.sign_file(self.path, 60.0)
+            harvest.sign_file(self.path)
 
         self.assertEqual(seen["argv"][0], sys.executable)
         self.assertTrue(seen["argv"][1].endswith("harvest.py"))
@@ -217,7 +217,7 @@ class ChildBoundary(unittest.TestCase):
             return _FakeChild(argv)
 
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
-            harvest.sign_file(path, 60.0)
+            harvest.sign_file(path)
         return " ".join(seen["argv"])
 
     def test_the_child_command_line_never_says_run(self):
@@ -254,7 +254,7 @@ class ChildBoundary(unittest.TestCase):
                                   lambda *a, **k: called.append(a)), \
                 mock.patch.object(harvest, "_decode_and_sign",
                                   return_value={"ok": False, "error": "ran in process"}) as dec:
-            err = harvest.sign_file(self.path, 60.0)
+            err = harvest.sign_file(self.path)
         self.assertEqual(err, (None, None))
         self.assertEqual(dec.call_count, 1)
         self.assertEqual(called, [])
@@ -273,7 +273,7 @@ class ChildBoundary(unittest.TestCase):
 
         with mock.patch.dict(os.environ, {"MallocLargeCache": "1"}), \
                 mock.patch.object(harvest.subprocess, "Popen", _popen):
-            harvest.sign_file(self.path, 60.0)
+            harvest.sign_file(self.path)
         self.assertEqual(seen["env"]["MallocLargeCache"], "1")
 
     def test_success_returns_a_memmap_and_leaves_no_files_behind(self):
@@ -284,7 +284,7 @@ class ChildBoundary(unittest.TestCase):
                                                    "seconds": 0.25, "peak_mb": 901.5,
                                                    "footprint_mb": 590.0},
                                                   chroma=chroma, pcm=pcm)):
-            c, samples = harvest.sign_file(self.path, 60.0)
+            c, samples = harvest.sign_file(self.path)
 
         self.assertTrue(np.array_equal(c, chroma))
         self.assertEqual(c.dtype, np.dtype("float32"))
@@ -306,7 +306,7 @@ class ChildBoundary(unittest.TestCase):
         with mock.patch.object(harvest.subprocess, "Popen",
                                self._child_writes({"ok": True, "error": None, "reason": None},
                                                   chroma=chroma, pcm=pcm)):
-            _c, samples = harvest.sign_file(self.path, 60.0)
+            _c, samples = harvest.sign_file(self.path)
 
         a = os.path.join(self.tmp, "a.wav")
         b = os.path.join(self.tmp, "b.wav")
@@ -328,7 +328,7 @@ class ChildBoundary(unittest.TestCase):
         with mock.patch.object(harvest.subprocess, "Popen",
                                self._child_writes({"ok": False, "reason": "decode_failed",
                                                    "error": err})):
-            c, samples = harvest.sign_file(self.path, 60.0)
+            c, samples = harvest.sign_file(self.path)
         self.assertEqual((c, samples), (None, None))
         self.assertEqual(harvest._LAST_CHILD["reason"], "decode_failed")
 
@@ -337,7 +337,7 @@ class ChildBoundary(unittest.TestCase):
             return _FakeChild(argv, returncode=1,
                               stderr=b"Traceback (most recent call last):\nValueError: boom\n")
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
-            c, samples = harvest.sign_file(self.path, 60.0)
+            c, samples = harvest.sign_file(self.path)
         self.assertEqual((c, samples), (None, None))
         self.assertEqual(harvest._LAST_CHILD["error"], "child failed (exit 1): ValueError: boom")
 
@@ -345,7 +345,7 @@ class ChildBoundary(unittest.TestCase):
         def _popen(argv, **kwargs):
             return _FakeChild(argv, returncode=143)
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
-            self.assertEqual(harvest.sign_file(self.path, 60.0), (None, None))
+            self.assertEqual(harvest.sign_file(self.path), (None, None))
         self.assertEqual(harvest._LAST_CHILD["error"], harvest.STOPPED)
 
     def test_a_child_signalled_ALONE_still_raises_the_parents_flag(self):
@@ -356,7 +356,7 @@ class ChildBoundary(unittest.TestCase):
         self.assertFalse(harvest._stop_requested())
         with mock.patch.object(harvest.subprocess, "Popen",
                               lambda argv, **k: _FakeChild(argv, returncode=143)):
-            harvest.sign_file(self.path, 60.0)
+            harvest.sign_file(self.path)
         self.assertTrue(harvest._stop_requested())
         self.assertEqual(harvest._stop_name(), "SIGTERM")
 
@@ -365,7 +365,7 @@ class ChildBoundary(unittest.TestCase):
         harvest._STOP["signum"] = signal.SIGTERM
         with mock.patch.object(harvest.subprocess, "Popen",
                               lambda *a, **k: called.append(a)):
-            self.assertEqual(harvest.sign_file(self.path, 60.0), (None, None))
+            self.assertEqual(harvest.sign_file(self.path), (None, None))
         self.assertEqual(called, [])
 
     def test_a_signal_between_the_spawn_and_the_registration_still_reaches_the_child(self):
@@ -401,14 +401,14 @@ class ChildBoundary(unittest.TestCase):
             return _Racing(argv)
 
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
-            self.assertEqual(harvest.sign_file(self.path, 60.0), (None, None))
+            self.assertEqual(harvest.sign_file(self.path), (None, None))
         self.assertEqual(terminated, [True])
 
     def test_a_missing_result_file_is_a_failure_not_a_success(self):
         def _popen(argv, **kwargs):
             return _FakeChild(argv, returncode=0, stderr=b"segmentation fault\n")
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
-            harvest.sign_file(self.path, 60.0)
+            harvest.sign_file(self.path)
         self.assertTrue(harvest._LAST_CHILD["error"].startswith("child failed (exit 0): "))
 
     def test_the_escape_hatch_runs_the_decode_in_process(self):
@@ -420,7 +420,7 @@ class ChildBoundary(unittest.TestCase):
                                   lambda *a, **k: called.append(a) or _FakeChild(["x"])), \
                 mock.patch.object(harvest, "_decode_and_sign",
                                   return_value={"ok": False, "error": "in-process"}) as dec:
-            err = harvest.sign_file(self.path, 60.0)
+            err = harvest.sign_file(self.path)
         self.assertEqual(err, (None, None))
         self.assertEqual(dec.call_count, 1)
         self.assertEqual(called, [])
@@ -509,7 +509,7 @@ class NoSignatureFromABadDecode(unittest.TestCase):
             for name, value in patches.items():
                 setattr(harvest, name, value)
             os.environ["NETRADIO_HARVEST_CHILD"] = "0"     # the decode runs right here
-            return harvest.sign_file(self.path, 60.0)
+            return harvest.sign_file(self.path)
 
     def _assert_no_signature(self, result, error_contains):
         self.assertEqual(result, (None, None))
@@ -548,7 +548,7 @@ class NoSignatureFromABadDecode(unittest.TestCase):
                                   side_effect=lambda p, **k: (harvest._STOP.__setitem__(
                                       "signum", signal.SIGTERM), p.wait())[1]):
             os.environ["NETRADIO_HARVEST_CHILD"] = "0"
-            result = harvest.sign_file(self.path, 60.0)
+            result = harvest.sign_file(self.path)
         self.assertEqual(result, (None, None))
         self.assertEqual(harvest._LAST_CHILD["error"], "stopped")
 
@@ -951,7 +951,7 @@ class ASignatureEvictedBetweenRenameAndCommit(unittest.TestCase):
                 mock.patch.object(harvest.sigstore, "put",
                                   lambda path, key: self.put.append(key) or "etag"), \
                 mock.patch("os.replace", side_effect=racing_replace):
-            c, samples = harvest.sign_file(self.path, 60.0)
+            c, samples = harvest.sign_file(self.path)
         self.assertEqual((c, samples), (None, None))
         self.assertEqual(harvest._LAST_CHILD["reason"], "no_space")
         self.assertIn("did not survive its own landing", harvest._LAST_CHILD["error"])

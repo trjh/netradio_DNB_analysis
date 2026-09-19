@@ -464,7 +464,8 @@ Need-to-know:
 - The signature, and the sidecar beside it, are uploaded to the bucket as `<key>.npy` and
   `<key>.json` — the index the pool has never had.
 - A file whose size or modification time no longer matches its row is **signed again**: a
-  re-cut part can be offered under the same key and a `no_space` delay is retried in place.
+  re-cut part can be offered under the same key (the old sidecar goes before the new audio —
+  [docs/HARVEST_FEED.md](./docs/HARVEST_FEED.md)), and a `no_space` delay is retried in place.
 - Two files another process writes tell the harvester what not to do:
   `.harvest/rulings.json` (the retired set — the harvester **refuses to run without it**) and
   `.harvest/PAUSED` (the pause flag, noticed within ~20 s).
@@ -473,7 +474,7 @@ Need-to-know:
   sidecar's `duration_s` by more than `max(10 s, 2 %)` is `delayed` with `length_mismatch` —
   a hand-over that disagrees with its own label is not signed.
 - The harvester's own fetch leg is gone, with the queue read, the cookie handling and the
-  host pacing that went with it: nothing in this repo fetches from the web any more. What
+  host pacing that went with it: nothing that runs in this repo fetches from the web. What
   arrives in the directories is signed; what never arrives is not missed.
 
 The harvester runs on one machine, supervised by the peer repo's watchdog; it adopts a
