@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Cut every well-defined track OUT of the mix, reassembling across captures where it must.
 
-    . .venv/bin/activate && python scripts/extract_tracks.py --out ~/media/netradio-tracks
     . .venv/bin/activate && python scripts/extract_tracks.py --dry-run
+    . .venv/bin/activate && python scripts/extract_tracks.py
+
+The cuts land in the `stream_tracks` cache (below), as FLAC: the codec is picked from the
+output's extension, exactly as before -- only the extension changed, from the .wav the tool
+first wrote.
 
 Why
 ---
@@ -50,11 +54,64 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import cache_budget                              # noqa: E402  (the machine's one cache policy)
 from streamalign import audio as _audio          # noqa: E402
 from streamalign import groundtruth as _gt       # noqa: E402
 from streamalign import tracklist2017 as _tl     # noqa: E402
 
 MIN_S = 30.0
+
+# --- the tracks cache, on the machine's one cache policy ------------------------------------
+#
+# Every cut lands in the `stream_tracks` cache: the tracks as they played, reassembled across
+# captures -- derived from captures this repo already holds, and re-cut in minutes. The policy
+# bounds it: cap NETRADIO_STREAM_TRACKS_CACHE_GB (default 2 GB -- the flac set is a little over
+# that, so the oldest re-cuts rotate out and come back by re-cut), age
+# NETRADIO_STREAM_TRACKS_CACHE_MAX_AGE_DAYS (default 14 -- a calibration run is a day's work,
+# a re-cut is minutes), directory NETRADIO_STREAM_TRACKS_CACHE_DIR (default
+# $NETRADIO_CACHE_ROOT/stream_tracks). While NETRADIO_CACHE_ROOT is unset there is no default
+# directory at all: pass --out, or set the root in .env.
+STREAM_TRACKS_CACHE = "stream_tracks"
+STREAM_TRACKS_CACHE_GB = 2
+STREAM_TRACKS_CACHE_MAX_AGE_DAYS = 14
+
+
+def tracks_dir():
+    """The tracks cache's directory: NETRADIO_STREAM_TRACKS_CACHE_DIR, else
+    $NETRADIO_CACHE_ROOT/stream_tracks, else None (no --out default)."""
+    d = os.environ.get("NETRADIO_STREAM_TRACKS_CACHE_DIR", "").strip()
+    if d:
+        return os.path.expanduser(d)
+    root = cache_budget.root()
+    return os.path.join(root, "stream_tracks") if root else None
+
+
+def register_cache():
+    """Put the tracks cache on the one cache policy, reading the environment now. Returns the
+    record, or None while the policy is dark (NETRADIO_CACHE_ROOT unset) or the directory is
+    refused."""
+    # rank 8: of the caches sharing the policy's floor, the tracks give up entries after the
+    # decoded captures and signatures -- each one comes back by a re-cut. The literal name,
+    # not the constant above, so env_check.py's code scan sees the registration and counts
+    # its variable family as read.
+    return cache_budget.register("stream_tracks",
+                                 cap=int(STREAM_TRACKS_CACHE_GB * cache_budget.GB),
+                                 max_age=STREAM_TRACKS_CACHE_MAX_AGE_DAYS,
+                                 refill="re-extract", rank=8)
+
+
+register_cache()                  # at import: the wrapper sources .env before any import
+
+
+def _on_policy(out_path):
+    """True when a cut landing at `out_path` lands inside the registered tracks cache, so its
+    write goes through the policy. A --out outside the cache is the operator's own directory:
+    written as before, not accounted."""
+    d = cache_budget.dir_of(STREAM_TRACKS_CACHE)
+    if not d or not out_path:
+        return False
+    a, b = os.path.realpath(out_path), os.path.realpath(d)
+    return os.path.commonpath([a, b]) == b
 
 
 def imprecise(stem):
@@ -101,12 +158,29 @@ def plan(mb, me, places):
     return pieces, None
 
 
-def cut(stem, m_from, m_to, cstart, out_path):
+def cut(stem, m_from, m_to, cstart, out_path, account=True):
+    """Cut [m_from, m_to) of the master out of `stem` into `out_path`, as flac where the name
+    says flac (ffmpeg picks the codec from the extension; the argv names none).
+
+    Through the cache policy when the cut lands inside the registered tracks cache: `reserve`
+    first (the cut's length is not known until ffmpeg has run, so an unplanned one -- admitted
+    while the cache is under its cap) and `commit` after. A refusal (the disk past its floor,
+    the cap with nothing evictable) skips the cut and returns False.
+
+    `account=False` names this writer's own scratch: the reassembly's part files, written and
+    unlinked within the same pass, never committed -- exempt from the policy's door like any
+    writer's own half-made file."""
     src = _audio.find_audio_file(stem)
     lo = m_from - cstart
+    policy = account and _on_policy(out_path)
+    if policy and not cache_budget.reserve(STREAM_TRACKS_CACHE, None):
+        return False
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "%.4f" % lo,
                     "-t", "%.4f" % (m_to - m_from), "-i", src,
                     "-ac", "2", "-ar", "44100", out_path], check=True)
+    if policy:
+        cache_budget.commit(STREAM_TRACKS_CACHE, out_path)
+    return True
 
 
 def safe(name):
@@ -116,10 +190,16 @@ def safe(name):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", default=os.path.expanduser("~/media/netradio-tracks"))
+    ap.add_argument("--out", default=None,
+                    help="where the cuts land (default: the stream_tracks cache -- "
+                         "NETRUDIO_STREAM_TRACKS_CACHE_DIR, else $NETRADIO_CACHE_ROOT/stream_tracks)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--only", type=int, action="append")
     args = ap.parse_args()
+    args.out = args.out or tracks_dir()
+    if not args.out:
+        sys.exit("no tracks directory: set NETRADIO_CACHE_ROOT (or NETRADIO_STREAM_TRACKS_CACHE_DIR) "
+                 "in .env -- see .env.example -- or pass --out")
 
     meta = json.load(open(os.path.join(_gt.REPO_ROOT, "track-metadata.json")))
     tracks = meta.get("tracks", meta)
@@ -149,7 +229,7 @@ def main():
         if pieces is None:
             print("  %3s SKIP  %-42s %s" % (num, title[:42], why)); skipped += 1; continue
 
-        name = "%03d - %s.wav" % (int(num), safe(title))
+        name = "%03d - %s.flac" % (int(num), safe(title))
         out = os.path.join(args.out, name)
         tag = "" if len(pieces) == 1 else "  [%d pieces: %s]" % (
             len(pieces), " + ".join(p[0] for p in pieces))
@@ -162,19 +242,36 @@ def main():
 
         if len(pieces) == 1:
             stem, a, b = pieces[0]
-            cut(stem, a, b, starts[stem], out)
+            if not cut(stem, a, b, starts[stem], out):
+                print("  %3s SKIP  %-42s the cache policy refused the room (the disk is past "
+                      "its floor)" % (num, title[:42]))
+                skipped += 1
+                continue
         else:
+            # The reassembly writes its part files as this writer's own scratch -- never
+            # committed, unlinked in this same pass -- and lands the assembled track under the
+            # same gate a direct cut uses: one reserve before the final file, one commit after.
             parts = []
             for i, (stem, a, b) in enumerate(pieces):
-                p = out + ".part%d.wav" % i
-                cut(stem, a, b, starts[stem], p)
+                p = out + ".part%d.flac" % i
+                cut(stem, a, b, starts[stem], p, account=False)
                 parts.append(p)
             lst = out + ".txt"
             with open(lst, "w") as fh:
                 for p in parts:
                     fh.write("file '%s'\n" % p.replace("'", "'\\''"))
+            policy = _on_policy(out)
+            if policy and not cache_budget.reserve(STREAM_TRACKS_CACHE, None):
+                for p in parts + [lst]:
+                    os.unlink(p)
+                print("  %3s SKIP  %-42s the cache policy refused the room (the disk is past "
+                      "its floor)" % (num, title[:42]))
+                skipped += 1
+                continue
             subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0",
                             "-i", lst, "-c", "copy", out], check=True)
+            if policy:
+                cache_budget.commit(STREAM_TRACKS_CACHE, out)
             for p in parts + [lst]:
                 os.unlink(p)
         made += 1

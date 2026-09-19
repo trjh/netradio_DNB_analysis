@@ -99,8 +99,10 @@ def submit_result(url, ok, error=None, retry_later=False):
 
 
 def already_held(url):
-    """Fetched-once, split-world edition: the cache or the store has the signature."""
-    if os.path.exists(sig_path(url)):
+    """Fetched-once, split-world edition: the cache or the store has the signature. A dark
+    cache holds nothing locally (sig_path is None), so only the store can answer."""
+    path = sig_path(url)
+    if path and os.path.exists(path):
         return True
     return sigstore.enabled() and sigstore.have_remote(_sig_key(url))
 
@@ -234,6 +236,11 @@ def run():
     # this pid alone used to leave yt-dlp and ffmpeg running against a dead parent. The fetch
     # itself already runs in harvest.py's per-candidate child, so this is all this side needs.
     harvest.install_signal_handlers()
+    if harvest._chroma_dir() is None:
+        print("the signature cache is dark (NETRADIO_CACHE_ROOT unset, or the registration "
+              "refused): a fetched track's signature would have nowhere to live. Set "
+              "NETRADIO_CACHE_ROOT in .env (see .env.example) and start again.")
+        return
     os.makedirs(STATE_DIR, exist_ok=True)
     lock = open(LOCK, "w")
     try:

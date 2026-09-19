@@ -14,7 +14,10 @@ a pyflakes pass over the scripts — cheap, and it would have caught it. The res
 added alongside: the excerpt hard cap, and the bot-wall halt.
 """
 
+import json
 import os
+import shutil
+import time
 import unittest.mock
 import subprocess
 import sys
@@ -23,6 +26,8 @@ import unittest
 
 SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
 sys.path.insert(0, SCRIPTS)
+
+import cache_budget                                # noqa: E402  (the machine's one cache policy)
 
 try:
     import harvest
@@ -219,16 +224,50 @@ class EvictingAPurgedLead(unittest.TestCase):
         self.assertIn("keep-me", [m["url"] for m in state["matches"]])
 
 
+# The cache-policy names the policy tests save and restore around a test (the same set
+# tests/test_cache_budget.py uses): the `CACHE` family plus the machine-wide settings.
+CACHE_ENV = ("NETRADIO_CACHE_ROOT", "NETRADIO_DOWNLOAD_ROOT", "NETRADIO_DISK_MAX_PCT",
+             "NETRADIO_CACHE_EVENTS_DAYS")
+
+
 class ARulingSpendsTheExcerpt(unittest.TestCase):
     """The excerpt exists so a human can confirm or reject the lead by ear. Once they have --
     match, not-a-match, heard -- that purpose is spent, and only the 30-day TTL sweep would ever
     have reclaimed the audio. `drop_ruled_excerpts` reclaims it on the next pass instead.
 
     The LEAD must survive whole: the score is the record, the audio was only ever the evidence.
+    The deletion itself goes through the cache policy's door, so the excerpt board must be
+    registered over this test's directory (a throwaway root, put back afterwards).
     """
 
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        self._saved = {k: os.environ.get(k) for k in list(os.environ)
+                       if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
+        for k in self._saved:
+            os.environ.pop(k, None)
+        self.addCleanup(self._restore)
+        # The policy's root lives OUTSIDE the excerpt board (no cache may hold its own root),
+        # in a second throwaway directory.
+        self._root = tempfile.mkdtemp(prefix="candidates-policy-root-")
+        os.environ["NETRADIO_CACHE_ROOT"] = self._root
+        os.environ["NETRADIO_CANDIDATES_CACHE_DIR"] = self.dir
+        self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        harvest.register_caches()
+
+    def _restore(self):
+        cache_budget._REGISTRY.clear()
+        cache_budget._REGISTRY.update(self._registry[0])
+        cache_budget._STATS.clear()
+        cache_budget._STATS.update(self._registry[1])
+        for k in [k for k in list(os.environ)
+                  if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)]:
+            os.environ.pop(k, None)
+        os.environ.update(self._saved)
+        shutil.rmtree(self._root, ignore_errors=True)
 
     def _wav(self, name):
         path = os.path.join(self.dir, name)
@@ -273,6 +312,158 @@ class ARulingSpendsTheExcerpt(unittest.TestCase):
                                          "audio": self._wav("MT4-0.06-cccc.wav")}]}
         harvest.drop_ruled_excerpts(state, {"u1"})
         self.assertEqual(state["kept"], 0)
+
+
+@unittest.skipIf(harvest is None, "needs the librosa venv")
+class TheHarvestersCachesOnThePolicy(unittest.TestCase):
+    """The harvester's two caches, `chroma` and `candidates`, register on the machine's one
+    cache policy: their directories come from the same variable family every other cache
+    reads, the excerpt board gives up the WORST excerpt of a mystery first (the rule KEEP_TOP
+    applies to the board, not plain oldest-added), and the TTL sweep deletes through the
+    policy's door so every removal is recorded. While the root is unset there is no cache
+    directory at all -- never an unbounded fallback, which is the growth this ends."""
+
+    KB = 1000
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harvest-caches-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        saved = {k: os.environ.get(k) for k in list(os.environ)
+                 if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
+        for k in saved:
+            os.environ.pop(k, None)
+        self.addCleanup(self._restore_env, saved)
+        os.environ["NETRADIO_CACHE_ROOT"] = os.path.join(self.tmp, "root")
+        self.addCleanup(self._restore_registry, dict(cache_budget._REGISTRY), dict(cache_budget._STATS))
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        self.addCleanup(setattr, cache_budget, "_disk_usage", cache_budget._disk_usage)
+        cache_budget._disk_usage = self._fake_volume   # an empty volume: the floor never trips
+        harvest.register_caches()
+        self.chroma_dir = os.path.join(self.tmp, "root", "chroma")
+        self.keep_dir = os.path.join(self.tmp, "root", "candidates")
+
+    @staticmethod
+    def _restore_env(saved):
+        for k in [k for k in list(os.environ)
+                  if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)]:
+            os.environ.pop(k, None)
+        for k, v in saved.items():
+            os.environ[k] = v
+
+    @staticmethod
+    def _restore_registry(registry, stats):
+        cache_budget._REGISTRY.clear()
+        cache_budget._REGISTRY.update(registry)
+        cache_budget._STATS.clear()
+        cache_budget._STATS.update(stats)
+
+    def _fake_volume(self, _path):
+        return (100 * 1000 * self.KB, 0, 100 * 1000 * self.KB)
+
+    def _excerpt(self, name, size, age_s=0):
+        """A board entry: `MT<n>-<cost>-<hash>.wav`, at an age, holding `size` bytes."""
+        os.makedirs(self.keep_dir, exist_ok=True)
+        path = os.path.join(self.keep_dir, name)
+        with open(path, "wb") as fh:
+            fh.write(b"x" * size)
+        t = time.time() - age_s
+        os.utime(path, (t, t))
+        return path
+
+    def _events(self):
+        path = cache_budget.events_path()
+        if not os.path.isfile(path):
+            return []
+        with open(path) as fh:
+            return [json.loads(line) for line in fh]
+
+    def test_the_two_registrations(self):
+        rows = {r["name"]: r for r in cache_budget.status()["caches"]}
+        self.assertEqual(set(rows), {"chroma", "candidates"})
+        chroma, candidates = rows["chroma"], rows["candidates"]
+        # `chroma`: the signature working cache, refilled from the signature bucket by key
+        self.assertEqual((chroma["dir"], chroma["max_age_days"], chroma["order"]),
+                         (self.chroma_dir, 14, "oldest-added"))
+        self.assertEqual(chroma["cap"], cache_budget.DEFAULT_CAP)
+        self.assertEqual((chroma["refill"], chroma["rank"]), ("bucket:chroma/", 4))
+        # `candidates`: the excerpt board, the worst excerpt of a mystery first
+        self.assertEqual((candidates["dir"], candidates["order"]),
+                         (self.keep_dir, "by-score"))
+        self.assertEqual(candidates["cap"], 250 * cache_budget.MB)
+        self.assertEqual(candidates["max_age_days"], harvest.KEEP_TTL_DAYS)
+        self.assertEqual((candidates["refill"], candidates["rank"]), ("re-cut", 10))
+        # the module's path constants follow the registry
+        self.assertEqual((harvest.CACHE, harvest.KEEP), (self.chroma_dir, self.keep_dir))
+        self.assertEqual(harvest.sig_path("https://example.invalid/x"),
+                         os.path.join(self.chroma_dir, harvest._sig_key("https://example.invalid/x")))
+
+    def test_the_variable_family_overrides_every_setting_it_names(self):
+        os.environ["NETRADIO_CHROMA_CACHE_DIR"] = os.path.join(self.tmp, "elsewhere-chroma")
+        os.environ["NETRADIO_CHROMA_CACHE_MAX_AGE_DAYS"] = "7"
+        os.environ["NETRADIO_CANDIDATES_CACHE_DIR"] = os.path.join(self.tmp, "elsewhere-candidates")
+        os.environ["NETRADIO_CANDIDATES_CACHE_GB"] = "1"
+        harvest.register_caches()
+        rows = {r["name"]: r for r in cache_budget.status()["caches"]}
+        self.assertEqual(rows["chroma"]["dir"], os.path.join(self.tmp, "elsewhere-chroma"))
+        self.assertEqual(rows["chroma"]["max_age_days"], 7)
+        self.assertEqual(rows["candidates"]["dir"], os.path.join(self.tmp, "elsewhere-candidates"))
+        self.assertEqual(rows["candidates"]["cap"], 1 * cache_budget.GB)
+
+    def test_dark_without_a_root_neither_cache_exists_at_all(self):
+        os.environ.pop("NETRADIO_CACHE_ROOT")
+        harvest.register_caches()
+        self.assertFalse(cache_budget.registered("chroma"))
+        self.assertFalse(cache_budget.registered("candidates"))
+        self.assertIsNone(harvest._chroma_dir())
+        self.assertIsNone(harvest._keep_dir())
+        self.assertIsNone(harvest.sig_path("https://example.invalid/x"))
+
+    def test_an_excerpt_past_the_cap_evicts_the_worst_of_its_mystery_first(self):
+        # A board of MT4 excerpts whose WORST is the NEWEST file: a plain oldest-added order
+        # would keep the worst and drop the best; `by-score` must take the worst first.
+        self._excerpt("MT4-0.0500-best.wav", 200 * self.KB, age_s=20 * 86400)
+        self._excerpt("MT4-0.0600-middling.wav", 200 * self.KB, age_s=10 * 86400)
+        worst = self._excerpt("MT4-0.0650-worst.wav", 200 * self.KB, age_s=86400)
+        fresh = os.path.join(self.keep_dir, "MT4-0.0400-new.wav")
+        os.environ["NETRADIO_CANDIDATES_CACHE_GB"] = "0.0007"    # 700 KB: the board cannot hold it all
+        harvest.register_caches()
+        import numpy as np
+        self.assertTrue(harvest.write_excerpt(
+            np.zeros(int(10 * 16000), dtype="float32"), 5.0, fresh),
+            "an excerpt short of the cap and the floor must be kept")
+        self.assertFalse(os.path.exists(worst), "the worst excerpt of the mystery went first")
+        self.assertFalse(os.path.exists(os.path.join(self.keep_dir, "MT4-0.0600-middling.wav")))
+        self.assertTrue(os.path.exists(os.path.join(self.keep_dir, "MT4-0.0500-best.wav")),
+                        "the best excerpt outlives the worst, whatever their ages")
+        self.assertTrue(os.path.exists(fresh), "never the entry just written")
+        evictions = [e for e in self._events() if e["event"] == "evict"]
+        self.assertEqual([e["entry"] for e in evictions][:2],
+                         ["MT4-0.0650-worst.wav", "MT4-0.0600-middling.wav"],
+                         "the policy's own record of the order it evicted in")
+
+    def test_an_excerpt_older_than_30_days_is_evicted(self):
+        old = self._excerpt("MT4-0.0600-old.wav", 100, age_s=40 * 86400)
+        fresh = self._excerpt("MT4-0.0550-fresh.wav", 100)
+        harvest.sweep_excerpts()
+        self.assertFalse(os.path.exists(old))
+        self.assertTrue(os.path.exists(fresh))
+        removals = [e for e in self._events() if e["event"] == "remove"]
+        self.assertEqual([(e["entry"], e["reason"]) for e in removals],
+                         [("MT4-0.0600-old.wav", "expired")],
+                         "the sweep deletes through the policy, which records the reason")
+
+    def test_a_refused_excerpt_is_not_kept(self):
+        """The write the policy refuses (the disk past its floor) leaves nothing on disk, so
+        run() neither counts it as kept nor names it as the lead's audio: the lead survives."""
+        cache_budget._disk_usage = lambda _p: (100 * self.KB, 50 * self.KB, 50 * self.KB)
+        os.environ["NETRADIO_DISK_MAX_PCT"] = "0"
+        path = os.path.join(self.keep_dir, "MT4-0.0500-refused.wav")
+        import numpy as np
+        self.assertFalse(harvest.write_excerpt(np.zeros(16000, dtype="float32"), 0.5, path))
+        self.assertFalse(os.path.exists(path))
+        self.assertTrue([e for e in self._events() if e["event"] == "refuse"],
+                        "the refusal is recorded like every other policy answer")
 
 
 if __name__ == "__main__":
@@ -330,7 +521,11 @@ class ANewMysteryMustSeeTheWholeCorpus(unittest.TestCase):
     def test_it_knows_what_it_has_already_scored(self):
         state, q = self._state(), {"done": ["u1", "u2"], "pending": []}
         state["scored"]["4:fp"] = [harvest._sig_key("u1")]
-        with unittest.mock.patch("os.path.exists", return_value=True):
+        # The signature cache has no directory while the policy is dark, so sig_path would be
+        # None and every candidate would read as unheld; CACHE is patched to a stand-in
+        # directory and os.path.exists is made to say the signature is there.
+        with unittest.mock.patch("os.path.exists", return_value=True), \
+             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"):
             pairs = harvest.unscored_pairs(state, q, set(), [(4, None, "4:fp")])
         self.assertEqual([p[3] for p in pairs], ["u2"])      # u1 already met MT4; only u2 is left
 
@@ -338,7 +533,8 @@ class ANewMysteryMustSeeTheWholeCorpus(unittest.TestCase):
         """The MT8 case: its clip lands, and every signature we already hold must meet it."""
         state, q = self._state(), {"done": ["u1", "u2", "u3"], "pending": []}
         state["scored"]["4:fp"] = [harvest._sig_key(u) for u in ("u1", "u2", "u3")]   # MT4 is done
-        with unittest.mock.patch("os.path.exists", return_value=True):
+        with unittest.mock.patch("os.path.exists", return_value=True), \
+             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"):
             pairs = harvest.unscored_pairs(state, q, set(),
                                            [(4, None, "4:fp"), (8, None, "8:fp")])
         self.assertEqual(sorted(p[3] for p in pairs), ["u1", "u2", "u3"])          # all, for MT8
@@ -348,7 +544,8 @@ class ANewMysteryMustSeeTheWholeCorpus(unittest.TestCase):
         """'not a match' means not a match for ANYTHING we are waiting for. Without this, the day
         MT8 lands, every record Tim already rejected comes straight back at him."""
         state, q = self._state(), {"done": ["keep", "rejected"], "pending": []}
-        with unittest.mock.patch("os.path.exists", return_value=True):
+        with unittest.mock.patch("os.path.exists", return_value=True), \
+             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"):
             pairs = harvest.unscored_pairs(state, q, {"rejected"}, [(8, None, "8:fp")])
         self.assertEqual([p[3] for p in pairs], ["keep"])
 
@@ -378,7 +575,8 @@ class ABetterClipMustNotInheritTheOldOnesVerdicts(unittest.TestCase):
         state = {"matches": [], "scored": {"7:oldclip123": [harvest._sig_key(u)
                                                             for u in ("u1", "u2", "u3")]}}
         q = {"done": ["u1", "u2", "u3"], "pending": []}
-        with unittest.mock.patch("os.path.exists", return_value=True):
+        with unittest.mock.patch("os.path.exists", return_value=True), \
+             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"):
             pairs = harvest.unscored_pairs(state, q, set(), self._q(7, "NEWclip456"))
         self.assertEqual(sorted(p[3] for p in pairs), ["u1", "u2", "u3"],
                          "a new clip must ask the WHOLE corpus again")
@@ -386,7 +584,8 @@ class ABetterClipMustNotInheritTheOldOnesVerdicts(unittest.TestCase):
     def test_the_same_clip_is_not_re_scored(self):
         state = {"matches": [], "scored": {"7:same": [harvest._sig_key("u1")]}}
         q = {"done": ["u1"], "pending": []}
-        with unittest.mock.patch("os.path.exists", return_value=True):
+        with unittest.mock.patch("os.path.exists", return_value=True), \
+             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"):
             self.assertEqual(harvest.unscored_pairs(state, q, set(), self._q(7, "same")), [])
 
     def test_forget_drops_the_leads_and_the_pairings(self):

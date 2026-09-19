@@ -27,6 +27,8 @@ import shutil
 import subprocess
 import tempfile
 
+import cache_budget                                 # the chroma cache's policy: deletions go through it
+
 # The one seam through which every aws invocation passes — swappable in tests.
 _run = subprocess.run
 
@@ -201,7 +203,11 @@ def evictable(path, key, scored, qkeys):
 
 
 def evict_cold(cache_dir, scored, qkeys):
-    """Delete every cold signature from the working cache. Returns (evicted, bytes_freed)."""
+    """Delete every cold signature from the working cache. Returns (evicted, bytes_freed).
+
+    Each deletion goes through the cache policy's one door, so it is refused (and recorded)
+    for a path outside the registered `chroma` cache, and while the policy is dark nothing is
+    deleted at all -- the callers refuse to run dark, so that is a belt, not a behaviour."""
     evicted, freed = 0, 0
     try:
         names = sorted(os.listdir(cache_dir))
@@ -214,9 +220,9 @@ def evict_cold(cache_dir, scored, qkeys):
         if evictable(path, name, scored, qkeys):
             try:
                 size = os.path.getsize(path)
-                os.remove(path)
             except OSError:
                 continue
-            evicted += 1
-            freed += size
+            if cache_budget.remove("chroma", path, "cold-verified"):
+                evicted += 1
+                freed += size
     return evicted, freed
