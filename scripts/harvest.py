@@ -77,6 +77,15 @@ STATE = os.path.join(STATE_DIR, "state.json")
 QUEUE = os.path.join(STATE_DIR, "queue.json")
 PAUSE = os.path.join(STATE_DIR, "PAUSED")
 
+# The retired set, from a rulings file another process writes: {key: reason}, the keys this
+# search must never propose again, for any mystery, present or future -- one key per entry
+# the listening queue has ruled on, or that is the queue owner's own upload. The queue's
+# owner (the one writer of the listen queue) writes the file whole, atomically, at its start
+# and after every ruling; this side only ever READS it, and the supervisor will not start a
+# harvester while it is absent -- a search that has forgotten every ruling hands back records
+# already rejected.
+RULINGS = os.path.join(STATE_DIR, "rulings.json")
+
 # --- the harvester's two caches, on the machine's one cache policy (cache_budget.py) ----------
 #
 # `chroma` is the signature working cache: the chroma signature of every candidate analysed so
@@ -1183,38 +1192,23 @@ def stamp_pool(state):
     Returns True when the stamp changed, so a caller with no other reason to save knows this
     one is worth persisting.
 
-    Also stamps the count's BREAKDOWN, because the bare number confused exactly the person it
-    was for (a bucket bigger than the scored ledger read as loss; it was the opposite):
-      * `retired`  -- signatures whose candidate the search is permanently done with (the
-                      RULED_ON flags + own-clips, the same retirement `unscored_pairs` honours:
-                      heard, discarded, ignored, duplicate, not_a_match);
-      * `canary`   -- the live self-test's known record, uploaded like any other but never a
-                      candidate;
-      * `active`   -- the rest: signatures still in play for every future mystery.
-    Sig keys are content-addressed from the URL, so membership is a hash, not a fetch.
-    The three always partition `count` (the canary is excluded from `retired` even when its
-    URL is also in the queue). If the QUEUE cannot be read, the breakdown is omitted rather
-    than fabricated -- and when the count did not move either, the prior stamp stands whole."""
+    Also stamps the count's CANARY: the live self-test's known record, uploaded like any
+    other but never a candidate. Sig keys are content-addressed from the URL, so membership
+    is a hash, not a fetch. The `active`/`retired` breakdown the stamp once carried came from
+    reading the listening queue's ruling flags, a read this side no longer makes: every such
+    figure is the queue owner's own join of the ledger with its queue and the rulings file,
+    so this stamp publishes the count and the canary and nothing derived. If the store is
+    dark or the listing failed, the previous stamp (with its honest `at`) is left standing."""
     remote = _remote_keys()
     if remote is None:
         return False
     prev = state.get("pool") or {}
-    pool = {"count": len(remote), "at": _now()}
-    _, retired_urls, queue_ok = listen_queue_split_checked()
-    if queue_ok:
-        canary_url = (os.environ.get("NETRADIO_CANARY_URL") or "").strip()
-        canary_key = _sig_key(canary_url) if canary_url else None
-        canary = 1 if canary_key and canary_key in remote else 0
-        retired_keys = {_sig_key(u) for u in retired_urls}
-        retired_keys.discard(canary_key)
-        retired = len(retired_keys & remote)
-        pool.update(retired=retired, canary=canary,
-                    active=pool["count"] - retired - canary)
-    elif prev.get("count") == pool["count"]:
-        return False              # queue dark, count unmoved: the honest prior stamp stands
+    canary_url = (os.environ.get("NETRADIO_CANARY_URL") or "").strip()
+    canary_key = _sig_key(canary_url) if canary_url else None
+    canary = 1 if canary_key and canary_key in remote else 0
+    pool = {"count": len(remote), "at": _now(), "canary": canary}
     state["pool"] = pool
-    return any(pool.get(k) != prev.get(k)
-               for k in ("count", "retired", "canary", "active"))
+    return any(pool.get(k) != prev.get(k) for k in ("count", "canary"))
 
 
 def _load_sig(url):
@@ -1238,7 +1232,7 @@ def _load_sig(url):
         return None
 
 
-def unscored_pairs(state, q, retired, qs, limit=None):
+def unscored_pairs(state, q, ruled, qs, limit=None):
     """Every (mystery, cached-signature) pair we have NOT scored yet.
 
     The harvester only ever walked `pending`. Once a URL reached `done` it was never looked at
@@ -1250,16 +1244,17 @@ def unscored_pairs(state, q, retired, qs, limit=None):
     MT4 today and MT8 next month, for free and with no network. So the pairing is what we track --
     `state["scored"][mystery] = [signature keys]` -- and anything unpaired is work to do.
 
-    Skips anything ruled on: a `not_a_match` is not a match for ANYTHING we are waiting for.
+    Skips anything ruled on (a key from the rulings file): a `not_a_match` is not a match for
+    ANYTHING we are waiting for.
     """
     scored = state.setdefault("scored", {})
     out = []
     for num, qc, qkey in qs:
         seen = set(scored.get(qkey, []))
         for url in q.get("done") or []:
-            if url in retired:
-                continue
             key = _sig_key(url)
+            if key in ruled:
+                continue
             if key in seen:
                 continue
             # A signature counts as HELD if it is in the working cache OR the bucket -- eviction
@@ -1293,7 +1288,7 @@ def _requeue_cap():
         return REQUEUE_MISSING_CAP
 
 
-def requeue_missing_sigs(state, q, retired):
+def requeue_missing_sigs(state, q, ruled):
     """Move `done` URLs whose signature is LOST -- in neither the working cache nor the bucket --
     back to `pending`, so the ordinary fetch path regenerates them.
 
@@ -1303,6 +1298,9 @@ def requeue_missing_sigs(state, q, retired):
     demand via --requeue-missing-sigs. `state["scored"]` is left alone on purpose -- the sig
     key is content-addressed from the URL and the recipe is deterministic, so old pairings
     stay valid and only unmet mysteries score the regenerated signature.
+
+    A ruled key never requeues: re-fetching a record the queue has already rejected would
+    re-propose it, which is the one thing the retired set exists to prevent.
 
     Two refusals, both deliberate:
       * the bucket cannot be LISTED -> do nothing at all. An evicted-cold signature lives only
@@ -1317,7 +1315,7 @@ def requeue_missing_sigs(state, q, retired):
     Returns {"checked", "missing", "requeued", "reported", "cleared", "why"}.
     """
     res = {"checked": 0, "missing": 0, "requeued": 0, "reported": False, "cleared": False}
-    done = [u for u in (q.get("done") or []) if u not in retired]
+    done = [u for u in (q.get("done") or []) if not _ruled(u, ruled)]
     res["checked"] = len(done)
     if not done:
         return dict(res, why="nothing in done to check")
@@ -1413,16 +1411,27 @@ def recover_missing_sigs_at_start(state=None):
     share: run() (Mode A), collector.run() (split mode), and --requeue-missing-sigs (on
     demand). The caller must already hold the writer lock.
 
+    Refuses, doing nothing, while the rulings file cannot be read: without it there is no way
+    to tell a ruled-out candidate from an active one, and requeueing a ruled-out URL re-fetches
+    -- and re-proposes -- a record the queue has already rejected.
+
     Pass the caller's live `state` when it keeps one across a session (run() does, and a
     later _save from it would clobber rows written by an independent load here); leave it
     None to load-and-save independently (the collector reloads state every pass, the CLI
     holds nothing).
     """
+    ruled = load_rulings()
+    if ruled is None:
+        why = ("the rulings file (%s) is absent or unreadable -- nothing was requeued: without it "
+               "a ruled-out candidate cannot be told from an active one, and requeueing a ruled-out "
+               "URL re-fetches a record the queue has already rejected" % RULINGS)
+        print("# %s" % why)
+        return {"checked": 0, "missing": 0, "requeued": 0, "reported": False, "cleared": False,
+                "why": why}
     if state is None:
         state = _load(STATE, blank_state())
     q = _load(QUEUE, {"pending": [], "done": []})
-    _, retired = listen_queue_split()
-    rq = requeue_missing_sigs(state, q, retired)
+    rq = requeue_missing_sigs(state, q, ruled)
     if rq["requeued"]:
         _save(QUEUE, q)
         print("# %s" % rq["why"])
@@ -1483,9 +1492,9 @@ def forget(state, num):
     return before - len(state["matches"]), len(dropped_keys)
 
 
-def rescan(state, q, retired, qs, limit=None, verbose=True):
+def rescan(state, q, ruled, qs, limit=None, verbose=True):
     """Work through the unscored pairs. Returns how many were scored."""
-    pairs = unscored_pairs(state, q, retired, qs, limit=limit)
+    pairs = unscored_pairs(state, q, ruled, qs, limit=limit)
     for num, qc, qkey, url, key in pairs:
         hit = score_cached(state, num, qc, qkey, url, key)
         if hit and verbose:
@@ -1565,21 +1574,22 @@ def sweep_excerpts():
             pass
 
 
-def drop_ruled_excerpts(state, retired):
+def drop_ruled_excerpts(state, ruled):
     """A ruled-on lead loses its audio; the numbers stay. Returns how many were dropped.
 
     The excerpt exists for exactly one purpose: to let a human confirm or reject the lead by ear.
-    Once the ruling is made -- match, not-a-match, heard, any of RULED_ON -- that purpose is spent,
-    and holding the audio a day longer serves nothing. The lead itself survives whole (url, cost,
-    mystery, key, at_s, verdict): the SCORE is the record; the audio was only ever the evidence.
+    Once the ruling is made -- match, not-a-match, heard, any key in the rulings file -- that
+    purpose is spent, and holding the audio a day longer serves nothing. The lead itself survives
+    whole (url, cost, mystery, key, at_s, verdict): the SCORE is the record; the audio was only
+    ever the evidence.
 
-    Runs on every pass, right after the listen queue is re-read, so a ruling made at /harvest
+    Runs on every pass, right after the rulings file is re-read, so a ruling made at /harvest
     takes effect within one loop iteration. The TTL sweep above remains the backstop for anything
     ruled while the harvester was off.
     """
     dropped = 0
     for m in state.get("matches") or []:
-        path = m.pop("audio", None) if m.get("url") in retired else None
+        path = m.pop("audio", None) if _ruled(m.get("url"), ruled) else None
         if not path:
             continue
         # The row stops carrying its audio whatever the policy answers (already gone, dark,
@@ -1676,43 +1686,38 @@ def add_to_queue(urls, source):
 
 LISTEN_QUEUE = os.environ.get("NETRADIO_LISTEN_QUEUE", "")
 
-# A human ruling retires an entry from the search. `duplicate` is the same audio as another entry;
-# `ignored` was rejected outright.
-#
-# `not_a_match` is the important one, and it is DELIBERATELY GLOBAL: it means "this record is not
-# any Mystery Track" -- including the mysteries whose clips do not exist yet. That is what makes
-# `rescan()` below safe. Without it, the day MT8's clip lands, every record Tim has already
-# listened to and rejected would be scored again and handed straight back to him.
-#
-# Note `not_a_match` does NOT imply `listened`: you can rule a record out as a match and still want
-# to hear it. The player keeps those two verdicts apart (see listen_queue_store.mark_not_a_match).
-RULED_ON = ("listened", "discarded", "ignored", "duplicate", "not_a_match")
+
+# The retirement read. The queue's ruling flags (`listened`, `discarded`, `ignored`,
+# `duplicate`, `not_a_match`) and its own-upload rule used to be read here directly, every
+# pass; the rulings file moves that read to the queue's owner's side of the boundary -- the
+# rulings are the queue owner's own, so the file it computes them into is too. The set is
+# today's, unchanged: one key per entry that carries a ruling flag or is the queue owner's own
+# upload, `not_a_match` deliberately global -- "this record is not any Mystery Track",
+# including the mysteries whose clips do not exist yet, which is what makes `rescan()` safe.
+# (A `not_a_match` does NOT imply `listened`: you can rule a record out as a match and still
+# want to hear it -- the queue keeps those two verdicts apart.)
 
 
-# Tim's own channel, as it appears in a listen-queue entry's `origin`.
-OWN_ORIGINS = ("tim hunter", "trjh", "UCuYTatE2k5dOV8J8Bi3rK0g")
+def load_rulings():
+    """The retired set, from the rulings file (`{key: reason}`): a set of signature keys, or
+    None when the file is absent, torn or the wrong shape -- "cannot read" is never "nothing
+    ruled", so a caller must refuse or stand still rather than score against an empty set.
 
-
-def _is_own_clip(item):
-    """Ours? Then never analyse it: we would rediscover our own question and report ~0.00.
-
-    This used to match ONLY the title `Mystery Track N`, and justified that by claiming
-    "listen-queue entries carry no channel or uploader field, only a title." That was false --
-    they carry `origin`, which names the subscription that produced them -- and the cost of the
-    mistake was real: NINE of his uploads sat in the pending queue, uncaught, because they are
-    titled "ID #1", "ID #2" and "Wave Forms [in the mix, low quality]". Not one of them contains
-    the word "mystery". The last is an excerpt of the mix itself.
-
-    So check WHO uploaded it first, and keep the title check only as a second net -- narrowly,
-    because real records are called things like "No Mystery" and "Mystery Blend".
+    The file writes the bare key (`u<sha1(url)[:20]>`, the pool's key); this side's name for
+    a key is its signature-file name (`_sig_key`, `<key>.npy`), so the suffix is appended
+    once, here, and every consumer compares `_sig_key(url)` directly. The reasons are for the
+    human reading the file; the search reads the keys alone.
     """
-    origin = item.get("origin")
-    origin = origin.strip().lower() if isinstance(origin, str) else ""
-    if any(o.lower() in origin for o in OWN_ORIGINS):
-        return True
-    title = item.get("title")
-    title = title.strip().lower() if isinstance(title, str) else ""
-    return title.startswith("mystery track") or title.startswith("netradio mystery")
+    data = _load(RULINGS, None)
+    if not isinstance(data, dict):
+        return None
+    return {k + ".npy" for k in data}
+
+
+def _ruled(url, ruled):
+    """Is this URL retired? A non-string URL is a corrupt row, not a crash -- but it is never
+    ruled: a corrupt row must not reach the network by that door either."""
+    return isinstance(url, str) and _sig_key(url) in ruled
 
 
 def _load_queue_items():
@@ -1794,29 +1799,22 @@ def _is_cooling(item):
 
 
 def listen_queue_split(issues=None):
-    """(candidates, retired) from the player's listen queue. Read-only; never raises.
+    """The candidate URLs from the player's listen queue. Read-only; never raises.
 
     Reads whichever layout NETRADIO_LISTEN_QUEUE names (single file, merged view, or sharded
-    dir/manifest -- see _load_queue_items).
-    """
-    candidates, retired, _ = listen_queue_split_checked(issues)
-    return candidates, retired
+    dir/manifest -- see _load_queue_items). Empty-on-failure: a weird queue is "try again
+    next pass", not a dead harvester.
 
-
-def listen_queue_split_checked(issues=None):
-    """(candidates, retired, ok) -- listen_queue_split plus an honesty bit. ok=False means the
-    queue is MISSING or UNREADABLE; an empty queue reads ok=True with empty results.
-
-    Empty-on-failure is the right contract for the search loop (a weird queue is "try again
-    next pass", not a dead harvester) -- but a publisher of DERIVED facts must not mistake
-    "could not read" for "nothing there": stamp_pool uses the bit so a torn queue read can't
-    republish every ruled-out signature as active.
+    The retirement this read once derived from the queue's ruling flags is the rulings file's
+    now (see `load_rulings`), so a ruled-on entry still shows up here as a candidate -- it is
+    `sync_listen_queue`, holding the retired set, that keeps it out of the working queue in
+    both directions.
 
     `issues`, when a list is passed, collects one `{"url": ..., "reason": ...}` row per entry
     refused here. A refusal is silent otherwise, and a silent refusal is indistinguishable from
     a queue that simply had nothing in it."""
     if not LISTEN_QUEUE or not os.path.exists(LISTEN_QUEUE):
-        return [], set(), False
+        return []
     try:
         items = _load_queue_items()
     except (OSError, ValueError, TypeError, AttributeError):
@@ -1824,9 +1822,9 @@ def listen_queue_split_checked(issues=None):
         # _load_queue_items raise ValueError). TypeError/AttributeError = the final net for any
         # shape this code did not think of -- the docstring says NEVER raises, so make it true;
         # a weird queue is "empty, try again next pass", not a dead harvester.
-        return [], set(), False
+        return []
 
-    candidates, retired = [], set()
+    candidates = []
     for it in items:
         url = it.get("url")
         if not isinstance(url, str):     # a non-string url is a corrupt item, not a crash
@@ -1834,21 +1832,19 @@ def listen_queue_split_checked(issues=None):
         url = url.strip()
         if not url.startswith("http"):
             continue
-        if any(it.get(f) for f in RULED_ON) or _is_own_clip(it):
-            retired.add(url)             # a ruling wins over cooling: retirement is permanent-ish
-        elif _is_cooling(it):
+        if _is_cooling(it):
             continue                     # cooling gates the network only -- hold the URL back, but
                                          # do NOT retire it: it rejoins on its own once the date
                                          # passes, so nothing here drops it from pending.
         elif too_long(url, it.get("duration")):
             # Refused whole, never truncated: analysing the first four hours of a six-hour set
             # and filing the result under the URL is a partial answer wearing a complete one's
-            # clothes. Not `retired` either -- no human ruled on it; the machine did.
+            # clothes. Not ruled on either -- no human ruled on it; the machine did.
             if issues is not None:
                 issues.append({"url": url, "reason": "too_long"})
         else:
             candidates.append(url)
-    return candidates, retired, True
+    return candidates
 
 
 # The player's declared durations, url -> seconds, cached for a few minutes.
@@ -1883,19 +1879,27 @@ def queue_duration(url, max_age_s=300):
     return _DURATIONS["by_url"].get(url)
 
 
-def sync_listen_queue(q, issues=None):
+def sync_listen_queue(q, ruled, issues=None):
     """Fold the player's queue into ours. Returns (added, dropped); mutates `q` in place.
 
     Length is deliberately NOT a filter: a record can hide inside an hour-long DJ mix, and the
     match reports WHERE it hit (`at`), so a long mix is a feature, not a cost. The one exception
     is the MAX_DURATION_S backstop -- see `too_long`; those rows land in `issues` if a list is
     passed.
+
+    `ruled` (the retired set, from the rulings file) gates BOTH directions: a ruled key never
+    flows in, and a URL whose key was ruled on while it sat on our lists flows out -- a record
+    the queue has already rejected is not a candidate, whichever side of the fold it is on.
     """
     refused = []
-    candidates, retired = listen_queue_split(refused)
+    candidates = listen_queue_split(refused)
+    # A ruled entry is retired before it can be refused too: the too_long row about a master the
+    # queue has already ruled on is noise about a decision already made, so it is filtered the
+    # same way the candidate list is.
+    refused = [r for r in refused if not _ruled(r["url"], ruled)]
     if issues is not None:
         issues.extend(refused)
-    if not candidates and not retired and not refused:
+    if not candidates and not ruled and not refused:
         return 0, 0
 
     # `retry_later` counts as SEEN. A URL lands there because the fetch leg measured more than
@@ -1904,10 +1908,10 @@ def sync_listen_queue(q, issues=None):
     # two hours of it again, every few minutes, for as long as the entry exists. The list is
     # drained deliberately or not at all (see `WHOLE_MAX_S`).
     seen = set(q["pending"]) | set(q["done"]) | set(q.get("retry_later") or [])
-    fresh = [u for u in candidates if u not in seen]
+    fresh = [u for u in candidates if u not in seen and not _ruled(u, ruled)]
     q["pending"].extend(fresh)
 
-    # Drop anything a human ruled on while it sat in our pending list. Not from `done` -- that is
+    # Drop anything ruled on while it sat in our pending list. Not from `done` -- that is
     # our record of work completed, and re-adding a URL later must not re-analyse it.
     #
     # A refused entry leaves pending by the same door. A backstop that only stopped NEW arrivals
@@ -1918,11 +1922,11 @@ def sync_listen_queue(q, issues=None):
     # exist while the player still offers the entry. Once a human has ruled on it there are no
     # parts coming, and a URL left on the list would be a retired one for whatever drains it to
     # trip over later. It cannot come back either way: it is no longer a candidate.
-    gone = set(retired) | {r["url"] for r in refused}
+    gone = {r["url"] for r in refused}
     before = len(q["pending"]) + len(q.get("retry_later") or [])
-    q["pending"] = [u for u in q["pending"] if u not in gone]
+    q["pending"] = [u for u in q["pending"] if u not in gone and not _ruled(u, ruled)]
     if q.get("retry_later"):
-        q["retry_later"] = [u for u in q["retry_later"] if u not in gone]
+        q["retry_later"] = [u for u in q["retry_later"] if u not in gone and not _ruled(u, ruled)]
     return len(fresh), before - len(q["pending"]) - len(q.get("retry_later") or [])
 
 
@@ -2102,6 +2106,17 @@ def run(args):
               "--run) -- ONE writer, always. Not starting.")
         return
     state = _load(STATE, blank_state())
+    # THE RETIRED SET IS A FILE THE QUEUE'S OWNER WRITES: every key this search must never
+    # propose again lives in the rulings file, so without it the run has no way to know what
+    # it has already been told to stop looking at -- and a search that has forgotten every
+    # ruling hands back records already rejected. Refuse here, naming the file (the same
+    # refusal the process that starts this one makes), rather than searching on amnesia.
+    ruled = load_rulings()
+    if ruled is None:
+        print("the rulings file (%s) is absent or unreadable: the search has no way to know which "
+              "keys it must never propose again. The queue's owner writes the file at its start "
+              "and after every ruling -- with the file back in place, start again." % RULINGS)
+        return
     qs = queries(state)
     if not qs:
         note_no_queries(state, qs)
@@ -2206,10 +2221,24 @@ def run(args):
             continue
 
         q = _load(QUEUE, {"pending": [], "done": []})
+        # Re-read the rulings file every pass, before anything consumes it: a ruling reaches the
+        # file within seconds, and must reach this search within one loop iteration. Unreadable
+        # is NOT "nothing ruled" -- a run that carried on would score against an empty retired
+        # set and hand back records already rejected, so stand down and let the supervisor
+        # restart the run once the file is back (the queue's owner rewrites it at its start).
+        ruled = load_rulings()
+        if ruled is None:
+            state["session"] = {"phase": "stopped (the rulings file is unreadable)", "until": 0}
+            state["current"] = None
+            _save(STATE, state)
+            print("!! the rulings file (%s) could not be read -- stopping this run. A search "
+                  "that has forgotten every ruling hands back records already rejected; start it "
+                  "again once the file is back." % RULINGS)
+            return
         # Re-read the player's queue every pass: a subscription that fired an hour ago should feed
         # this search without a restart, and a candidate ruled on at /harvest should leave it.
         refused = []
-        added, dropped = sync_listen_queue(q, refused)
+        added, dropped = sync_listen_queue(q, ruled, refused)
         if added or dropped:
             _save(QUEUE, q)
             print("listen queue: +%d new, -%d ruled on" % (added, dropped))
@@ -2233,18 +2262,18 @@ def run(args):
         # (~0.06s each, no network), and it is what makes a NEW mystery see the WHOLE corpus: the
         # day MT8's clip lands, all ~900 signatures already on disk get scored against it, without
         # re-downloading a single track. Positions (`at_s`) on old rows get filled in on the way.
-        _, retired = listen_queue_split()
+        #
         # A ruling spends the excerpt: the audio existed to let the human make the call, and the
         # call has been made. Drop it now, not at the 30-day sweep.
-        n_dropped = drop_ruled_excerpts(state, retired)
+        n_dropped = drop_ruled_excerpts(state, ruled)
         if n_dropped:
             _save(STATE, state)
             print("dropped %d ruled-on excerpt(s) -- the leads keep their numbers" % n_dropped)
         stamp_pool(state)                     # bucket sig count for /harvest; ≤15-min cached
-        todo = len(unscored_pairs(state, q, retired, qs))
+        todo = len(unscored_pairs(state, q, ruled, qs))
         if todo:
             state["rescan_pending"] = todo
-            n = rescan(state, q, retired, qs, limit=RESCAN_PER_PASS)
+            n = rescan(state, q, ruled, qs, limit=RESCAN_PER_PASS)
             state["rescan_pending"] = max(0, todo - n)
             _save(STATE, state)
         elif sigstore.enabled():
@@ -2488,7 +2517,9 @@ def main():
                          "bucket) back into pending so the fetch path regenerates them. Both "
                          "runtimes do this by themselves at writer startup -- this is the "
                          "on-demand form, and it refuses to run while another queue/state "
-                         "writer (the collector, or harvest.py --run) holds the writer lock. "
+                         "writer (the collector, or harvest.py --run) holds the writer lock, or "
+                         "while the rulings file is absent or unreadable (re-fetching a ruled-out "
+                         "record would re-propose it). "
                          "Refuses past the safety cap (NETRADIO_REQUEUE_MISSING_CAP, default "
                          "10%% of the corpus) and reports instead.")
     args = ap.parse_args()
@@ -2590,14 +2621,22 @@ def main():
         if _chroma_dir() is None:
             print("# the signature cache is dark -- set NETRADIO_CACHE_ROOT in .env first.")
             return
+        # The same refusal run() makes: the rescan scores the corpus, and without the rulings
+        # file it cannot know which keys it must never propose -- it would score records already
+        # rejected and stamp `rescan_pending` over them.
+        ruled = load_rulings()
+        if ruled is None:
+            print("# the rulings file (%s) is absent or unreadable -- not rescanning: without it the "
+                  "rescan cannot tell a ruled-out candidate from an active one. The queue's owner "
+                  "writes the file at its start and after every ruling." % RULINGS)
+            return
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})
         qs = queries()
-        _, retired = listen_queue_split()
-        todo = len(unscored_pairs(state, q, retired, qs))
+        todo = len(unscored_pairs(state, q, ruled, qs))
         print("# rescanning %d (signature, mystery) pair(s) against MT%s -- no network, ~%.0f min"
               % (todo, "/MT".join(str(n) for n, _, _ in qs), todo * 0.06 / 60))
-        n = rescan(state, q, retired, qs)
+        n = rescan(state, q, ruled, qs)
         state["rescan_pending"] = 0
         _save(STATE, state)
         print("# scored %d. Every cached signature has now met every mystery." % n)

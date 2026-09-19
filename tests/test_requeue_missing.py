@@ -8,7 +8,9 @@ closes that hole; these tests pin its policy (Tim, 2026-07-30):
   * a loss past the cap (10%, env-overridable) REPORTS — a standing `sig_alert` plus ONE
     issues row — and touches nothing,
   * an unlistable bucket means "cannot tell lost from evicted": do nothing at all,
-  * ruled-on (retired) URLs are never requeued,
+  * ruled-out keys are never requeued (a ruled key's URL stays exactly where it was),
+  * the startup recovery refuses outright while the rulings file cannot be read — "cannot
+    read" is never "nothing ruled" — requeueing nothing and naming the file it wanted,
   * the alert stands down by itself when the condition stops holding.
 """
 
@@ -67,7 +69,7 @@ class SmallLossRequeues(RequeueBase):
         for u in URLS[1:]:
             self.hold(u)                               # 1 of 10 lost = 10%, NOT past the cap
         q, state = self.q(), {}
-        res = harvest.requeue_missing_sigs(state, q, retired=set())
+        res = harvest.requeue_missing_sigs(state, q, ruled=set())
         self.assertEqual(res["requeued"], 1)
         self.assertNotIn(URLS[0], q["done"])
         self.assertIn(URLS[0], q["pending"])
@@ -76,7 +78,7 @@ class SmallLossRequeues(RequeueBase):
         rows = [i for i in state["issues"] if i["issue"].startswith("missing-sigs: requeued")]
         self.assertEqual(len(rows), 1)
         # again: the URL is now pending, done is clean — nothing further happens, no new row
-        res2 = harvest.requeue_missing_sigs(state, q, retired=set())
+        res2 = harvest.requeue_missing_sigs(state, q, ruled=set())
         self.assertEqual(res2["requeued"], 0)
         self.assertEqual(q["pending"].count(URLS[0]), 1)
         rows = [i for i in state["issues"] if i["issue"].startswith("missing-sigs: requeued")]
@@ -86,17 +88,19 @@ class SmallLossRequeues(RequeueBase):
         for u in URLS[1:]:
             self.hold(u)
         q = self.q(pending=[URLS[0]])                  # already pending (e.g. a prior run)
-        harvest.requeue_missing_sigs({}, q, retired=set())
+        harvest.requeue_missing_sigs({}, q, ruled=set())
         self.assertEqual(q["pending"].count(URLS[0]), 1)
         self.assertNotIn(URLS[0], q["done"])
 
-    def test_retired_urls_are_not_requeued(self):
+    def test_a_ruled_key_is_never_requeued(self):
         for u in URLS[1:]:
-            self.hold(u)                               # URLS[0] lost — but ruled on
+            self.hold(u)                               # URLS[0] lost — but its key is ruled on
         q = self.q()
-        res = harvest.requeue_missing_sigs({}, q, retired={URLS[0]})
+        res = harvest.requeue_missing_sigs({}, q, ruled={harvest._sig_key(URLS[0])})
         self.assertEqual(res["requeued"], 0)
         self.assertIn(URLS[0], q["done"])              # left exactly where it was
+        self.assertEqual(res["checked"], 9, "a ruled key is not part of the corpus the "
+                                             "loss cap weighs either")
 
 
 class MassLossReports(RequeueBase):
@@ -104,7 +108,7 @@ class MassLossReports(RequeueBase):
         for u in URLS[:2]:
             self.hold(u)                               # 8 of 10 lost
         q, state = self.q(), {}
-        res = harvest.requeue_missing_sigs(state, q, retired=set())
+        res = harvest.requeue_missing_sigs(state, q, ruled=set())
         self.assertTrue(res["reported"])
         self.assertEqual(res["requeued"], 0)
         self.assertEqual(q["done"], URLS)              # untouched
@@ -114,24 +118,24 @@ class MassLossReports(RequeueBase):
         rows = [i for i in state["issues"] if i["issue"].startswith("missing-sigs:")]
         self.assertEqual(len(rows), 1)
         # a supervisor respawn re-checks: the alert stands, the issues row is NOT repeated
-        harvest.requeue_missing_sigs(state, q, retired=set())
+        harvest.requeue_missing_sigs(state, q, ruled=set())
         rows = [i for i in state["issues"] if i["issue"].startswith("missing-sigs:")]
         self.assertEqual(len(rows), 1)
 
     def test_the_alert_stands_down_when_the_loss_is_dealt_with(self):
         q, state = self.q(), {}
-        harvest.requeue_missing_sigs(state, q, retired=set())      # all 10 lost -> alert
+        harvest.requeue_missing_sigs(state, q, ruled=set())      # all 10 lost -> alert
         self.assertIn("sig_alert", state)
         for u in URLS:
             self.hold(u)                               # the human restored the store
-        res = harvest.requeue_missing_sigs(state, q, retired=set())
+        res = harvest.requeue_missing_sigs(state, q, ruled=set())
         self.assertTrue(res["cleared"])
         self.assertNotIn("sig_alert", state)
 
     def test_the_cap_is_env_overridable_for_a_deliberate_mass_regen(self):
         os.environ["NETRADIO_REQUEUE_MISSING_CAP"] = "1"
         q, state = self.q(), {}
-        res = harvest.requeue_missing_sigs(state, q, retired=set())
+        res = harvest.requeue_missing_sigs(state, q, ruled=set())
         self.assertEqual(res["requeued"], len(URLS))
         self.assertEqual(q["done"], [])
         self.assertEqual(q["pending"], URLS)
@@ -143,15 +147,18 @@ class WriterLockAndStartup(RequeueBase):
 
     def setUp(self):
         super().setUp()
-        self._paths = harvest.WRITER_LOCK, harvest.STATE, harvest.QUEUE, harvest.listen_queue_split
+        self._paths = harvest.WRITER_LOCK, harvest.STATE, harvest.QUEUE, harvest.RULINGS
         harvest.WRITER_LOCK = os.path.join(self.tmp, "collector.lock")
         harvest.STATE = os.path.join(self.tmp, "state.json")
         harvest.QUEUE = os.path.join(self.tmp, "queue.json")
-        harvest.listen_queue_split = lambda: ([], set())
+        # The recovery takes its retired set from the rulings file; a throwaway one keeps the
+        # real .harvest/ out of the test (the real path is the worktree's, and absent).
+        harvest.RULINGS = os.path.join(self.tmp, "rulings.json")
+        harvest._save(harvest.RULINGS, {})
 
     def tearDown(self):
         (harvest.WRITER_LOCK, harvest.STATE, harvest.QUEUE,
-         harvest.listen_queue_split) = self._paths
+         harvest.RULINGS) = self._paths
         super().tearDown()
 
     def test_the_writer_lock_is_exclusive_until_released(self):
@@ -180,6 +187,20 @@ class WriterLockAndStartup(RequeueBase):
         self.assertIn("sig_alert", harvest._load(harvest.STATE, {}))
         self.assertEqual(harvest._load(harvest.QUEUE, {})["done"], URLS)
 
+    def test_startup_recovery_refuses_an_unreadable_rulings_file(self):
+        # "Cannot read" is never "nothing ruled": with no rulings file there is no telling
+        # a ruled-out candidate from an active one, so the recovery refuses outright --
+        # nothing requeued, nothing touched -- and names the file it wanted.
+        for u in URLS[1:]:
+            self.hold(u)                               # a real loss it would otherwise fix
+        harvest._save(harvest.QUEUE, self.q())
+        harvest.RULINGS = os.path.join(self.tmp, "never_written.json")
+        res = harvest.recover_missing_sigs_at_start()
+        self.assertEqual(res["requeued"], 0)
+        self.assertEqual(res["checked"], 0)
+        self.assertIn(harvest.RULINGS, res["why"])
+        self.assertEqual(harvest._load(harvest.QUEUE, {}), self.q())   # untouched
+
     def test_every_writer_takes_the_lock_and_runs_the_recovery(self):
         # A source-level pin: Mode A, the split collector, and the CLI must all go through
         # acquire_writer_lock() and recover_missing_sigs_at_start(). If one of them stops,
@@ -206,7 +227,7 @@ class BucketSemantics(RequeueBase):
         held = {harvest._sig_key(u) for u in URLS}     # everything evicted to the bucket
         harvest._remote_keys = lambda max_age_s=900: held
         q = self.q()
-        res = harvest.requeue_missing_sigs({}, q, retired=set())
+        res = harvest.requeue_missing_sigs({}, q, ruled=set())
         self.assertEqual(res["requeued"], 0)
         self.assertEqual(q["done"], URLS)
 
@@ -214,7 +235,7 @@ class BucketSemantics(RequeueBase):
         harvest.sigstore.enabled = lambda: True
         harvest._remote_keys = lambda max_age_s=900: None
         q, state = self.q(), {"sig_alert": {"at": "x"}}
-        res = harvest.requeue_missing_sigs(state, q, retired=set())
+        res = harvest.requeue_missing_sigs(state, q, ruled=set())
         self.assertEqual(res["requeued"], 0)
         self.assertFalse(res["reported"])
         self.assertEqual(q["done"], URLS)              # not requeued

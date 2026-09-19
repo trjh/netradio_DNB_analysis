@@ -232,90 +232,6 @@ CACHE_ENV = ("NETRADIO_CACHE_ROOT", "NETRADIO_DOWNLOAD_ROOT", "NETRADIO_DISK_MAX
              "NETRADIO_CACHE_EVENTS_DAYS")
 
 
-class ARulingSpendsTheExcerpt(unittest.TestCase):
-    """The excerpt exists so a human can confirm or reject the lead by ear. Once they have --
-    match, not-a-match, heard -- that purpose is spent, and only the 30-day TTL sweep would ever
-    have reclaimed the audio. `drop_ruled_excerpts` reclaims it on the next pass instead.
-
-    The LEAD must survive whole: the score is the record, the audio was only ever the evidence.
-    The deletion itself goes through the cache policy's door, so the excerpt board must be
-    registered over this test's directory (a throwaway root, put back afterwards).
-    """
-
-    def setUp(self):
-        self.dir = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.dir, True)
-        self._saved = {k: os.environ.get(k) for k in list(os.environ)
-                       if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
-        for k in self._saved:
-            os.environ.pop(k, None)
-        self.addCleanup(self._restore)
-        # The policy's root lives OUTSIDE the excerpt board (no cache may hold its own root),
-        # in a second throwaway directory.
-        self._root = tempfile.mkdtemp(prefix="candidates-policy-root-")
-        os.environ["NETRADIO_CACHE_ROOT"] = self._root
-        os.environ["NETRADIO_CANDIDATES_CACHE_DIR"] = self.dir
-        self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
-        cache_budget._REGISTRY.clear()
-        cache_budget._STATS.clear()
-        harvest.register_caches()
-
-    def _restore(self):
-        cache_budget._REGISTRY.clear()
-        cache_budget._REGISTRY.update(self._registry[0])
-        cache_budget._STATS.clear()
-        cache_budget._STATS.update(self._registry[1])
-        for k in [k for k in list(os.environ)
-                  if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)]:
-            os.environ.pop(k, None)
-        os.environ.update(self._saved)
-        shutil.rmtree(self._root, ignore_errors=True)
-
-    def _wav(self, name):
-        path = os.path.join(self.dir, name)
-        open(path, "wb").close()
-        return path
-
-    def test_a_ruled_leads_audio_goes_and_its_numbers_stay(self):
-        wav = self._wav("MT4-0.0603-aaaa.wav")
-        state = {"kept": 1, "matches": [{"mystery": 4, "cost": 0.0603, "url": "u1",
-                                         "at_s": 12.0, "verdict": "near", "audio": wav}]}
-        self.assertEqual(harvest.drop_ruled_excerpts(state, {"u1"}), 1)
-        self.assertFalse(os.path.exists(wav))
-        m = state["matches"][0]
-        self.assertNotIn("audio", m)
-        self.assertEqual((m["url"], m["cost"], m["at_s"]), ("u1", 0.0603, 12.0))
-        self.assertEqual(state["kept"], 0)
-
-    def test_an_unruled_lead_keeps_its_excerpt(self):
-        wav = self._wav("MT4-0.0603-bbbb.wav")
-        state = {"kept": 1, "matches": [{"mystery": 4, "cost": 0.0603, "url": "u1", "audio": wav}]}
-        self.assertEqual(harvest.drop_ruled_excerpts(state, {"someone-else"}), 0)
-        self.assertTrue(os.path.exists(wav))
-        self.assertEqual(state["matches"][0]["audio"], wav)
-        self.assertEqual(state["kept"], 1)
-
-    def test_a_ruled_lead_with_no_audio_is_a_no_op(self):
-        """The normal case after --purge-audio, and for every rescan-found lead."""
-        state = {"kept": 0, "matches": [{"mystery": 4, "cost": 0.06, "url": "u1"}]}
-        self.assertEqual(harvest.drop_ruled_excerpts(state, {"u1"}), 0)
-        self.assertEqual(state["kept"], 0)
-
-    def test_an_already_gone_file_still_clears_the_row(self):
-        """TTL sweep or a hand-rm got there first; the row must stop advertising audio anyway."""
-        state = {"kept": 1, "matches": [{"mystery": 4, "cost": 0.06, "url": "u1",
-                                         "audio": os.path.join(self.dir, "never-existed.wav")}]}
-        self.assertEqual(harvest.drop_ruled_excerpts(state, {"u1"}), 1)
-        self.assertNotIn("audio", state["matches"][0])
-        self.assertEqual(state["kept"], 0)
-
-    def test_kept_never_goes_negative(self):
-        state = {"kept": 0, "matches": [{"mystery": 4, "cost": 0.06, "url": "u1",
-                                         "audio": self._wav("MT4-0.06-cccc.wav")}]}
-        harvest.drop_ruled_excerpts(state, {"u1"})
-        self.assertEqual(state["kept"], 0)
-
-
 @unittest.skipIf(harvest is None, "needs the librosa venv")
 class TheHarvestersCachesOnThePolicy(unittest.TestCase):
     """The harvester's two caches, `chroma` and `candidates`, register on the machine's one
@@ -570,8 +486,8 @@ class TheOnDemandRescanRefusesADarkPolicy(unittest.TestCase):
         with unittest.mock.patch.object(sys, "argv", argv), \
                 unittest.mock.patch.object(harvest, "queries",
                                           refused("query set")), \
-                unittest.mock.patch.object(harvest, "listen_queue_split",
-                                          refused("player's queue")), \
+                unittest.mock.patch.object(harvest, "load_rulings",
+                                          refused("rulings file")), \
                 contextlib.redirect_stdout(io.StringIO()) as out:
             harvest.main()
         self.assertIn("the signature cache is dark", out.getvalue())
@@ -580,42 +496,38 @@ class TheOnDemandRescanRefusesADarkPolicy(unittest.TestCase):
                          "a refused rescan writes no state: rescan_pending was never "
                          "stamped to a completion it did not do")
 
+    def test_rescan_refuses_without_the_rulings_file_too(self):
+        """The rescan scores the corpus, so it needs the retired set as much as the run does:
+        without the file it would score records already rejected and stamp `rescan_pending`
+        over them. The cache is lit for this one (the refusal under test is the file's), and
+        the query set must never be read past it."""
+        tmp = tempfile.mkdtemp(prefix="rescan-norulings-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        paths = harvest.STATE, harvest.QUEUE, harvest.RULINGS
+        harvest.STATE = os.path.join(tmp, "state.json")
+        harvest.QUEUE = os.path.join(tmp, "queue.json")
+        harvest.RULINGS = os.path.join(tmp, "rulings.json")       # never written
+        self.addCleanup(lambda: (setattr(harvest, "STATE", paths[0]),
+                                 setattr(harvest, "QUEUE", paths[1]),
+                                 setattr(harvest, "RULINGS", paths[2])))
+        with unittest.mock.patch.object(harvest, "_chroma_dir",
+                                        lambda: os.path.join(tmp, "chroma")), \
+                unittest.mock.patch.object(sys, "argv", ["harvest.py", "--rescan"]), \
+                unittest.mock.patch.object(
+                    harvest, "queries",
+                    lambda state=None: (_ for _ in ()).throw(
+                        AssertionError("the refusal must come before the query set is read"))), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            harvest.main()
+        text = out.getvalue()
+        self.assertIn("the rulings file", text)
+        self.assertIn(harvest.RULINGS, text)
+        self.assertFalse(os.path.exists(harvest.STATE),
+                         "a refused rescan writes no state")
+
 
 if __name__ == "__main__":
     unittest.main()
-
-
-@unittest.skipIf(harvest is None, "needs the librosa venv")
-class OurOwnUploadsAreNeverAnalysed(unittest.TestCase):
-    """A harvester that "finds" one of Tim's own uploads has rediscovered its own question and
-    would report a triumphant ~0.00.
-
-    The guard used to match ONLY the title `Mystery Track N`, justified by "listen-queue entries
-    carry no channel or uploader field, only a title". That was false -- they carry `origin` -- and
-    it cost us: NINE of his uploads sat in the PENDING queue, uncaught, because they are titled
-    "ID #1", "ID #2" and "Wave Forms [in the mix, low quality]". None contains the word "mystery".
-    The last is an excerpt of the mix itself.
-    """
-
-    def test_the_nine_real_titles_that_slipped_through(self):
-        for title in ("ID #1", "ID #2", "Wave Forms [in the mix, low quality]",
-                      "Bunny!", "Canadian geese in Strandhill", "Crepe Suzette Supremo"):
-            with self.subTest(title=title):
-                item = {"title": title, "origin": "subscription:  Tim Hunter"}
-                self.assertTrue(harvest._is_own_clip(item), "%r must be refused" % title)
-
-    def test_the_title_net_still_catches_a_clip_with_no_origin(self):
-        """Belt and braces: an entry that never carried an origin is still caught by its title."""
-        self.assertTrue(harvest._is_own_clip({"title": "Mystery Track 8", "origin": ""}))
-        self.assertTrue(harvest._is_own_clip({"title": "Netradio Mystery 3"}))
-
-    def test_a_real_record_is_still_analysed(self):
-        """The guard must not be so broad that it refuses the corpus we are searching. Real records
-        really are called things like this."""
-        for title in ("No Mystery", "Mystery Blend", "Big Bud - Tahoe"):
-            with self.subTest(title=title):
-                item = {"title": title, "origin": "subscription:Back 2 The Old Skool Era"}
-                self.assertFalse(harvest._is_own_clip(item))
 
 
 @unittest.skipIf(harvest is None, "needs the librosa venv")
@@ -654,19 +566,8 @@ class ANewMysteryMustSeeTheWholeCorpus(unittest.TestCase):
                                            [(4, None, "4:fp"), (8, None, "8:fp")])
         self.assertEqual(sorted(p[3] for p in pairs), ["u1", "u2", "u3"])          # all, for MT8
         self.assertTrue(all(p[0] == 8 for p in pairs))                             # and only MT8
-
-    def test_a_ruled_out_record_is_never_offered_again_not_even_for_a_new_mystery(self):
-        """'not a match' means not a match for ANYTHING we are waiting for. Without this, the day
-        MT8 lands, every record Tim already rejected comes straight back at him."""
-        state, q = self._state(), {"done": ["keep", "rejected"], "pending": []}
-        with unittest.mock.patch("os.path.exists", return_value=True), \
-             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"):
-            pairs = harvest.unscored_pairs(state, q, {"rejected"}, [(8, None, "8:fp")])
-        self.assertEqual([p[3] for p in pairs], ["keep"])
-
-    def test_not_a_match_retires_an_entry(self):
-        """The player writes the flag; the harvester must honour it."""
-        self.assertIn("not_a_match", harvest.RULED_ON)
+        # A ruled-out record is never offered again, not even for that new mystery --
+        # that case moved to tests/test_harvest_rulings.py with the rest of the retirement.
 
 
 @unittest.skipIf(harvest is None, "needs the librosa venv")

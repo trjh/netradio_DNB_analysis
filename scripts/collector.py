@@ -39,8 +39,7 @@ import harvest                                       # noqa: E402
 import sigstore                                      # noqa: E402
 from harvest import (                                # noqa: E402
     KEEP, KEEP_CEILING, KEEP_TOP, MATCH_COST, QUEUE, RESCAN_PER_PASS, STATE,
-    _load, _now, _save, blank_state, evict_overfull, listen_queue_split, queries,
-    write_excerpt,
+    _load, _now, _save, blank_state, evict_overfull, queries, write_excerpt,
 )
 from harvest import _cm                              # noqa: E402  (the matcher)
 from harvester import JOBS, RESULTS, STATE_DIR       # noqa: E402  (the shared layout)
@@ -380,6 +379,17 @@ def run():
     # sig_alert and stand still). No live state is held yet, so let it load-and-save.
     harvest.recover_missing_sigs_at_start()
     while True:
+        # The retired set is the rulings file's, here as in Mode A -- and it is read FIRST,
+        # before anything on the pass scores: a pass that cannot read it must propose nothing,
+        # not even a result already on the spool, and stands down instead. (`--once` makes the
+        # same gate at its own entry point.)
+        ruled = harvest.load_rulings()
+        if ruled is None:
+            print("the rulings file (%s) is absent or unreadable -- this runtime has no way to "
+                  "know which keys it must never propose again, so it is standing down without "
+                  "folding. Start it again once the queue's owner has written the file."
+                  % harvest.RULINGS)
+            return
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})
         qs, changed = refresh_dashboard_state(state)
@@ -387,12 +397,11 @@ def run():
             _save(STATE, state)
         n = collect_once(state, q, qs)
 
-        _, retired = listen_queue_split()
-        dropped = harvest.drop_ruled_excerpts(state, retired)
-        todo = len(harvest.unscored_pairs(state, q, retired, qs))
+        dropped = harvest.drop_ruled_excerpts(state, ruled)
+        todo = len(harvest.unscored_pairs(state, q, ruled, qs))
         if todo:
             state["rescan_pending"] = todo
-            done = harvest.rescan(state, q, retired, qs, limit=RESCAN_PER_PASS)
+            done = harvest.rescan(state, q, ruled, qs, limit=RESCAN_PER_PASS)
             state["rescan_pending"] = max(0, todo - done)
             _save(STATE, state)
         elif sigstore.enabled():
@@ -431,6 +440,17 @@ def main():
         ok, why = _caches_ready()
         if not ok:
             print(why)
+            return
+        # The same gate the loop makes, for the same reason: --once scores the spool, and a
+        # pass that cannot read the rulings file must not -- "cannot read" is never "nothing
+        # ruled". (The readable-file retirement surface is the loop's, applied on the pass
+        # after the fold, exactly as at the base; this gate only keeps the one-shot entry
+        # point from scoring on amnesia.)
+        if harvest.load_rulings() is None:
+            print("the rulings file (%s) is absent or unreadable -- this runtime has no way to "
+                  "know which keys it must never propose again, so the one-shot pass is not "
+                  "folding. Start it again once the queue's owner has written the file."
+                  % harvest.RULINGS)
             return
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})
