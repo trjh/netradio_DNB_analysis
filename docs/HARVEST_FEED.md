@@ -73,6 +73,12 @@ so a naming bug is visible rather than silent.
    `<key>.json`.
 4. It writes the ledger row.
 
+Both objects must land before the row is written: a `signed` row is the promise that the
+signature and its sidecar are in the bucket together, and the harvester treats such a row as
+the file being done with. When the bucket is configured and either upload fails, the file gets
+**no row at all** and is signed again on a later pass, so a bucket that is briefly refusing
+writes costs one re-decode, never a signature with no sidecar beside it.
+
 A file can come back **delayed** instead of signed, with one of four reasons:
 
 | Reason | Meaning | What the feed does |
@@ -132,9 +138,11 @@ reconciled against the bucket's listing: a `signed` row whose object is gone los
 
 The ledger is the one thing the feed reads back:
 
-* **`signed` with an `uploaded_etag`** — the signature is in the bucket; the file is done with.
-* **`signed` without an `uploaded_etag`** — the signature is not in the bucket (the upload
-  failed, or the reconciliation found the object gone); the key can be fed again.
+* **`signed` with an `uploaded_etag`** — the signature and its sidecar are in the bucket; the
+  file is done with.
+* **`signed` without an `uploaded_etag`** — the signature object is not in the bucket: the
+  reconciliation found it gone (and the harvester never writes such a row for a live sign —
+  a sign whose upload failed gets no row and is tried again). The key can be fed again.
 * **`delayed`, any reason but `no_space`** — a verdict on the file as fed. Feed the key again
   only when the file would differ: a re-cut part has a new size and modification time, and the
   harvester signs a changed file again.

@@ -328,6 +328,68 @@ class SignFileWritesTheRow(_SignerCase):
         row = harvest._load(harvest.LEDGER, {})[key]
         self.assertEqual((row["status"], row["reason"]), ("delayed", "no_space"))
 
+    def test_a_failed_upload_writes_no_row_and_is_retried(self):
+        """A `signed` row is the promise that both objects are in the bucket, and the scan
+        treats the row as covering the file. A half-landed sign recorded as signed would
+        never be retried -- the pool would hold a signature with no sidecar beside it for
+        good, or a sidecar beside no signature. No row: the file is still wanted, and the
+        next pass signs it again."""
+        key = _key("https://y/sidecar-blip")
+        path = self._feed(key)
+        issues = []
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        # the signature upload lands, the sidecar's fails
+        self._store_on()
+        def _flaky_sidecar(p, k):
+            self.put.append((os.path.basename(p), k))
+            return "etag-abc" if k.endswith(".npy") else None
+        with mock.patch.object(harvest.sigstore, "put", _flaky_sidecar):
+            c, samples = harvest.sign_file(path, 60.0, issues=issues)
+        self.assertEqual((c, samples), (None, None))
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {}, "no row was written")
+        self.assertTrue(any("did not upload" in r["issue"] for r in issues))
+        # the scan still wants the file -- the retry is the point
+        todo, _covered = harvest.scan_directories(harvest._load(harvest.LEDGER, {}))
+        self.assertEqual([r["key"] for r in todo], [key])
+        # and the next sign, with both uploads landing, writes the row
+        c, _samples = harvest.sign_file(path, 60.0, issues=issues)
+        self.assertIsNotNone(c)
+        row = harvest._load(harvest.LEDGER, {})[key]
+        self.assertEqual(row["status"], "signed")
+        self.assertEqual(row["uploaded_etag"], "etag-abc")
+        self.assertEqual(self.put[-1], (key + ".json", key + ".json"))
+
+    def test_a_failed_signature_upload_writes_no_row_either(self):
+        """The same completeness rule, the other half: the decode succeeded but the
+        signature never reached the bucket -- recording it `signed` would cover the file
+        forever with the pool holding nothing for it."""
+        key = _key("https://y/sig-blip")
+        path = self._feed(key)
+        issues = []
+        self._store_on()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        with mock.patch.object(harvest.sigstore, "put", lambda p, k: None):
+            c, samples = harvest.sign_file(path, 60.0, issues=issues)
+        self.assertEqual((c, samples), (None, None))
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
+        self.assertTrue(any("the signature did not upload" in r["issue"] for r in issues))
+        todo, _covered = harvest.scan_directories({})
+        self.assertEqual([r["key"] for r in todo], [key])
+
+    def test_a_dark_store_signs_locally_with_no_etag(self):
+        """No bucket configured, no uploads promised: the row is `signed` with no etag, and
+        the feeder's rule for that shape (feed the key again) is the contract's, not this
+        side's -- nothing feeds against a dark store."""
+        key = _key("https://y/local-only")
+        path = self._feed(key)
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        with mock.patch.object(harvest.sigstore, "enabled", lambda: False):
+            c, samples = harvest.sign_file(path, 60.0)
+        self.assertIsNotNone(c)
+        row = harvest._load(harvest.LEDGER, {})[key]
+        self.assertEqual((row["status"], row["uploaded_etag"]), ("signed", None))
+        self.assertEqual(self.put, [])
+
     def test_a_file_that_vanishes_mid_sign_gets_no_row(self):
         """The cache policy, not the harvester, owns the directories' space; a file it took
         away mid-sign goes back on the feeder's list, and a `decode_failed` row would be a

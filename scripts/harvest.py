@@ -1036,17 +1036,22 @@ def sign_file(path, expect_s=None, issues=None):
         if result.get("ok"):
             etag = result.get("uploaded_etag")
             # THE SIDECAR BESIDE THE SIGNATURE, the index the pool has never had
-            # (docs/HARVEST_FEED.md). Uploaded as the harvester saw it, best effort: a failed
-            # upload
-            # of the index never buries the signature itself, and the row still carries the
-            # sidecar's own fields.
-            if sigstore.enabled():
-                if not sigstore.put(sidecar_path, key + ".json"):
-                    if issues is not None:
-                        issues.append({"at": _now(), "key": key,
-                                       "issue": "the sidecar %s did not upload beside the "
-                                                "signature -- retried when the file is signed "
-                                                "again" % os.path.basename(sidecar_path)})
+            # (docs/HARVEST_FEED.md). With the store on, BOTH objects must land before the
+            # row is written: a `signed` row is the promise that `<key>.npy` and `<key>.json`
+            # are in the bucket, and the scan treats the row as covering the file -- so a
+            # half-landed sign recorded as signed would never be retried, and the pool would
+            # hold a signature with no sidecar beside it for good. A failed upload of either
+            # writes NO row: the file is still wanted, the next pass signs it again (one
+            # re-decode per retry -- the cost of a bucket blip, never a hole in the index),
+            # and the issue row names what failed.
+            if sigstore.enabled() and (etag is None or
+                                       not sigstore.put(sidecar_path, key + ".json")):
+                what = "the signature" if etag is None else "the sidecar beside the signature"
+                if issues is not None:
+                    issues.append({"at": _now(), "key": key,
+                                   "issue": "%s did not upload -- no row, so the file is "
+                                            "signed again on a later pass" % what})
+                return None, None
             ledger[key] = _row(key, st.st_size, st.st_mtime, "signed", None, _now(),
                                etag, sidecar)
             _save(LEDGER, ledger)
