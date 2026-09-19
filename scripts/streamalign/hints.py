@@ -213,7 +213,7 @@ def build_hints(stem, labels_dir=None, audio_dir=None, decim=8):
 
     audio_path = _audio.find_audio_file(stem, audio_dir)
     if not audio_path:
-        raise SystemExit("no audio found for %s (looked for %s.wav/.au)" % (stem, stem))
+        raise SystemExit("no audio found for %s (looked for %s.wav/.au/.mp3)" % (stem, stem))
     duration = _audio.duration_seconds(stem, audio_dir=audio_dir)
     diag["duration"] = duration
 

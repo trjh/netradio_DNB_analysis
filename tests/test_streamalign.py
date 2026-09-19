@@ -2,7 +2,7 @@
 
 Ground-truth parsing runs anywhere (labels are committed). Audio-dependent tests
 skip gracefully when the capture files / ffmpeg aren't present (they live on Tim's
-disk, not in the repo). The cache-policy and extension-rule tests are synthetic
+disk, not in the repo). The cache-policy and resolution tests are synthetic
 and run everywhere: they stub the decode and drive `cache_budget` against a
 temporary root.
 """
@@ -607,11 +607,11 @@ class TailSolveTests(unittest.TestCase):
         self.assertEqual(res["orphan"], "d396-415")
 
 
-class FindAudioFileRuleTests(unittest.TestCase):
-    """The capture-file extension rule: `.wav`/`.au` only, never an MP3.
-
-    A stem with no capture file on disk is an error, not a silent downgrade of
-    what gets decoded."""
+class FindAudioFileTests(unittest.TestCase):
+    """Capture-file resolution: `.wav` and `.au` are preferred, and a directory
+    holding only the `.mp3` transcodes still resolves — a machine can hold only
+    the transcodes, so the fall-through stays deliberately until the captures
+    can be pulled on demand."""
 
     def setUp(self):
         self.dir = tempfile.mkdtemp(prefix="streamalign-ext-")
@@ -629,22 +629,29 @@ class FindAudioFileRuleTests(unittest.TestCase):
         self.assertTrue(audio.find_audio_file("a", self.dir).endswith("a.wav"))
         self.assertTrue(audio.find_audio_file("b.au", self.dir).endswith("b.au"))
 
-    def test_wav_preferred_over_au_and_bare_stem(self):
-        # the preference order among the lossless files is unchanged: .wav, then .au
+    def test_wav_preferred_over_au_then_mp3(self):
+        # the preference order is unchanged: .wav, then .au, then the transcode
         self._touch("c.wav")
         self._touch("c.au")
+        self._touch("c.mp3")
         self.assertTrue(audio.find_audio_file("c", self.dir).endswith("c.wav"))
-        self.assertTrue(audio.find_audio_file("c.au", self.dir).endswith("c.wav"))
+        self.assertTrue(audio.find_audio_file("c.mp3", self.dir).endswith("c.wav"))
 
-    def test_never_falls_through_to_the_mp3(self):
+    def test_a_directory_holding_only_the_mp3_still_resolves(self):
+        # a machine can hold only the transcodes, so a stem with no capture
+        # file on disk must resolve the .mp3, not fail
         self._touch("d.mp3")
-        self.assertIsNone(audio.find_audio_file("d", self.dir))
-        self.assertIsNone(audio.find_audio_file("d.mp3", self.dir))
+        self.assertTrue(audio.find_audio_file("d", self.dir).endswith("d.mp3"))
+        self.assertTrue(audio.find_audio_file("d.mp3", self.dir).endswith("d.mp3"))
 
-    def test_load_audio_fails_rather_than_decode_the_mp3(self):
+    def test_load_audio_decodes_the_mp3_when_it_is_all_there_is(self):
         self._touch("e.mp3")
-        with self.assertRaises(FileNotFoundError):
-            audio.load_audio("e", audio_dir=self.dir)
+        with mock.patch.object(
+                audio, "_ffmpeg_decode",
+                return_value=np.zeros(20 * 1000, dtype="float32")) as decode:
+            signal = audio.load_audio("e", audio_dir=self.dir)
+        self.assertEqual(len(signal), 20 * 1000)
+        self.assertTrue(decode.call_args[0][0].endswith("e.mp3"))
 
 
 class CachePolicyTests(unittest.TestCase):
