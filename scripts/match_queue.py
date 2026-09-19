@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Chroma-match the Mystery Tracks against the listen queue's DOWNLOADED, UNLISTENED tracks.
 
-    . .venv/bin/activate && python scripts/match_queue.py --out /tmp/queue-match.txt
+    . .venv/bin/activate && python scripts/match_queue.py --queue <queue> --out /tmp/queue-match.txt
+
+<queue> is one JSON file (a list of items, or an object with an `items` list) or a directory of
+`shard-*.json` files, which are read in name order and joined.
 
 The listen queue is a second candidate pool that already exists on disk. Only the tracks Tim has
 NOT listened to are worth checking: if he had heard it and it were the mystery, it would not be
@@ -14,6 +17,7 @@ the file. That is the basis for scaling this to material we cannot afford to sto
 """
 
 import argparse
+import glob
 import hashlib
 import json
 import os
@@ -73,22 +77,35 @@ def cost(q, c):
     return _cm.match(q, c)[:2]
 
 
+def load_queue(path):
+    """The queue's items from one JSON file or a directory of shard-*.json files."""
+    if os.path.isdir(path):
+        shards = sorted(glob.glob(os.path.join(path, "shard-*.json")))
+        if not shards:
+            raise SystemExit("match_queue.py: no shard-*.json files in %s" % path)
+        return [i for f in shards for i in _items(json.load(open(f)))]
+    return _items(json.load(open(path)))
+
+
+def _items(data):
+    return data.get("items", []) if isinstance(data, dict) else data
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--queue", default=None, help="listen_queue.json")
+    ap.add_argument("--queue", required=True,
+                    help="the listen queue: one JSON file, or a directory of shard-*.json files")
     ap.add_argument("--root", default=None, help="NETRADIO_DOWNLOAD_ROOT")
     ap.add_argument("--out", default="-")
     ap.add_argument("--include-listened", action="store_true")
     args = ap.parse_args()
 
     root = args.root or os.path.expanduser(os.environ.get("NETRADIO_DOWNLOAD_ROOT", ""))
-    queue = args.queue or os.path.expanduser(
-        "~/Downloads/Netradio/player/metadata/listen_queue.json")
+    queue = os.path.expanduser(args.queue)
     src = os.environ.get("NETRADIO_SOURCES_DIR")
     out = sys.stdout if args.out == "-" else open(args.out, "w", buffering=1)
 
-    data = json.load(open(queue))
-    items = data.get("items", data)
+    items = load_queue(queue)
     # Only what he has NOT heard: if he'd heard the mystery, it would not be a mystery.
     unheard = {i.get("id"): i for i in items
                if args.include_listened or not i.get("listened")}

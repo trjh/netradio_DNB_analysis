@@ -334,7 +334,8 @@ def main():
         raise SystemExit("usage: streamvideo.py <start> <end> [outdir]")
     start, end = int(sys.argv[1]), int(sys.argv[2])
     outdir = sys.argv[3] if len(sys.argv) > 3 else os.path.join(
-        os.path.expanduser("~"), "Downloads/Netradio/stream-uploads")
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "stream-uploads")                  # stream-uploads beside the repo
     os.makedirs(outdir, exist_ok=True)
     tr, albums, sf = load_meta()
     count = end - start + 1
