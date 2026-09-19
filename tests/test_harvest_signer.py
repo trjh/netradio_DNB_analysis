@@ -1,0 +1,885 @@
+"""The signer: directories, sidecars, the ledger, sign_file.
+
+Nothing here touches the network and nothing decodes real audio: `ffmpeg` is a fake that
+writes prepared PCM into the spool it is handed, `compute_chroma` is stubbed, and the two
+things worth being careful about are pinned:
+
+  * **The row is the verdict.** A file that decodes badly, or whose own sidecar disagrees
+    with its length, or that the cache policy has no room for, is `delayed` with a reason --
+    and a feeder reads that reason to decide what to do with the file. The three things that
+    must write NO row are pinned just as hard: a stop, a file that vanished mid-sign, and a
+    sidecar that went between the scan and the sign.
+  * **The directories are someone else's.** The harvester reads their top level and writes
+    nothing there: no deletion, no rename, no move. A test feeds it a directory and demands
+    every file back afterwards.
+"""
+
+import contextlib
+import io
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+from unittest import mock
+
+SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
+sys.path.insert(0, SCRIPTS)
+
+import numpy as np                      # noqa: E402
+
+try:
+    import harvest                      # noqa: E402
+except Exception:                       # a dependency this test does not own
+    harvest = None
+
+import cache_budget                     # noqa: E402  (the machine's one cache policy)
+import sigstore                         # noqa: E402  (the seam every bucket test fakes)
+
+SR = 16000
+LONG_ENOUGH = int(60 * SR)              # comfortably over chroma_recipe.MIN_SECONDS
+
+# The cache-policy names the landing tests save and restore (the same set
+# tests/test_cache_budget.py uses).
+CACHE_ENV = ("NETRADIO_CACHE_ROOT", "NETRADIO_DOWNLOAD_ROOT", "NETRADIO_DISK_MAX_PCT",
+             "NETRADIO_CACHE_EVENTS_DAYS")
+
+
+def _pcm(n_samples):
+    """Decoded PCM as ffmpeg would write it: mono float32 little-endian."""
+    return (np.arange(n_samples, dtype="float32") % 7.0 - 3.0).tobytes()
+
+
+def _key(url):
+    return "u" + __import__("hashlib").sha1(url.encode()).hexdigest()[:20]
+
+
+class _FakeProc:
+    """Just enough of `Popen` for the decode path: exit code and stderr."""
+
+    def __init__(self, argv, returncode=0, stderr=b"", alive=False, order=None):
+        self.argv = argv
+        self.returncode = returncode
+        self.stdout = io.BytesIO()          # never read; the code closes it
+        self.stderr = io.BytesIO(stderr)
+        self.alive = alive
+        self.order = order if order is not None else []
+        self.killed = False
+
+    def name(self):
+        return os.path.basename(self.argv[0])
+
+    def wait(self, timeout=None):
+        self.alive = False
+        return self.returncode
+
+    def poll(self):
+        return None if self.alive else self.returncode
+
+    def terminate(self):
+        self.order.append(self.name())
+        self.alive = False
+
+    def kill(self):
+        self.killed = True
+        self.alive = False
+
+
+def fake_decode(pcm=b"", rc=0, stderr=b"", alive=False, order=None, vanish=None):
+    """A `subprocess.Popen` stand-in for the one ffmpeg the signer spawns.
+
+    The fake writes `pcm` straight into the spool file it is handed as `stdout`, which is
+    exactly what the real one does. `vanish` unlinks that path while "decoding", so a test
+    can take the file away mid-sign.
+    """
+    made = {}
+
+    def _popen(argv, **kwargs):
+        proc = _FakeProc(argv, returncode=rc, stderr=stderr, alive=alive, order=order)
+        if pcm:
+            kwargs["stdout"].write(pcm)
+        made["ff"] = proc
+        if vanish:
+            os.unlink(vanish)
+        return proc
+
+    _popen.made = made
+    return _popen
+
+
+def fake_slow_decode(chunks, order=None, rc=0):
+    """An ffmpeg that takes several polls to finish, so a stop can land mid-decode."""
+    made = {}
+
+    class _Slow(_FakeProc):
+        def __init__(self, argv, spool):
+            _FakeProc.__init__(self, argv, returncode=rc, alive=True, order=order)
+            self.spool, self.left = spool, list(chunks)
+
+        def wait(self, timeout=None):
+            if self.left and timeout is not None:
+                self.spool.write(self.left.pop(0))
+                self.spool.flush()
+                raise subprocess.TimeoutExpired(self.argv, timeout)
+            self.alive = False
+            return self.returncode
+
+        def terminate(self):
+            self.left = []
+            _FakeProc.terminate(self)
+
+    def _popen(argv, **kwargs):
+        made["ff"] = _Slow(argv, kwargs["stdout"])
+        return made["ff"]
+
+    _popen.made = made
+    return _popen
+
+
+class _SignerCase(unittest.TestCase):
+    """A lit cache policy, a throwaway ledger and one directory of audio."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="signer-")
+        self.audio = os.path.join(self.tmp, "audio")
+        os.makedirs(self.audio)
+        self.root = os.path.join(self.tmp, "root")      # the policy's root, OUTSIDE the audio
+        self._paths = (harvest.LEDGER, harvest.STATE, harvest.JOBS, harvest.WRITER_LOCK,
+                       harvest.RULINGS, harvest.STATE_DIR, harvest.HARVEST_DIRS)
+        harvest.STATE_DIR = os.path.join(self.tmp, ".harvest")
+        harvest.LEDGER = os.path.join(self.tmp, ".harvest", "ledger.json")
+        harvest.STATE = os.path.join(self.tmp, ".harvest", "state.json")
+        harvest.JOBS = os.path.join(self.tmp, ".harvest", "tmp")
+        harvest.WRITER_LOCK = os.path.join(self.tmp, ".harvest", "writer.lock")
+        harvest.RULINGS = os.path.join(self.tmp, ".harvest", "rulings.json")
+        harvest.HARVEST_DIRS = self.audio
+        self._env = {k: os.environ.get(k) for k in list(os.environ) if k.startswith("NETRADIO_")}
+        for k in self._env:
+            os.environ.pop(k, None)
+        os.environ["NETRADIO_CACHE_ROOT"] = self.root
+        os.environ["NETRADIO_HARVEST_CHILD"] = "0"      # the decode runs in this process
+        self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        harvest.register_caches()
+        self.put = []
+        self.chroma_dir = os.path.join(self.root, "chroma")
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        (harvest.LEDGER, harvest.STATE, harvest.JOBS, harvest.WRITER_LOCK,
+         harvest.RULINGS, harvest.STATE_DIR, harvest.HARVEST_DIRS) = self._paths
+        cache_budget._REGISTRY.clear()
+        cache_budget._REGISTRY.update(self._registry[0])
+        cache_budget._STATS.clear()
+        cache_budget._STATS.update(self._registry[1])
+        for k in [k for k in list(os.environ) if k.startswith("NETRADIO_")]:
+            os.environ.pop(k, None)
+        os.environ.update(self._env)
+        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
+        harvest._REMOTE_OBJECTS.update({"at": 0.0, "objects": None})
+        harvest._LAST_CHILD.clear()
+        harvest._said_vanished.clear()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    # -- the world a feeder builds -----------------------------------------------------------
+
+    def _feed(self, key, url="https://y/x", pcm=_pcm(LONG_ENOUGH), sidecar=None, name=None,
+              mtime=None):
+        """One audio file + its sidecar, the way the contract says a feeder writes them."""
+        path = os.path.join(self.audio, name or (key + ".mp3"))
+        with open(path, "wb") as fh:
+            fh.write(pcm if isinstance(pcm, bytes) else b"")
+        sc = {"key": key, "url": url, "title": "a set", "artist": "someone",
+              "duration_s": len(pcm) / 4.0 / SR, "fed_at": "2026-09-19T00:00:00+00:00"}
+        sc.update(sidecar or {})
+        with open(os.path.join(self.audio, key + ".json"), "w") as fh:
+            json.dump(sc, fh)
+        if mtime is not None:
+            os.utime(path, (mtime, mtime))
+        return path
+
+    def _store_on(self, etag="etag-abc"):
+        p = mock.patch.object(harvest.sigstore, "enabled", lambda: True), \
+            mock.patch.object(harvest.sigstore, "put",
+                              lambda path, key: self.put.append(
+                                  (os.path.basename(path), key)) or etag)
+        for patch in p:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def _decode_patches(self, popen, chroma=None):
+        chroma = chroma if chroma is not None else np.zeros((12, 8), dtype="float32")
+        return [mock.patch.object(harvest.subprocess, "Popen", popen),
+                mock.patch.object(harvest.chroma_recipe, "compute_chroma",
+                                  lambda y, sr=None: chroma)]
+
+    def _run_patches(self, popen, chroma=None):
+        patches = self._decode_patches(popen, chroma)
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class SignFileWritesTheRow(_SignerCase):
+    """`sign_file` on a file: decode, upload, and the row -- or the delayed reason."""
+
+    def test_a_file_is_signed_and_the_row_names_every_field(self):
+        key = _key("https://y/one")
+        path = self._feed(key, url="https://y/one#t=0,60")
+        self._store_on()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        c, samples = harvest.sign_file(path, 60.0)
+
+        self.assertIsNotNone(c)                       # the chroma, for scoring
+        self.assertEqual(len(samples), LONG_ENOUGH)  # the memmap, for an excerpt
+        row = harvest._load(harvest.LEDGER, {})[key]
+        self.assertEqual(row["key"], key)
+        self.assertEqual(row["status"], "signed")
+        self.assertIsNone(row["reason"])
+        self.assertEqual(row["size"], os.path.getsize(path))
+        self.assertEqual(row["mtime"], os.stat(path).st_mtime)
+        self.assertEqual(row["uploaded_etag"], "etag-abc")
+        self.assertIn("signed_at", row)
+        # the sidecar's fields are carried, never read for meaning
+        self.assertEqual(row["url"], "https://y/one#t=0,60")
+        self.assertEqual((row["title"], row["artist"]), ("a set", "someone"))
+        self.assertEqual(row["duration_s"], 60.0)
+        # the signature landed in the working cache, under the key
+        sig = os.path.join(self.chroma_dir, key + ".npy")
+        self.assertTrue(os.path.isfile(sig))
+        self.assertTrue(np.array_equal(np.load(sig),
+                                       np.zeros((12, 8), dtype="float32").astype("float16")))
+        # the uploads: the signature, and the sidecar BESIDE it
+        self.assertEqual(self.put, [(key + ".npy", key + ".npy"), (key + ".json", key + ".json")])
+
+    def test_the_length_mismatch_is_a_delayed_verdict(self):
+        key = _key("https://y/mismatch")
+        path = self._feed(key, sidecar={"duration_s": 3600})
+        self._store_on()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))   # 60s decoded, 3600 declared
+        c, samples = harvest.sign_file(path, 3600.0)
+        self.assertEqual((c, samples), (None, None))
+        row = harvest._load(harvest.LEDGER, {})[key]
+        self.assertEqual((row["status"], row["reason"]), ("delayed", "length_mismatch"))
+        self.assertIsNone(row["uploaded_etag"])
+        self.assertEqual(self.put, [], "nothing is uploaded for a refused file")
+        self.assertFalse(os.path.exists(os.path.join(self.chroma_dir, key + ".npy")))
+
+    def test_a_length_within_tolerance_is_signed(self):
+        key = _key("https://y/close")
+        path = self._feed(key)                     # duration_s matches the bytes
+        self._store_on()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH - SR)))   # one second short of 60
+        c, _ = harvest.sign_file(path, 60.0)
+        self.assertIsNotNone(c)
+        self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["status"], "signed")
+
+    def test_the_four_hour_cap_is_refused_before_anything_is_spawned(self):
+        """A declared length over the cap is refused on the sidecar's own claim: four hours of
+        decode is four hours of CPU paid for a refusal, and the claim was in hand first."""
+        key = _key("https://y/master")
+        path = self._feed(key, sidecar={"duration_s": 5 * 3600})
+        spawned = []
+        self._run_patches(lambda argv, **kw: spawned.append(argv) or _FakeProc(argv))
+        c, samples = harvest.sign_file(path, 5 * 3600.0)
+        self.assertEqual((c, samples), (None, None))
+        self.assertEqual(spawned, [], "ffmpeg never ran")
+        row = harvest._load(harvest.LEDGER, {})[key]
+        self.assertEqual((row["status"], row["reason"]), ("delayed", "too_long"))
+
+    def test_an_undeclared_four_hour_file_is_refused_on_its_decode(self):
+        """No `duration_s`, no claim -- but the decode's own length still answers the backstop,
+        and the signature is the thing that must never exist."""
+        key = _key("https://y/undeclared")
+        path = self._feed(key, sidecar={"duration_s": None})
+        self._store_on()
+        self._run_patches(fake_decode(pcm=_pcm((4 * 3600 + 60) * SR)))
+        c, samples = harvest.sign_file(path, None)
+        self.assertEqual((c, samples), (None, None))
+        row = harvest._load(harvest.LEDGER, {})[key]
+        self.assertEqual((row["status"], row["reason"]), ("delayed", "too_long"))
+        self.assertEqual(self.put, [])
+        self.assertFalse(os.path.exists(os.path.join(self.chroma_dir, key + ".npy")))
+
+    def test_a_failed_decode_is_a_verdict_not_a_crash(self):
+        key = _key("https://y/corrupt")
+        path = self._feed(key)
+        self._store_on()
+        self._run_patches(fake_decode(rc=1, stderr=b"pipe:0: Invalid data found\n"))
+        c, samples = harvest.sign_file(path, 60.0)
+        self.assertEqual((c, samples), (None, None))
+        row = harvest._load(harvest.LEDGER, {})[key]
+        self.assertEqual((row["status"], row["reason"]), ("delayed", "decode_failed"))
+
+    def test_no_room_for_the_signature_is_a_delayed_no_space(self):
+        key = _key("https://y/full-disk")
+        path = self._feed(key)
+        self._store_on()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        with mock.patch.object(harvest.cache_budget, "reserve", lambda *a, **k: False):
+            c, samples = harvest.sign_file(path, 60.0)
+        self.assertEqual((c, samples), (None, None))
+        row = harvest._load(harvest.LEDGER, {})[key]
+        self.assertEqual((row["status"], row["reason"]), ("delayed", "no_space"))
+
+    def test_a_file_that_vanishes_mid_sign_gets_no_row(self):
+        """The cache policy, not the harvester, owns the directories' space; a file it took
+        away mid-sign goes back on the feeder's list, and a `decode_failed` row would be a
+        final verdict on bytes nobody can re-feed."""
+        key = _key("https://y/evicted")
+        path = self._feed(key)
+        issues = []
+        self._run_patches(fake_decode(vanish=path, rc=1))
+        c, samples = harvest.sign_file(path, 60.0, issues=issues)
+        self.assertEqual((c, samples), (None, None))
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {}, "no row was written")
+        self.assertEqual(self.put, [])
+        self.assertTrue(any("left while it was being signed" in r["issue"] for r in issues))
+
+    def test_a_vanished_files_issue_is_news_once_per_file(self):
+        key = _key("https://y/evicted-twice")
+        path = self._feed(key)
+        issues = []
+        for _ in range(2):
+            self._feed(key, name=key + ".mp3")      # the feeder puts it back...
+            self._run_patches(fake_decode(vanish=os.path.join(self.audio, key + ".mp3"), rc=1))
+            harvest.sign_file(os.path.join(self.audio, key + ".mp3"), 60.0, issues=issues)
+        self.assertEqual(len([r for r in issues if "left while" in r["issue"]]), 1)
+
+    def test_a_stop_is_never_a_verdict(self):
+        key = _key("https://y/stopped")
+        path = self._feed(key)
+        self._run_patches(fake_slow_decode([_pcm(SR), _pcm(SR)]))
+        harvest._STOP["signum"] = signal.SIGTERM     # the flag, as the handler raises it
+        try:
+            c, samples = harvest.sign_file(path, 60.0)
+        finally:
+            harvest._STOP["signum"] = 0
+        self.assertEqual((c, samples), (None, None))
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {}, "no row was written")
+
+    def test_a_file_whose_sidecar_goes_is_skipped_not_signed(self):
+        key = _key("https://y/pulled")
+        path = self._feed(key)
+        os.unlink(os.path.join(self.audio, key + ".json"))
+        spawned = []
+        self._run_patches(lambda argv, **kw: spawned.append(argv) or _FakeProc(argv))
+        c, samples = harvest.sign_file(path, 60.0)
+        self.assertEqual((c, samples), (None, None))
+        self.assertEqual(spawned, [])
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
+
+
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class TheScan(_SignerCase):
+    """The top level, the completeness rule, and what a row already covers."""
+
+    def test_a_file_with_no_sidecar_is_neither_read_nor_logged(self):
+        key = _key("https://y/incomplete")
+        with open(os.path.join(self.audio, key + ".mp3"), "wb") as fh:
+            fh.write(_pcm(SR))
+        todo, covered = harvest.scan_directories({})
+        self.assertEqual(todo, [])
+        self.assertEqual(covered, [])
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
+
+    def test_a_subdirectory_file_is_never_read(self):
+        key = _key("https://y/buried")
+        sub = os.path.join(self.audio, "scratch")
+        os.makedirs(sub)
+        with open(os.path.join(sub, key + ".mp3"), "wb") as fh:
+            fh.write(_pcm(SR))
+        with open(os.path.join(self.audio, key + ".json"), "w") as fh:
+            json.dump({"key": key}, fh)
+        todo, _ = harvest.scan_directories({})
+        self.assertEqual(todo, [], "a sidecar beside the DIRECTORY is not a sidecar beside "
+                                   "the file, and no subdirectory is ever read")
+
+    def test_a_sidecar_whose_key_differs_from_the_stem_is_refused(self):
+        key = _key("https://y/mislabelled")
+        self._feed(key, sidecar={"key": _key("https://y/someone-else")})
+        issues = []
+        todo, _ = harvest.scan_directories({}, issues=issues)
+        self.assertEqual(todo, [])
+        self.assertTrue(any("differs from" in r["issue"] for r in issues))
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
+
+    def test_a_stem_that_is_not_a_keys_shape_is_refused(self):
+        """The pool's own listing admits only `u` + 20 hex, so a signature filed under any
+        other stem would be invisible to the pool -- refused where the refusal can name it."""
+        for name in ("notes.txt", "u123.mp3", "u" + "g" * 20 + ".mp3"):
+            with self.subTest(name=name):
+                with open(os.path.join(self.audio, name), "wb") as fh:
+                    fh.write(_pcm(SR))
+                stem = name.rsplit(".", 1)[0]
+                with open(os.path.join(self.audio, stem + ".json"), "w") as fh:
+                    json.dump({"key": stem}, fh)
+        issues = []
+        todo, _ = harvest.scan_directories({}, issues=issues)
+        self.assertEqual(todo, [])
+        self.assertEqual(len(issues), 3, "each bad stem is refused, and named")
+
+    def test_a_missing_directory_is_skipped_with_an_issue_row(self):
+        harvest.HARVEST_DIRS = os.path.join(self.audio, "not-there")
+        issues = []
+        todo, covered = harvest.scan_directories({}, issues=issues)
+        self.assertEqual((todo, covered), ([], []))
+        self.assertTrue(any("not there" in r["issue"] for r in issues))
+
+    def test_a_file_with_no_row_is_wanted_oldest_first(self):
+        old = self._feed(_key("https://y/old"), mtime=1000)
+        new = self._feed(_key("https://y/new"), mtime=2000)
+        todo, covered = harvest.scan_directories({})
+        self.assertEqual([r["key"] for r in todo],
+                         [_key("https://y/old"), _key("https://y/new")])
+        self.assertEqual(covered, [])
+
+    def test_a_row_that_covers_the_file_means_no_sign(self):
+        key = _key("https://y/done")
+        path = self._feed(key)
+        row = harvest._row(key, os.path.getsize(path), os.stat(path).st_mtime,
+                           "signed", None, "then", "etag", {})
+        todo, covered = harvest.scan_directories({key: row})
+        self.assertEqual(todo, [])
+        self.assertEqual(covered, [key])
+
+    def test_a_changed_file_is_signed_again_whatever_the_row_said(self):
+        key = _key("https://y/re-cut")
+        path = self._feed(key)
+        st = os.stat(path)
+        for status, reason in (("signed", None), ("delayed", "decode_failed"),
+                               ("delayed", "too_long"), ("delayed", "length_mismatch")):
+            with self.subTest(status=status, reason=reason):
+                # the row's size/mtime are the OLD file's: the re-cut differs in both
+                row = harvest._row(key, st.st_size - 1, st.st_mtime - 1,
+                                   status, reason, None, "etag", {})
+                todo, _ = harvest.scan_directories({key: row})
+                self.assertEqual([r["key"] for r in todo], [key])
+
+    def test_a_no_space_delay_is_wanted_again_unchanged(self):
+        """The one delayed row that is retried in place: `no_space` means the machine was
+        full, not that the file was judged."""
+        key = _key("https://y/no-room")
+        path = self._feed(key)
+        st = os.stat(path)
+        row = harvest._row(key, st.st_size, st.st_mtime, "delayed", "no_space",
+                           None, None, {})
+        todo, covered = harvest.scan_directories({key: row})
+        self.assertEqual([r["key"] for r in todo], [key])
+        self.assertEqual(covered, [])
+
+    def test_the_sidecars_duration_is_carried_validated(self):
+        key = _key("https://y/duration")
+        self._feed(key, sidecar={"duration_s": 61})
+        for bad in (True, "an hour", 0, -30):
+            with self.subTest(bad=bad):
+                self._feed(_key("https://y/bad-%r" % (bad,)), sidecar={"duration_s": bad})
+        todo, _ = harvest.scan_directories({})
+        self.assertEqual(sorted(str(r["duration_s"]) for r in todo), ["61.0", "None", "None",
+                                                                    "None", "None"],
+                         "a claim that is not a length makes no claim")
+
+    def test_only_the_top_level_of_each_directory_is_read(self):
+        """`:`-separated directories, each its own top level."""
+        other = os.path.join(self.tmp, "more-audio")
+        os.makedirs(other)
+        harvest.HARVEST_DIRS = self.audio + os.pathsep + other
+        a = self._feed(_key("https://y/a"))
+        key_b = _key("https://y/b")
+        with open(os.path.join(other, key_b + ".mp3"), "wb") as fh:
+            fh.write(_pcm(SR))
+        with open(os.path.join(other, key_b + ".json"), "w") as fh:
+            json.dump({"key": key_b}, fh)
+        todo, _ = harvest.scan_directories({})
+        self.assertEqual(sorted(r["key"] for r in todo),
+                         sorted([_key("https://y/a"), key_b]))
+
+
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class TheLedger(_SignerCase):
+    """Seeded from the bucket at the first start; reconciled against it on every start."""
+
+    def _objects(self, *names, etag="e-%s"):
+        return {name: etag % name[:6] for name in names}
+
+    def test_the_first_start_seeds_one_signed_row_per_bucket_key(self):
+        objects = self._objects("u" + "a" * 20 + ".npy", "u" + "b" * 20 + ".npy")
+        with mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: objects):
+            res = harvest.reconcile_ledger({"issues": []})
+        self.assertEqual(res["seeded"], 2)
+        rows = harvest._load(harvest.LEDGER, {})
+        for key in ("u" + "a" * 20, "u" + "b" * 20):
+            with self.subTest(key=key):
+                row = rows[key]
+                self.assertEqual((row["status"], row["key"]), ("signed", key))
+                self.assertIsNone(row["size"], "the seed has no file to name")
+                self.assertIsNone(row["mtime"])
+                self.assertIsNone(row["signed_at"], "when it was signed is not known")
+                self.assertEqual(row["uploaded_etag"], "e-%s" % key[:6],
+                                  "the object is there: the seed's evidence is the listing")
+
+    def test_a_gone_object_loses_its_etag(self):
+        key = "u" + "a" * 20
+        gone = "u" + "b" * 20
+        filler = [("u" + ("%02d" % i) * 10) for i in range(12)]
+        rows = {k: harvest._row(k, 1, 1.0, "signed", None, "then", "e-%s" % k, {})
+                for k in filler}
+        rows[key] = harvest._row(key, 1, 1.0, "signed", None, "then", "keep", {})
+        rows[gone] = harvest._row(gone, 1, 1.0, "signed", None, "then", "lost", {})
+        harvest._save(harvest.LEDGER, rows)
+        objects = {k + ".npy": "e-%s" % k[:6]
+                   for k in list(rows) if k != gone}
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900: objects):
+            res = harvest.reconcile_ledger({"issues": []})
+        self.assertEqual(res["dropped"], 1)
+        saved = harvest._load(harvest.LEDGER, {})
+        self.assertEqual(saved[key]["uploaded_etag"], "keep")
+        self.assertIsNone(saved[gone]["uploaded_etag"])
+        self.assertEqual(len(saved), len(rows), "the drop touched nothing else")
+
+    def test_a_landed_upload_gains_its_etag_back(self):
+        """A signed row with no etag whose object IS in the listing: the feeder's re-feed
+        rule must not keep firing for a key the bucket already holds."""
+        key = "u" + "a" * 20
+        harvest._save(harvest.LEDGER,
+                      {key: harvest._row(key, 1, 1.0, "signed", None, "then", None, {})})
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900: self._objects(key + ".npy")):
+            res = harvest.reconcile_ledger({"issues": []})
+        self.assertEqual(res["restored"], 1)
+        self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["uploaded_etag"],
+                         "e-%s" % key[:6])
+
+    def test_an_unlistable_bucket_touches_nothing(self):
+        """'Unknown' is never 'gone': with the listing dark, a bucket-held signature and a
+        missing one are indistinguishable, and dropping etags on a guess would empty the
+        feeder's list of every key it should not feed."""
+        key = "u" + "a" * 20
+        harvest._save(harvest.LEDGER,
+                      {key: harvest._row(key, 1, 1.0, "signed", None, "then", "e", {})})
+        with mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: None):
+            res = harvest.reconcile_ledger({"issues": []})
+        self.assertEqual((res["seeded"], res["dropped"], res["restored"]), (0, 0, 0))
+        self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["uploaded_etag"], "e")
+
+    def test_a_mass_loss_reports_and_touches_nothing(self):
+        keys = [("u" + ("%02d" % i) * 10) for i in range(10)]
+        rows = {k: harvest._row(k, 1, 1.0, "signed", None, "then", "e-%s" % k, {})
+                for k in keys}
+        harvest._save(harvest.LEDGER, rows)
+        state = {"issues": []}
+        # the listing holds only one of the ten: the store broke, not the rows
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900: self._objects(keys[0] + ".npy")):
+            res = harvest.reconcile_ledger(state)
+        self.assertTrue(res["reported"])
+        self.assertEqual((res["seeded"], res["dropped"]), (0, 0))
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), rows,
+                         "nothing was dropped over a loss that size")
+        self.assertIn("sig_alert", state)
+        self.assertTrue(any(r.get("issue", "").startswith("ledger:") for r in state["issues"]))
+
+    def test_the_cap_is_env_overridable_for_a_deliberate_drop(self):
+        key = "u" + "a" * 20
+        harvest._save(harvest.LEDGER,
+                      {key: harvest._row(key, 1, 1.0, "signed", None, "then", "e", {})})
+        with mock.patch.dict(os.environ, {"NETRADIO_RECONCILE_DROP_CAP": "1"}), \
+                mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: {}):
+            res = harvest.reconcile_ledger({"issues": []})
+        self.assertEqual(res["dropped"], 1)
+        self.assertIsNone(harvest._load(harvest.LEDGER, {})[key]["uploaded_etag"])
+
+    def test_a_delayed_row_is_neither_seeded_nor_reconciled(self):
+        """The reconciliation's business is the `signed` rows: a delayed row is a verdict on
+        a file, not a claim about the bucket."""
+        key = "u" + "a" * 20
+        harvest._save(harvest.LEDGER,
+                      {key: harvest._row(key, 1, 1.0, "delayed", "too_long", None, None, {})})
+        with mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: {}):
+            res = harvest.reconcile_ledger({"issues": []})
+        self.assertEqual((res["dropped"], res["restored"]), (0, 0))
+        self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["status"], "delayed")
+
+
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class MatchRowsCarryTheKey(_SignerCase):
+    """A match row joins on the key, and the old rows move onto it at first start."""
+
+    def _score(self, url):
+        key = _key(url)
+        chroma = np.zeros((12, 8), dtype="float32")
+        os.makedirs(self.chroma_dir, exist_ok=True)
+        np.save(os.path.join(self.chroma_dir, key + ".npy"), chroma)
+        state = {"matches": [], "kept": 0, "scored": {}}
+        with mock.patch.object(harvest._cm, "match", return_value=(0.01, 0, 12.0)):
+            return harvest.score_cached(state, 4, chroma, "4:fp", key), state
+
+    def test_a_new_match_row_carries_the_key_and_not_the_url(self):
+        hit, state = self._score("https://y/a-match")
+        self.assertEqual(hit["key"], _key("https://y/a-match"))
+        self.assertNotIn("url", hit)
+        self.assertEqual(state["scored"]["4:fp"], [hit["key"] + ".npy"],
+                         "the scored pairings keep the pool's own file naming")
+
+    def test_an_existing_row_is_updated_by_its_key(self):
+        key = _key("https://y/known")
+        state = {"matches": [{"mystery": 4, "key": key, "cost": 0.09, "at_s": None,
+                              "verdict": "near"}], "kept": 0, "scored": {}}
+        os.makedirs(self.chroma_dir, exist_ok=True)
+        np.save(os.path.join(self.chroma_dir, key + ".npy"),
+                np.zeros((12, 8), dtype="float32"))
+        with mock.patch.object(harvest._cm, "match", return_value=(0.012, 1, 30.0)):
+            hit = harvest.score_cached(state, 4, np.zeros((12, 8), dtype="float32"),
+                                      "4:fp", key)
+        self.assertIs(hit, state["matches"][0], "no duplicate row was added")
+        self.assertEqual((hit["cost"], hit["at_s"]), (0.012, 30.0))
+
+    def test_a_fixture_of_url_only_rows_gains_a_key_on_every_row(self):
+        state = {"matches": [
+            {"at": "x", "mystery": 4, "cost": 0.02, "at_s": 1.0, "verdict": "MATCH",
+             "url": "https://y/one"},
+            {"at": "x", "mystery": 6, "cost": 0.06, "at_s": 2.0, "verdict": "near",
+             "url": "https://y/two"},
+            {"at": "x", "mystery": 7, "cost": 0.05, "verdict": "near",
+             "url": "https://y/three"},          # old row: no at_s
+        ]}
+        moved = harvest.migrate_matches(state)
+        self.assertEqual(moved, 3)
+        self.assertEqual([m["key"] for m in state["matches"]],
+                         [_key(u) for u in ("https://y/one", "https://y/two",
+                                            "https://y/three")])
+        for m in state["matches"]:
+            self.assertNotIn("url", m)
+            self.assertNotIn("--", m["key"])
+        # and a second run moves nothing
+        self.assertEqual(harvest.migrate_matches(state), 0)
+
+    def test_a_row_with_neither_field_is_left_alone(self):
+        state = {"matches": [{"mystery": 4, "cost": 0.02}]}
+        self.assertEqual(harvest.migrate_matches(state), 0)
+        self.assertEqual(state["matches"], [{"mystery": 4, "cost": 0.02}])
+
+
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class SignOneIsTheHandTool(_SignerCase):
+    """`--sign-one <key>`: the lock, the reconcile, and the same path the loop uses."""
+
+    def test_it_takes_the_lock_and_signs_through_the_same_path(self):
+        key = _key("https://y/hand")
+        path = self._feed(key)
+        self._store_on()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        calls = []
+        with mock.patch.object(harvest, "reconcile_ledger",
+                               lambda state=None: calls.append("reconcile") or
+                               {"seeded": 0, "dropped": 0, "restored": 0, "reported": False,
+                                "cleared": False, "why": ""}), \
+                mock.patch.object(harvest, "sign_file",
+                                  side_effect=lambda p, e=None, issues=None:
+                                      calls.append((p, e)) or (None, None)) as sign:
+            argv = ["harvest.py", "--sign-one", key]
+            with mock.patch.object(sys, "argv", argv), \
+                    contextlib.redirect_stdout(io.StringIO()) as out:
+                harvest.main()
+        sign.assert_called_once()
+        self.assertEqual(sign.call_args[0][0], path)
+        self.assertEqual(calls[0], "reconcile", "the hand tool reconciles first, like a run")
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {},
+                         "the patched sign_file wrote nothing; the lock was the point")
+
+    def test_it_refuses_while_a_writer_holds_the_lock(self):
+        key = _key("https://y/hand")
+        self._feed(key)
+        first = harvest.acquire_writer_lock()
+        self.assertIsNotNone(first)
+        self.addCleanup(first.close)
+        with mock.patch.object(sys, "argv", ["harvest.py", "--sign-one", key]), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            harvest.main()
+        self.assertIn("writer is RUNNING", out.getvalue())
+
+    def test_it_names_the_missing_key(self):
+        with mock.patch.object(sys, "argv",
+                               ["harvest.py", "--sign-one", _key("https://y/absent")]), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            harvest.main()
+        self.assertIn("no file for key", out.getvalue())
+
+
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class TheHarvesterOwnsNothingButItsOwnFiles(_SignerCase):
+    """The directories are someone else's: read, never written."""
+
+    def test_a_full_sign_deletes_nothing_in_the_directories(self):
+        key = _key("https://y/mine")
+        path = self._feed(key)
+        before = sorted(os.listdir(self.audio))
+        self._store_on()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        c, samples = harvest.sign_file(path, 60.0)
+        samples = None
+        self.assertEqual(sorted(os.listdir(self.audio)), before,
+                         "the audio and its sidecar are exactly as the feeder left them")
+        self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["status"], "signed")
+
+    def test_a_refused_sign_deletes_nothing_either(self):
+        key = _key("https://y/still-mine")
+        path = self._feed(key, sidecar={"duration_s": 3600})
+        before = sorted(os.listdir(self.audio))
+        self._store_on()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        harvest.sign_file(path, 3600.0)
+        self.assertEqual(sorted(os.listdir(self.audio)), before)
+
+    def test_no_code_path_builds_a_ytdlp_argv(self):
+        """The fetch leg is gone; if it ever comes back through this file, the pool's
+        politeness rules come back with it, and that is a decision, not a slip."""
+        src = open(os.path.join(SCRIPTS, "harvest.py"), encoding="utf-8").read()
+        self.assertNotIn("yt-dlp", src)
+        self.assertNotIn("yt_dlp", src)
+
+    def test_nothing_reads_a_queue_or_a_download_index(self):
+        """The sidecar is the only notice the harvester takes: no queue, no download index,
+        no other process's store is opened to decide what to work on."""
+        src = open(os.path.join(SCRIPTS, "harvest.py"), encoding="utf-8").read()
+        for name in ("NETRADIO_LISTEN_QUEUE", "listen_queue", "index.json",
+                     "NETRADIO_YTDLP", "NETRADIO_CANARY_URL"):
+            self.assertNotIn(name, src, "%s has no business in the signer" % name)
+
+
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class TheLoopSignsAndScores(_SignerCase):
+    """One pass of `run()`, end to end: the seed, the scan, the sign, the rescan's row."""
+
+    def _run(self, stop_after_naps=1):
+        """Run the loop until it has napped `stop_after_naps` times, then stop it cleanly."""
+
+        class _StopTheRun(Exception):
+            pass
+
+        naps = []
+
+        def _nap(seconds):
+            naps.append(seconds)
+            if len(naps) >= stop_after_naps:
+                harvest._STOP["signum"] = signal.SIGTERM
+                return True
+            return False
+
+        return _StopTheRun, naps, _nap
+
+    def test_a_file_is_signed_scored_and_the_state_saved(self):
+        key = _key("https://y/looped")
+        path = self._feed(key)
+        harvest._save(harvest.RULINGS, {})
+        qs = [(4, np.zeros((12, 8), dtype="float32"), "4:fp")]
+        self._store_on()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        _exc, naps, _nap = self._run(stop_after_naps=1)
+        with mock.patch.object(harvest, "queries", lambda state=None: qs), \
+                mock.patch.object(harvest, "_remote_objects",
+                                  lambda max_age_s=900: None), \
+                mock.patch.object(harvest, "_nap", _nap), \
+                mock.patch.object(harvest._cm, "match", return_value=(None, 0, None)), \
+                mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
+                mock.patch.object(harvest.memwatch, "allocator_canary",
+                                  lambda *a, **k: (0, 0, None)):
+            harvest.run(None)
+        state = harvest._load(harvest.STATE, {})
+        self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["status"], "signed")
+        self.assertEqual(state["analyzed"], 1)
+        # the file was signed; the second pass's scan found it covered and the run stood down
+        self.assertTrue(naps)
+        self.assertEqual(sorted(os.listdir(self.audio)),
+                         sorted([key + ".mp3", key + ".json"]))
+
+    def test_the_second_pass_counts_the_covered_file_once(self):
+        key = _key("https://y/counted")
+        self._feed(key)
+        harvest._save(harvest.RULINGS, {})
+        qs = []
+        self._store_on()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        _exc, naps, _nap = self._run(stop_after_naps=2)
+        with mock.patch.object(harvest, "queries", lambda state=None: qs), \
+                mock.patch.object(harvest, "_remote_objects",
+                                  lambda max_age_s=900: None), \
+                mock.patch.object(harvest, "_nap", _nap), \
+                mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
+                mock.patch.object(harvest.memwatch, "allocator_canary",
+                                  lambda *a, **k: (0, 0, None)):
+            harvest.run(None)
+        state = harvest._load(harvest.STATE, {})
+        self.assertEqual(state["skipped_cached"], 1,
+                         "counted once for the key, not once per pass that saw it")
+
+    def test_the_run_refuses_to_start_with_no_directories(self):
+        harvest.HARVEST_DIRS = ""
+        harvest._save(harvest.RULINGS, {})
+        out = io.StringIO()
+        with mock.patch.object(harvest, "queries", lambda state=None: []), \
+                contextlib.redirect_stdout(out):
+            harvest.run(None)
+        self.assertIn("NETRADIO_HARVEST_DIRS", out.getvalue())
+        self.assertIn("no directories", out.getvalue())
+
+    def test_the_run_refuses_to_start_on_a_dark_cache(self):
+        self._feed(_key("https://y/dark"))
+        harvest._save(harvest.RULINGS, {})
+        attrs = (harvest.CACHE, harvest.KEEP, harvest._CACHE_AT_IMPORT,
+                 harvest._KEEP_AT_IMPORT)
+        for k in [k for k in list(os.environ) if k.startswith("NETRADIO_")
+                  and ("CACHE" in k or k in CACHE_ENV)]:
+            os.environ.pop(k, None)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        harvest.register_caches()         # the policy dark: nowhere to keep a signature
+        try:
+            out = io.StringIO()
+            with mock.patch.object(harvest, "queries", lambda state=None: []), \
+                    mock.patch.object(harvest.selftest, "offline",
+                                      lambda: (_ for _ in ()).throw(
+                                          AssertionError("refused before the canary"))), \
+                    contextlib.redirect_stdout(out):
+                harvest.run(None)
+        finally:
+            for name, value in zip(("CACHE", "KEEP", "_CACHE_AT_IMPORT",
+                                    "_KEEP_AT_IMPORT"), attrs):
+                setattr(harvest, name, value)
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(self._registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(self._registry[1])
+        self.assertIn("cache", out.getvalue())
+        self.assertIn("NETRADIO_CACHE_ROOT", out.getvalue())
+
+    def test_a_pass_with_no_room_signs_nothing_and_does_not_loop_the_decode(self):
+        """The probe: one refusal per pass, no decode -- a full disk must not put every file
+        through a multi-hour sign that ends in `no_space`."""
+        key = _key("https://y/full")
+        self._feed(key)
+        harvest._save(harvest.RULINGS, {})
+        spawned = []
+        self._run_patches(lambda argv, **kw: spawned.append(argv) or _FakeProc(argv))
+        _exc, naps, _nap = self._run(stop_after_naps=1)
+        with mock.patch.object(harvest, "queries", lambda state=None: []), \
+                mock.patch.object(harvest, "_nap", _nap), \
+                mock.patch.object(harvest.cache_budget, "reserve",
+                                  lambda *a, **k: False), \
+                mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
+                mock.patch.object(harvest.memwatch, "allocator_canary",
+                                  lambda *a, **k: (0, 0, None)):
+            harvest.run(None)
+        self.assertEqual(spawned, [], "ffmpeg never ran")
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
+
+
+if __name__ == "__main__":
+    unittest.main()

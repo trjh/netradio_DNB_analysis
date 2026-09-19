@@ -59,7 +59,7 @@ audio-dependent tests need `.venv` (`make venv`).
 | `scripts/identify_by_chroma.py` | chroma-match a clip against a pool of candidate records | when you have candidate audio |
 | `scripts/identify_by_api.py` | ask the commercial catalogues (ACRCloud + AudD) to name a clip — searches ~150-160M tracks you don't own, unlike the local chroma pool | when a mystery may be a catalogued release. **Acoustic fingerprinting may be defeated by the 1998 codec/EQ like AcoustID is — it's an experiment; every hit is a lead to confirm by ear.** Needs `ACRCLOUD_*` / `AUDD_API_TOKEN` in `.env` |
 | `scripts/match_queue.py` | chroma-match the mysteries against the listen queue's **downloaded, unlistened** tracks | one-off sweep of what's already on disk |
-| `scripts/harvest.py` | the long-runner: stream candidates → chroma signature → **drop the audio** → score | continuously. See [the harvester](#the-harvester) |
+| `scripts/harvest.py` | the long-runner: sign the audio that lands in the harvest directories → chroma signature → **drop the audio** → score | continuously. See [the harvester](#the-harvester) |
 | `scripts/discogs_leads.py` | read the labels this DJ actually played, ask Discogs what else they released 1994–99. A lead is tested by adding a stream of it to the listen queue through the queue's add box | when the pool needs new leads |
 | `scripts/acoustid_check.py` | verify the **originals** against AcoustID; catch mislabelled source files | occasionally. **Does not work on stream audio** — see `Archive/LESSON_acoustid_stream.md` |
 
@@ -69,7 +69,7 @@ audio-dependent tests need `.venv` (`make venv`).
 |---|---|---|
 | `scripts/extract_tracks.py` | cut every well-defined track **out of the mix**, reassembling across captures. Refuses anything it cannot place precisely. | once; **re-run whenever a capture gains precise timing or a track's span changes** |
 | `scripts/calibrate.py` | score every known mix track against every known original → `docs/CALIBRATION.md` | **whenever the matcher changes.** It is the regression test for the whole matching stack |
-| `scripts/selftest.py` | the **canary**: re-identify a track we already know and demand cost, rank **and** margin — offline (small pool) and live (real stream) | continuously, by the harvester. Surfaced at `/harvest`. See [below](#the-canary-does-the-matcher-still-work) |
+| `scripts/selftest.py` | the **canary**: re-identify a track we already know and demand cost, rank **and** margin — offline (small pool); the live check is not wired to a fetch at the moment | continuously, by the harvester. Surfaced on the harvest page. See [below](#the-canary-does-the-matcher-still-work) |
 
 `calibrate.py` is not a one-off. It is how we know that the true-match and non-match populations
 **overlap** — and therefore that *rank*, not cost, is the reliable signal. Any change to
@@ -100,18 +100,27 @@ make harvest-run                                                      # runs for
 
 set -a && . ./.env && set +a
 . .venv/bin/activate && python scripts/harvest.py --status
-. .venv/bin/activate && MallocLargeCache=0 python scripts/harvest.py --run
-. .venv/bin/activate && python scripts/harvest.py --pause        # / --resume
-. .venv/bin/activate && python scripts/harvest.py --purge-audio  # throw every retained excerpt away
-. .venv/bin/activate && python scripts/harvest.py --forget 7     # drop MT7's leads + pairings
-. .venv/bin/activate && python scripts/harvest.py --rescan       # score every cached signature
-                                                                      # against every mystery it has
-                                                                      # not met yet (no network)
-. .venv/bin/activate && python scripts/harvest.py --requeue-missing-sigs
-                                                                      # re-fetch done URLs whose
-                                                                      # signature is LOST (refuses
-                                                                      # while a writer runs)
+.venv/bin/python scripts/harvest.py --pause         # / --resume
+.venv/bin/python scripts/harvest.py --purge-audio   # throw every retained excerpt away
+.venv/bin/python scripts/harvest.py --forget 7      # drop MT7's leads + pairings
+.venv/bin/python scripts/harvest.py --rescan        # score every held signature against
+                                                     # every mystery it has not met yet (no
+                                                     # network)
+.venv/bin/python scripts/harvest.py --sign-one u1f0e8d2ba9c4d6f8a1b2
+                                                     # sign one file, by key, through the
+                                                     # same path the loop uses
 ```
+
+**The harvester knows directories, and nothing else.** `NETRADIO_HARVEST_DIRS` (in `.env`)
+names one or more absolute directories, `:`-separated; the loop reads the **top level** of
+each and writes nothing into any of them. An audio file is `<key>.<ext>` with a `<key>.json`
+sidecar beside it — no sidecar, no signature — and the ledger `.harvest/ledger.json` is the
+mark: one row per key, `signed` or `delayed` with a reason. The full contract, written for
+whatever fills the directories (the key encoding, the sidecar schema, the completeness rule,
+the ledger and what a feed reads from it), is
+[docs/HARVEST_FEED.md](HARVEST_FEED.md). The harvester never reads a queue or an index to
+decide what to work on, and nothing in this repo fetches from the web: what arrives in the
+directories is signed; what never arrives is not missed.
 
 **The harvester's caches live on the machine's cache policy.** The signature working cache and
 the excerpt board (`chroma` and `candidates`) are no longer fixed paths: each lives under
@@ -119,7 +128,7 @@ the excerpt board (`chroma` and `candidates`) are no longer fixed paths: each li
 bounded by the policy — a 14-day age on signatures (the bucket is their long-term home), a
 250 MB cap on the board that gives up the worst excerpt of a mystery first, and the policy's
 shared disk floor. With `NETRADIO_CACHE_ROOT` unset there is no cache directory at all and the
-harvester **refuses to start**, naming the setting: a signature it cannot keep is network cost
+harvester **refuses to start**, naming the setting: a signature it cannot keep is decode cost
 paid for nothing. The on-demand `--rescan` refuses the same way: it reads the same cache, and
 scoring nothing would stamp a completion that never happened. Set the root in `.env` (see
 `.env.example`). The tracks cut by
@@ -132,119 +141,92 @@ name once ffmpeg has it.
 hard way: Mystery Track 4's clip was wavpack-compacted and silently **left the query set** —
 the harvester ran for days with the page saying "working" while searching for everything except
 the one thing missing a clip. With no searchable clip at all, the harvester now stamps a
-first-class **"nothing to search for"** state (`state["no_queries"]` + phase) before exiting,
-instead of leaving a stale "working" phase behind; and each pass it publishes the **bucket's**
+first-class **"nothing to search for"** state (`state["no_queries"]`) and keeps signing, instead
+of leaving a stale "working" phase behind; and each pass it publishes the **bucket's**
 signature count (`state["pool"]`, the pool's real size post-migration) and the current query
-key per mystery (`state["query_keys"]`) so `/harvest` can show a live "compared: N of pool"
-per mystery.
+key per mystery (`state["query_keys"]`) so the harvest page can show a live "compared: N of
+pool" per mystery.
 
 **A new mystery sees the WHOLE corpus.** A chroma signature is not tied to the question you asked
 of it: the same 12×N matrix answers MT4 today and MT8 next month, for free. So the harvester
 remembers which **(signature, mystery)** pairs it has scored, and any unpaired combination is work
-to do — a chunk each pass, riding along in the gaps between fetches. The day a new
-`Mystery Track N` clip lands, every signature already on disk (~900) is scored against it **without
-re-downloading a single track**: ~0.06 s each, ~3 minutes for the lot. `--rescan` does it all at
-once, for when you want it finished now.
+to do — a chunk each pass, riding along between signs. The day a new
+`Mystery Track N` clip lands, every signature the pool holds is scored against it **without a
+single new decode**: ~0.06 s each, ~3 minutes for the lot. `--rescan` does it all at once, for
+when you want it finished now. `--rescan` also needs the ledger to exist (start the harvester
+once and it is seeded from the bucket) and the rulings file to be readable, for the same reason
+every scoring path does.
 
-This closes a real hole. `run()` only ever walked `pending`; once a URL reached `done` it was never
-looked at again — so a mystery whose clip arrived later was scored **only** against candidates
-fetched after it, and weeks of accumulated corpus were silently never tested against it.
-
-**Lost signatures regenerate.** The same "done is never looked at again" rule had a second hole:
-a signature that vanished from *both* the working cache and the bucket left its candidate
-permanently dark to every future mystery. Every queue/state **writer** now runs the same
-recovery at startup — `harvest.py --run`, and `--requeue-missing-sigs` on demand — putting such
-URLs back into `pending` so the ordinary fetch path re-signs them. Two deliberate refusals: if the bucket can't be *listed*, "lost" and
-"evicted-to-the-bucket" are indistinguishable, so it does nothing; and past the safety cap —
-more than 10% of the corpus missing (`NETRADIO_REQUEUE_MISSING_CAP`) — a loss that size means the
-*store* broke, so it **reports** (a standing `sig_alert` in the state, shown by the player's
-notices) and stands still rather than hammering hosts for days re-fetching hundreds of tracks.
-Raise the cap deliberately (e.g. `NETRADIO_REQUEUE_MISSING_CAP=1`) if the loss turns out to be
-real. Either way you can SEE it: every requeue leaves a row in `/harvest`'s issues list, and the
-past-the-cap alert additionally reddens the queue page's notice light. A third refusal, like
-every scoring path: an absent or unreadable rulings file stops the recovery entirely, because
-without it a ruled-out candidate cannot be told from an active one (see
-[the harvester](#the-harvester)). **One writer, enforced:** both writer paths (`--run`,
-`--requeue-missing-sigs`) hold the same flock (`harvest.WRITER_LOCK`, under its historic
-`collector.lock` name) for their lifetime — a second writer, including this flag under a
+**The ledger replaces the working queue, and the recovery goes with it.** The old
+`queue.json` lists (`pending`, `done`, `retry_later`) are gone; at its first start under this
+contract the harvester seeds one `signed` row per key the bucket already holds (the bucket's
+listing was the only record of what is signed), and on every start it reconciles the rows
+against that listing: a `signed` row whose object is gone loses its `uploaded_etag`, so the
+feeder feeds that key again. Past a safety cap (`NETRADIO_RECONCILE_DROP_CAP`, default 10% of
+the signed corpus) the reconciliation **reports** — a standing `sig_alert` in the state — and
+touches nothing: a mass drop means the store broke, not the rows, and would put the whole pool
+back on the feeder's list over a configuration fault. **One writer, enforced:** both writer
+paths (`--run`, `--sign-one`) hold the same flock (`harvest.WRITER_LOCK`, under its historic
+`collector.lock` name) for their lifetime — a second writer, including the hand tool under a
 running daemon, refuses loudly instead of interleaving.
 
-The rescan also fills in **where** each old match hit (`at_s`), which is why `/harvest` can cue a
-lead to the moment it matched even for leads found before that field existed. The position was
-never lost — it is recomputable from the signature we already hold.
+The rescan also fills in **where** each old match hit (`at_s`), which is why the harvest page
+can cue a lead to the moment it matched even for leads found before that field existed. The
+position was never lost: it is recomputable from the signature we already hold.
 
 **A clip too short to distinguish records is refused** (`MIN_QUERY_S`, 60s). MT7's clip is **23
 seconds**, and it produced five *confident* false positives all within **0.0007** of each other: a
 short query drives every cost down until the matcher can no longer tell records apart, and a
-degenerate ranking looks exactly like a real one. Better to search for nothing than for everything.
-The mystery re-enters the search **by itself** once a longer clip is cut.
+degenerate ranking looks exactly like a real one. Better to search for nothing than to search for
+everything. The mystery re-enters the search **by itself** once a longer clip is cut.
 
 **A re-cut clip asks the whole corpus again.** `state["scored"]` is keyed on the mystery number
 **plus a fingerprint of the clip's contents** — so a better clip voids every pairing made against
-the old one, and every cached signature is scored against the new question. Keyed on the number
+the old one, and every held signature is scored against the new question. Keyed on the number
 alone, a better MT7 clip would have silently inherited the 23-second clip's verdicts and never
 actually been asked. Use `--forget N` to drop the stale *leads* as well: the pairings go by
 themselves, but the leads are the part that misleads a human into ruling on evidence gathered with
 a broken instrument.
 
-**A ruled-out record stays ruled out.** `not a match` at `/harvest` is deliberately **global**: it
+**A ruled-out record stays ruled out.** `not a match` is deliberately **global**: it
 means "not any Mystery Track", including the ones whose clips do not exist yet. So a rescan skips
 it. Without that, the day MT8 lands, every record you have already rejected comes straight back at
 you. (It does **not** mean "heard" — you can rule a record out as a match and still want to listen
-to it. The player keeps those two verdicts apart.) The retired set is a **rulings file**,
-`.harvest/rulings.json`: one key per entry the queue has ruled on (heard, discarded, ignored,
-duplicate, not-a-match) or that is the queue owner's own upload, each with its reason. The queue's
-owner writes it whole, atomically, at its start and after every ruling; the harvester only reads
+to it. The two verdicts are kept apart.) The retired set is a **rulings file**,
+`.harvest/rulings.json`: one key per entry that has been ruled on (heard, discarded, ignored,
+duplicate, not-a-match) or that is the owner's own upload, each with its reason. The rulings'
+writer writes it whole, atomically, at its start and after every ruling; the harvester only reads
 it — the keys alone, never the reasons — re-reading it every pass so a ruling takes effect within
-one loop iteration. **The harvester refuses to run without it** (`--run`, `--rescan` and the
-lost-signature recovery all refuse, naming the file), because a search that has forgotten
-every ruling hands back records already rejected. An empty file is fine — that is a queue with nothing
-ruled on yet; only a missing or unreadable file is a refusal.
+one loop iteration. **The harvester refuses to run without it** (`--run` and `--rescan` both
+refuse, naming the file), because a search that has forgotten every ruling hands back records
+already rejected. An empty file is fine — that is nothing ruled on yet; only a missing or
+unreadable file is a refusal.
 
-**What it does.** Takes its candidates from the player's **listen queue** (holding back,
-temporarily, anything a recent fetch failed on: a `retry_after` date in the future keeps the URL
-off the network until it passes) and keeps its own working queue in `.harvest/`. The rulings file
-gates both directions of that fold: a ruled key never flows in, and one ruled on while it sat on
-the working queue flows out. It reads the queue in whatever layout the player
-keeps it — the single `listen_queue.json`, or the sharded `listen_queue/` directory (its
-`index.json` manifest + `shard-NNNN.json` files) — read-only, never writing.
+**What it does.** For each audio file in the configured directories with a complete sidecar and
+no ledger row — or with a row whose size or modification time no longer matches, or a
+`no_space` delay: decode it with ffmpeg in a child process, compute the **chroma signature**
+(12×N float16, ~55 KB against ~8 MB), upload the signature and the sidecar beside it to the
+bucket, write the ledger row, score the signature against every unsolved Mystery Track — **but
+only the mysteries it holds a clip of** (see
+[PROCESS §8b](../PROCESS.md#8b-giving-the-harvester-a-new-or-better-mystery-track-clip)) — and
+keep an excerpt if the match is near. Then sleep and repeat.
 
-**Long audio arrives in chunks.** An entry for audio longer than two hours comes split: the same
-URL once per slice, each carrying a `#t=<start>,<end>` media fragment in whole seconds. yt-dlp
-ignores URL fragments, so the harvester reads the fragment itself and hands ffmpeg `-ss`/`-t` —
-each chunk is decoded, signed and cached on its own, under its own key.
-
-Anything that would decode more than **four** hours in one go is refused outright, with a
-`too_long` row in the issue list — analysing its first four hours and filing that under the URL
-would be a partial answer wearing a complete one's clothes. What counts as "how long" is the
-**fragment's span** whenever there is a fragment, since the span is what ffmpeg is told to decode;
-the entry's declared duration decides only when there is no fragment. So a `#t=0,21600` slice is
-refused exactly like the six-hour master it was cut from: a fragment is a *claim* made upstream,
-not proof that an entry is short, and a backstop that trusted the claim would not be one. (Two
-hours is where splitting starts to pay; four is where one decode costs more than any single lead
-can be worth — different numbers for different questions.)
-
-The same check runs again inside the fetch child, immediately before ffmpeg. A fetch driven from
-the queue is refused there on the queue's terms, because the declared duration is written into the
-job file beside the URL (see below) and the child reads both — a check is only as good as what it
-is told, and the child knows only what the job hands it. A **hand-run `--fetch-one <url>` with no
-`--duration` is not length-checked**, and that is deliberate: someone typing a URL is deliberately
-asking for that URL, there is no trustworthy length to judge it by, and inventing one would be
-worse than going without. A `#t=` span is enforced in every case, since it needs nothing from
-outside the URL.
-
-For each candidate: streams the audio (never to disk), reduces it to a **chroma signature** (12×N
-float16, ~55 KB against ~8 MB), throws the audio away, and scores the signature against every
-unsolved Mystery Track — **but only the mysteries it holds a clip of** (see
-[PROCESS §8b](../PROCESS.md#8b-giving-the-harvester-a-new-or-better-mystery-track-clip)).
+A file comes back **delayed** instead of `signed` with one of four reasons: `length_mismatch`
+(the decoded length disagrees with the sidecar's `duration_s` by more than `max(10 s, 2 %)` — a
+hand-over that disagrees with its own label is not signed), `too_long` (over four hours —
+refused, never truncated; splitting long audio is the feeder's job, each part a key of its
+own), `decode_failed`, or `no_space` (transient — retried on later passes until the policy makes
+room). A file that vanishes mid-sign gets **no row at all**, so it stays on the feeder's list
+and is signed again when it comes back.
 
 **It proposes; you dispose.** It never marks a mystery solved. It keeps the best **leads** (best 12
-per mystery, evicting the worst when a better one lands) and you rule on them at **`/harvest`** —
-see [PROCESS: *Ruling on what the harvester finds*](../PROCESS.md#ruling-on-what-the-harvester-finds-harvest).
+per mystery, evicting the worst when a better one lands) and you rule on them on the harvest
+page — see
+[PROCESS: *Ruling on what the harvester finds*](../PROCESS.md#ruling-on-what-the-harvester-finds-harvest).
 
 **A lead is a URL, not audio.** `--purge-audio` threw away the retained excerpts, and nothing is
-hoarded now: what survives is the url, the cost, the mystery, the key, and *where* in the candidate
-it matched. `/harvest` reviews each candidate by **embed at its source**. This is both the better
+hoarded now: what survives is the key, the cost, the mystery, and *where* in the candidate it
+matched. The page reviews each candidate by **embed at its source**. This is both the better
 review and the only defensible copyright posture — the retained audio had grown to 2.2 GB and
 included a 108-minute DJ mix kept whole, which broke the one claim the posture rested on. There is
 now a hard cap in `write_excerpt`, and a test that feeds it that mix and demands 30 seconds back.
@@ -252,30 +234,18 @@ now a hard cap in `write_excerpt`, and a test that feeds it that mix and demands
 **Why signatures.** The matcher can only find what's in the pool, and the pool we want is far
 bigger than this disk. 100,000 tracks is ~5 GB of signatures and 0 GB of audio.
 
-**How it stays polite.** Rotates hosts between tracks (no site sees a burst), per-host token
-buckets, jittered delays (never a fixed cadence), 4–5 h sessions then 40–120 min idle,
-exponential backoff on 429/403, and a hard stop after 5 refusals from one host. Every track is
-fetched **once, ever** — the signature cache guarantees it.
-
-**The bot wall.** *"Sign in to confirm you're not a bot"* carries no 403 and no 429, so it slips
-past the backoff logic entirely. The harvester **halts** on it instead of failing forever. Feed it
-a cookie — see [PROCESS: *The harvester, and the bot wall*](../PROCESS.md#the-harvester-and-the-bot-wall).
-On macOS, prefer a `cookies.txt` file or `firefox`; `chrome` raises a **Keychain prompt per
-process**, so a restarting harvester will ask for your password endlessly.
-
-**Watch it** at **`/harvest`** on the player: pause/resume, the self-test, the mysteries it is
-*not* searching for, and the ruling buttons. The player **supervises** it — it adopts a
+**Watch it** on the harvest page: pause/resume, the self-test, the mysteries it is *not*
+searching for, and the ruling buttons. The peer repo **supervises** it — it adopts a
 hand-started harvester rather than spawning a second, and a watchdog revives it if it dies.
-`scripts/run_player.sh status` in the player repo reports it too.
 
 ### How much memory it uses, and why
 
-Two `harvest.py` processes exist while a candidate is being fetched: the long-running parent
-(`--run`) and a **fetch child** (`--fetch-job DIR`, see below), plus that child's `yt-dlp` and
-`ffmpeg`. The child does the whole fetch — download, decode, chroma, cache, upload — and exits.
-The parent, which holds the state, the queue and the matching board, never touches a track's
-audio, so its footprint stays flat across candidates rather than climbing to a high-water mark
-and staying there.
+Two `harvest.py` processes exist while a file is being signed: the long-running parent
+(`--run`) and a **decode child** (`--sign-job DIR`), plus the child's `ffmpeg`. The child does
+the whole decode — read the file, decode, chroma, cache, upload — and exits. The parent, which
+holds the state, the ledger and the matching board, never touches a file's audio, so its
+footprint stays flat across files rather than climbing to a high-water mark and staying
+there.
 
 Three things put the memory back:
 
@@ -283,39 +253,39 @@ Three things put the memory back:
 |---|---|
 | The tuning estimate runs 300 seconds at a time (`chroma_recipe.estimate_tuning_blockwise`) | `chroma_cqt` estimated the recording's distance from concert pitch over the **whole file** first, holding several copies of a 1025-row spectrogram with one column per 512 samples. Profiled on the development Mac, that one call accounted for about 9.8 GB of a 10.2 GB peak on a 117-minute candidate; the CQT itself cost about a tenth of it. The estimate returns the same float either way, so **every signature is byte-identical** and `RECIPE_VERSION` stays 1 — `tests/test_chroma_tuning.py` compares both against librosa's own whole-file path with `==` and `np.array_equal`. |
 | `MallocLargeCache=0` | macOS libmalloc keeps freed large blocks inside the process instead of returning them to the kernel. Python frees everything and the footprint does not move; under pressure those dirty pages get compressed and swapped. Measured on macOS 26.5.2 by allocating and freeing 800 MB of float32: 764 MB still held afterwards by default, 0 MB with the variable set. The variable is **undocumented**, which is why the harvester re-measures it on every start. |
-| ffmpeg writes the decoded PCM to a **file** in the job directory | The old path piped it through `communicate()`, which builds a chunk list and then joins it — two full copies of the audio at the moment of the join (1,034 MB held for 451 MB of PCM, measured). The parent reads the spool back as a memory map, and the file is unlinked as soon as it is mapped. Disk cost is 64 KB per second of audio, for as long as the candidate is being scored. |
+| ffmpeg writes the decoded PCM to a **file** in the job directory | The old path piped it through `communicate()`, which builds a chunk list and then joins it — two full copies of the audio at the moment of the join (1,034 MB held for 451 MB of PCM, measured). The parent reads the spool back as a memory map, and the file is unlinked as soon as it is mapped. Disk cost is 64 KB per second of audio, for as long as the file is being scored. |
 
-The child's command line is `harvest.py --fetch-job <dir>` and the URL is **not on it** — it is
-handed over in the job directory. The player's supervisor finds a live harvester by matching
-`--run` as a substring of the whole `ps` line, and a YouTube id may legally contain `--run`, so a
-URL on the argv would be a way for a process that lives for one track to be adopted as the
-harvester. The job file (`url.json`) carries the URL **and** the queue's declared duration for it,
-so the child's length check weighs the same facts the queue did; describing half the job there and
-half on a command line is how the two would drift apart. To run one fetch by hand,
-`--fetch-one URL --job DIR` still works, with `--duration SECONDS` if you want it length-checked.
+The child's command line is `harvest.py --sign-job <dir>` and the audio path is **not on it** —
+it is handed over in the job directory. The peer repo's supervisor finds a live harvester by
+matching `--run` as a substring of the whole `ps` line, so a path on the argv would be a way for
+a process that lives for one file to be adopted as the harvester. The job file (`sign.json`)
+carries the path **and** the sidecar's declared length for it, so the child's length check weighs
+the same facts the scan weighed; describing half the job there and half on a command line is how
+the two would drift apart. To sign one file by hand, `--sign-one KEY` uses the same path (it
+takes the writer lock and reconciles the ledger first).
 
-`NETRADIO_HARVEST_CHILD=0` runs the fetch in the harvester's own process instead of a child. It is
-for diagnosing a venv or environment problem in the child; it brings the memory back with it, so
-it is not for normal use.
+`NETRADIO_HARVEST_CHILD=0` runs the decode in the harvester's own process instead of a child. It
+is for diagnosing a venv or environment problem in the child; it brings the memory back with it,
+so it is not for normal use.
 
-`make harvest-run` sets `MallocLargeCache=0` for you; the player's supervisor sets it too. It is
-read at process start, so setting it from inside a running harvester does nothing. On every start
-the harvester allocates and frees 800 MB and prints what the allocator kept — if that number goes
-back up after an OS upgrade, the variable has stopped working and an `issues` row says so.
+`make harvest-run` sets `MallocLargeCache=0` for you; the peer repo's supervisor sets it too. It
+is read at process start, so setting it from inside a running harvester does nothing. On every
+start the harvester allocates and frees 800 MB and prints what the allocator kept — if that
+number goes back up after an OS upgrade, the variable has stopped working and an `issues` row
+says so.
 
-Each candidate leaves a row in `state["mem"]` (and the last 50 in `state["mem_log"]`): the
-parent's footprint, the parent's lifetime peak, and the fetch child's peak and final footprint.
+Each signed file leaves a row in `state["mem"]` (and the last 50 in `state["mem_log"]`): the
+parent's footprint, the parent's lifetime peak, and the decode child's peak and final footprint.
 Set `NETRADIO_HARVEST_MEM_CEILING_MB` to have the **parent** stand down when it goes over that
-number — the player's watchdog then restarts it. It is **off by default**, because the right
-number depends on what a long candidate actually costs and that measurement has not been taken
-yet. A child over the ceiling only earns an `issues` row: its memory left with it.
+number — the supervisor's watchdog then restarts it. It is **off by default**, because the right
+number depends on what a long file actually costs and that measurement has not been taken yet. A
+child over the ceiling only earns an `issues` row: its memory left with it.
 
-**Stopping it.** `Ctrl-C`, or `SIGTERM` to the parent's pid, now stops cleanly: the state is
-saved with phase `stopped (SIGTERM)`, the interrupted URL stays `pending`, and the fetch child
-stops **ffmpeg before yt-dlp**. That order matters — kill yt-dlp first and ffmpeg sees a clean
-EOF, exits 0 on a truncated stream, and a partial decode starts to look like a complete one. No
-signature is ever written unless yt-dlp exited 0, ffmpeg exited 0, the decode is long enough, and
-no stop was asked for. The player's `stop()` signals the whole process group and still works.
+**Stopping it.** `Ctrl-C`, or `SIGTERM` to the parent's pid, stops cleanly: the state is saved, the
+file that was being signed gets **no ledger row**, and it is signed again on a later pass. No
+signature is ever written unless ffmpeg exited 0, the decode is long enough, the file is not
+over-long, the length matches the sidecar's claim, and no stop was asked for. The supervisor's
+`stop()` signals the whole process group and still works.
 
 ### The canary: does the matcher still WORK?
 
@@ -324,7 +294,7 @@ no stop was asked for. The player's `stop()` signals the whole process group and
 | Mode | What it proves |
 |---|---|
 | **offline** | Re-identifies a track we already know (Jamie Myerson, *Sky Blue*) out of a small pool. The matcher still **works** — not merely that the process is alive. |
-| **live** | The same, end to end, against a real stream fetched from the internet. |
+| **live** | The same, end to end, against a real stream fetched from the internet — **not wired to a fetch at the moment**: the harvester's fetch leg is gone, and the check's replacement — re-scoring the canary's *stored* signature, by its key — is the next change to `selftest.py`. `--live` answers *not checked* until then. |
 
 Both demand **cost, rank *and* a margin**. Requiring only "cost in range, rank 1" is not enough: a
 degenerate matcher scores everything identically, ties sort by track number, and the subject — the
@@ -335,13 +305,9 @@ The live check **refuses to establish a canary** if the stream it finds is not t
 the candidate against our own copy first). A canary that cries wolf gets ignored, which is worse
 than no canary — so it retries rather than enshrining a wrong upload.
 
-**Handing it a link.** The subject is the lowest-numbered calibration case — currently **track 3,
-Jamie Myerson – *Sky Blue***. It takes YouTube's first hit for that name, and for this track that
-hit is *not* the record (0.0867 against our own copy), so it is refused and the live check sits at
-*not checked* forever. Break the deadlock by naming a stream you know is right:
-
-    NETRADIO_CANARY_URL=https://…      # in .env
-
-It is still **validated against our own copy** exactly like a searched one — a hand-picked URL is a
-hint, never an override. If it is not the record, it is still refused. `/harvest` reports **PASS**,
-**FAIL** and **not checked** as three distinct states: *a skip is not a pass.*
+**How the canary is named.** Under the new contract the canary is an ordinary entry: its file
+arrives through the harvest directories like any other, is signed once, and is named by its
+**key** (`NETRADIO_CANARY_KEY` in `.env`). The stored-signature re-score that replaces the old
+fetch is the next change to `selftest.py`; until then the offline check above is the one that
+runs, and `--live` answers *not checked*. The harvest page reports **PASS**, **FAIL**
+and **not checked** as three distinct states: *a skip is not a pass.*

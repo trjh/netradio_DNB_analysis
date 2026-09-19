@@ -1,8 +1,8 @@
-"""The retired set is a file the queue's owner writes -- the search reads only the keys.
+"""The retired set is a file another process writes -- the search reads only the keys.
 
 The harvester used to derive its never-again set -- every key the search must not propose,
 for any mystery, present or future -- from the listen queue's ruling flags, read directly every
-pass. The rulings are the queue owner's own, so the file it computes them into is too:
+pass. The rulings are the writer's own, so the file it computes them into is too:
 `.harvest/rulings.json`, `{key: reason}`, written whole and atomically at its start and after
 every ruling. These tests pin the read side: which keys the file retires, that nothing else is
 retired, that an absent or torn file refuses the run rather than emptying the set, and -- the
@@ -44,11 +44,12 @@ class TheRulingsFile(unittest.TestCase):
         harvest.RULINGS = fh.name
 
     def test_the_keys_arrive_in_the_pools_own_naming(self):
-        # The file writes the bare key (`u<sha1[:20]>`); this side's name for a key is its
-        # signature-file name, so every consumer compares `_sig_key(url)` directly.
+        # The file writes the bare key (`u<sha1[:20]>`), and that is what the reader gets back:
+        # the same stem every file, row and signature carries, with no suffix to strip or
+        # append on the way in (a caller that wants a signature-file name appends `.npy`).
         bare = "u" + "a" * 20
         self._file({bare: "listened", "u" + "b" * 20: "not_a_match"})
-        self.assertEqual(harvest.load_rulings(), {bare + ".npy", "u" + "b" * 20 + ".npy"})
+        self.assertEqual(harvest.load_rulings(), {bare, "u" + "b" * 20})
 
     def test_the_reasons_are_ignored(self):
         # The reasons are for the human reading the file; the search reads the keys alone --
@@ -58,7 +59,7 @@ class TheRulingsFile(unittest.TestCase):
         for reason in ("listened", "not_a_match", "own", ""):
             with self.subTest(reason=reason):
                 self._file({bare: reason})
-                self.assertEqual(harvest.load_rulings(), {bare + ".npy"})
+                self.assertEqual(harvest.load_rulings(), {bare})
 
     def test_an_empty_file_retires_nothing(self):
         # A queue with no rulings at all is a real state, and a valid one -- an empty set, not
@@ -100,7 +101,7 @@ class TheRulingsFile(unittest.TestCase):
 class ARuledKeyIsNeverProposed(unittest.TestCase):
     """The whole point of the set. `not a match` is deliberately GLOBAL: it means "not any
     Mystery Track", including the ones whose clips do not exist yet. Without that, the day
-    MT8's clip lands, every record already rejected comes straight back."""
+    MT8 lands, every record already rejected comes straight back."""
 
     def setUp(self):
         self._rulings = harvest.RULINGS
@@ -108,120 +109,53 @@ class ARuledKeyIsNeverProposed(unittest.TestCase):
         harvest.RULINGS = os.path.join(tempfile.mkdtemp(prefix="ruled_"), "rulings.json")
         self.addCleanup(shutil.rmtree, os.path.dirname(harvest.RULINGS), True)
 
+    def _ledger(self, *urls):
+        """One signed row per URL, the way the seed and the sign path write them."""
+        return {harvest._sig_key(u)[:-4]:
+                harvest._row(harvest._sig_key(u)[:-4], 1, 1.0, "signed", None, "then",
+                             "e", {}) for u in urls}
+
+    def _objects(self, *urls):
+        """The bucket's listing as unscored_pairs reads it: one object per held key."""
+        return {harvest._sig_key(u): "e" for u in urls}
+
     def _rule_out(self, *urls):
-        """Write the rulings file with one key per URL, the way the queue's owner does."""
+        """Write the rulings file with one key per URL, the way the rulings' writer does."""
         harvest._save(harvest.RULINGS, {harvest._sig_key(u)[:-4]: "not_a_match" for u in urls})
 
     def test_never_offered_again_not_even_for_a_new_mystery(self):
         self._rule_out("https://y/rejected")
-        state, q = {"matches": [], "kept": 0, "scored": {}}, {"done": ["https://y/keep",
-                                                                     "https://y/rejected"]}
-        # The signature cache has no directory while the policy is dark, so sig_path would be
-        # None and every candidate would read as unheld; CACHE is patched to a stand-in
-        # directory and os.path.exists is made to say the signature is there.
-        with unittest.mock.patch("os.path.exists", return_value=True), \
-             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"):
-            pairs = harvest.unscored_pairs(state, q, harvest.load_rulings(), [(8, None, "8:fp")])
-        self.assertEqual([p[3] for p in pairs], ["https://y/keep"])
+        state = {"matches": [], "kept": 0, "scored": {}}
+        ledger = self._ledger("https://y/keep", "https://y/rejected")
+        # The signature cache has no directory while the policy is dark, so the held check
+        # falls to the bucket listing; a bucket holding both keys is enough.
+        with unittest.mock.patch("os.path.exists", return_value=False), \
+             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"), \
+             unittest.mock.patch.object(harvest, "_remote_objects",
+                                        lambda max_age_s=900:
+                                        self._objects("https://y/keep",
+                                                      "https://y/rejected")):
+            pairs = harvest.unscored_pairs(state, ledger, harvest.load_rulings(),
+                                           [(8, None, "8:fp")])
+        self.assertEqual([p[3] for p in pairs], [harvest._sig_key("https://y/keep")[:-4]])
 
     def test_the_rescan_skips_it_too(self):
         # --rescan and the loop's chunked rescan go through the same door: the ruled key never
         # reaches the scorer, so it cannot be proposed by the one mode a new mystery runs first.
         self._rule_out("https://y/rejected")
         state = {"matches": [], "kept": 0, "scored": {}}
-        q = {"done": ["https://y/keep", "https://y/rejected"]}
+        ledger = self._ledger("https://y/keep", "https://y/rejected")
         scored = []
-        with unittest.mock.patch("os.path.exists", return_value=True), \
+        with unittest.mock.patch("os.path.exists", return_value=False), \
              unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"), \
+             unittest.mock.patch.object(harvest, "_remote_objects",
+                                        lambda max_age_s=900:
+                                        self._objects("https://y/keep",
+                                                      "https://y/rejected")), \
              unittest.mock.patch.object(harvest, "score_cached",
-                                        lambda st, n, qc, qk, url, key: scored.append(url)):
-            n = harvest.rescan(state, q, harvest.load_rulings(), [(8, None, "8:fp")])
-        self.assertEqual((scored, n), (["https://y/keep"], 1))
-
-
-@unittest.skipIf(harvest is None, "harvest.py needs the librosa venv (.venv) — skipping")
-class RuledKeysNeverFlowIntoTheWorkingQueue(unittest.TestCase):
-    """`sync_listen_queue` holds the retired set, and it gates the fold BOTH ways: a ruled key
-    never flows in (however many times the queue still offers the entry), and a URL ruled on
-    while it sat on our lists flows out. `done` is the one list that does not work that way --
-    it is our record of work completed, and forgetting it would re-analyse on a re-add."""
-
-    def setUp(self):
-        self._rulings = harvest.RULINGS
-        self.addCleanup(setattr, harvest, "RULINGS", self._rulings)
-        harvest.RULINGS = os.path.join(tempfile.mkdtemp(prefix="ruled_"), "rulings.json")
-        self.addCleanup(shutil.rmtree, os.path.dirname(harvest.RULINGS), True)
-
-    def _queue(self, items):
-        fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
-        json.dump({"items": items}, fh)
-        fh.close()
-        harvest.LISTEN_QUEUE = fh.name
-        self.addCleanup(os.unlink, fh.name)
-        self.addCleanup(setattr, harvest, "LISTEN_QUEUE", harvest.LISTEN_QUEUE)
-
-    def _rule_out(self, *urls):
-        harvest._save(harvest.RULINGS, {harvest._sig_key(u)[:-4]: "listened" for u in urls})
-
-    def test_a_ruled_key_flows_out_and_never_back_in(self):
-        # The queue still OFFERS the ruled entry (the ruling is recorded beside it, not
-        # instead of it) -- the retired set is the only thing keeping it out of the working
-        # queue, in both directions at once.
-        self._rule_out("https://y/heard")
-        self._queue([{"url": "https://y/new", "title": "new"},
-                     {"url": "https://y/heard", "title": "heard", "listened": True}])
-        q = {"pending": ["https://y/heard", "https://y/keep"], "done": []}
-        added, dropped = harvest.sync_listen_queue(q, harvest.load_rulings())
-        self.assertEqual((added, dropped), (1, 1))
-        self.assertEqual(q["pending"], ["https://y/keep", "https://y/new"])
-
-    def test_a_ruling_does_not_erase_the_record_of_work_done(self):
-        self._rule_out("https://y/x")
-        self._queue([{"url": "https://y/x", "title": "x", "listened": True}])
-        q = {"pending": [], "done": ["https://y/x"]}
-        harvest.sync_listen_queue(q, harvest.load_rulings())
-        self.assertEqual(q["done"], ["https://y/x"])
-
-    def test_an_own_upload_arrives_already_retired(self):
-        # A harvester that "finds" one of the queue owner's own uploads has rediscovered its
-        # own question and would report a triumphant ~0.00. The writer retires those keys on
-        # arrival -- the harvester's own-clip rule moved there with the rest of the set -- so
-        # the entries never become candidates, however ordinary they look.
-        self._rule_out("https://y/own", "https://y/own2")
-        self._queue([{"url": "https://y/own", "title": "Mystery Track 7"},
-                     {"url": "https://y/own2", "title": "netradio mystery track 4 (clip)"}])
-        q = {"pending": [], "done": []}
-        added, _ = harvest.sync_listen_queue(q, harvest.load_rulings())
-        self.assertEqual(added, 0)
-        self.assertEqual(q["pending"], [])
-
-    def test_a_ruling_takes_it_off_the_set_aside_list_too(self):
-        # A URL waits on `retry_later` for parts, and the parts only come while the queue
-        # still offers the entry. Once it has been ruled on there are none coming, so it
-        # leaves by the same door `pending` uses.
-        url = "https://example.invalid/watch?v=master"
-        self._rule_out(url)
-        self._queue([{"url": url, "duration": 21600}])
-        q = {"pending": [], "done": [], "retry_later": [url]}
-        added, dropped = harvest.sync_listen_queue(q, harvest.load_rulings())
-        self.assertEqual((added, dropped), (0, 1))
-        self.assertEqual(q["retry_later"], [],
-                         "a retired URL left on the list is one for whatever drains it to trip "
-                         "over -- it is not coming back as a candidate")
-
-    def test_a_ruled_masters_too_long_refusal_is_silent(self):
-        # A human who has heard it has retired it; the length backstop does not get a second
-        # opinion. The queue's read refuses the six-hour master like any other, but the retired
-        # set filters the refusal too -- an issue row about a decision already made is noise.
-        url = "https://y/master"
-        self._rule_out(url)
-        self._queue([{"url": url, "duration": 21600, "listened": True}])
-        q = {"pending": [url], "done": []}
-        issues = []
-        added, dropped = harvest.sync_listen_queue(q, harvest.load_rulings(), issues)
-        self.assertEqual((added, dropped), (0, 1))
-        self.assertEqual(q["pending"], [])
-        self.assertEqual(issues, [])
+                                        lambda st, n, qc, qk, key: scored.append(key)):
+            n = harvest.rescan(state, ledger, harvest.load_rulings(), [(8, None, "8:fp")])
+        self.assertEqual((scored, n), ([harvest._sig_key("https://y/keep")[:-4]], 1))
 
 
 @unittest.skipIf(harvest is None, "harvest.py needs the librosa venv (.venv) — skipping")
@@ -275,46 +209,43 @@ class ARulingSpendsTheExcerpt(unittest.TestCase):
         open(path, "wb").close()
         return path
 
-    def _ruled(self, *urls):
-        return {harvest._sig_key(u) for u in urls}
-
     def test_a_ruled_leads_audio_goes_and_its_numbers_stay(self):
         wav = self._wav("MT4-0.0603-aaaa.wav")
-        state = {"kept": 1, "matches": [{"mystery": 4, "cost": 0.0603, "url": "u1",
+        state = {"kept": 1, "matches": [{"mystery": 4, "cost": 0.0603, "key": "u1",
                                          "at_s": 12.0, "verdict": "near", "audio": wav}]}
-        self.assertEqual(harvest.drop_ruled_excerpts(state, self._ruled("u1")), 1)
+        self.assertEqual(harvest.drop_ruled_excerpts(state, {"u1"}), 1)
         self.assertFalse(os.path.exists(wav))
         m = state["matches"][0]
         self.assertNotIn("audio", m)
-        self.assertEqual((m["url"], m["cost"], m["at_s"]), ("u1", 0.0603, 12.0))
+        self.assertEqual((m["key"], m["cost"], m["at_s"]), ("u1", 0.0603, 12.0))
         self.assertEqual(state["kept"], 0)
 
     def test_an_unruled_lead_keeps_its_excerpt(self):
         wav = self._wav("MT4-0.0603-bbbb.wav")
-        state = {"kept": 1, "matches": [{"mystery": 4, "cost": 0.0603, "url": "u1", "audio": wav}]}
-        self.assertEqual(harvest.drop_ruled_excerpts(state, self._ruled("someone-else")), 0)
+        state = {"kept": 1, "matches": [{"mystery": 4, "cost": 0.0603, "key": "u1", "audio": wav}]}
+        self.assertEqual(harvest.drop_ruled_excerpts(state, {"u" + "c" * 20}), 0)
         self.assertTrue(os.path.exists(wav))
         self.assertEqual(state["matches"][0]["audio"], wav)
         self.assertEqual(state["kept"], 1)
 
     def test_a_ruled_lead_with_no_audio_is_a_no_op(self):
         """The normal case after --purge-audio, and for every rescan-found lead."""
-        state = {"kept": 0, "matches": [{"mystery": 4, "cost": 0.06, "url": "u1"}]}
-        self.assertEqual(harvest.drop_ruled_excerpts(state, self._ruled("u1")), 0)
+        state = {"kept": 0, "matches": [{"mystery": 4, "cost": 0.06, "key": "u1"}]}
+        self.assertEqual(harvest.drop_ruled_excerpts(state, {"u1"}), 0)
         self.assertEqual(state["kept"], 0)
 
     def test_an_already_gone_file_still_clears_the_row(self):
         """TTL sweep or a hand-rm got there first; the row must stop advertising audio anyway."""
-        state = {"kept": 1, "matches": [{"mystery": 4, "cost": 0.06, "url": "u1",
+        state = {"kept": 1, "matches": [{"mystery": 4, "cost": 0.06, "key": "u1",
                                          "audio": os.path.join(self.dir, "never-existed.wav")}]}
-        self.assertEqual(harvest.drop_ruled_excerpts(state, self._ruled("u1")), 1)
+        self.assertEqual(harvest.drop_ruled_excerpts(state, {"u1"}), 1)
         self.assertNotIn("audio", state["matches"][0])
         self.assertEqual(state["kept"], 0)
 
     def test_kept_never_goes_negative(self):
-        state = {"kept": 0, "matches": [{"mystery": 4, "cost": 0.06, "url": "u1",
+        state = {"kept": 0, "matches": [{"mystery": 4, "cost": 0.06, "key": "u1",
                                          "audio": self._wav("MT4-0.06-cccc.wav")}]}
-        harvest.drop_ruled_excerpts(state, self._ruled("u1"))
+        harvest.drop_ruled_excerpts(state, {"u1"})
         self.assertEqual(state["kept"], 0)
 
 
@@ -328,15 +259,18 @@ class TheRunGate(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="rulings-gate-")
         self.addCleanup(shutil.rmtree, self.tmp, True)
-        self._paths = harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK, harvest.RULINGS
+        self._paths = (harvest.STATE, harvest.LEDGER, harvest.WRITER_LOCK, harvest.RULINGS,
+                       harvest.STATE_DIR)
         harvest.STATE = os.path.join(self.tmp, "state.json")
-        harvest.QUEUE = os.path.join(self.tmp, "queue.json")
+        harvest.LEDGER = os.path.join(self.tmp, "ledger.json")
         harvest.WRITER_LOCK = os.path.join(self.tmp, "writer.lock")
         harvest.RULINGS = os.path.join(self.tmp, "rulings.json")       # never written
+        harvest.STATE_DIR = self.tmp        # the lock's own makedirs lands on the throwaway
         self.addCleanup(lambda: (setattr(harvest, "STATE", self._paths[0]),
-                                 setattr(harvest, "QUEUE", self._paths[1]),
+                                 setattr(harvest, "LEDGER", self._paths[1]),
                                  setattr(harvest, "WRITER_LOCK", self._paths[2]),
-                                 setattr(harvest, "RULINGS", self._paths[3])))
+                                 setattr(harvest, "RULINGS", self._paths[3]),
+                                 setattr(harvest, "STATE_DIR", self._paths[4])))
 
     def test_refuses_without_the_file_naming_it(self):
         import contextlib
@@ -354,9 +288,10 @@ class TheRunGate(unittest.TestCase):
                                              "tell WHICH file is missing")
 
     def test_a_readable_file_lets_the_run_past_the_gate(self):
-        # The same run, with the file in place, proceeds to the next gate -- this one's world
-        # (STATE on a throwaway path) is what run() refuses on next, so reaching that refusal
-        # proves the rulings gate opened.
+        # The same run, with the file in place, proceeds to the next gates -- with no query
+        # set it says so, and then (this world has a dark cache policy and no directories)
+        # it refuses on the cache, which proves the rulings gate opened: every line of that
+        # comes after the refusal the first test pins.
         harvest._save(harvest.RULINGS, {})
         import contextlib
         import io
@@ -364,7 +299,9 @@ class TheRunGate(unittest.TestCase):
         with unittest.mock.patch.object(harvest, "queries", lambda state=None: []), \
              contextlib.redirect_stdout(out):
             harvest.run(None)
-        self.assertIn("nothing to search for", out.getvalue())
+        text = out.getvalue()
+        self.assertIn("nothing to search for", text)
+        self.assertIn("NETRADIO_CACHE_ROOT", text, "the next gate refused, so the run went on")
 
 
 if __name__ == "__main__":
