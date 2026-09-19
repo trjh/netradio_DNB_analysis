@@ -379,6 +379,17 @@ def run():
     # sig_alert and stand still). No live state is held yet, so let it load-and-save.
     harvest.recover_missing_sigs_at_start()
     while True:
+        # The retired set is the rulings file's, here as in Mode A -- and it is read FIRST,
+        # before anything on the pass scores: a pass that cannot read it must propose nothing,
+        # not even a result already on the spool, and stands down instead. (`--once`, which
+        # never scores the backlog, needs no gate.)
+        ruled = harvest.load_rulings()
+        if ruled is None:
+            print("the rulings file (%s) is absent or unreadable -- this runtime has no way to "
+                  "know which keys it must never propose again, so it is standing down without "
+                  "folding. Start it again once the queue's owner has written the file."
+                  % harvest.RULINGS)
+            return
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})
         qs, changed = refresh_dashboard_state(state)
@@ -386,15 +397,6 @@ def run():
             _save(STATE, state)
         n = collect_once(state, q, qs)
 
-        # The retired set is the rulings file's, here as in Mode A: re-read every pass, and
-        # stand down when it cannot be read -- folding on an empty retired set would score
-        # records already rejected. (`--once`, which never scores the backlog, needs no gate.)
-        ruled = harvest.load_rulings()
-        if ruled is None:
-            print("the rulings file (%s) is absent or unreadable -- this runtime has no way to "
-                  "know which keys it must never propose again, so it is standing down. Start it "
-                  "again once the queue's owner has written the file." % harvest.RULINGS)
-            return
         dropped = harvest.drop_ruled_excerpts(state, ruled)
         todo = len(harvest.unscored_pairs(state, q, ruled, qs))
         if todo:
