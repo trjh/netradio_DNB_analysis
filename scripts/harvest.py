@@ -1765,17 +1765,24 @@ def run(args):
               % (" and the ".join(dark), "is" if len(dark) == 1 else "are"))
         return
     # NO DIRECTORIES, NOTHING TO SIGN, EVER. Refuse here, naming the setting, rather than
-    # idling forever over an unset variable -- the same refusal a dark cache earns.
-    if not _dirs():
-        print("NETRADIO_HARVEST_DIRS is unset or empty: the harvester has no directories of "
-              "audio to sign. Name one or more (absolute, `:`-separated) in .env -- see "
-              ".env.example and docs/HARVEST_FEED.md -- and start again.")
+    # idling forever over an unset variable -- the same refusal a dark cache earns. A
+    # relative entry is refused by name in the issues row the gate collects, so an operator
+    # sees WHICH entry was wrong, not only that the setting came up empty.
+    said = set()                        # per-run dedupe: a refusal or a gap is news once
+    _said_vanished.clear()
+    dirs = _dirs(issues=state.setdefault("issues", []), said=said)
+    if not dirs:
+        print("NETRADIO_HARVEST_DIRS is unset, empty, or names no absolute directory: the "
+              "harvester has no directories of audio to sign. Name one or more (absolute, "
+              "`:`-separated) in .env -- see .env.example and docs/HARVEST_FEED.md -- and "
+              "start again.")
+        _save(STATE, state)
         return
     print("# searching for Mystery Tracks %s"
           % (", ".join(str(n) for n, _, _ in qs) or "none"))
     print("# signing the top level of %d director%s, one file a pass. Ctrl-C or SIGTERM stops "
           "cleanly: state and ledger are saved, and the file in flight is signed on a later "
-          "pass." % (len(_dirs()), "y" if len(_dirs()) == 1 else "ies"))
+          "pass." % (len(dirs), "y" if len(dirs) == 1 else "ies"))
 
     sweep_excerpts()                    # drop anything past its TTL before we start
     swept = sweep_job_dirs()            # and whatever a crashed decode child left in .harvest/tmp
@@ -1822,8 +1829,6 @@ def run(args):
     if rec["seeded"] or rec["dropped"] or rec["restored"] or rec["reported"] or rec["cleared"]:
         _save(STATE, state)
 
-    said = set()                        # per-run dedupe: a refusal or a gap is news once
-    _said_vanished.clear()
     while True:
         if _stop_requested():
             return _stopped(state)
@@ -2098,12 +2103,13 @@ def main():
             print("# a ledger/state writer is RUNNING (a harvest.py --run) -- not signing "
                   "under it. Stop the writer first if you need this now.")
             return
-        if not _dirs():
-            print("# NETRADIO_HARVEST_DIRS is unset or empty: --sign-one looks for the file in "
-                  "the configured directories. Name them in .env (see .env.example) and try "
-                  "again.")
-            return
         state = _load(STATE, blank_state())
+        if not _dirs(issues=state.setdefault("issues", [])):
+            print("# NETRADIO_HARVEST_DIRS is unset, empty, or names no absolute directory: "
+                  "--sign-one looks for the file in the configured directories. Name them in "
+                  ".env (see .env.example) and try again.")
+            _save(STATE, state)
+            return
         rec = reconcile_ledger(state)
         print("# ledger: %s" % rec["why"])
         moved = migrate_matches(state)

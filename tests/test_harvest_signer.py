@@ -932,6 +932,31 @@ class TheLoopSignsAndScores(_SignerCase):
         self.assertEqual(state["skipped_cached"], 1,
                          "counted once for the key, not once per pass that saw it")
 
+    def test_the_run_names_a_relative_entry_in_its_refusal(self):
+        """The gate at the run's start records WHICH entry was wrong, so an operator sees the
+        refused path in the issues list and not only the message that the setting came up
+        empty."""
+        harvest.HARVEST_DIRS = "not-absolute"
+        harvest._save(harvest.RULINGS, {})
+        out = io.StringIO()
+        with mock.patch.object(harvest, "queries", lambda state=None: []), \
+                contextlib.redirect_stdout(out):
+            harvest.run(None)
+        text = out.getvalue()
+        self.assertIn("no absolute directory", text)
+        state = harvest._load(harvest.STATE, {})
+        self.assertTrue(any("not-absolute" in r.get("dir", "") for r in state["issues"]),
+                        "the refused entry is named in a persisted issues row")
+
+    def test_the_hand_tool_names_a_relative_entry_in_its_refusal(self):
+        harvest.HARVEST_DIRS = "not-absolute"
+        with mock.patch.object(sys, "argv", ["harvest.py", "--sign-one", "u" + "a" * 20]), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            harvest.main()
+        self.assertIn("no absolute directory", out.getvalue())
+        state = harvest._load(harvest.STATE, {})
+        self.assertTrue(any("not-absolute" in r.get("dir", "") for r in state["issues"]))
+
     def test_the_run_refuses_to_start_with_no_directories(self):
         harvest.HARVEST_DIRS = ""
         harvest._save(harvest.RULINGS, {})
