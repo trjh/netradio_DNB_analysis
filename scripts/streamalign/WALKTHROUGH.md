@@ -81,15 +81,19 @@ sign/scale error (which is exactly the bug caught and fixed during P1).
 
 | function | role | calls / called by |
 |---|---|---|
-| `load_audio(name)` | the workhorse: resolve → decode → cache → return float32 mono @16 kHz | calls `find_audio_file`, `_ffmpeg_decode`, `_cache_key`; called by `align_pair`, `characterise_overlap` |
-| `find_audio_file(name)` | map a label name/stem to a real file, preferring `.wav` > `.au` > `.mp3` | uses `stem_of` |
+| `load_audio(name)` | the workhorse: resolve → decode → cache → return float32 mono @16 kHz | calls `find_audio_file`, `_ffmpeg_decode`, `_cache_key`, `cache_budget.reserve`/`commit`; called by `align_pair`, `characterise_overlap` |
+| `find_audio_file(name)` | map a label name/stem to a real file — `.wav`/`.au` only, never an MP3 (a missing capture file is an error, not a downgrade of what gets decoded) | uses `stem_of` |
+| `register_cache()` | put the decoded-array cache on the machine's cache policy (`cache_budget.py`): cap, age limit, directory and eviction from `NETRADIO_STREAMALIGN_CACHE_*`, dark until `NETRADIO_CACHE_ROOT` is set | calls `cache_budget.register`; called at import (and again to re-read the environment) |
 | `_ffmpeg_decode(path)` | one ffmpeg subprocess → `np.frombuffer` (mono, normalized) | — |
 | `_cache_key(path)` | sha1 of realpath+size+mtime+params → cache filename | — |
 | `stem_of(name)` | `d019-040.wav` → `d019-040` | everywhere |
 | `duration_seconds(name)` | decoded length / SR | helpers |
 
 Why a cache: a global solve reads each ~20-min file many times; decoding once and
-`np.load(mmap)`-ing thereafter keeps the inner loops fast. No third-party audio
+`np.load(mmap)`-ing thereafter keeps the inner loops fast. The cache is bounded on
+the machine's cache policy — every entry re-decodes in seconds, so the policy may
+evict any entry at any time; without a policy configured (`NETRADIO_CACHE_ROOT`)
+there is no cache at all and every load decodes. No third-party audio
 libraries — `ffmpeg` handles every container/endianness, numpy does the rest.
 
 ---
