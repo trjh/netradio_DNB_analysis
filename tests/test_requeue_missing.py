@@ -9,6 +9,8 @@ closes that hole; these tests pin its policy (Tim, 2026-07-30):
     issues row — and touches nothing,
   * an unlistable bucket means "cannot tell lost from evicted": do nothing at all,
   * ruled-out keys are never requeued (a ruled key's URL stays exactly where it was),
+  * the startup recovery refuses outright while the rulings file cannot be read — "cannot
+    read" is never "nothing ruled" — requeueing nothing and naming the file it wanted,
   * the alert stands down by itself when the condition stops holding.
 """
 
@@ -184,6 +186,20 @@ class WriterLockAndStartup(RequeueBase):
         self.assertTrue(res["reported"])
         self.assertIn("sig_alert", harvest._load(harvest.STATE, {}))
         self.assertEqual(harvest._load(harvest.QUEUE, {})["done"], URLS)
+
+    def test_startup_recovery_refuses_an_unreadable_rulings_file(self):
+        # "Cannot read" is never "nothing ruled": with no rulings file there is no telling
+        # a ruled-out candidate from an active one, so the recovery refuses outright --
+        # nothing requeued, nothing touched -- and names the file it wanted.
+        for u in URLS[1:]:
+            self.hold(u)                               # a real loss it would otherwise fix
+        harvest._save(harvest.QUEUE, self.q())
+        harvest.RULINGS = os.path.join(self.tmp, "never_written.json")
+        res = harvest.recover_missing_sigs_at_start()
+        self.assertEqual(res["requeued"], 0)
+        self.assertEqual(res["checked"], 0)
+        self.assertIn(harvest.RULINGS, res["why"])
+        self.assertEqual(harvest._load(harvest.QUEUE, {}), self.q())   # untouched
 
     def test_every_writer_takes_the_lock_and_runs_the_recovery(self):
         # A source-level pin: the run and the CLI must both go through
