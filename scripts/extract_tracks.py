@@ -4,9 +4,9 @@
     . .venv/bin/activate && python scripts/extract_tracks.py --dry-run
     . .venv/bin/activate && python scripts/extract_tracks.py
 
-The cuts land in the `stream_tracks` cache (below), as FLAC: the codec is picked from the
-output's extension, exactly as before -- only the extension changed, from the .wav the tool
-first wrote.
+The cuts land in the `stream_tracks` cache (below), as FLAC: each cut is written whole
+under a temporary name and renamed into its final `.flac` name once ffmpeg has it, so a
+cache eviction between the two can never leave a partial cut wearing the final name.
 
 Why
 ---
@@ -161,21 +161,28 @@ def plan(mb, me, places):
 
 
 def cut(stem, m_from, m_to, cstart, out_path):
-    """Cut [m_from, m_to) of the master out of `stem` into `out_path`, as flac where the name
-    says flac (ffmpeg picks the codec from the extension; the argv names none).
+    """Cut [m_from, m_to) of the master out of `stem` into `out_path`, as FLAC.
 
     Through the cache policy when the cut lands inside the registered tracks cache: `reserve`
     first (the cut's length is not known until ffmpeg has run, so an unplanned one -- admitted
     while the cache is under its cap) and `commit` after. A refusal (the disk past its floor,
-    the cap with nothing evictable) skips the cut and returns False."""
+    the cap with nothing evictable) skips the cut and returns False.
+
+    The write lands whole under a `.tmp` name -- the policy's write-in-progress mark, held by
+    every eviction run while it is fresh -- and is renamed into place only once ffmpeg has
+    succeeded, so the final name never exists as a half-written file another writer's
+    eviction could take. The tmp's extension says nothing, so the container is named for it
+    explicitly; the final keeps the cut's `.flac` name."""
     src = _audio.find_audio_file(stem)
     lo = m_from - cstart
     policy = _on_policy(out_path)
     if policy and not cache_budget.reserve(STREAM_TRACKS_CACHE, None):
         return False
+    tmp = "%s.%d.tmp" % (out_path, os.getpid())
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "%.4f" % lo,
                     "-t", "%.4f" % (m_to - m_from), "-i", src,
-                    "-ac", "2", "-ar", "44100", out_path], check=True)
+                    "-ac", "2", "-ar", "44100", "-f", "flac", tmp], check=True)
+    os.replace(tmp, out_path)
     if policy:
         cache_budget.commit(STREAM_TRACKS_CACHE, out_path)
     return True
@@ -189,7 +196,9 @@ def assemble_track(pieces, starts, out):
     The part files and the concat list live in a scratch directory OUTSIDE the cache: a
     policy run may evict anything inside the cache's directory to make room, and an active
     part is not an entry to give up -- a concat that lost a part mid-flight would leave a
-    partial track wearing the final name. Only the assembled track lands in the cache."""
+    partial track wearing the final name. Only the assembled track lands in the cache, and
+    it lands whole the same way a direct cut does: written under a `.tmp` the policy holds,
+    renamed into place once the concat succeeds."""
     scratch = tempfile.mkdtemp(prefix="stream-tracks-parts-")
     try:
         parts = []
@@ -205,8 +214,10 @@ def assemble_track(pieces, starts, out):
         policy = _on_policy(out)
         if policy and not cache_budget.reserve(STREAM_TRACKS_CACHE, None):
             return False
+        tmp = "%s.%d.tmp" % (out, os.getpid())
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0",
-                        "-i", lst, "-c", "copy", out], check=True)
+                        "-i", lst, "-c", "copy", "-f", "flac", tmp], check=True)
+        os.replace(tmp, out)
         if policy:
             cache_budget.commit(STREAM_TRACKS_CACHE, out)
         return True

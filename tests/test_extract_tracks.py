@@ -77,9 +77,11 @@ class TheTracksCache(unittest.TestCase):
                          (2 * cache_budget.GB, 14, "re-extract", 8))
         self.assertEqual(rec["dir"], os.path.join(self.tmp, "stream_tracks"))
 
-    def test_the_argv_carries_flac_and_names_no_codec(self):
-        """The output's extension chooses the codec: the argv names none, and the cut's
-        output path ends .flac."""
+    def test_the_argv_carries_flac_and_lands_whole_under_the_final_name(self):
+        """The cut's output is FLAC, and the final name never exists as a half-written file:
+        ffmpeg writes a `.tmp` (the policy's write-in-progress mark, whose extension says
+        nothing -- the container is named for it explicitly) that is renamed into place once
+        it has the whole cut."""
         argvs = []
         out = os.path.join(self.tmp, "stream_tracks", "001 - A - B.flac")
         os.makedirs(os.path.dirname(out), exist_ok=True)   # main() makes the directory first
@@ -96,9 +98,11 @@ class TheTracksCache(unittest.TestCase):
         self.assertEqual(len(argvs), 1, "one ffmpeg invocation per cut")
         argv = argvs[0]
         self.assertEqual(argv[:1], ["ffmpeg"])
-        self.assertTrue(argv[-1].endswith(".flac"), "the cut's output is flac")
-        self.assertNotIn("-c", argv, "the codec is picked from the extension, never named")
-        self.assertNotIn("-f", argv, "the container too")
+        self.assertTrue(argv[-1].endswith(".tmp"), "the in-flight write is the policy's mark")
+        i = argv.index("-f")
+        self.assertEqual(argv[i:i + 2], ["-f", "flac"], "the tmp's extension names no container")
+        self.assertFalse(os.path.exists(argv[-1]), "the tmp is consumed by the rename")
+        self.assertTrue(out.endswith(".flac") and os.path.isfile(out))
 
     def test_a_cut_inside_the_cache_reserves_and_commits(self):
         self.assertTrue(cache_budget.registered("stream_tracks"))
@@ -206,6 +210,86 @@ class TheTracksCache(unittest.TestCase):
                          "the old entries went, so the assembled track fits")
         self.assertEqual([n for n in os.listdir(tracks_dir) if n.startswith("001")], [],
                          "no part or list file is left in the cache")
+
+    def test_a_cut_in_progress_is_never_an_entry_an_eviction_can_take(self):
+        """The finding's race, reproduced: another writer's `reserve` runs while ffmpeg is
+        mid-write. The in-flight cut sits under the policy's `.tmp` mark, so the run makes
+        its room out of the old ENTRIES -- the half-written cut is held, and cut() cannot
+        report success over a final path that is not there."""
+        tracks_dir = os.path.join(self.tmp, "stream_tracks")
+        os.makedirs(tracks_dir, exist_ok=True)
+        old = os.path.join(tracks_dir, "001 - Old - One.flac")
+        with open(old, "wb") as fh:
+            fh.write(b"x" * 400 * self.KB)         # one entry, most of the cap
+        os.environ["NETRADIO_STREAM_TRACKS_CACHE_GB"] = "0.0006"   # 600 KB: room must be made
+        extract_tracks.register_cache()
+        out = os.path.join(tracks_dir, "002 - A - B.flac")
+        during = {}
+
+        def fake_run(argv, **kwargs):
+            tmp = argv[-1]
+            self.assertTrue(tmp.endswith(".tmp"))
+            with open(tmp, "wb") as fh:
+                fh.write(b"fLaC" * 25000)            # half the cut is on disk
+            during["reserve"] = cache_budget.reserve("stream_tracks", 250 * self.KB)
+            self.assertTrue(os.path.exists(tmp),
+                            "the in-flight write is held by the policy, never evicted")
+            self.assertFalse(os.path.exists(out), "the final name does not exist yet")
+            with open(tmp, "ab") as fh:
+                fh.write(b"!" * 25000)              # ... and ffmpeg finishes
+            return unittest.mock.Mock(returncode=0)
+
+        with unittest.mock.patch.object(extract_tracks.subprocess, "run", fake_run), \
+                unittest.mock.patch.object(extract_tracks._audio, "find_audio_file",
+                                          lambda stem: os.path.join(self.tmp, "capture.wav")):
+            self.assertTrue(extract_tracks.cut("d000-018", 0.0, 30.0, 0.0, out))
+        self.assertEqual(during, {"reserve": True}, "the concurrent reserve found its room")
+        self.assertFalse(os.path.exists(old), "out of the old entry, not the cut in flight")
+        self.assertTrue(os.path.isfile(out), "the whole cut landed under the final name")
+        self.assertFalse([n for n in os.listdir(tracks_dir) if n.endswith(".tmp")])
+
+    def test_an_assembly_in_progress_is_never_an_entry_an_eviction_can_take(self):
+        """The same race through the reassembly: the parts are scratch outside the cache, the
+        assembled track is written under the `.tmp` mark, and a concurrent reserve mid-concat
+        takes the old entries and holds the in-flight write."""
+        tracks_dir = os.path.join(self.tmp, "stream_tracks")
+        os.makedirs(tracks_dir, exist_ok=True)
+        old = os.path.join(tracks_dir, "001 - Old - One.flac")
+        with open(old, "wb") as fh:
+            fh.write(b"x" * 400 * self.KB)
+        os.environ["NETRADIO_STREAM_TRACKS_CACHE_GB"] = "0.0006"
+        extract_tracks.register_cache()
+        out = os.path.join(tracks_dir, "002 - A - B.flac")
+        during = {}
+
+        def fake_cut(stem, m_from, m_to, cstart, out_path):
+            self.assertNotEqual(os.path.dirname(out_path), tracks_dir,
+                                "the parts stay in scratch, outside the cache")
+            with open(out_path, "wb") as fh:
+                fh.write(b"fLaC" * 75000)
+            return True
+
+        def fake_concat(argv, **kwargs):
+            tmp = argv[-1]
+            self.assertTrue(tmp.endswith(".tmp"))
+            with open(tmp, "wb") as fh:
+                fh.write(b"fLaC" * 75000)           # half the assembled track
+            during["reserve"] = cache_budget.reserve("stream_tracks", 250 * self.KB)
+            self.assertTrue(os.path.exists(tmp))
+            with open(tmp, "ab") as fh:
+                fh.write(b"!" * 75000)
+            return unittest.mock.Mock(returncode=0)
+
+        pieces = [("d000-018", 0.0, 30.0), ("d001-026b", 30.0, 60.0)]
+        with unittest.mock.patch.object(extract_tracks, "cut", fake_cut), \
+                unittest.mock.patch.object(extract_tracks.subprocess, "run", fake_concat):
+            self.assertTrue(extract_tracks.assemble_track(
+                pieces, {"d000-018": 0.0, "d001-026b": 0.0}, out))
+        self.assertEqual(during, {"reserve": True})
+        self.assertFalse(os.path.exists(old), "the old entry made the room")
+        self.assertTrue(os.path.isfile(out), "the assembled track landed whole")
+        self.assertEqual(sorted(n for n in os.listdir(tracks_dir) if n.endswith(".flac")),
+                         ["002 - A - B.flac"], "no part or tmp is left in the cache")
 
     def test_the_help_names_the_variable_the_code_reads(self):
         """The --out help is the operator-facing spelling of the default's override; a name

@@ -122,8 +122,9 @@ bounded by the policy — a 14-day age on signatures (the bucket is their long-t
 shared disk floor. With `NETRADIO_CACHE_ROOT` unset there is no cache directory at all and the
 harvester **refuses to start**, naming the setting: a signature it cannot keep is network cost
 paid for nothing. Set the root in `.env` (see `.env.example`). The tracks cut by
-`extract_tracks.py` are the policy's `stream_tracks` cache, and are cut as **FLAC** now (same
-argv, the extension chooses the codec).
+`extract_tracks.py` are the policy's `stream_tracks` cache, cut as **FLAC** now: each cut is
+written whole under a temporary name the policy holds, and renamed into its final `.flac`
+name once ffmpeg has it.
 
 **Clip formats: `.wav`, `.wv`, `.flac`, `.m4a`, `.mp3`** — lossless preferred, in that order
 (everything decodes through ffmpeg, which reads WavPack natively). `.wv` earned its place the
