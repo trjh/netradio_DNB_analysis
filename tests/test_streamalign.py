@@ -2,19 +2,25 @@
 
 Ground-truth parsing runs anywhere (labels are committed). Audio-dependent tests
 skip gracefully when the capture files / ffmpeg aren't present (they live on Tim's
-disk, not in the repo).
+disk, not in the repo). The cache-policy and resolution tests are synthetic
+and run everywhere: they stub the decode and drive `cache_budget` against a
+temporary root.
 """
 
 import json
 import os
+import re
 import shutil
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
 
+import cache_budget  # noqa: E402
 from streamalign import align, audio, emit_labels, graph, groundtruth, score, skips, solve, track_mix  # noqa: E402
 
 # Known hand values from TIMELINE_GUIDE / the labels (master_start seconds).
@@ -25,6 +31,11 @@ SMOKE = {
     "d088-107": 5267.520066,
     "d336-355": 19875.171068,  # chained: d328-342 start + 237.408
 }
+
+# Every NETRADIO_* name the cache policy reads beside the CACHE family (the same
+# list tests/test_cache_budget.py saves and restores around a test).
+ENV_NAMES = ("NETRADIO_CACHE_ROOT", "NETRADIO_DOWNLOAD_ROOT", "NETRADIO_DISK_MAX_PCT",
+             "NETRADIO_CACHE_EVENTS_DAYS")
 
 
 def _have_audio(*stems):
@@ -594,6 +605,222 @@ class TailSolveTests(unittest.TestCase):
         # d512-005 sits ~869 s before the d000-018 loop anchor (master 0)
         self.assertAlmostEqual(res["absolute"]["d512-005"], -869.061, places=1)
         self.assertEqual(res["orphan"], "d396-415")
+
+
+class FindAudioFileTests(unittest.TestCase):
+    """Capture-file resolution: `.wav` and `.au` are preferred, and a directory
+    holding only the `.mp3` transcodes still resolves — a machine can hold only
+    the transcodes, so the fall-through stays deliberately until the captures
+    can be pulled on demand."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="streamalign-ext-")
+        self.addCleanup(shutil.rmtree, self.dir, True)
+
+    def _touch(self, name):
+        path = os.path.join(self.dir, name)
+        with open(path, "wb") as fh:
+            fh.write(b"x" * 16)
+        return path
+
+    def test_finds_the_wav_and_the_au(self):
+        self._touch("a.wav")
+        self._touch("b.au")
+        self.assertTrue(audio.find_audio_file("a", self.dir).endswith("a.wav"))
+        self.assertTrue(audio.find_audio_file("b.au", self.dir).endswith("b.au"))
+
+    def test_wav_preferred_over_au_then_mp3(self):
+        # the preference order is unchanged: .wav, then .au, then the transcode
+        self._touch("c.wav")
+        self._touch("c.au")
+        self._touch("c.mp3")
+        self.assertTrue(audio.find_audio_file("c", self.dir).endswith("c.wav"))
+        self.assertTrue(audio.find_audio_file("c.mp3", self.dir).endswith("c.wav"))
+
+    def test_a_directory_holding_only_the_mp3_still_resolves(self):
+        # a machine can hold only the transcodes, so a stem with no capture
+        # file on disk must resolve the .mp3, not fail
+        self._touch("d.mp3")
+        self.assertTrue(audio.find_audio_file("d", self.dir).endswith("d.mp3"))
+        self.assertTrue(audio.find_audio_file("d.mp3", self.dir).endswith("d.mp3"))
+
+    def test_load_audio_decodes_the_mp3_when_it_is_all_there_is(self):
+        self._touch("e.mp3")
+        with mock.patch.object(
+                audio, "_ffmpeg_decode",
+                return_value=np.zeros(20 * 1000, dtype="float32")) as decode:
+            signal = audio.load_audio("e", audio_dir=self.dir)
+        self.assertEqual(len(signal), 20 * 1000)
+        self.assertTrue(decode.call_args[0][0].endswith("e.mp3"))
+
+
+class CachePolicyTests(unittest.TestCase):
+    """The decoded-array cache runs on the one cache policy (cache_budget.py).
+
+    `reserve` before the write, `commit` after, oldest-added eviction under the
+    cap, the entry in flight pinned, and no cache at all while the policy is dark
+    (NETRADIO_CACHE_ROOT unset) — never an unbounded cache with no eviction."""
+
+    KB = 1000
+    SAMPLES = 20 * 1000                       # 80 KB of float32 per decoded entry
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="streamalign-cache-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        saved = {k: os.environ.get(k) for k in os.environ
+                 if k.startswith("NETRADIO_") and ("CACHE" in k or k in ENV_NAMES)}
+        for k in saved:
+            os.environ.pop(k)
+        self.addCleanup(self._restore_env, saved)
+        os.environ["NETRADIO_CACHE_ROOT"] = os.path.join(self.tmp, "root")
+        self.addCleanup(self._restore_registry,
+                        dict(cache_budget._REGISTRY), dict(cache_budget._STATS))
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        self.addCleanup(setattr, cache_budget, "_disk_usage", cache_budget._disk_usage)
+        cache_budget._disk_usage = self._fake_volume   # an empty volume: the floor never trips
+        self.cache_dir = os.path.join(self.tmp, "root", "streamalign")
+        self.audio_dir = os.path.join(self.tmp, "audio")
+        os.makedirs(self.audio_dir)
+        self.decodes = []
+        patcher = mock.patch.object(audio, "_ffmpeg_decode", self._fake_decode)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def _restore_env(saved):
+        for k in [k for k in os.environ
+                  if k.startswith("NETRADIO_") and ("CACHE" in k or k in ENV_NAMES)]:
+            os.environ.pop(k)
+        for k, v in saved.items():
+            os.environ[k] = v
+
+    @staticmethod
+    def _restore_registry(registry, stats):
+        cache_budget._REGISTRY.clear()
+        cache_budget._REGISTRY.update(registry)
+        cache_budget._STATS.clear()
+        cache_budget._STATS.update(stats)
+
+    def _fake_volume(self, _path):
+        return (100 * 1000 * self.KB, 0, 100 * 1000 * self.KB)
+
+    def _fake_decode(self, path, sr, mono):
+        self.decodes.append(path)
+        return np.zeros(self.SAMPLES, dtype="float32")
+
+    def _source(self, name):
+        path = os.path.join(self.audio_dir, name)
+        with open(path, "wb") as fh:
+            fh.write(b"x" * 1000)
+        return path
+
+    def _entry(self, name):
+        return os.path.join(self.cache_dir, audio._cache_key(
+            os.path.join(self.audio_dir, name), audio.SR, True) + ".npy")
+
+    def test_a_load_writes_through_the_policy(self):
+        self._source("a.wav")
+        rec = audio.register_cache()
+        self.assertEqual(rec["dir"], self.cache_dir)
+        signal = audio.load_audio("a", audio_dir=self.audio_dir)
+        self.assertEqual(len(self.decodes), 1)
+        self.assertEqual(len(signal), self.SAMPLES)
+        self.assertTrue(os.path.isfile(self._entry("a.wav")))
+        row = cache_budget.status()["caches"][0]
+        self.assertEqual((row["name"], row["entries"], row["refill"]),
+                         ("streamalign", 1, "re-decode"))
+
+    def test_a_second_load_reads_the_cache_without_decoding_again(self):
+        self._source("a.wav")
+        audio.register_cache()
+        first = audio.load_audio("a", audio_dir=self.audio_dir)
+        second = audio.load_audio("a", audio_dir=self.audio_dir)
+        self.assertEqual(len(self.decodes), 1)
+        self.assertEqual(second.shape, first.shape)
+
+    def test_the_registration_reads_the_variable_family(self):
+        os.environ["NETRADIO_STREAMALIGN_CACHE_DIR"] = os.path.join(self.tmp, "elsewhere")
+        os.environ["NETRADIO_STREAMALIGN_CACHE_GB"] = "2"
+        os.environ["NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS"] = "14"
+        rec = audio.register_cache()
+        self.assertEqual(rec["dir"], os.path.join(self.tmp, "elsewhere"))
+        self.assertEqual(rec["cap"], 2 * cache_budget.GB)
+        self.assertEqual(rec["max_age"], 14)
+        self.assertEqual(rec["rank"], 3)
+
+    def test_the_registration_defaults(self):
+        rec = audio.register_cache()
+        self.assertEqual(rec["cap"], cache_budget.DEFAULT_CAP)
+        self.assertIsNone(rec["max_age"])
+        self.assertEqual(rec["order"], "oldest-added")
+
+    def test_a_lowered_cap_evicts_on_the_next_load(self):
+        self._source("a.wav")
+        self._source("b.wav")
+        audio.register_cache()
+        audio.load_audio("a", audio_dir=self.audio_dir)
+        os.environ["NETRADIO_STREAMALIGN_CACHE_GB"] = "0.0001"   # 100 KB: one entry fits, two do not
+        audio.register_cache()                                     # re-read: the lowered cap applies
+        audio.load_audio("b", audio_dir=self.audio_dir)
+        self.assertFalse(os.path.isfile(self._entry("a.wav")),   # the oldest went
+                          "the lowered cap must evict the first entry")
+        self.assertTrue(os.path.isfile(self._entry("b.wav")),    # never the file just written
+                        "the entry just committed must survive its own commit")
+
+    def test_a_pinned_entry_is_never_evicted_for_a_new_one(self):
+        self._source("a.wav")
+        self._source("b.wav")
+        audio.register_cache()
+        audio.load_audio("a", audio_dir=self.audio_dir)
+        os.environ["NETRADIO_STREAMALIGN_CACHE_GB"] = "0.0001"
+        audio.register_cache()
+        with audio._Pinned(self._entry("a.wav")):     # what a decode in flight holds
+            signal = audio.load_audio("b", audio_dir=self.audio_dir)
+        self.assertEqual(len(self.decodes), 2)                 # b decoded and returned
+        self.assertEqual(len(signal), self.SAMPLES)
+        self.assertEqual(os.listdir(self.cache_dir),
+                         [os.path.basename(self._entry("a.wav"))])  # but not cached over the pin
+
+    def test_dark_without_cache_root_there_is_no_cache_at_all(self):
+        os.environ.pop("NETRADIO_CACHE_ROOT")
+        self.assertIsNone(audio.register_cache())
+        self.assertFalse(cache_budget.registered("streamalign"))
+        self._source("a.wav")
+        self.assertEqual(len(audio.load_audio("a", audio_dir=self.audio_dir)), self.SAMPLES)
+        self.assertEqual(len(audio.load_audio("a", audio_dir=self.audio_dir)), self.SAMPLES)
+        self.assertEqual(len(self.decodes), 2)         # every load decodes again
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "root")))
+
+
+class RetiredCacheNamesTests(unittest.TestCase):
+    """The old cache rules are removed, not deprecated: nothing reads the old
+    fraction variables any more — they are gone from the sources, not merely
+    outranked by newer settings."""
+
+    NAMES = ("NETRADIO_ALIGN_CACHE", "NETRADIO_ALIGN_CACHE_MAX_FRAC",
+             "NETRADIO_ALIGN_CACHE_DISK_FULL_FRAC")
+    SKIP_DIRS = {".git", ".venv", ".worktree", "__pycache__", "Archive", "audacity",
+                 "data", "docs", "labels", "logo", "tests"}
+    CODE = (".py", ".sh", ".pl")
+
+    def test_no_source_reads_the_old_names(self):
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        pats = [(name, re.compile(re.escape(name) + r"(?![A-Z0-9_])"))
+                for name in self.NAMES]   # the exact names, not their prefixes inside one another
+        hits = []
+        for dirpath, dirs, files in os.walk(repo):
+            dirs[:] = sorted(d for d in dirs if d not in self.SKIP_DIRS)
+            for fname in sorted(files):
+                if not (fname.endswith(self.CODE) or fname in ("Makefile", ".env.example")):
+                    continue
+                path = os.path.join(dirpath, fname)
+                with open(path, encoding="utf-8", errors="replace") as fh:
+                    text = fh.read()
+                for name, rx in pats:
+                    if rx.search(text):
+                        hits.append("%s reads %s" % (os.path.relpath(path, repo), name))
+        self.assertEqual(hits, [], "the old cache names are retired, not dormant")
 
 
 if __name__ == "__main__":
