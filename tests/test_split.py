@@ -440,6 +440,61 @@ class TestCollector(Base):
                          else [], [harvest._sig_key(URL) + ".json"],
                          "the spool keeps its record: nothing crashed, nothing was lost")
 
+    def test_once_refuses_an_unreadable_rulings_file_before_the_fold(self):
+        """--once is the cron entry point, and it scores the spool: an unreadable rulings
+        file must stop it before the fold, the same gate the loop makes (local review, cycle
+        netradio-build-2-2-20260919, iteration 3). A spooled ok result and a gate, and the
+        one-shot pass folds nothing."""
+        self._harvested()                 # a real job dir + a spooled ok result
+        saved = {k: os.environ.get(k) for k in list(os.environ)
+                 if k.startswith("NETRADIO_") and ("CACHE" in k or
+                                                   k in ("NETRADIO_CACHE_ROOT",
+                                                         "NETRADIO_DOWNLOAD_ROOT",
+                                                         "NETRADIO_DISK_MAX_PCT",
+                                                         "NETRADIO_CACHE_EVENTS_DAYS"))}
+        for k in saved:
+            os.environ.pop(k, None)
+        os.environ["NETRADIO_CACHE_ROOT"] = os.path.join(self.tmp.name, "policy-root")
+        import cache_budget
+        registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+
+        def restore():
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(registry[1])
+            for k, v in saved.items():
+                os.environ[k] = v
+        self.addCleanup(restore)
+        harvest.register_caches()             # re-read: the caches are lit for this pass
+        self.assertIsNotNone(harvest._keep_dir())
+        self._rulings = harvest.RULINGS
+        harvest.RULINGS = os.path.join(self.tmp.name, "rulings.json")    # never written
+        self.addCleanup(setattr, harvest, "RULINGS", self._rulings)
+        collector.STATE = os.path.join(self.tmp.name, "state3.json")
+        with unittest.mock.patch.object(
+                    collector, "queries",
+                    lambda state=None: (_ for _ in ()).throw(
+                        AssertionError("the gate must come before the query set is read"))), \
+                unittest.mock.patch.object(
+                    collector, "collect_once",
+                    lambda *a, **k: (_ for _ in ()).throw(
+                        AssertionError("the fold must not run on an unreadable rulings "
+                                       "file"))), \
+                unittest.mock.patch.dict(os.environ, {"NETRADIO_COLLECTOR": "on"}), \
+                unittest.mock.patch.object(sys, "argv", ["collector.py", "--once"]), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            collector.main()
+        text = out.getvalue()
+        self.assertIn("the rulings file", text)
+        self.assertIn(harvest.RULINGS, text, "the refusal names the file, so a hand-run can "
+                                             "tell WHICH file is missing")
+        self.assertIn("not folding", text)
+        self.assertEqual(os.listdir(collector.RESULTS), [harvest._sig_key(URL) + ".json"],
+                         "the spool keeps its record: nothing was folded, nothing was lost")
+        self.assertFalse(os.path.exists(collector.STATE),
+                         "the gate wrote no state of its own -- the stand-down is the print")
+
     def test_no_retained_audio_scores_but_cannot_excerpt(self):
         q = self._harvested()
         key = harvest._sig_key(URL)

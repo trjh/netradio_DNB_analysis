@@ -197,8 +197,9 @@ to it. The player keeps those two verdicts apart.) The retired set is a **ruling
 duplicate, not-a-match) or that is the queue owner's own upload, each with its reason. The queue's
 owner writes it whole, atomically, at its start and after every ruling; the harvester only reads
 it — the keys alone, never the reasons — re-reading it every pass so a ruling takes effect within
-one loop iteration. **The harvester refuses to run without it** (`--run`, `--rescan`, and the
-lost-signature recovery all refuse, naming the file), because a search that has forgotten every
+one loop iteration. **The harvester refuses to run without it** (`--run`, `--rescan`, the
+lost-signature recovery, and the split runtime's loop and one-shot pass all refuse, naming the
+file), because a search that has forgotten every
 ruling hands back records already rejected. An empty file is fine — that is a queue with nothing
 ruled on yet; only a missing or unreadable file is a refusal.
 

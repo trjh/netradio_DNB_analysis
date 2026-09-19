@@ -441,6 +441,17 @@ def main():
         if not ok:
             print(why)
             return
+        # The same gate the loop makes, for the same reason: --once scores the spool, and a
+        # pass that cannot read the rulings file must not -- "cannot read" is never "nothing
+        # ruled". (The readable-file retirement surface is the loop's, applied on the pass
+        # after the fold, exactly as at the base; this gate only keeps the one-shot entry
+        # point from scoring on amnesia.)
+        if harvest.load_rulings() is None:
+            print("the rulings file (%s) is absent or unreadable -- this runtime has no way to "
+                  "know which keys it must never propose again, so the one-shot pass is not "
+                  "folding. Start it again once the queue's owner has written the file."
+                  % harvest.RULINGS)
+            return
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})
         print(collect_once(state, q, queries()))
