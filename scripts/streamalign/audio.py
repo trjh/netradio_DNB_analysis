@@ -139,8 +139,8 @@ def load_audio(name, sr=SR, mono=True, use_cache=True, audio_dir=None):
     """Load a capture as a float32 numpy array (mono, normalized to ~[-1, 1]).
 
     `name` may be a bare stem, a label filename, or a full path. Returns the
-    decoded signal; raises FileNotFoundError if the audio can't be located — and
-    an MP3 is never located (see `find_audio_file`).
+    decoded signal; raises FileNotFoundError if the audio can't be located
+    (see `find_audio_file` for the `.wav` > `.au` > `.mp3` order).
 
     The decoded signal is cached on the policy when one is configured: `reserve`
     makes room for it (evicting oldest-first, never the entry this decode is
