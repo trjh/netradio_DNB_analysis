@@ -276,7 +276,7 @@ reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to 
 }
 
 # The live data files each checkout's running process rewrites, set aside around every fast-forward.
-reconcile_analysis() { reconcile_main "$ANALYSIS" analysis "track-metadata.json" "TRACKLIST.md"; }
+reconcile_analysis() { reconcile_main "$ANALYSIS" "$LBL_A" "track-metadata.json" "TRACKLIST.md"; }
 # EVERY path queue_sync commits must be listed here, or the ff-merge aborts on it and the player
 # repo is left un-reconciled. `metadata/queue_chapters` and `metadata/queue_info` were missing
 # until 2026-09-11 — a live `make sync` failed with "Your local changes to the following files
@@ -303,11 +303,11 @@ reconcile_player() {
        && ! player_is_down; then
       say "  player: the player is running, or its launcher cannot tell — leaving the checkout alone;"
       say "          run make sync from the player repo, which stops the player first"
-      BLOCKED="$BLOCKED player"
+      BLOCKED="$BLOCKED $LBL_P"
       return 0
     fi
   fi
-  reconcile_main "$PLAYER" player \
+  reconcile_main "$PLAYER" "$LBL_P" \
     "metadata/track-metadata.json" "metadata/listen_queue.json" "metadata/listen_queue" \
     "metadata/subscriptions.json" "metadata/queue_chapters" "metadata/queue_info" \
     "metadata/source-inventory.json" "SOURCES.md" "data/harvest-queue.json"
@@ -321,6 +321,8 @@ reconcile_player() {
 # If that changed THIS script, re-run the new version: finishing a sync with old code is how the
 # copies drifted in the first place. The running bash is unaffected until the exec, because git
 # replaces a file rather than writing into it.
+LBL_A="analysis"; LBL_P="player"   # the labels a reconcile appends to BLOCKED; the self-check
+                                    # matches them to tell WHICH checkout a blockage names
 BLOCKED=""   # labels of the checkouts a reconcile left behind origin/main
 self_sum="$(cksum < "$0")"
 # A re-run carries the checksum of the script it re-ran into. Any other value is a leftover in the
@@ -383,7 +385,16 @@ for twin in "${TWINS[@]}"; do
     say "ERROR: $prel is on disk in one repo but not the other — a shared file lands in BOTH or neither." >&2
     if [ -e "$pfile" ]; then say "  on disk:  $pfile" >&2; else say "  missing:  $pfile" >&2; fi
     if [ -e "$afile" ]; then say "  on disk:  $afile" >&2; else say "  missing:  $afile" >&2; fi
-    if [ -n "$BLOCKED" ] && [ -n "$op" ] && [ "$op" = "$oa" ]; then
+    # Which checkout is missing its copy? (exactly one: both-missing was skipped above)
+    mlabel="$LBL_A"; [ ! -e "$pfile" ] && mlabel="$LBL_P"
+    # The catch-up remedy repairs only a checkout it could not move, and $BLOCKED's labels
+    # name exactly those — so the advice is true only when the side missing the file is
+    # itself in the list. A blocked OTHER checkout explains nothing about this pair: a
+    # checkout that is current while its copy was deleted locally is repaired by restoring
+    # the file, not by any fast-forward (local review 3 reproduced the crossed state).
+    mblocked=false
+    case " $BLOCKED " in *" $mlabel "*) mblocked=true ;; esac
+    if $mblocked && [ -n "$op" ] && [ "$op" = "$oa" ]; then
       # Not half-landed after all: both origin/main copies hold the file and agree, and the
       # checkout without it is one the catch-up could not move (see above). The merge is done;
       # the catch-up is the remedy — the same reasoning as the differing case below.
