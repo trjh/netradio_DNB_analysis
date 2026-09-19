@@ -234,6 +234,29 @@ def safe(name):
     return "".join(c if (c.isalnum() or c in " -_&.,'()") else "_" for c in name).strip()[:90]
 
 
+def resolve_out(explicit_out=None):
+    """(directory, None) to cut into, or (None, the refusal to print and exit on).
+
+    The default must be a REGISTERED cache. A directory the policy refused (one that
+    overlaps another cache's, or holds the cache root) is a misconfiguration, and cutting
+    into it unbounded -- no cap, no age sweep, no accounting -- is the growth this tool's
+    cache exists to end; refuse and name the setting, as the harvester refuses to run on a
+    cache that did not register. An explicit --out is the operator's own directory and may
+    be anywhere, accounted or not."""
+    out = explicit_out or tracks_dir()
+    if not out:
+        return None, ("no tracks directory: set NETRADIO_CACHE_ROOT (or "
+                      "NETRADIO_STREAM_TRACKS_CACHE_DIR) in .env -- see .env.example -- or "
+                      "pass --out")
+    if explicit_out is None and cache_budget.dir_of(STREAM_TRACKS_CACHE) != out:
+        return None, ("the tracks cache did not register on the policy: %s\n"
+                      "Its directory may overlap another cache's, or hold the cache root. Fix "
+                      "NETRADIO_STREAM_TRACKS_CACHE_DIR (or NETRADIO_CACHE_ROOT) in .env, or "
+                      "pass --out to cut into a directory of your own -- with no cap, no age "
+                      "limit and no accounting." % out)
+    return out, None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -243,10 +266,9 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--only", type=int, action="append")
     args = ap.parse_args()
-    args.out = args.out or tracks_dir()
-    if not args.out:
-        sys.exit("no tracks directory: set NETRADIO_CACHE_ROOT (or NETRADIO_STREAM_TRACKS_CACHE_DIR) "
-                 "in .env -- see .env.example -- or pass --out")
+    args.out, why = resolve_out(args.out)
+    if why:
+        sys.exit(why)
 
     meta = json.load(open(os.path.join(_gt.REPO_ROOT, "track-metadata.json")))
     tracks = meta.get("tracks", meta)

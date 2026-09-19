@@ -68,6 +68,39 @@ class TheTracksCache(unittest.TestCase):
         self.assertIsNone(extract_tracks.tracks_dir(),
                           "no directory at all while the policy is dark -- never a fallback")
 
+    def test_resolve_out_the_default_must_be_a_registered_cache(self):
+        out, why = extract_tracks.resolve_out()
+        self.assertEqual((out, why), (os.path.join(self.tmp, "stream_tracks"), None))
+        # dark: no directory at all
+        os.environ.pop("NETRADIO_CACHE_ROOT")
+        out, why = extract_tracks.resolve_out()
+        self.assertIsNone(out)
+        self.assertIn("no tracks directory", why)
+
+    def test_resolve_out_refuses_a_directory_the_policy_refused_to_register(self):
+        """The misconfiguration the reviewer reproduced: the directory variable names the
+        cache root itself, the policy refuses the registration (no cache holds its own
+        root), and cutting into it would be an unbounded cache with no accounting. The tool
+        refuses and names the setting, as the harvester refuses a cache that did not
+        register; only an explicit --out may go outside the policy."""
+        os.environ["NETRADIO_STREAM_TRACKS_CACHE_DIR"] = self.tmp      # == the cache root
+        extract_tracks.register_cache()                                # refused, by design
+        # the refusal leaves the process's earlier registration standing (the twin replaces
+        # a record only on success), so it is the mismatch that must trip the refusal
+        self.assertNotEqual(cache_budget.dir_of("stream_tracks"), self.tmp)
+        out, why = extract_tracks.resolve_out()
+        self.assertIsNone(out)
+        self.assertIn("did not register on the policy", why)
+        self.assertIn("NETRADIO_STREAM_TRACKS_CACHE_DIR", why)
+        # an explicit --out is the operator's own directory: kept, with no policy
+        out, why = extract_tracks.resolve_out(os.path.join(self.tmp, "my-tracks"))
+        self.assertEqual((out, why), (os.path.join(self.tmp, "my-tracks"), None))
+        # and the refusal exits the tool before anything is cut
+        argv = [sys.executable, os.path.join(SCRIPTS, "extract_tracks.py"), "--dry-run"]
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=120)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("did not register on the policy", proc.stdout + proc.stderr)
+
     def test_the_registration(self):
         rec = cache_budget.register("stream_tracks",
                                     cap=int(extract_tracks.STREAM_TRACKS_CACHE_GB * cache_budget.GB),

@@ -9,8 +9,11 @@ Reports two lists:
     name, a retired rule's variable, or a typo. These make the check fail (exit 1).
   * **read but unset** -- every `NETRADIO_*` name the code reads that the file leaves unset, with
     the default the code falls back to where the code states one as a literal. Information
-    only. The wrapper and test hand-off names (`INTERNAL`) are left out of this list; they still
-    count as read.
+    only. For a cache's family the default shown is what the registration sets -- the cap
+    and age limit the registering code passes, which a bare name cannot state; caches whose
+    registration departs from the generic cap (4 GB) or age (none) are named in the tool's
+    own table so the list states the default the code really uses. The wrapper and test
+    hand-off names (`INTERNAL`) are left out of this list; they still count as read.
 
 Only names are printed, never values: a `.env` holds credentials and machine paths.
 
@@ -46,6 +49,18 @@ CACHE_SUFFIXES = {"GB": "the cap the registration sets (4 GB where it sets none)
                   "MAX_AGE_DAYS": "the age limit the registration sets (none unless it sets one)",
                   "DIR": "the directory the registration names "
                          "($NETRADIO_CACHE_ROOT/<name> where it names none)"}
+# What each registered cache's own settings are, where they depart from the policy's generic
+# cap (4 GB) or age (none). The code scan cannot evaluate a registration's arguments (they
+# are expressions, not literals), so the caches this repo registers are named here with the
+# default the code really falls back to -- the registration's own. Keep it in step with the
+# registrations; the generic text above covers every cache not named.
+CACHE_SETTINGS = {
+    "chroma": {"MAX_AGE_DAYS": "14 days, the registration's age limit"},
+    "candidates": {"GB": "0.25 GB / 250 MB, the registration's cap",
+                   "MAX_AGE_DAYS": "30 days, the registration's age limit"},
+    "stream_tracks": {"GB": "2 GB, the registration's cap",
+                      "MAX_AGE_DAYS": "14 days, the registration's age limit"},
+}
 
 NAME = re.compile(r"\bNETRADIO_[A-Z0-9_]*[A-Z0-9]\b")
 WHOLE_NAME = re.compile(r"^NETRADIO_[A-Z0-9_]*[A-Z0-9]$")
@@ -154,7 +169,7 @@ def read_names(root=None):
         for suffix, default in CACHE_SUFFIXES.items():
             name = "NETRADIO_%s_CACHE_%s" % (cache.upper(), suffix)
             if names.get(name) is None:
-                names[name] = default.replace("<name>", cache)
+                names[name] = CACHE_SETTINGS.get(cache, {}).get(suffix, default).replace("<name>", cache)
     return names
 
 

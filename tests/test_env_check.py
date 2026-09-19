@@ -195,6 +195,23 @@ class TheRepo(unittest.TestCase):
         self.assertNotIn("NETRADIO_TRACKS_DIR", read,
                          "the retired hard-coded path variable is gone from the code")
 
+    def test_the_registered_caches_report_the_defaults_the_code_really_uses(self):
+        # The informational list's contract: the default shown is the one the code falls
+        # back to -- for a cache family, what the registration sets. Caches whose
+        # registration departs from the generic 4 GB / no age are named in the tool's own
+        # table, because the code scan cannot evaluate the registration's arguments.
+        read = env_check.read_names()
+        self.assertIn("0.25 GB / 250 MB", read["NETRADIO_CANDIDATES_CACHE_GB"],
+                      "candidates registers a 250 MB cap, not the generic 4 GB")
+        self.assertIn("2 GB", read["NETRADIO_STREAM_TRACKS_CACHE_GB"],
+                      "stream_tracks registers a 2 GB cap, not the generic 4 GB")
+        self.assertIn("30 days", read["NETRADIO_CANDIDATES_CACHE_MAX_AGE_DAYS"])
+        self.assertIn("14 days", read["NETRADIO_CHROMA_CACHE_MAX_AGE_DAYS"])
+        self.assertIn("14 days", read["NETRADIO_STREAM_TRACKS_CACHE_MAX_AGE_DAYS"])
+        # and a cache whose registration sets no cap keeps the generic text
+        self.assertIn("4 GB", read["NETRADIO_CHROMA_CACHE_GB"])
+        self.assertIn("none", read["NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS"])
+
     def test_the_retired_old_cache_names_are_read_by_nothing(self):
         # The old rules are removed, not deprecated: nothing reads the names this repo
         # stopped using.
