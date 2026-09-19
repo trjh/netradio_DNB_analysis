@@ -419,6 +419,8 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         self.assertIsNone(harvest._keep_dir())
         self.assertIsNone(harvest.sig_path("https://example.invalid/x"))
 
+    @unittest.skipUnless(HAVE_AUDIO,
+                        "write_excerpt writes a real excerpt -- see requirements-streamalign.txt")
     def test_an_excerpt_past_the_cap_evicts_the_worst_of_its_mystery_first(self):
         # A board of MT4 excerpts whose WORST is the NEWEST file: a plain oldest-added order
         # would keep the worst and drop the best; `by-score` must take the worst first.
@@ -453,6 +455,8 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
                          [("MT4-0.0600-old.wav", "expired")],
                          "the sweep deletes through the policy, which records the reason")
 
+    @unittest.skipUnless(HAVE_AUDIO,
+                        "write_excerpt writes a real excerpt -- see requirements-streamalign.txt")
     def test_a_refused_excerpt_is_not_kept(self):
         """The write the policy refuses (the disk past its floor) leaves nothing on disk, so
         run() neither counts it as kept nor names it as the lead's audio: the lead survives."""
