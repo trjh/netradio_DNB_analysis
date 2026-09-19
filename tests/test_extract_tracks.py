@@ -291,6 +291,74 @@ class TheTracksCache(unittest.TestCase):
         self.assertEqual(sorted(n for n in os.listdir(tracks_dir) if n.endswith(".flac")),
                          ["002 - A - B.flac"], "no part or tmp is left in the cache")
 
+    def test_a_cut_evicted_between_its_rename_and_its_commit_reports_failure(self):
+        """The reviewer's interleave: another writer's `reserve` runs after the rename and
+        before the commit, and takes the just-published cut (it is not yet recorded, and
+        carries no in-progress mark). The cut must report the failure, never a success over
+        a path that is not there."""
+        tracks_dir = os.path.join(self.tmp, "stream_tracks")
+        os.makedirs(tracks_dir, exist_ok=True)
+        out = os.path.join(tracks_dir, "001 - A - B.flac")
+        os.environ["NETRADIO_STREAM_TRACKS_CACHE_GB"] = "0.0000001"   # 100 bytes: a cut overflows it
+        extract_tracks.register_cache()
+        real_replace = os.replace
+
+        def racing_replace(a, b):
+            real_replace(a, b)
+            cache_budget.reserve("stream_tracks", None)   # the evictor, mid-landing
+
+        def fake_run(argv, **kwargs):
+            with open(argv[-1], "wb") as fh:
+                fh.write(b"fLaC" * 250)                    # a 1000-byte cut
+            return unittest.mock.Mock(returncode=0)
+
+        with unittest.mock.patch.object(extract_tracks.subprocess, "run", fake_run), \
+                unittest.mock.patch.object(extract_tracks._audio, "find_audio_file",
+                                          lambda stem: os.path.join(self.tmp, "capture.wav")), \
+                unittest.mock.patch("os.replace", side_effect=racing_replace):
+            self.assertFalse(extract_tracks.cut("d000-018", 0.0, 30.0, 0.0, out),
+                             "a landing that did not survive is a failed cut")
+        self.assertFalse(os.path.exists(out))
+
+    def test_an_assembly_evicted_between_its_rename_and_its_commit_reports_failure(self):
+        """The same interleave through the reassembly: the assembled track is published under
+        the final name and a concurrent reserve takes it before the commit; the assembly
+        reports the failure and leaves nothing behind."""
+        tracks_dir = os.path.join(self.tmp, "stream_tracks")
+        os.makedirs(tracks_dir, exist_ok=True)
+        out = os.path.join(tracks_dir, "002 - A - B.flac")
+        os.environ["NETRADIO_STREAM_TRACKS_CACHE_GB"] = "0.0000001"
+        extract_tracks.register_cache()
+        real_replace = os.replace
+        landed = {}
+
+        def racing_replace(a, b):
+            real_replace(a, b)
+            if os.path.dirname(b) == tracks_dir:
+                # the eviction the finding reproduces: between the rename and the commit
+                cache_budget.reserve("stream_tracks", None)
+                landed[b] = os.path.exists(b)
+
+        def fake_cut(stem, m_from, m_to, cstart, out_path):
+            with open(out_path, "wb") as fh:
+                fh.write(b"fLaC" * 250)
+            return True
+
+        def fake_concat(argv, **kwargs):
+            with open(argv[-1], "wb") as fh:
+                fh.write(b"fLaC" * 250)
+            return unittest.mock.Mock(returncode=0)
+
+        pieces = [("d000-018", 0.0, 30.0), ("d001-026b", 30.0, 60.0)]
+        with unittest.mock.patch.object(extract_tracks, "cut", fake_cut), \
+                unittest.mock.patch.object(extract_tracks.subprocess, "run", fake_concat), \
+                unittest.mock.patch("os.replace", side_effect=racing_replace):
+            self.assertFalse(extract_tracks.assemble_track(
+                pieces, {"d000-018": 0.0, "d001-026b": 0.0}, out))
+        self.assertEqual(landed, {out: False}, "the published track was taken before the commit")
+        self.assertFalse(os.path.exists(out))
+        self.assertEqual(os.listdir(tracks_dir), [], "no part or tmp is left in the cache")
+
     def test_the_help_names_the_variable_the_code_reads(self):
         """The --out help is the operator-facing spelling of the default's override; a name
         that differs by one letter silently gets the default instead."""

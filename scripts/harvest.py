@@ -895,6 +895,14 @@ def _decode_and_sign(url, job, duration=None):
         np.save(fh, c.astype(chroma_recipe.STORE_DTYPE))
     os.replace(tmp, sig)
     cache_budget.commit(CHROMA_CACHE, sig)
+    if not os.path.isfile(sig):
+        # THE LANDING CHECK. The rename and the commit are two calls, and a bounded cache may
+        # lose any entry at any time -- an eviction run that starts between them can take a
+        # signature that has not been recorded yet. What a writer must never do is report a
+        # success whose entry is not there; the lost-signature recovery offers this URL again.
+        return {"ok": False,
+                "error": "the signature did not survive its own landing: an eviction run "
+                         "took it before the policy recorded it"}
     # The bucket is the signature's long-term home (see sigstore). Upload now, verified; on
     # failure the local file stays until the cache policy's age limit takes it (the `chroma`
     # cache has no pins -- requeue_missing_sigs offers the URL again once its signature is
@@ -1083,6 +1091,11 @@ def write_excerpt(samples, at_s, path):
         sf.write(fh, clip, _audio.SR, format="WAV")
     os.replace(tmp, path)
     cache_budget.commit(CANDIDATES_CACHE, path)
+    if not os.path.isfile(path):
+        # THE LANDING CHECK (see the signature write for the reason): an eviction run that
+        # starts between the rename and the commit can take an excerpt not yet recorded.
+        # Not kept, not counted -- the lead survives its numbers.
+        return False
     _write_provenance()
     return True
 

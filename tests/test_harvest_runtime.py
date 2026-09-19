@@ -469,6 +469,33 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         self.assertTrue([e for e in self._events() if e["event"] == "refuse"],
                         "the refusal is recorded like every other policy answer")
 
+    @unittest.skipUnless(HAVE_AUDIO,
+                        "write_excerpt writes a real excerpt -- see requirements-streamalign.txt")
+    def test_an_excerpt_evicted_between_its_rename_and_its_commit_is_not_kept(self):
+        """The rename and the commit are two calls; another writer's `reserve` that starts
+        between them takes an excerpt the policy has not recorded yet. The write must not
+        report a kept excerpt that is not on disk."""
+        import numpy as np
+        # The cap admits the planned excerpt and nothing else beside it: 300 KB against a
+        # ~32 KB excerpt, so another writer asking for 300 KB of room must take the excerpt.
+        os.environ["NETRADIO_CANDIDATES_CACHE_GB"] = "0.0003"
+        harvest.register_caches()
+        real_replace = os.replace
+
+        def racing_replace(a, b):
+            real_replace(a, b)
+            # another writer asks for room, and the not-yet-recorded excerpt is the only
+            # entry to give up -- the exact interval between rename and commit
+            cache_budget.reserve(harvest.CANDIDATES_CACHE, 300 * self.KB)
+
+        path = os.path.join(self.keep_dir, "MT4-0.0500-raced.wav")
+        with unittest.mock.patch("os.replace", side_effect=racing_replace):
+            self.assertFalse(harvest.write_excerpt(np.zeros(16000, dtype="float32"), 0.5, path))
+        self.assertFalse(os.path.exists(path), "the excerpt was taken, not kept")
+        self.assertFalse(os.path.exists(self.keep_dir) and
+                         "PROVENANCE.txt" in os.listdir(self.keep_dir),
+                         "a landing that did not survive writes no board note")
+
 
 if __name__ == "__main__":
     unittest.main()

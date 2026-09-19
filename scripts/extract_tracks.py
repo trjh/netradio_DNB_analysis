@@ -172,7 +172,10 @@ def cut(stem, m_from, m_to, cstart, out_path):
     every eviction run while it is fresh -- and is renamed into place only once ffmpeg has
     succeeded, so the final name never exists as a half-written file another writer's
     eviction could take. The tmp's extension says nothing, so the container is named for it
-    explicitly; the final keeps the cut's `.flac` name."""
+    explicitly; the final keeps the cut's `.flac` name. After the commit the cut verifies its
+    own landing: a bounded cache may lose any entry at any time, and an eviction run that
+    starts between the rename and the commit can take a cut not yet recorded -- what a
+    writer must never do is report success over a path that is not there."""
     src = _audio.find_audio_file(stem)
     lo = m_from - cstart
     policy = _on_policy(out_path)
@@ -185,7 +188,7 @@ def cut(stem, m_from, m_to, cstart, out_path):
     os.replace(tmp, out_path)
     if policy:
         cache_budget.commit(STREAM_TRACKS_CACHE, out_path)
-    return True
+    return os.path.isfile(out_path)
 
 
 def assemble_track(pieces, starts, out):
@@ -220,7 +223,9 @@ def assemble_track(pieces, starts, out):
         os.replace(tmp, out)
         if policy:
             cache_budget.commit(STREAM_TRACKS_CACHE, out)
-        return True
+        # The same landing check a direct cut makes (see there for the reason): never report
+        # success over a path an eviction between the rename and the commit took away.
+        return os.path.isfile(out)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 

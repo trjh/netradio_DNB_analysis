@@ -34,6 +34,8 @@ try:
 except Exception:                       # a dependency this test does not own
     harvest = memwatch = None
 
+import cache_budget                     # noqa: E402  (the machine's one cache policy)
+
 try:
     import harvester                    # noqa: E402  (split mode; also needs soundfile)
 except Exception:
@@ -1262,6 +1264,79 @@ class TheInProcessEscapeHatchAlsoStops(unittest.TestCase):
         self.assertTrue(harvest._stop_requested())
         self.assertEqual(order, ["ffmpeg", "yt-dlp"])
         self.assertEqual(harvest._STOP["procs"], [])
+
+
+# The cache-policy names the landing test saves and restores (the same set
+# tests/test_cache_budget.py uses).
+CACHE_ENV = ("NETRADIO_CACHE_ROOT", "NETRADIO_DOWNLOAD_ROOT", "NETRADIO_DISK_MAX_PCT",
+             "NETRADIO_CACHE_EVENTS_DAYS")
+
+
+@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+class ASignatureEvictedBetweenRenameAndCommit(unittest.TestCase):
+    """The rename and the commit are two calls, and a bounded cache may lose any entry at any
+    time: an eviction run that starts between them takes a signature the policy has not
+    recorded yet. The writer must never report a success whose entry is not there -- the
+    fetch reports the failure (and the lost-signature recovery offers the URL again), and
+    nothing is uploaded for a signature that is not on disk."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.job = os.path.join(self.tmp, "job")
+        self.url = "https://example.invalid/watch?v=landing"
+        self.put = []
+        self._saved = {k: os.environ.get(k) for k in list(os.environ)
+                       if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
+        for k in self._saved:
+            os.environ.pop(k, None)
+        self.addCleanup(self._restore)
+        # The policy ON, with the chroma cache registered over this test's own directory:
+        # its cap (2000 bytes) admits the ~1440-byte signature, and another writer asking
+        # for 1000 bytes of room must take the just-published, not-yet-recorded entry.
+        os.environ["NETRADIO_CACHE_ROOT"] = os.path.join(self.tmp, "root")
+        os.environ["NETRADIO_CHROMA_CACHE_DIR"] = os.path.join(self.tmp, "cache")
+        os.environ["NETRADIO_CHROMA_CACHE_GB"] = "0.000002"
+        self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        harvest.register_caches()
+
+    def _restore(self):
+        cache_budget._REGISTRY.clear()
+        cache_budget._REGISTRY.update(self._registry[0])
+        cache_budget._STATS.clear()
+        cache_budget._STATS.update(self._registry[1])
+        for k in [k for k in list(os.environ)
+                  if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)]:
+            os.environ.pop(k, None)
+        os.environ.update(self._saved)
+        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_the_fetch_reports_the_failure_and_nothing_is_uploaded(self):
+        real_replace = os.replace
+
+        def racing_replace(a, b):
+            real_replace(a, b)
+            # another writer asks for room, between the signature's rename and its commit
+            cache_budget.reserve("chroma", 1000)
+
+        with mock.patch.object(harvest.subprocess, "Popen",
+                               fake_decode(pcm=_pcm(LONG_ENOUGH))), \
+                mock.patch.object(harvest.chroma_recipe, "compute_chroma",
+                                  lambda y, sr=None: np.zeros((12, 60), dtype="float32")), \
+                mock.patch.object(harvest.sigstore, "enabled", lambda: True), \
+                mock.patch.object(harvest.sigstore, "put",
+                                  lambda *a: self.put.append(a) or True), \
+                mock.patch("os.replace", side_effect=racing_replace):
+            result = harvest._fetch_and_sign(self.url, self.job)
+        self.assertFalse(result["ok"], result)
+        self.assertIn("did not survive its own landing", result["error"])
+        self.assertNotIn("403", result["error"])       # never read as a host problem
+        self.assertNotIn("429", result["error"])
+        self.assertNotIn("blocked", result["error"].lower())
+        self.assertEqual(self.put, [], "nothing uploaded for a signature that is not there")
+        self.assertFalse(os.path.exists(harvest.sig_path(self.url)))
 
 
 if __name__ == "__main__":
