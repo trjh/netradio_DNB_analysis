@@ -1,13 +1,11 @@
 """Audio loading for the stream alignment engine.
 
 All netradio captures are 16 kHz / stereo / 16-bit PCM (``.wav`` little-endian,
-``.au`` big-endian). We decode everything through ffmpeg to float32 mono at a
-fixed sample rate so the rest of the engine never has to think about
-container/format/endianness, and cache the decoded arrays on disk (these files
-get read many times across a global solve). The transcoded ``.mp3`` tiles are
-never decoded here: alignment reads the lossless captures, and falling through
-to an MP3 when no capture file is on disk silently changes what gets aligned, so
-a stem whose ``.wav``/``.au`` is absent fails instead.
+``.au`` big-endian); the transcoded ``.mp3`` tiles exist too but the lossless
+originals are preferred for alignment. We decode everything through ffmpeg to
+float32 mono at a fixed sample rate so the rest of the engine never has to think
+about container/format/endianness, and cache the decoded arrays on disk (these
+files get read many times across a global solve).
 
 No third-party audio deps: ffmpeg for decode, numpy for everything else.
 """
@@ -32,10 +30,10 @@ AUDIO_DIR = os.environ.get(
     "NETRADIO_AUDIO_DIR", os.path.join(_REPO_ROOT, "jaz_links"))
 
 # Preference order when a label names a file without (or with a different)
-# extension: the lossless capture files only. The .mp3 tiles are transcodes of
-# these and never a substitute — a stem with no .wav/.au on disk is an error,
-# not a downgrade.
-_AUDIO_EXTS = (".wav", ".au")
+# extension: lossless originals first, transcode last. The .mp3 stays in the
+# order deliberately — a machine can hold only the transcodes, and a stem with
+# no capture file on disk must still resolve there.
+_AUDIO_EXTS = (".wav", ".au", ".mp3")
 
 
 # --- the decoded-array cache, on the one cache policy ---------------------------------
@@ -99,9 +97,8 @@ def stem_of(name):
 def find_audio_file(name, audio_dir=None):
     """Resolve a label/sync filename to an actual audio file on disk.
 
-    Matches `.wav`/`.au` only — never an `.mp3`, which would silently change
-    what gets decoded. Returns the best available original for `name`'s stem,
-    or None if no capture file is present.
+    Labels reference `.wav`/`.au`/`.mp3` interchangeably; return the best
+    available original for `name`'s stem, or None if nothing is present.
     """
     audio_dir = audio_dir or AUDIO_DIR
     stem = stem_of(name)

@@ -43,8 +43,7 @@ pairs. This is the data everything else is graded against.
 
 **2. Find (measure from the audio).**
 - `audio.py` — ffmpeg→numpy loader (16 kHz mono), on-disk decode cache bounded by
-  the machine's cache policy, capture-file resolution (`.wav`/`.au` only, never an
-  MP3).
+  the machine's cache policy, capture-file resolution.
 - `align.py` — pairwise offset between two captures: decimated FFT
   cross-correlation (coarse) → GCC-PHAT (sub-sample).
 - `skips.py` — walk an overlap window-by-window tracking the local offset; steps in
