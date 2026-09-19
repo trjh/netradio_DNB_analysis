@@ -472,6 +472,30 @@ class TheScan(_SignerCase):
         self.assertTrue(any("differs from" in r["issue"] for r in issues))
         self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
 
+    def test_a_sidecar_without_fed_at_is_refused(self):
+        """`fed_at` is the one field the contract requires of every sidecar -- the record of
+        when the hand-over was made. A feeder that forgot it must hear about the refusal,
+        not watch its file sit unsigned with no row and no reason."""
+        key = _key("https://y/no-fed-at")
+        self._feed(key, sidecar={"fed_at": None})
+        issues = []
+        todo, _ = harvest.scan_directories({}, issues=issues)
+        self.assertEqual(todo, [])
+        self.assertTrue(any("fed_at" in r["issue"] for r in issues))
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
+
+    def test_the_hand_tool_refuses_the_same_sidecar(self):
+        """--sign-one goes through sign_file's own check, so the hand tool cannot sign past
+        the rule the scan enforces."""
+        key = _key("https://y/hand-fed-at")
+        path = self._feed(key, sidecar={"fed_at": None})
+        spawned = []
+        self._run_patches(lambda argv, **kw: spawned.append(argv) or _FakeProc(argv))
+        c, samples = harvest.sign_file(path, 60.0)
+        self.assertEqual((c, samples), (None, None))
+        self.assertEqual(spawned, [])
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
+
     def test_a_stem_that_is_not_a_keys_shape_is_refused(self):
         """The pool's own listing admits only `u` + 20 hex, so a signature filed under any
         other stem would be invisible to the pool -- refused where the refusal can name it."""
@@ -481,7 +505,7 @@ class TheScan(_SignerCase):
                     fh.write(_pcm(SR))
                 stem = name.rsplit(".", 1)[0]
                 with open(os.path.join(self.audio, stem + ".json"), "w") as fh:
-                    json.dump({"key": stem}, fh)
+                    json.dump({"key": stem, "fed_at": "now"}, fh)
         issues = []
         todo, _ = harvest.scan_directories({}, issues=issues)
         self.assertEqual(todo, [])
@@ -557,7 +581,7 @@ class TheScan(_SignerCase):
         with open(os.path.join(other, key_b + ".mp3"), "wb") as fh:
             fh.write(_pcm(SR))
         with open(os.path.join(other, key_b + ".json"), "w") as fh:
-            json.dump({"key": key_b}, fh)
+            json.dump({"key": key_b, "fed_at": "now"}, fh)
         todo, _ = harvest.scan_directories({})
         self.assertEqual(sorted(r["key"] for r in todo),
                          sorted([_key("https://y/a"), key_b]))

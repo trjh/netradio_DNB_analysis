@@ -952,6 +952,18 @@ def scan_directories(ledger, issues=None, said=None):
                                             "the file's stem -- a feeder bug, not a verdict on "
                                             "the audio" % (name, sidecar.get("key"))})
                 continue
+            if not sidecar.get("fed_at"):
+                # `fed_at` is required of the feeder (docs/HARVEST_FEED.md) -- the record of
+                # when the hand-over was made, which the backfill that synthesises sidecars
+                # for the old pool writes too. Refused loudly rather than silently skipped: a
+                # feeder that forgot one line of the contract must hear about it, not watch
+                # its file sit unsigned with no row and no reason.
+                if path not in said and issues is not None:
+                    said.add(path)
+                    issues.append({"at": _now(), "key": stem,
+                                   "issue": "refused %s: its sidecar carries no fed_at -- the "
+                                            "one required field it is missing" % name})
+                continue
             try:
                 st = os.stat(path)
             except OSError:
@@ -999,7 +1011,8 @@ def sign_file(path, expect_s=None, issues=None):
     key = file_key(path)
     sidecar_path = os.path.join(os.path.dirname(path), key + ".json")
     sidecar = _load(sidecar_path, None)
-    if not isinstance(sidecar, dict) or sidecar.get("key") != key:
+    if (not isinstance(sidecar, dict) or sidecar.get("key") != key
+            or not sidecar.get("fed_at")):
         return None, None                    # no complete sidecar: not this function's business
     if expect_s is None:
         expect_s = _expect_s(sidecar)

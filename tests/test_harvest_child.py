@@ -122,7 +122,8 @@ def _feed(case, key, url="https://example.invalid/watch?v=abc", duration_s=60.0)
     with open(path, "wb") as fh:
         fh.write(b"")
     with open(os.path.join(case.audio, key + ".json"), "w") as fh:
-        json.dump({"key": key, "url": url, "duration_s": duration_s}, fh)
+        json.dump({"key": key, "url": url, "duration_s": duration_s,
+                   "fed_at": "2026-09-19T00:00:00+00:00"}, fh)
     return path
 
 
@@ -237,7 +238,7 @@ class ChildBoundary(unittest.TestCase):
         with open(hostile, "wb") as fh:
             fh.write(b"")
         with open(os.path.join(hostile_dir, self.key + ".json"), "w") as fh:
-            json.dump({"key": self.key}, fh)
+            json.dump({"key": self.key, "fed_at": "2026-09-19T00:00:00+00:00"}, fh)
         line = self._spawned_command_line(hostile)
         self.assertNotIn("--run", line)
         self.assertNotIn(hostile, line)
@@ -599,7 +600,7 @@ class TheChildEntryPoint(unittest.TestCase):
         with open(self.path, "wb") as fh:
             fh.write(b"")
         with open(os.path.join(self.audio, "u" + "a" * 20 + ".json"), "w") as fh:
-            json.dump({"key": "u" + "a" * 20}, fh)
+            json.dump({"key": "u" + "a" * 20, "fed_at": "2026-09-19T00:00:00+00:00"}, fh)
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def test_main_dispatches_the_child_before_taking_the_writer_lock(self):
@@ -654,7 +655,8 @@ class TheChildEntryPoint(unittest.TestCase):
         with open(path, "wb") as fh:
             fh.write(b"")
         with open(os.path.join(self.audio, key + ".json"), "w") as fh:
-            json.dump({"key": key, "duration_s": 50.0}, fh)
+            json.dump({"key": key, "duration_s": 50.0,
+                       "fed_at": "2026-09-19T00:00:00+00:00"}, fh)
         # The signature cache has no directory while the cache policy is dark, so the child
         # gets a throwaway root and puts its one signature under that -- nothing lands in any
         # real directory, and nothing needs putting back afterwards.

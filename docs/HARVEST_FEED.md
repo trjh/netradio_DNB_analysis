@@ -55,13 +55,14 @@ take the file for unfinished).
 | `title` | no | as the source names it |
 | `artist` | no | the uploader or channel |
 | `duration_s` | no | the file's length in seconds, for the length check |
-| `fed_at` | yes | when the sidecar was written |
+| `fed_at` | yes | when the sidecar was written; a sidecar without it is refused, with a row in the issues list |
 
 **No sidecar, no signature.** A file without a sidecar is not complete, and the harvester
 does not read it, sign it, or record it — the sidecar is how the harvester knows the feed is
-finished. A sidecar whose `key` differs from the audio file's stem is refused: the file is not
-signed, no row is written for it, and the refusal is recorded in the harvester's issues list,
-so a naming bug is visible rather than silent.
+finished. Two sidecars are refused outright, with no row and a row in the issues list, so a
+feeder bug is visible rather than silent: one whose `key` differs from the audio file's stem,
+and one missing its required `fed_at`. A torn or unreadable sidecar is neither — it is the
+mid-write state again, retried on the next pass.
 
 ## What the harvester does with a file
 
@@ -173,10 +174,12 @@ in the harvester's own checkout.
 ## The hand tool
 
 ```bash
+set -a && . ./.env && set +a        # the settings live in .env: the directories, the cache root
 .venv/bin/python scripts/harvest.py --sign-one <key>
 ```
 
 Signs the one file whose stem is this key, in the configured directories, through the same
-path the loop uses — including the ledger row. It reconciles the ledger first, and it does not
-score. Useful for reproducing one sign by hand, or for forcing a re-sign after a file has been
-replaced.
+path the loop uses — including the ledger row. It reconciles the ledger first, and it does
+not score. Useful for reproducing one sign by hand, or for forcing a re-sign after a file
+has been replaced. Like every other mode, it needs its settings from `.env`
+(`NETRADIO_HARVEST_DIRS` at a minimum) and refuses, naming them, without.
