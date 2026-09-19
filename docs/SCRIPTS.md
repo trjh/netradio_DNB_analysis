@@ -60,8 +60,7 @@ audio-dependent tests need `.venv` (`make venv`).
 | `scripts/identify_by_api.py` | ask the commercial catalogues (ACRCloud + AudD) to name a clip — searches ~150-160M tracks you don't own, unlike the local chroma pool | when a mystery may be a catalogued release. **Acoustic fingerprinting may be defeated by the 1998 codec/EQ like AcoustID is — it's an experiment; every hit is a lead to confirm by ear.** Needs `ACRCLOUD_*` / `AUDD_API_TOKEN` in `.env` |
 | `scripts/match_queue.py` | chroma-match the mysteries against the listen queue's **downloaded, unlistened** tracks | one-off sweep of what's already on disk |
 | `scripts/harvest.py` | the long-runner: stream candidates → chroma signature → **drop the audio** → score | continuously. See [the harvester](#the-harvester) |
-| `scripts/discogs_leads.py` | read the labels this DJ actually played, ask Discogs what else they released 1994–99 | when the pool needs new leads |
-| `scripts/seed_leads.py` | turn those leads into URLs and queue them for the harvester | after `discogs_leads.py` |
+| `scripts/discogs_leads.py` | read the labels this DJ actually played, ask Discogs what else they released 1994–99. A lead is tested by adding a stream of it to the listen queue through the queue's add box | when the pool needs new leads |
 | `scripts/acoustid_check.py` | verify the **originals** against AcoustID; catch mislabelled source files | occasionally. **Does not work on stream audio** — see `Archive/LESSON_acoustid_stream.md` |
 
 ## Measuring the matcher
@@ -153,10 +152,9 @@ fetched after it, and weeks of accumulated corpus were silently never tested aga
 
 **Lost signatures regenerate.** The same "done is never looked at again" rule had a second hole:
 a signature that vanished from *both* the working cache and the bucket left its candidate
-permanently dark to every future mystery. Every queue/state **writer** now runs the same recovery
-at startup — Mode A's `harvest.py --run` *and* the split collector — putting such URLs back into
-`pending` so the ordinary fetch path re-signs them (`--requeue-missing-sigs` is the on-demand
-form). Two deliberate refusals: if the bucket can't be *listed*, "lost" and
+permanently dark to every future mystery. Every queue/state **writer** now runs the same
+recovery at startup — `harvest.py --run`, and `--requeue-missing-sigs` on demand — putting such
+URLs back into `pending` so the ordinary fetch path re-signs them. Two deliberate refusals: if the bucket can't be *listed*, "lost" and
 "evicted-to-the-bucket" are indistinguishable, so it does nothing; and past the safety cap —
 more than 10% of the corpus missing (`NETRADIO_REQUEUE_MISSING_CAP`) — a loss that size means the
 *store* broke, so it **reports** (a standing `sig_alert` in the state, shown by the player's
@@ -166,8 +164,9 @@ real. Either way you can SEE it: every requeue leaves a row in `/harvest`'s issu
 past-the-cap alert additionally reddens the queue page's notice light. A third refusal, like
 every scoring path: an absent or unreadable rulings file stops the recovery entirely, because
 without it a ruled-out candidate cannot be told from an active one (see
-[the harvester](#the-harvester)). **One writer, enforced:** all three paths hold the same flock (`harvest.WRITER_LOCK`, the
-historic `collector.lock`) for their lifetime — a second writer, including this flag under a
+[the harvester](#the-harvester)). **One writer, enforced:** both writer paths (`--run`,
+`--requeue-missing-sigs`) hold the same flock (`harvest.WRITER_LOCK`, under its historic
+`collector.lock` name) for their lifetime — a second writer, including this flag under a
 running daemon, refuses loudly instead of interleaving.
 
 The rescan also fills in **where** each old match hit (`at_s`), which is why `/harvest` can cue a
@@ -197,10 +196,9 @@ to it. The player keeps those two verdicts apart.) The retired set is a **ruling
 duplicate, not-a-match) or that is the queue owner's own upload, each with its reason. The queue's
 owner writes it whole, atomically, at its start and after every ruling; the harvester only reads
 it — the keys alone, never the reasons — re-reading it every pass so a ruling takes effect within
-one loop iteration. **The harvester refuses to run without it** (`--run`, `--rescan`, the
-lost-signature recovery, and the split runtime's loop and one-shot pass all refuse, naming the
-file), because a search that has forgotten every
-ruling hands back records already rejected. An empty file is fine — that is a queue with nothing
+one loop iteration. **The harvester refuses to run without it** (`--run`, `--rescan` and the
+lost-signature recovery all refuse, naming the file), because a search that has forgotten
+every ruling hands back records already rejected. An empty file is fine — that is a queue with nothing
 ruled on yet; only a missing or unreadable file is a refusal.
 
 **What it does.** Takes its candidates from the player's **listen queue** (holding back,

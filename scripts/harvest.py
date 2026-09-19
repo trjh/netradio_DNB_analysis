@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Harvest chroma signatures from the internet, slowly, and match them against the Mysteries.
 
-    . .venv/bin/activate && python scripts/harvest.py --seed-channel https://www.youtube.com/@back2theoldskoolera999
     . .venv/bin/activate && python scripts/harvest.py --run          # work the queue
     . .venv/bin/activate && python scripts/harvest.py --status
 
@@ -52,8 +51,6 @@ import sys
 import threading
 import time
 import traceback
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -168,11 +165,10 @@ def _keep_dir():
     return KEEP if KEEP is not _KEEP_AT_IMPORT else cache_budget.dir_of(CANDIDATES_CACHE)
 
 # THE queue/state writer lock. queue.json and state.json have exactly ONE writer at a time:
-# collector.run() in split mode, run() in Mode A, or the on-demand --requeue-missing-sigs.
-# Every one of them takes this flock for its lifetime, so "never run Mode A alongside the
-# collector" is enforced, not just documented. The path keeps its historic name
-# (collector.lock) so a new binary and an already-running old collector still exclude
-# each other.
+# run(), or the on-demand --requeue-missing-sigs. Each takes this flock for its lifetime, so
+# a second writer refuses loudly instead of interleaving. The path keeps its historic name
+# (collector.lock) -- the split runtime's collector shared it -- so a writer still running
+# under an old binary and this one still exclude each other.
 WRITER_LOCK = os.path.join(STATE_DIR, "collector.lock")
 
 
@@ -681,8 +677,8 @@ def job_dir(url):
 
 
 def sweep_job_dirs(max_age_s=JOB_STALE_S):
-    """Remove what a crashed fetch child left behind. Nothing younger than an hour: the split
-    harvester may be mid-fetch on its own schedule, and its spool file is not ours to delete."""
+    """Remove what a crashed fetch child left behind. Nothing younger than an hour: a fetch
+    child may still be mid-fetch, and its spool file is not ours to delete."""
     if not os.path.isdir(JOBS):
         return 0
     now = time.time()
@@ -1026,8 +1022,8 @@ _LAST_CHILD = {}
 def stream_chroma(url, duration=None):
     """Stream the audio, reduce it to a chroma signature -> (chroma, samples, error).
 
-    Unchanged as a contract: the three callers (`run()`, `harvester.work_once()`, and the live
-    canary) see the same three-tuple and the same error strings as before.
+    Unchanged as a contract: the two callers (`run()` and the live canary) see the same
+    three-tuple and the same error strings as before.
 
     `duration` is the player's declared length for this URL, which the working queue does not
     carry (it holds bare URLs) -- callers get it from `queue_duration`. It exists so the refusal
@@ -1037,8 +1033,8 @@ def stream_chroma(url, duration=None):
     What changed is where the work happens. The fetch, the decode and the recipe now run in a
     CHILD process, so the memory they need dies with it; this process never holds a candidate's
     audio or the recipe's working set. `samples` is a memory map over the child's decoded PCM,
-    which behaves like the array it used to be -- `write_excerpt` slices ~30 seconds out of it and
-    `harvester.py` writes it to a FLAC job copy. The spool file is unlinked as soon as it is
+    which behaves like the array it used to be -- `write_excerpt` slices ~30 seconds out of it.
+    The spool file is unlinked as soon as it is
     mapped, so the disk space comes back when the caller drops `samples`, and a crash anywhere
     after this point leaves nothing behind.
 
@@ -1383,10 +1379,10 @@ def requeue_missing_sigs(state, q, ruled):
 
 
 def note_no_queries(state, qs):
-    """Keep the "nothing to search for" state truthful for WHICHEVER runtime just refreshed
-    the query set (Mode A's run(), or the split collector each pass).
+    """Keep the "nothing to search for" state truthful for the caller that just refreshed
+    the query set (run(), at its start).
 
-    An empty query set is a first-class state, not a print-and-vanish: in Mode A the
+    An empty query set is a first-class state, not a print-and-vanish: the
     process EXITS and the supervisor respawns it in a loop, and before this stamp /harvest
     kept showing the LAST session's stale phase ("working") with no explanation while the
     queue page's button correctly went red. Stamped once (the `at` is when it AROSE, like
@@ -1407,9 +1403,9 @@ def note_no_queries(state, qs):
 
 
 def recover_missing_sigs_at_start(state=None):
-    """Lost-signature recovery at WRITER startup -- the one entry point all three writers
-    share: run() (Mode A), collector.run() (split mode), and --requeue-missing-sigs (on
-    demand). The caller must already hold the writer lock.
+    """Lost-signature recovery at WRITER startup -- the one entry point both writers
+    share: run(), and --requeue-missing-sigs (on demand). The caller must already hold
+    the writer lock.
 
     Refuses, doing nothing, while the rulings file cannot be read: without it there is no way
     to tell a ruled-out candidate from an active one, and requeueing a ruled-out URL re-fetches
@@ -1417,8 +1413,7 @@ def recover_missing_sigs_at_start(state=None):
 
     Pass the caller's live `state` when it keeps one across a session (run() does, and a
     later _save from it would clobber rows written by an independent load here); leave it
-    None to load-and-save independently (the collector reloads state every pass, the CLI
-    holds nothing).
+    None to load-and-save independently (the CLI holds nothing).
     """
     ruled = load_rulings()
     if ruled is None:
@@ -1599,69 +1594,6 @@ def drop_ruled_excerpts(state, ruled):
         state["kept"] = max(0, state.get("kept", 0) - 1)
         dropped += 1
     return dropped
-
-
-# --- the queue ---------------------------------------------------------------------------------
-
-def enumerate_channel(url, limit=None):
-    """Track URLs on a channel/playlist -- metadata only, NO audio. One cheap request."""
-    cmd = ["yt-dlp", "-q", "--no-warnings", "--flat-playlist", "--print", "%(url)s", url]
-    if limit:
-        cmd += ["--playlist-end", str(limit)]
-    out = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-    return [u.strip() for u in out.stdout.split("\n") if u.strip().startswith("http")]
-
-
-# Tim's own channel publishes the Mystery Track clips themselves. A harvester that "finds" one
-# there has found nothing -- it has rediscovered its own question, and would report a triumphant
-# 0.00 match. Never queue it.
-EXCLUDE_CHANNELS = ("UCuYTatE2k5dOV8J8Bi3rK0g",)   # Tim Hunter
-
-# The player, which is the SINGLE WRITER of the listen queue.
-PLAYER_URL = os.environ.get("NETRADIO_PLAYER_URL", "http://127.0.0.1:8765")
-
-
-def add_to_queue(urls, source):
-    """Queue candidates by handing them to the PLAYER, not by writing our own queue.
-
-    This used to append straight into `.harvest/queue.json`, and that was the bug. It gave the
-    harvester a second, private door that the listen queue knew nothing about: 400 candidates got
-    in that way, invisible at /queue, untagged, and impossible to remove when a channel turned out
-    to be feeding us noise. Tim found it by adding a video by hand and getting no duplicate warning
-    for a record we had already analysed.
-
-    So there is now ONE door. Everything enters through the listen queue, tagged with where it came
-    from, and `sync_listen_queue()` folds it back into our working queue on the next pass. We only
-    ever READ that file -- the player owns it, and two writers on one JSON file is how you lose the
-    file -- so we ask the player over HTTP and let it do the write.
-
-    A dead player is a hard failure, not a silent fallback to the private queue: falling back is
-    precisely how the candidates went dark in the first place.
-    """
-    if any(c in (source or "") for c in EXCLUDE_CHANNELS):
-        print("refusing to queue %s -- it publishes the mystery clips themselves" % source)
-        return 0
-
-    origin = "seed-channel:%s" % (source or "unknown")
-    added = 0
-    for url in dict.fromkeys(urls):
-        body = json.dumps({"url": url, "origin": origin}).encode()
-        req = urllib.request.Request(PLAYER_URL.rstrip("/") + "/api/queue/add", data=body,
-                                     headers={"Content-Type": "application/json"}, method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=20) as r:
-                for res in (json.loads(r.read()) or {}).get("results") or []:
-                    if res.get("status") == "new":
-                        added += 1
-                    elif res.get("status") == "refused":
-                        print("  refused: %s -- %s" % (url, res.get("why")))
-        except urllib.error.URLError as e:
-            raise SystemExit(
-                "cannot reach the player at %s (%s).\n"
-                "Candidates are queued THROUGH the player now -- it owns the listen queue and is\n"
-                "its only writer. Start it (scripts/run_player.sh start), or set NETRADIO_PLAYER_URL."
-                % (PLAYER_URL, e))
-    return added
 
 
 # --- the listen queue: one queue, two stores -----------------------------------------------------
@@ -2103,8 +2035,8 @@ def run(args):
     install_signal_handlers()
     lock = acquire_writer_lock()
     if lock is None:
-        print("another queue/state writer is running (the collector, or another harvest.py "
-              "--run) -- ONE writer, always. Not starting.")
+        print("another queue/state writer is running (another harvest.py --run) -- "
+              "ONE writer, always. Not starting.")
         return
     state = _load(STATE, blank_state())
     # THE RETIRED SET IS A FILE THE QUEUE'S OWNER WRITES: every key this search must never
@@ -2470,9 +2402,6 @@ def run(args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--seed-channel", action="append", default=[],
-                    help="enumerate a YouTube/SoundCloud channel or playlist into the queue")
-    ap.add_argument("--limit", type=int, default=None, help="cap how many to take from a channel")
     ap.add_argument("--run", action="store_true", help="work the queue (runs for weeks)")
     ap.add_argument("--fetch-one", metavar="URL",
                     help="fetch ONE candidate and write its signature, then exit. This is the "
@@ -2515,10 +2444,10 @@ def main():
                          "have just added a Mystery Track clip).")
     ap.add_argument("--requeue-missing-sigs", action="store_true",
                     help="put done URLs whose signature is LOST (in neither the cache nor the "
-                         "bucket) back into pending so the fetch path regenerates them. Both "
-                         "runtimes do this by themselves at writer startup -- this is the "
+                         "bucket) back into pending so the fetch path regenerates them. The "
+                         "run does this by itself at writer startup -- this is the "
                          "on-demand form, and it refuses to run while another queue/state "
-                         "writer (the collector, or harvest.py --run) holds the writer lock, or "
+                         "writer (a harvest.py --run) holds the writer lock, or "
                          "while the rulings file is absent or unreadable (re-fetching a ruled-out "
                          "record would re-propose it). "
                          "Refuses past the safety cap (NETRADIO_REQUEUE_MISSING_CAP, default "
@@ -2606,8 +2535,8 @@ def main():
     if args.requeue_missing_sigs:
         lock = acquire_writer_lock()
         if lock is None:
-            print("# a queue/state writer is RUNNING (the collector, or harvest.py --run) -- "
-                  "not touching queue.json under it. Both requeue lost sigs themselves at "
+            print("# a queue/state writer is RUNNING (a harvest.py --run) -- "
+                  "not touching queue.json under it. The run requeues lost sigs itself at "
                   "startup; stop the writer first if you need this now.")
             return
         res = recover_missing_sigs_at_start()
@@ -2661,10 +2590,6 @@ def main():
                           "phase": s.get("session", {}).get("phase"),
                           "paused": os.path.exists(PAUSE)}, indent=2))
         return
-    for ch in args.seed_channel:
-        urls = enumerate_channel(ch, args.limit)
-        n = add_to_queue(urls, ch)
-        print("seeded %d new track(s) from %s (%d found)" % (n, ch, len(urls)))
     if args.run:
         run(args)
 

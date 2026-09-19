@@ -441,7 +441,7 @@ class TheOnDemandRescanRefusesADarkPolicy(unittest.TestCase):
     counted the pairs (a bucket-held signature reads as held), `_load_sig` answered None for
     every one, and the run stamped `rescan_pending` to 0 over "Every cached signature has now
     met every mystery" -- a completion claim about work that never ran, where every sibling
-    mode refuses (run(), the collector's two gates, --migrate-sigs, --requeue-missing-sigs).
+    mode refuses (run(), --migrate-sigs, --requeue-missing-sigs).
     It refuses now, before the query set is even read, with the message --migrate-sigs uses."""
 
     def test_rescan_refuses_before_the_query_set_is_read(self):
@@ -665,3 +665,51 @@ class TheLiveCanaryMustNotCrashTheHarvester(unittest.TestCase):
         import numpy as np
         cost, n = selftest.best_rival_cost([], np.ones((12, 40), dtype="float32"))
         self.assertEqual((cost, n), (1.0, 0))   # no rival = nothing beaten, not a free pass
+
+
+@unittest.skipIf(harvest is None, "needs the librosa venv")
+class TheRunTakesTheWriterLock(unittest.TestCase):
+    """The writer lock is harvest.py's own: with the split runtime deleted, the two writers
+    left are run() and the on-demand --requeue-missing-sigs, and each must keep taking the
+    lock, one at a time, or two processes interleave their writes of the same state.json and
+    queue.json. Pinned here because the lock outlived the runtime it was shared with: a run
+    that quietly stopped taking it would bring the two-writers-one-file loss back."""
+
+    def test_run_refuses_to_start_while_another_writer_holds_the_lock(self):
+        tmp = tempfile.mkdtemp(prefix="writer-lock-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        paths = (harvest.STATE_DIR, harvest.STATE, harvest.QUEUE,
+                 harvest.WRITER_LOCK, harvest.RULINGS)
+        harvest.STATE_DIR = os.path.join(tmp, "harvest")
+        harvest.STATE = os.path.join(tmp, "state.json")
+        harvest.QUEUE = os.path.join(tmp, "queue.json")
+        harvest.WRITER_LOCK = os.path.join(tmp, "writer.lock")
+        # a throwaway rulings file, so the refusal under test is the lock's and not the file's
+        harvest.RULINGS = os.path.join(tmp, "rulings.json")
+        harvest._save(harvest.RULINGS, {})
+        self.addCleanup(lambda: (setattr(harvest, "STATE_DIR", paths[0]),
+                                 setattr(harvest, "STATE", paths[1]),
+                                 setattr(harvest, "QUEUE", paths[2]),
+                                 setattr(harvest, "WRITER_LOCK", paths[3]),
+                                 setattr(harvest, "RULINGS", paths[4])))
+        first = harvest.acquire_writer_lock()
+        self.assertIsNotNone(first)
+        self.addCleanup(first.close)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            harvest.run(None)
+        self.assertIn("ONE writer, always", out.getvalue())
+        self.assertFalse(os.path.exists(harvest.STATE),
+                         "a refused start writes no state: the second writer never ran")
+
+        # the lock free again -> the SAME run gets past the gate (and past the rulings read)
+        class _Past(Exception):
+            pass
+
+        def boom(state=None):
+            raise _Past()
+
+        first.close()
+        with unittest.mock.patch.object(harvest, "queries", boom), \
+                contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaises(_Past):
+                harvest.run(None)

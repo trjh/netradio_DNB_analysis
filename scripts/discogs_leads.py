@@ -251,8 +251,8 @@ records would be worth having.
         print("", file=out)
     print("# %d candidate release(s). These are the records worth ACQUIRING -- buy, borrow, or\n"
           "# find on Discogs. A lead that later scores is a lead to obtain the record, not to build\n"
-          "# a library from. (seed_leads.py will search streams of these to FINGERPRINT them cheaply;\n"
-          "# it retains signatures, never audio.)" % total, file=out)
+          "# a library from. (To test a lead cheaply, add a stream of it to the listen queue through\n"
+          "# the queue's add box: the harvester keeps the signature, never the audio.)" % total, file=out)
 
 
 if __name__ == "__main__":

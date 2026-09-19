@@ -37,11 +37,6 @@ except Exception:                       # a dependency this test does not own
 
 import cache_budget                     # noqa: E402  (the machine's one cache policy)
 
-try:
-    import harvester                    # noqa: E402  (split mode; also needs soundfile)
-except Exception:
-    harvester = None
-
 SR = 16000
 LONG_ENOUGH = int(60 * SR)              # comfortably over chroma_recipe.MIN_SECONDS
 
@@ -475,7 +470,7 @@ class ChildBoundary(unittest.TestCase):
         self.assertEqual(called, [])
 
     def test_stale_job_directories_are_swept_but_recent_ones_are_left(self):
-        """A crashed child's spool is dead weight; a live split-harvester fetch is not ours."""
+        """A crashed child's spool is dead weight; a fetch child still mid-fetch is not ours."""
         os.makedirs(os.path.join(self.jobs, "old"))
         os.makedirs(os.path.join(self.jobs, "recent"))
         old = os.path.join(self.jobs, "old")
@@ -1226,97 +1221,6 @@ class MemoryRowsAndCeiling(unittest.TestCase):
     def test_a_nonsense_ceiling_is_ignored_rather_than_crashing_the_run(self):
         with mock.patch.dict(os.environ, {"NETRADIO_HARVEST_MEM_CEILING_MB": "lots"}):
             self.assertEqual(harvest.mem_ceiling_mb(), 0.0)
-
-
-@unittest.skipUnless(harvest is not None and harvester is not None,
-                     "the split harvester needs soundfile -- not this test's job")
-class AStopIsNeverAVerdict(unittest.TestCase):
-    """The split harvester must submit nothing for a fetch a signal interrupted.
-
-    `submit_result` is a VERDICT either way it is called. The collector folds an `ok: false`
-    record, counts the error, and moves the URL out of `pending` into `done` -- and `done` is
-    never re-fetched. So once the parent gained a handler, a Ctrl-C during a fetch would have
-    dropped that candidate from the search for good, which is worse than the behaviour it
-    replaced: before the handler the process simply died mid-pipe and submitted nothing.
-
-    An interrupted fetch has nothing to report -- not success, not failure.
-    """
-
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp()
-        self.url = "https://example.invalid/watch?v=stopme"
-        self.results = os.path.join(self.tmp, "results")
-        self._patches = [
-            mock.patch.object(harvester, "RESULTS", self.results),
-            mock.patch.object(harvester, "HSTATE", os.path.join(self.tmp, "hstate.json")),
-            mock.patch.object(harvester, "JOBS", os.path.join(self.tmp, "jobs")),
-            mock.patch.object(harvest, "CACHE", os.path.join(self.tmp, "cache")),
-            mock.patch.object(harvester.sigstore, "enabled", lambda: False),
-        ]
-        for patch in self._patches:
-            patch.start()
-        self.addCleanup(self._restore)
-
-    def _restore(self):
-        for patch in self._patches:
-            patch.stop()
-        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def _spooled(self):
-        return sorted(os.listdir(self.results)) if os.path.isdir(self.results) else []
-
-    def _stopped_fetch(self, _url, _duration=None):
-        """What `stream_chroma` returns when the handler fired while the child was running.
-
-        Takes `duration` because the real one does: it is the player's declared length, carried
-        to the fetch child so its refusal weighs what the queue door weighed."""
-        harvest._STOP["signum"] = signal.SIGTERM
-        return None, None, "stopped"
-
-    def test_a_stopped_fetch_submits_nothing_and_leaves_the_url_pending(self):
-        q = {"pending": [self.url], "done": []}
-        hstate = harvester.blank_hstate()
-        with mock.patch.object(harvest, "stream_chroma", self._stopped_fetch):
-            outcome = harvester.work_once(hstate, q)
-        self.assertEqual(outcome, "stopped")
-        self.assertEqual(self._spooled(), [],
-                         "a stop wrote a result to the spool -- the collector folds that and "
-                         "moves the URL to done, which is never re-fetched")
-        self.assertEqual(q["pending"], [self.url])
-        self.assertEqual(q["done"], [])
-        self.assertEqual(hstate["errors"], 0)
-        self.assertEqual(hstate["session"]["phase"], "stopped (SIGTERM)")
-        self.assertIsNone(hstate["current"])
-
-    def test_a_child_signalled_alone_is_also_not_a_verdict(self):
-        """The third door. When only the fetch child is signalled, this process's flag stays
-        down -- so a guard that reads only the flag lets the stop through to
-        `submit_result(ok=False)` and the candidate is retired to `done` for good. The guard has
-        to read the route the danger actually travels on, which here is the error string.
-        """
-        q = {"pending": [self.url], "done": []}
-        hstate = harvester.blank_hstate()
-        self.assertFalse(harvest._stop_requested())
-        with mock.patch.object(harvest, "stream_chroma",
-                               lambda u, d=None: (None, None, harvest.STOPPED)):
-            outcome = harvester.work_once(hstate, q)
-        self.assertEqual(outcome, "stopped")
-        self.assertEqual(self._spooled(), [])
-        self.assertEqual(q["pending"], [self.url])
-        self.assertEqual(q["done"], [])
-        self.assertEqual(hstate["errors"], 0)
-
-    def test_an_ordinary_failure_is_still_a_verdict(self):
-        """The guard must not swallow a real per-URL failure, which the collector needs."""
-        q = {"pending": [self.url], "done": []}
-        hstate = harvester.blank_hstate()
-        with mock.patch.object(harvest, "stream_chroma",
-                               lambda u, d=None: (None, None, "ERROR: video unavailable")):
-            outcome = harvester.work_once(hstate, q)
-        self.assertEqual(outcome, "fetched")
-        self.assertEqual(len(self._spooled()), 1)
-        self.assertEqual(hstate["errors"], 1)
 
 
 @unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
