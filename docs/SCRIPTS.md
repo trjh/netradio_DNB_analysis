@@ -163,7 +163,10 @@ more than 10% of the corpus missing (`NETRADIO_REQUEUE_MISSING_CAP`) — a loss 
 notices) and stands still rather than hammering hosts for days re-fetching hundreds of tracks.
 Raise the cap deliberately (e.g. `NETRADIO_REQUEUE_MISSING_CAP=1`) if the loss turns out to be
 real. Either way you can SEE it: every requeue leaves a row in `/harvest`'s issues list, and the
-past-the-cap alert additionally reddens the queue page's notice light. **One writer, enforced:** all three paths hold the same flock (`harvest.WRITER_LOCK`, the
+past-the-cap alert additionally reddens the queue page's notice light. A third refusal, like
+every scoring path: an absent or unreadable rulings file stops the recovery entirely, because
+without it a ruled-out candidate cannot be told from an active one (see
+[the harvester](#the-harvester)). **One writer, enforced:** all three paths hold the same flock (`harvest.WRITER_LOCK`, the
 historic `collector.lock`) for their lifetime — a second writer, including this flag under a
 running daemon, refuses loudly instead of interleaving.
 
@@ -189,12 +192,21 @@ a broken instrument.
 means "not any Mystery Track", including the ones whose clips do not exist yet. So a rescan skips
 it. Without that, the day MT8 lands, every record you have already rejected comes straight back at
 you. (It does **not** mean "heard" — you can rule a record out as a match and still want to listen
-to it. The player keeps those two verdicts apart.)
+to it. The player keeps those two verdicts apart.) The retired set is a **rulings file**,
+`.harvest/rulings.json`: one key per entry the queue has ruled on (heard, discarded, ignored,
+duplicate, not-a-match) or that is the queue owner's own upload, each with its reason. The queue's
+owner writes it whole, atomically, at its start and after every ruling; the harvester only reads
+it — the keys alone, never the reasons — re-reading it every pass so a ruling takes effect within
+one loop iteration. **The harvester refuses to run without it** (`--run`, `--rescan`, and the
+lost-signature recovery all refuse, naming the file), because a search that has forgotten every
+ruling hands back records already rejected. An empty file is fine — that is a queue with nothing
+ruled on yet; only a missing or unreadable file is a refusal.
 
-**What it does.** Takes its candidates from the player's **listen queue** (skipping anything
-already heard, discarded, ignored or duplicate — and holding back, temporarily, anything a recent
-fetch failed on: a `retry_after` date in the future keeps the URL off the network until it passes)
-and keeps its own working queue in `.harvest/`. It reads the queue in whatever layout the player
+**What it does.** Takes its candidates from the player's **listen queue** (holding back,
+temporarily, anything a recent fetch failed on: a `retry_after` date in the future keeps the URL
+off the network until it passes) and keeps its own working queue in `.harvest/`. The rulings file
+gates both directions of that fold: a ruled key never flows in, and one ruled on while it sat on
+the working queue flows out. It reads the queue in whatever layout the player
 keeps it — the single `listen_queue.json`, or the sharded `listen_queue/` directory (its
 `index.json` manifest + `shard-NNNN.json` files) — read-only, never writing.
 

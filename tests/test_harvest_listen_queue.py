@@ -2,8 +2,10 @@
 
 The player OWNS `listen_queue.json`; the harvester only ever reads it (two writers on one JSON
 file is how you lose the file). These tests pin the read side: which entries become candidates,
-which are retired, and — the one that actually costs something if it breaks — that the harvester
-never queues Tim's own uploads of the mystery clips, which would "match" at 0.00 and mean nothing.
+and how the layout is told apart. Retirement no longer happens here at all — the ruling
+flags and the own-clip rule are the queue owner's business, written into the rulings file the
+harvester reads instead (see `tests/test_harvest_rulings.py`); this read answers one question
+only: what does the queue OFFER?
 
 No librosa import here: the module pulls in numpy/librosa at import, so the queue logic is
 exercised through a stub-free import guard (skipped if the analysis venv is absent).
@@ -39,36 +41,36 @@ class ListenQueueSplit(unittest.TestCase):
     def test_unheard_entries_are_candidates(self):
         self._queue([{"url": "https://y/a", "title": "A"},
                      {"url": "https://y/b", "title": "B"}])
-        cand, retired = harvest.listen_queue_split()
+        cand = harvest.listen_queue_split()
         self.assertEqual(cand, ["https://y/a", "https://y/b"])
-        self.assertEqual(retired, set())
 
-    def test_a_human_ruling_retires_an_entry(self):
-        """Heard, discarded, ignored or duplicate all mean: nothing left here for the matcher."""
-        for flag in ("listened", "discarded", "ignored", "duplicate"):
+    def test_ruled_on_entries_are_offered_like_any_other(self):
+        """The ruling flags are no longer this read's business: a heard or discarded entry is
+        still OFFERED by the queue, and `sync_listen_queue` (holding the retired set from the
+        rulings file) keeps it out of the working queue. If the read filtered here too, a
+        missing rulings file would silently look like an empty queue."""
+        for flag in ("listened", "discarded", "ignored", "duplicate", "not_a_match"):
             with self.subTest(flag=flag):
                 self._queue([{"url": "https://y/x", "title": "X", flag: True}])
-                cand, retired = harvest.listen_queue_split()
-                self.assertEqual(cand, [])
-                self.assertEqual(retired, {"https://y/x"})
+                cand = harvest.listen_queue_split()
+                self.assertEqual(cand, ["https://y/x"])
 
-    def test_never_queues_tims_own_mystery_clips(self):
-        """A harvester that "finds" the clip it is searching FOR has rediscovered its own question
-        and reports a triumphant 0.00. Listen-queue entries carry no channel field, so the
-        channel-level guard cannot catch this — the title is all we have."""
+    def test_a_clip_title_is_just_a_title(self):
+        """The own-clip net (a clip upload titled `Mystery Track N`) moved to the queue's
+        owner with the rest of the retirement; from here the entry is data like any other,
+        and `Mystery Track 7` in a title is not this read's to refuse."""
         self._queue([{"url": "https://y/own", "title": "Mystery Track 7"},
                      {"url": "https://y/own2", "title": "netradio mystery track 4 (clip)"}])
-        cand, retired = harvest.listen_queue_split()
-        self.assertEqual(cand, [])
-        self.assertEqual(retired, {"https://y/own", "https://y/own2"})
+        cand = harvest.listen_queue_split()
+        self.assertEqual(cand, ["https://y/own", "https://y/own2"])
 
     def test_real_records_with_mystery_in_the_name_are_still_searched(self):
-        """The guard must be narrow: these are actual records in the queue today."""
+        """The queue's titles are not a filter here in any direction."""
         self._queue([{"url": "https://y/1", "title": "No Mystery (1996)"},
                      {"url": "https://y/2", "title": "Mystery Blend Atmospheric"},
                      {"url": "https://y/3", "title": "Mystery Science Theater 3000 Love Theme"}])
-        cand, _ = harvest.listen_queue_split()
-        self.assertEqual(len(cand), 3)      # none of these are Tim's clips
+        cand = harvest.listen_queue_split()
+        self.assertEqual(len(cand), 3)
 
     def test_a_half_written_queue_file_is_survived_not_crashed(self):
         """The player writes this file continuously; we may read it mid-write."""
@@ -77,11 +79,11 @@ class ListenQueueSplit(unittest.TestCase):
         fh.close()
         harvest.LISTEN_QUEUE = fh.name
         self.addCleanup(os.unlink, fh.name)
-        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+        self.assertEqual(harvest.listen_queue_split(), [])
 
     def test_inert_when_the_player_is_not_there(self):
         harvest.LISTEN_QUEUE = ""
-        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+        self.assertEqual(harvest.listen_queue_split(), [])
 
 
 @unittest.skipIf(harvest is None, "harvest.py needs the librosa venv (.venv) — skipping")
@@ -110,41 +112,42 @@ class ShardedListenQueue(unittest.TestCase):
         self._shards([("shard-0000.json", [{"url": "https://y/a", "title": "A"}]),
                       ("shard-0001.json", [{"url": "https://y/b", "title": "B"},
                                            {"url": "https://y/c", "title": "C"}])])
-        cand, retired = harvest.listen_queue_split()
+        cand = harvest.listen_queue_split()
         self.assertEqual(cand, ["https://y/a", "https://y/b", "https://y/c"])
-        self.assertEqual(retired, set())
 
     def test_manifest_named_directly_also_works(self):
         self._shards([("shard-0000.json", [{"url": "https://y/a"}]),
                       ("shard-0001.json", [{"url": "https://y/b"}])], point_at="manifest")
-        cand, _ = harvest.listen_queue_split()
+        cand = harvest.listen_queue_split()
         self.assertEqual(cand, ["https://y/a", "https://y/b"])
 
-    def test_rulings_and_own_clips_still_apply_across_shards(self):
+    def test_flagged_and_own_entries_flow_in_across_shards_too(self):
+        # The shards are concatenated whatever an entry's flags are -- the read is about what
+        # the queue offers, and the retirement is the rulings file's (see
+        # test_harvest_rulings.py).
         self._shards([("shard-0000.json", [{"url": "https://y/a"},
                                            {"url": "https://y/heard", "listened": True}]),
                       ("shard-0001.json", [{"url": "https://y/own", "title": "Mystery Track 3"}])])
-        cand, retired = harvest.listen_queue_split()
-        self.assertEqual(cand, ["https://y/a"])
-        self.assertEqual(retired, {"https://y/heard", "https://y/own"})
+        cand = harvest.listen_queue_split()
+        self.assertEqual(cand, ["https://y/a", "https://y/heard", "https://y/own"])
 
     def test_a_shard_named_by_the_manifest_but_missing_is_survived(self):
         d = self._shards([("shard-0000.json", [{"url": "https://y/a"}]),
                           ("shard-0001.json", [{"url": "https://y/b"}])])
         os.unlink(os.path.join(d, "shard-0001.json"))
-        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+        self.assertEqual(harvest.listen_queue_split(), [])
 
     def test_an_invalid_json_shard_is_survived(self):
         d = self._shards([("shard-0000.json", [{"url": "https://y/a"}])])
         with open(os.path.join(d, "shard-0000.json"), "w", encoding="utf-8") as fh:
             fh.write('[{"url": "https://y/a"')       # truncated mid-write
-        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+        self.assertEqual(harvest.listen_queue_split(), [])
 
     def test_a_missing_manifest_is_survived(self):
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         harvest.LISTEN_QUEUE = d                       # a dir with no index.json yet
-        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+        self.assertEqual(harvest.listen_queue_split(), [])
 
     def test_a_manifest_with_string_shard_entries_is_survived(self):
         # syntactically valid, wrong SHAPE: {"shards": ["shard-0000.json"]} must land in the
@@ -152,38 +155,38 @@ class ShardedListenQueue(unittest.TestCase):
         d = self._shards([("shard-0000.json", [{"url": "https://y/a"}])])
         with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as fh:
             json.dump({"shards": ["shard-0000.json"]}, fh)
-        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+        self.assertEqual(harvest.listen_queue_split(), [])
 
     def test_a_wrapped_shard_whose_items_is_a_string_is_survived(self):
         d = self._shards([("shard-0000.json", [{"url": "https://y/a"}])])
         with open(os.path.join(d, "shard-0000.json"), "w", encoding="utf-8") as fh:
             json.dump({"items": "nope"}, fh)
-        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+        self.assertEqual(harvest.listen_queue_split(), [])
 
     def test_a_non_list_shard_is_survived(self):
         d = self._shards([("shard-0000.json", [{"url": "https://y/a"}])])
         with open(os.path.join(d, "shard-0000.json"), "w", encoding="utf-8") as fh:
             json.dump("nope", fh)
-        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+        self.assertEqual(harvest.listen_queue_split(), [])
 
     def test_a_corrupt_item_is_dropped_without_starving_the_rest(self):
         # one non-object item must not hide the other thousands behind an empty read
         self._shards([("shard-0000.json", [{"url": "https://y/a"}, "corrupt",
                                            {"url": "https://y/b"}])])
-        cand, _ = harvest.listen_queue_split()
+        cand = harvest.listen_queue_split()
         self.assertEqual(cand, ["https://y/a", "https://y/b"])
 
     def test_a_non_object_manifest_is_survived(self):
         d = self._shards([("shard-0000.json", [{"url": "https://y/a"}])])
         with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as fh:
             json.dump([1], fh)
-        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+        self.assertEqual(harvest.listen_queue_split(), [])
 
     def test_a_non_string_shard_name_is_survived(self):
         d = self._shards([("shard-0000.json", [{"url": "https://y/a"}])])
         with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as fh:
             json.dump({"shards": [{"name": 1}]}, fh)
-        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+        self.assertEqual(harvest.listen_queue_split(), [])
 
     def test_a_symlinked_shard_never_escapes_the_dir(self):
         # a canonically NAMED shard that is a symlink elsewhere defeats the name check —
@@ -195,7 +198,7 @@ class ShardedListenQueue(unittest.TestCase):
         self.addCleanup(os.unlink, outside)
         os.unlink(os.path.join(d, "shard-0000.json"))
         os.symlink(outside, os.path.join(d, "shard-0000.json"))
-        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+        self.assertEqual(harvest.listen_queue_split(), [])
 
     def test_a_traversal_or_absolute_shard_name_never_escapes_the_dir(self):
         # containment: a tampered manifest must not make the harvester read an UNRELATED
@@ -209,7 +212,7 @@ class ShardedListenQueue(unittest.TestCase):
             with self.subTest(name=name):
                 with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as fh:
                     json.dump({"shards": [{"name": name}]}, fh)
-                self.assertEqual(harvest.listen_queue_split(), ([], set()))
+                self.assertEqual(harvest.listen_queue_split(), [])
 
     def test_corrupt_item_fields_are_tolerated_per_item(self):
         # a mapping url, an int origin, an int title: each item is skipped or handled,
@@ -217,16 +220,17 @@ class ShardedListenQueue(unittest.TestCase):
         self._shards([("shard-0000.json", [{"url": {"nested": True}},
                                            {"url": "https://y/a", "origin": 5, "title": 7},
                                            {"url": "https://y/b"}])])
-        cand, retired = harvest.listen_queue_split()
+        cand = harvest.listen_queue_split()
         self.assertEqual(cand, ["https://y/a", "https://y/b"])
-        self.assertEqual(retired, set())
 
 
 @unittest.skipIf(harvest is None, "harvest.py needs the librosa venv (.venv) — skipping")
 class RetryAfterCooling(unittest.TestCase):
     """`retry_after` (ISO YYYY-MM-DD) holds a URL back from the network while its date is in the
-    future -- exactly the player's rule. Cooling gates fetching and NOTHING else: the URL is not a
-    candidate, but it is NOT retired either, so it rejoins on its own once the date passes."""
+    future -- exactly the player's rule. Cooling gates the OFFER and nothing else: the URL is not
+    a candidate today, and it rejoins on its own once the date passes (the retirement that
+    once outranked it here is the rulings file's now -- a cooling entry that is also ruled on
+    is simply held back like any other)."""
 
     def _queue(self, items):
         fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
@@ -238,11 +242,10 @@ class RetryAfterCooling(unittest.TestCase):
     def _today(self):
         return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    def test_a_future_retry_after_is_neither_candidate_nor_retired(self):
+    def test_a_future_retry_after_holds_the_url_back(self):
         self._queue([{"url": "https://y/cool", "retry_after": "2999-01-01"}])
-        cand, retired = harvest.listen_queue_split()
-        self.assertEqual(cand, [])
-        self.assertEqual(retired, set())               # cooling never retires
+        cand = harvest.listen_queue_split()
+        self.assertEqual(cand, [])               # cooling never retires: the date passes and it rejoins
 
     def test_past_today_absent_or_nonstring_retry_after_is_a_candidate(self):
         # "tomorrow"/"9999" would compare lexically greater than any ISO date FOREVER — only a
@@ -254,17 +257,8 @@ class RetryAfterCooling(unittest.TestCase):
                 if ra is not None:
                     item["retry_after"] = ra
                 self._queue([item])
-                cand, retired = harvest.listen_queue_split()
+                cand = harvest.listen_queue_split()
                 self.assertEqual(cand, ["https://y/c"])
-                self.assertEqual(retired, set())
-
-    def test_a_ruling_wins_over_cooling(self):
-        """A cooling item that has ALSO been ruled on stays retired -- retirement is permanent-ish
-        and outranks a temporary network cooldown."""
-        self._queue([{"url": "https://y/x", "retry_after": "2999-01-01", "not_a_match": True}])
-        cand, retired = harvest.listen_queue_split()
-        self.assertEqual(cand, [])
-        self.assertEqual(retired, {"https://y/x"})
 
 
 @unittest.skipIf(harvest is None, "harvest.py needs the librosa venv (.venv) — skipping")
@@ -276,34 +270,28 @@ class SyncIntoOurQueue(unittest.TestCase):
         harvest.LISTEN_QUEUE = fh.name
         self.addCleanup(os.unlink, fh.name)
 
-    def test_new_entries_flow_in_and_ruled_on_ones_flow_out(self):
+    def test_new_entries_flow_in(self):
         self._queue([{"url": "https://y/new", "title": "new"},
                      {"url": "https://y/heard", "title": "heard", "listened": True}])
-        q = {"pending": ["https://y/heard", "https://y/keep"], "done": []}
-        added, dropped = harvest.sync_listen_queue(q)
-        self.assertEqual((added, dropped), (1, 1))
-        self.assertEqual(q["pending"], ["https://y/keep", "https://y/new"])
+        q = {"pending": ["https://y/keep"], "done": []}
+        added, dropped = harvest.sync_listen_queue(q, set())
+        self.assertEqual((added, dropped), (2, 0))
+        self.assertEqual(q["pending"], ["https://y/keep", "https://y/new", "https://y/heard"])
+        # A ruled-on entry flows in here too, and it is `tests/test_harvest_rulings.py` that
+        # pins the retired set keeping it out; this test pins the fold's own half.
 
     def test_never_re_analyses_something_already_done(self):
         self._queue([{"url": "https://y/done", "title": "done"}])
         q = {"pending": [], "done": ["https://y/done"]}
-        added, _ = harvest.sync_listen_queue(q)
+        added, _ = harvest.sync_listen_queue(q, set())
         self.assertEqual(added, 0)
         self.assertEqual(q["pending"], [])
-
-    def test_a_ruling_does_not_erase_the_record_of_work_done(self):
-        """`done` is our record of work completed. A human ruling retires it from PENDING, but
-        must not remove it from `done` — else a re-add would re-analyse it from scratch."""
-        self._queue([{"url": "https://y/x", "title": "x", "listened": True}])
-        q = {"pending": [], "done": ["https://y/x"]}
-        harvest.sync_listen_queue(q)
-        self.assertEqual(q["done"], ["https://y/x"])
 
     def test_long_mixes_are_not_filtered_out(self):
         """A record can hide inside an hour-long DJ mix, and the match reports WHERE it hit."""
         self._queue([{"url": "https://y/mix", "title": "3 HOUR JUNGLE MIX 1998"}])
         q = {"pending": [], "done": []}
-        added, _ = harvest.sync_listen_queue(q)
+        added, _ = harvest.sync_listen_queue(q, set())
         self.assertEqual(added, 1)
 
 

@@ -354,9 +354,8 @@ class TheTooLongBackstop(unittest.TestCase):
     def test_an_unsplit_master_is_skipped_with_a_reason(self):
         self._queue([{"url": "https://y/master", "title": "6 HOUR SET", "duration": 21600}])
         issues = []
-        cand, retired = harvest.listen_queue_split(issues)
-        self.assertEqual(cand, [])
-        self.assertEqual(retired, set())        # refused, not RULED ON -- no human said anything
+        cand = harvest.listen_queue_split(issues)
+        self.assertEqual(cand, [])              # refused, not a candidate -- no human said anything
         self.assertEqual(issues, [{"url": "https://y/master", "reason": "too_long"}])
 
     def test_a_chunk_of_that_same_master_is_accepted(self):
@@ -367,7 +366,7 @@ class TheTooLongBackstop(unittest.TestCase):
         self._queue([{"url": "https://y/master#t=0,7200", "title": "6 HOUR SET [1/3]",
                       "duration": 21600}])
         issues = []
-        cand, _ = harvest.listen_queue_split(issues)
+        cand = harvest.listen_queue_split(issues)
         self.assertEqual(cand, ["https://y/master#t=0,7200"])
         self.assertEqual(issues, [])
 
@@ -380,15 +379,14 @@ class TheTooLongBackstop(unittest.TestCase):
         it can be wrong, stale or hand-written."""
         self._queue([{"url": "https://y/master#t=0,21600", "duration": 21600}])
         issues = []
-        cand, retired = harvest.listen_queue_split(issues)
+        cand = harvest.listen_queue_split(issues)
         self.assertEqual(cand, [])
-        self.assertEqual(retired, set())
         self.assertEqual(issues, [{"url": "https://y/master#t=0,21600", "reason": "too_long"}])
 
     def test_a_late_chunk_is_measured_by_its_span_not_its_end(self):
         """A slice near the end of a long master has big numbers on both ends and a modest span."""
         self._queue([{"url": "https://y/m#t=18000,21600", "duration": 21600}])
-        cand, _ = harvest.listen_queue_split()
+        cand = harvest.listen_queue_split()
         self.assertEqual(cand, ["https://y/m#t=18000,21600"])
 
     def test_the_span_governs_when_the_two_disagree(self):
@@ -423,11 +421,11 @@ class TheTooLongBackstop(unittest.TestCase):
                 self._queue([{"url": bad, "duration": 600},
                              {"url": "https://y/good", "duration": 600}])
                 issues = []
-                cand, retired = harvest.listen_queue_split(issues)       # must not raise
+                cand = harvest.listen_queue_split(issues)       # must not raise
                 self.assertEqual(cand, [bad, "https://y/good"])
                 self.assertEqual(issues, [])
                 q = {"pending": [], "done": []}
-                added, _ = harvest.sync_listen_queue(q)                  # nor this one
+                added, _ = harvest.sync_listen_queue(q, set())   # nor this one
                 self.assertEqual(added, 2)
 
     def test_a_long_mix_under_the_backstop_is_still_searched(self):
@@ -438,7 +436,7 @@ class TheTooLongBackstop(unittest.TestCase):
                 self._queue([{"url": "https://y/mix", "title": "JUNGLE 1998",
                               "duration": seconds}])
                 issues = []
-                cand, _ = harvest.listen_queue_split(issues)
+                cand = harvest.listen_queue_split(issues)
                 self.assertEqual(cand, ["https://y/mix"])
                 self.assertEqual(issues, [])
 
@@ -449,22 +447,14 @@ class TheTooLongBackstop(unittest.TestCase):
             with self.subTest(duration=duration):
                 self._queue([{"url": "https://y/x", "title": "X", "duration": duration}])
                 issues = []
-                cand, _ = harvest.listen_queue_split(issues)
+                cand = harvest.listen_queue_split(issues)
                 self.assertEqual(cand, ["https://y/x"])
                 self.assertEqual(issues, [])
-
-    def test_a_ruling_still_wins(self):
-        """A human who has heard it has retired it; the backstop does not get a second opinion."""
-        self._queue([{"url": "https://y/master", "duration": 21600, "listened": True}])
-        issues = []
-        cand, retired = harvest.listen_queue_split(issues)
-        self.assertEqual((cand, retired), ([], {"https://y/master"}))
-        self.assertEqual(issues, [])
 
     def test_the_caller_may_ignore_the_issues_list(self):
         """Every existing caller passes nothing, and none of them should have to care."""
         self._queue([{"url": "https://y/master", "duration": 21600}])
-        self.assertEqual(harvest.listen_queue_split(), ([], set()))
+        self.assertEqual(harvest.listen_queue_split(), [])
 
     def test_a_refused_url_also_leaves_our_pending_list(self):
         """It was queued before the split rule existed. A backstop that only stopped NEW arrivals
@@ -472,7 +462,7 @@ class TheTooLongBackstop(unittest.TestCase):
         self._queue([{"url": "https://y/master", "duration": 21600}])
         q = {"pending": ["https://y/master"], "done": []}
         issues = []
-        added, dropped = harvest.sync_listen_queue(q, issues)
+        added, dropped = harvest.sync_listen_queue(q, set(), issues)
         self.assertEqual((added, dropped), (0, 1))
         self.assertEqual(q["pending"], [])
         self.assertEqual(issues, [{"url": "https://y/master", "reason": "too_long"}])
@@ -482,7 +472,7 @@ class TheTooLongBackstop(unittest.TestCase):
                      {"url": "https://y/m#t=0,7200", "duration": 21600},
                      {"url": "https://y/m#t=7200,14400", "duration": 21600}])
         q = {"pending": ["https://y/m"], "done": []}
-        added, dropped = harvest.sync_listen_queue(q)
+        added, dropped = harvest.sync_listen_queue(q, set())
         self.assertEqual((added, dropped), (2, 1))
         self.assertEqual(q["pending"], ["https://y/m#t=0,7200", "https://y/m#t=7200,14400"])
 
