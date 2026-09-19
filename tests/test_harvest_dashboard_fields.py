@@ -97,65 +97,45 @@ class PoolStamp(unittest.TestCase):
         self.assertFalse(harvest.stamp_pool(state))
         self.assertEqual(state["pool"]["count"], 4244)      # the honest last stamp stands
 
-    def _breakdown_world(self, retired=("https://y/ruled", "https://y/neverfetched")):
-        """Four sigs in the bucket: two live candidates, one retired, the canary. A fifth
-        retired URL was never fetched -- it must not count (its sig is in no bucket)."""
+    def test_the_stamp_is_the_count_and_the_canary_only(self):
+        # The active/retired breakdown left with the queue-flag read it came from: every such
+        # figure is the queue owner's own join of the ledger with its queue and the rulings
+        # file now, so this stamp publishes the count and the canary and nothing derived. The
+        # page renders the breakdown only while all three of its fields arrive as numbers,
+        # so their absence reads as the plain "in the bucket" line -- never a crash.
         urls = ("https://y/active1", "https://y/active2", "https://y/ruled", "https://y/canary")
         harvest._remote_keys = lambda max_age_s=900: {harvest._sig_key(u) for u in urls}
-        self.addCleanup(setattr, harvest, "listen_queue_split_checked",
-                        harvest.listen_queue_split_checked)
-        harvest.listen_queue_split_checked = lambda: ([], set(retired), True)
         self.addCleanup(os.environ.pop, "NETRADIO_CANARY_URL", None)
         os.environ["NETRADIO_CANARY_URL"] = "https://y/canary"
-
-    def test_stamps_the_breakdown_not_just_the_count(self):
-        # The bare count confused exactly the person it was for (bucket > scored ledger read
-        # as loss; it was retired-candidates + canary). The stamp now says so itself.
-        self._breakdown_world()
         state = {}
         self.assertTrue(harvest.stamp_pool(state))
         p = state["pool"]
-        self.assertEqual((p["count"], p["active"], p["retired"], p["canary"]), (4, 2, 1, 1))
+        self.assertEqual((p["count"], p["canary"]), (4, 1))
+        self.assertEqual(sorted(p), ["at", "canary", "count"], "the stamp's shape")
 
-    def test_a_breakdown_change_alone_is_worth_a_save(self):
-        # Same COUNT, one candidate newly ruled out -> the stamp changed and must persist.
-        self._breakdown_world()
+    def test_a_canary_change_alone_is_worth_a_save(self):
+        # Same COUNT, the canary's key arriving in the bucket: the stamp changed and must
+        # persist even though the count never moved.
+        urls = ("https://y/a", "https://y/b")
+        harvest._remote_keys = lambda max_age_s=900: {harvest._sig_key(u) for u in urls}
         state = {}
         harvest.stamp_pool(state)
-        harvest.listen_queue_split_checked = \
-            lambda: ([], {"https://y/ruled", "https://y/active1"}, True)
+        canary_key = harvest._sig_key("https://y/canary")
+        harvest._remote_keys = lambda max_age_s=900: {harvest._sig_key("https://y/a"),
+                                                    harvest._sig_key("https://y/b"), canary_key}
+        self.addCleanup(os.environ.pop, "NETRADIO_CANARY_URL", None)
+        os.environ["NETRADIO_CANARY_URL"] = "https://y/canary"
         self.assertTrue(harvest.stamp_pool(state))
-        self.assertEqual((state["pool"]["active"], state["pool"]["retired"]), (1, 2))
+        self.assertEqual(state["pool"]["canary"], 1)
         self.assertFalse(harvest.stamp_pool(state))         # and settles once recorded
 
-    def test_a_retired_canary_still_partitions_the_count(self):
-        # The canary's URL can sit in the queue (heard, own-clip) -- counting it in BOTH
-        # buckets once produced active=-1. The categories must partition, whatever overlaps.
-        self._breakdown_world(retired=("https://y/ruled", "https://y/canary"))
+    def test_no_canary_configured_is_a_zero_not_an_omission(self):
+        harvest._remote_keys = lambda max_age_s=900: {"a.npy"}
+        self.addCleanup(os.environ.pop, "NETRADIO_CANARY_URL", None)
+        os.environ.pop("NETRADIO_CANARY_URL", None)
         state = {}
         self.assertTrue(harvest.stamp_pool(state))
-        p = state["pool"]
-        self.assertEqual((p["count"], p["active"], p["retired"], p["canary"]), (4, 2, 1, 1))
-        self.assertEqual(p["active"] + p["retired"] + p["canary"], p["count"])
-        self.assertGreaterEqual(p["active"], 0)
-
-    def test_an_unreadable_queue_never_fabricates_a_breakdown(self):
-        # A torn queue read is "could not read", not "nothing retired" -- republishing every
-        # ruled-out signature as active would overwrite the last honest stamp.
-        self._breakdown_world()
-        state = {}
-        harvest.stamp_pool(state)
-        before = dict(state["pool"])
-        harvest.listen_queue_split_checked = lambda: ([], set(), False)
-        self.assertFalse(harvest.stamp_pool(state))          # count unmoved: stamp stands whole
-        self.assertEqual(state["pool"], before)
-        # count moved while the queue is dark: fresh count, breakdown honestly ABSENT
-        harvest._remote_keys = lambda max_age_s=900: before and {
-            harvest._sig_key(u) for u in ("https://y/active1", "https://y/active2")}
-        self.assertTrue(harvest.stamp_pool(state))
-        self.assertEqual(state["pool"]["count"], 2)
-        for k in ("active", "retired", "canary"):
-            self.assertNotIn(k, state["pool"])
+        self.assertEqual(state["pool"]["canary"], 0)
 
 
 @unittest.skipUnless(harvest and HAVE_LIBROSA,
@@ -232,10 +212,14 @@ class TheSplitRuntimePublishesToo(unittest.TestCase):
 class NothingToSearchForIsAState(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="noq_")
-        self._paths = harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK
+        self._paths = harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK, harvest.RULINGS
         harvest.STATE = os.path.join(self.tmp, "state.json")
         harvest.QUEUE = os.path.join(self.tmp, "queue.json")
         harvest.WRITER_LOCK = os.path.join(self.tmp, "collector.lock")
+        # run() refuses to start while the rulings file is absent, and these tests need to get
+        # PAST that refusal (they stop the run on the query set / the excerpt sweep).
+        harvest.RULINGS = os.path.join(self.tmp, "rulings.json")
+        harvest._save(harvest.RULINGS, {})
         # run() refuses to start while its caches are dark, and the test below needs to get
         # PAST that refusal (it stops the run on the excerpt sweep). A throwaway root, with
         # the harvester's registrations re-read onto it, put back afterwards.
@@ -249,7 +233,8 @@ class NothingToSearchForIsAState(unittest.TestCase):
         harvest.register_caches()
 
     def tearDown(self):
-        harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK = self._paths
+        (harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK,
+         harvest.RULINGS) = self._paths
         import cache_budget
         cache_budget._REGISTRY.clear()
         cache_budget._REGISTRY.update(self._registry[0])

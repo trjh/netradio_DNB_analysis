@@ -39,8 +39,7 @@ import harvest                                       # noqa: E402
 import sigstore                                      # noqa: E402
 from harvest import (                                # noqa: E402
     KEEP, KEEP_CEILING, KEEP_TOP, MATCH_COST, QUEUE, RESCAN_PER_PASS, STATE,
-    _load, _now, _save, blank_state, evict_overfull, listen_queue_split, queries,
-    write_excerpt,
+    _load, _now, _save, blank_state, evict_overfull, queries, write_excerpt,
 )
 from harvest import _cm                              # noqa: E402  (the matcher)
 from harvester import JOBS, RESULTS, STATE_DIR       # noqa: E402  (the shared layout)
@@ -387,12 +386,20 @@ def run():
             _save(STATE, state)
         n = collect_once(state, q, qs)
 
-        _, retired = listen_queue_split()
-        dropped = harvest.drop_ruled_excerpts(state, retired)
-        todo = len(harvest.unscored_pairs(state, q, retired, qs))
+        # The retired set is the rulings file's, here as in Mode A: re-read every pass, and
+        # stand down when it cannot be read -- folding on an empty retired set would score
+        # records already rejected. (`--once`, which never scores the backlog, needs no gate.)
+        ruled = harvest.load_rulings()
+        if ruled is None:
+            print("the rulings file (%s) is absent or unreadable -- this runtime has no way to "
+                  "know which keys it must never propose again, so it is standing down. Start it "
+                  "again once the queue's owner has written the file." % harvest.RULINGS)
+            return
+        dropped = harvest.drop_ruled_excerpts(state, ruled)
+        todo = len(harvest.unscored_pairs(state, q, ruled, qs))
         if todo:
             state["rescan_pending"] = todo
-            done = harvest.rescan(state, q, retired, qs, limit=RESCAN_PER_PASS)
+            done = harvest.rescan(state, q, ruled, qs, limit=RESCAN_PER_PASS)
             state["rescan_pending"] = max(0, todo - done)
             _save(STATE, state)
         elif sigstore.enabled():
