@@ -348,7 +348,9 @@ fi
 # version you just edited over the other and PR it in BOTH repos.
 # Each entry is <player path>=<analysis path>; a file that becomes a twin later is added here.
 # A pair absent from both checkouts is skipped with a line; a pair on disk in one and not the
-# other is a half-landed twin and refuses.
+# other is a half-landed twin and refuses — unless a dry run can see both origin/main copies
+# already agree, in which case a real run's catch-up fast-forwards the checkout that is behind
+# and passes (the same rule the differing case has always had).
 TWINS=(
   "scripts/tracklist_sync.sh=scripts/tracklist_sync.sh"
   "cache_budget.py=scripts/cache_budget.py"
@@ -363,24 +365,25 @@ for twin in "${TWINS[@]}"; do
     say "self-check: $prel is in neither checkout — skipped"
     continue
   fi
+  if [ -e "$pfile" ] && [ -e "$afile" ] && cmp -s "$pfile" "$afile"; then
+    say "self-check: $prel identical in both repos ✓"
+    continue
+  fi
+  op="$(origin_copy "$PLAYER" "$prel")"; oa="$(origin_copy "$ANALYSIS" "$arel")"
+  if $DRY && [ -n "$op" ] && [ "$op" = "$oa" ]; then
+    # A dry run skipped the catch-up, so the copies on disk can still differ — or one be
+    # missing — where a real run would have fast-forwarded them first. What decides the real
+    # run is the two origin/main copies.
+    say "[dry-run] self-check: $prel differs or is missing on disk, but both origin/main copies match —"
+    say "          a real run fast-forwards first and passes"
+    continue
+  fi
   if [ ! -e "$pfile" ] || [ ! -e "$afile" ]; then
     say "ERROR: $prel is on disk in one repo but not the other — a shared file lands in BOTH or neither." >&2
     say "  player:   $pfile" >&2
     say "  analysis: $afile" >&2
     say "Merge the missing half's PR, or pull the checkout that is behind, then re-run." >&2
     exit 1
-  fi
-  if cmp -s "$pfile" "$afile"; then
-    say "self-check: $prel identical in both repos ✓"
-    continue
-  fi
-  op="$(origin_copy "$PLAYER" "$prel")"; oa="$(origin_copy "$ANALYSIS" "$arel")"
-  if $DRY && [ -n "$op" ] && [ "$op" = "$oa" ]; then
-    # A dry run skipped the catch-up, so the copies on disk can still differ where a real run would
-    # have fast-forwarded them first. What decides the real run is the two origin/main copies.
-    say "[dry-run] self-check: $prel differs on disk, but both origin/main copies match —"
-    say "          a real run fast-forwards first and passes"
-    continue
   fi
   {
     say "ERROR: $prel differs between the two repos:"
