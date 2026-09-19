@@ -143,7 +143,7 @@ class MassLossReports(RequeueBase):
 
 class WriterLockAndStartup(RequeueBase):
     """The ONE-writer lock is shared by every queue/state writer, and every writer runs the
-    startup recovery — including the split runtime's collector."""
+    startup recovery."""
 
     def setUp(self):
         super().setUp()
@@ -202,21 +202,13 @@ class WriterLockAndStartup(RequeueBase):
         self.assertEqual(harvest._load(harvest.QUEUE, {}), self.q())   # untouched
 
     def test_every_writer_takes_the_lock_and_runs_the_recovery(self):
-        # A source-level pin: Mode A, the split collector, and the CLI must all go through
+        # A source-level pin: the run and the CLI must both go through
         # acquire_writer_lock() and recover_missing_sigs_at_start(). If one of them stops,
-        # the split runtime silently loses the recovery (the original review finding).
+        # a writer silently loses the recovery (the original review finding).
         import inspect
-        try:
-            import collector
-        except Exception:
-            self.skipTest("collector deps unavailable")
-        # same lock FILE, not a twin: collector aliases harvest's, whatever its value was
-        # at import time (tests re-point harvest.WRITER_LOCK, so compare source not value)
-        self.assertIn("LOCK = harvest.WRITER_LOCK", inspect.getsource(collector))
         run_a = inspect.getsource(harvest.run)
-        run_split = inspect.getsource(collector.run)
         cli = inspect.getsource(harvest.main)
-        for src in (run_a, run_split, cli):
+        for src in (run_a, cli):
             self.assertIn("acquire_writer_lock()", src)
             self.assertIn("recover_missing_sigs_at_start(", src)
 

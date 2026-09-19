@@ -183,5 +183,5 @@ records would be worth having.
   1999  Dom + Roland* - Parasite
 
 # 138 candidate release(s). These are the records worth ACQUIRING -- buy, borrow, or find on
-# Discogs. seed_leads.py searches streams of these to FINGERPRINT them; it retains signatures,
-# never audio.
+# Discogs. To test a lead cheaply, add a stream of it to the listen queue through the queue's
+# add box: the harvester keeps the signature, never the audio.
