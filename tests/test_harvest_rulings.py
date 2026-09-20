@@ -146,14 +146,21 @@ class ARuledKeyIsNeverProposed(unittest.TestCase):
         state = {"matches": [], "kept": 0, "scored": {}}
         ledger = self._ledger("https://y/keep", "https://y/rejected")
         scored = []
+
+        def _score(st, n, qc, qk, key):
+            # the real score_cached records the pair in state["scored"] once the signature
+            # loaded; rescan counts a pair as scored on that record, not on a hit being
+            # added, so the mock records it the same way.
+            scored.append(key)
+            st.setdefault("scored", {}).setdefault(qk, []).append(key + ".npy")
+
         with unittest.mock.patch("os.path.exists", return_value=False), \
              unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"), \
              unittest.mock.patch.object(harvest, "_remote_objects",
                                         lambda max_age_s=900:
                                         self._objects("https://y/keep",
                                                       "https://y/rejected")), \
-             unittest.mock.patch.object(harvest, "score_cached",
-                                        lambda st, n, qc, qk, key: scored.append(key)):
+             unittest.mock.patch.object(harvest, "score_cached", _score):
             n = harvest.rescan(state, ledger, harvest.load_rulings(), [(8, None, "8:fp")])
         self.assertEqual((scored, n), ([harvest._sig_key("https://y/keep")[:-4]], 1))
 

@@ -1477,15 +1477,29 @@ def forget(state, num):
 
 
 def rescan(state, ledger, ruled, qs, limit=None, verbose=True):
-    """Work through the unscored pairs. Returns how many were scored."""
+    """Work through the unscored pairs. Returns how many were scored -- a pair whose
+    signature could not be loaded is not scored: it stays in the pending count and is
+    tried again on the next pass, and the harvester never reports a held signature as
+    having met every mystery while one it could not read is still outstanding.
+
+    `score_cached` records a pair in `state["scored"]` once the signature was loaded and
+    scored -- whether it matched or not -- so a pair whose `_load_sig` returned None is
+    the one that is not recorded, and that is the one this count leaves pending.
+    """
     pairs = unscored_pairs(state, ledger, ruled, qs, limit=limit)
+    scored = state.setdefault("scored", {})
+    n = 0
     for num, qc, qkey, key in pairs:
+        before = len(scored.get(qkey, []))
         hit = score_cached(state, num, qc, qkey, key)
+        if len(scored.get(qkey, [])) <= before:
+            continue                       # the load failed: not scored, stays pending
+        n += 1
         if hit and verbose:
             a = int(hit.get("at_s") or 0)
             print("  %s  MT%d  cost %.4f  at %d:%02d  %s  (from a held signature -- no decode)"
                   % (hit["verdict"], num, hit["cost"], a // 60, a % 60, key))
-    return len(pairs)
+    return n
 
 
 def evict_overfull(state, num):
@@ -2222,9 +2236,17 @@ def main():
         print("# rescanning %d (signature, mystery) pair(s) against MT%s -- no network, ~%.0f min"
               % (todo, "/MT".join(str(n) for n, _, _ in qs), todo * 0.06 / 60))
         n = rescan(state, ledger, ruled, qs)
-        state["rescan_pending"] = 0
+        # A pair whose signature could not be loaded is not scored: rescan left it out of
+        # the count, so it stays in `rescan_pending` for the next pass. The completion
+        # line is the one claim that must not over-reach -- it speaks only when every
+        # held signature actually met every mystery this pass.
+        state["rescan_pending"] = todo - n
         _save(STATE, state)
-        print("# scored %d. Every held signature has now met every mystery." % n)
+        if n < todo:
+            print("# scored %d of %d; %d pair(s) could not load their signature and stay "
+                  "pending -- re-run once the cache or bucket is whole." % (n, todo, todo - n))
+        else:
+            print("# scored %d. Every held signature has now met every mystery." % n)
         return
     if args.pause:
         open(PAUSE, "w").close()
