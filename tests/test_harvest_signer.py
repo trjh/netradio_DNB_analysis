@@ -1138,6 +1138,75 @@ class CurrentQueryBlock(_SignerCase):
         self.assertNotEqual(cq_after_b["started"], started_after_a,
                             "started re-stamped when the second chunk began in this call")
 
+    def test_the_loop_clears_the_block_when_the_backlog_is_empty(self):
+        """THE LOOP-LEVEL STALE-READER GUARD: run()'s loop calls rescan every pass, even
+        when the backlog is empty, so rescan's own clear (pinned above) fires from the
+        loop. Without this, a block whose final batch completed would stay in state.json
+        with `remaining: 0` and a frozen `updated` until new work or forget() replaced
+        it -- the loop's `elif sigstore.enabled():` evict branch never touched the
+        block. The loop now calls rescan unconditionally; an empty call clears the block
+        and returns 0, so 'cleared when the backlog is empty' holds from run()'s loop."""
+        key = "u" + "aa" * 10
+        # A signed ledger row, already scored against MT4: unscored_pairs returns [].
+        ledger = {key: harvest._row(key, 1, 1.0, "signed", None, "then", "e-%s" % key, {})}
+        harvest._save(harvest.LEDGER, ledger)
+        harvest._save(harvest.RULINGS, {})
+        # The stale block: a completed batch left it with remaining: 0 and a frozen
+        # updated. The loop's empty-backlog pass must clear it.
+        harvest._save(harvest.STATE, {"matches": [], "kept": 0,
+                                     "scored": {"4:fp": [key + ".npy"]},
+                                     "issues": [],
+                                     "current_query": {"mystery": 4, "query_key": "4:fp",
+                                                       "started": "then", "compared": 3,
+                                                       "remaining": 0, "updated": "then"}})
+        qs = [(4, np.zeros((12, 8), dtype="float32"), "4:fp")]
+        # Stop the loop after one nap (the empty-backlog pass naps at the bottom).
+        naps = []
+
+        def _nap(seconds):
+            naps.append(seconds)
+            if len(naps) >= 1:
+                harvest._STOP["signum"] = signal.SIGTERM
+                return True
+            return False
+
+        # run() opens the writer lock itself on the way in; the stop path does not close
+        # it in a finally (the process exit does), so this test takes the lock through a
+        # recorder and the cleanup closes whatever it got -- the same convention as
+        # test_run_refuses_to_start_while_another_writer_holds_the_lock.
+        real_acquire = harvest.acquire_writer_lock
+        acquired = []
+        self.addCleanup(lambda: [fh.close() for fh in acquired])
+
+        def record_then_return():
+            fh = real_acquire()
+            if fh is not None:
+                acquired.append(fh)
+            return fh
+
+        with mock.patch.object(harvest, "acquire_writer_lock", record_then_return), \
+                mock.patch.object(harvest, "queries", lambda state=None: qs), \
+                mock.patch.object(harvest, "_remote_objects",
+                                  lambda max_age_s=900: None), \
+                mock.patch.object(harvest, "_nap", _nap), \
+                mock.patch.object(harvest._cm, "match", return_value=(None, 0, None)), \
+                mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
+                mock.patch.object(harvest.memwatch, "allocator_canary",
+                                  lambda *a, **k: (0, 0, None)), \
+                mock.patch.object(harvest, "score_canary", lambda state, qs: False), \
+                mock.patch.object(harvest, "scan_directories",
+                                  lambda ledger, issues=None, said=None: ([], set())), \
+                mock.patch.object(harvest, "reconcile_ledger",
+                                  lambda state=None: {"seeded": 0, "dropped": 0,
+                                                     "restored": 0, "reported": 0,
+                                                     "cleared": 0, "why": "test"}), \
+                contextlib.redirect_stdout(io.StringIO()):
+            harvest.run(None)
+        state = harvest._load(harvest.STATE, {})
+        self.assertNotIn("current_query", state,
+                         "the loop's empty-backlog pass cleared the stale block")
+        self.assertTrue(naps, "the loop ran a pass and stopped on the nap")
+
     def test_clears_the_block_when_the_backlog_is_empty(self):
         """THE STALE-READER GUARD: when the rescan backlog is empty (zero unscored
         pairs), the block is cleared. Without this, a block with `remaining > 0` and a

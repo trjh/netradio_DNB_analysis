@@ -2152,12 +2152,17 @@ def run(args):
         # clip lands, every signature the pool holds gets scored against it, without a single
         # new decode. Positions (`at_s`) on old rows get filled in on the way.
         todo = len(unscored_pairs(state, ledger, ruled, qs))
-        if todo:
-            state["rescan_pending"] = todo
-            n = rescan(state, ledger, ruled, qs, limit=RESCAN_PER_PASS)
-            state["rescan_pending"] = max(0, todo - n)
-            _save(STATE, state)
-        elif sigstore.enabled():
+        # rescan is called every pass, even when the backlog is empty: an empty call clears a
+        # stale `current_query` block (the stale-reader guard inside rescan) and returns 0, so
+        # the loop's own "cleared when the backlog is empty" contract holds without a second
+        # clear site here. The block's contract is "absent means idle"; honouring it from the
+        # loop means a block whose final batch completed does not stay in state.json with
+        # `remaining: 0` and a frozen `updated` until new work or forget() replaces it.
+        state["rescan_pending"] = todo
+        n = rescan(state, ledger, ruled, qs, limit=RESCAN_PER_PASS)
+        state["rescan_pending"] = max(0, todo - n)
+        _save(STATE, state)
+        if not todo and sigstore.enabled():
             # Rescan backlog empty = every held signature is scored vs every current mystery,
             # which is exactly when cold ones may leave the disk (verified-remote only).
             n_ev, freed = sigstore.evict_cold(_chroma_dir(), state.get("scored") or {},

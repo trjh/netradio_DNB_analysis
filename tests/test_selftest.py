@@ -391,6 +391,55 @@ class LiveCLI(unittest.TestCase):
         import io
         return contextlib.redirect_stdout(io.StringIO())
 
+    def test_a_dark_cache_reports_the_misconfiguration_not_a_legacy_dir(self):
+        """THE DARK-CACHE REPORT: when the cache policy is dark (NETRADIO_CACHE_ROOT and
+        NETRADIO_CHROMA_CACHE_DIR both unset), `_chroma_cache_dir()` returns None and the
+        `--live` CLI reports 'the chroma cache is dark -- set NETRADIO_CACHE_ROOT ...'
+        rather than silently scoring from a legacy directory the harvester's loop never
+        reads. Without this, a future edit that reintroduced a silent fallback tier would
+        let the by-hand CLI score a canary from a directory no current writer of the
+        pool's signatures produces, and the operator would see a green check from a
+        misconfigured machine."""
+        try:
+            import harvest
+            import cache_budget
+        except Exception:
+            self.skipTest("harvest.py needs numpy -- not this test's job")
+        saved_env = {k: os.environ.get(k) for k in list(os.environ) if k.startswith("NETRADIO_")}
+        for k in saved_env:
+            os.environ.pop(k, None)
+        # The cache policy is dark: no NETRADIO_CACHE_ROOT, no NETRADIO_CHROMA_CACHE_DIR.
+        # 'chroma' stays unregistered (register() returns None while the policy is dark),
+        # so both tiers of _chroma_cache_dir() yield None.
+        saved_registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        harvest.register_caches()       # re-read: 'chroma' is dark, registers nothing
+        os.environ["NETRADIO_CANARY_KEY"] = "u" + "a" * 20
+        try:
+            self.assertIsNone(harvest._chroma_dir(),
+                             "the cache policy is dark -- _chroma_dir() resolves to None")
+            self.assertIsNone(selftest._chroma_cache_dir(),
+                             "the dark policy leaves _chroma_cache_dir() with nowhere to read")
+            with mock.patch.object(sys, "argv", ["selftest.py", "--live"]), \
+                    self._capture_stdout() as out:
+                selftest.main()
+            text = out.getvalue()
+            self.assertIn("the chroma cache is dark", text,
+                          "the --live CLI reported the dark-cache misconfiguration")
+            self.assertIn("NETRADIO_CACHE_ROOT", text,
+                          "the report names the env var that lights the policy")
+            self.assertIn('"ok": null', text,
+                          "a dark cache is 'not checked', not a failure")
+        finally:
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(saved_registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(saved_registry[1])
+            for k in [k for k in list(os.environ) if k.startswith("NETRADIO_")]:
+                os.environ.pop(k, None)
+            os.environ.update(saved_env)
+
 
 if __name__ == "__main__":
     unittest.main()

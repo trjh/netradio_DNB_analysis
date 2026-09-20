@@ -416,12 +416,11 @@ def _load_canary_signature():
     The cache directory is resolved through `harvest._chroma_dir()` -- the SAME seam the
     harvester's loop uses (`_load_sig`) -- so the by-hand `--live` command reads from the
     same directory every pass does. The harvester's `_chroma_dir()` resolves through the
-    cache policy's registry (`cache_budget.dir_of("chroma")`, which reads
-    `$NETRADIO_CHROMA_CACHE_DIR` or `$NETRADIO_CACHE_ROOT/chroma`), and importing `harvest`
-    registers the chroma cache. A `harvest` import that fails (a dependency the CLI does
-    not own) falls back to reading the registry directly; if the registry is dark, the
-    cache is dark and the caller reports the misconfiguration rather than scoring from a
-    directory the harvester's loop never reads.
+    cache policy's registry (which reads `$NETRADIO_CHROMA_CACHE_DIR` or
+    `$NETRADIO_CACHE_ROOT/chroma`), and importing `harvest` registers the chroma cache.
+    A `harvest` import that fails (a dependency the CLI does not own) or a dark policy
+    leaves `_chroma_cache_dir()` None, and the caller reports the misconfiguration rather
+    than scoring from a directory the harvester's loop never reads.
     """
     key = (os.environ.get("NETRADIO_CANARY_KEY") or "").strip()
     if not key:
@@ -449,25 +448,21 @@ def _load_canary_signature():
 def _chroma_cache_dir():
     """The chroma cache's directory, resolved the same way the harvester resolves it.
 
-    Imports `harvest` lazily (which registers the chroma cache with the policy) and reads
-    `harvest._chroma_dir()`. If the import fails (a dependency the CLI does not own), reads
-    the registry directly via `cache_budget.dir_of("chroma")`. If that is dark too, the
-    cache is dark: return None and let the caller (`_load_canary_signature`) report the
+    Imports `harvest` lazily (which registers the chroma cache with the policy via
+    `harvest.register_caches()`, run at import) and reads `harvest._chroma_dir()`. If the
+    import fails (a dependency the CLI does not own) or the policy is dark, the cache is
+    dark: return None and let the caller (`_load_canary_signature`) report the
     misconfiguration, rather than scoring from a legacy directory the harvester's loop
     never reads. The harvester itself refuses to start on a dark policy, so a by-hand
     `--live` CLI that silently fell back to `<repo>/.chroma-cache` would read a directory
-    no current writer produces.
+    no current writer of the pool's signatures produces: `match_queue.py` does cache its
+    own content-addressed signatures there, but under sha1(basename|size|mtime) keys,
+    never the pool's `u` + sha1(url)[:20] keys, so the canary's `.npy` would never be
+    found and the loop never reads the directory.
     """
     try:
         import harvest                          # lazy: registers the chroma cache
         d = harvest._chroma_dir()
-        if d is not None:
-            return d
-    except Exception:
-        pass
-    try:
-        import cache_budget
-        d = cache_budget.dir_of("chroma")
         if d is not None:
             return d
     except Exception:
