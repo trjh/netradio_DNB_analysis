@@ -162,6 +162,11 @@ class _SignerCase(unittest.TestCase):
             os.environ.pop(k, None)
         os.environ["NETRADIO_CACHE_ROOT"] = self.root
         os.environ["NETRADIO_HARVEST_CHILD"] = "0"      # the decode runs in this process
+        # The disk floor is the host's, not the test's: a machine whose cache root volume
+        # is past the default 82% would refuse every `reserve` and turn every "signed"
+        # case into `no_space` -- a verdict on the host, not the code. The floor is
+        # exercised by tests/test_cache_budget.py; here it is pinned out of the way.
+        os.environ["NETRADIO_DISK_MAX_PCT"] = "100"
         self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
         cache_budget._REGISTRY.clear()
         cache_budget._STATS.clear()
