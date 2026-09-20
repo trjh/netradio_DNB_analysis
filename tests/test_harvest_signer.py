@@ -16,6 +16,7 @@ things worth being careful about are pinned:
 
 import contextlib
 import io
+import itertools
 import json
 import os
 import shutil
@@ -25,6 +26,7 @@ import sys
 import tempfile
 import time
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
@@ -1094,6 +1096,47 @@ class CurrentQueryBlock(_SignerCase):
         cq = state["current_query"]
         self.assertEqual((cq["mystery"], cq["query_key"]), (5, "5:fp"))
         self.assertEqual((cq["compared"], cq["remaining"]), (3, 0))
+
+    def test_reinitialises_the_block_per_chunk_across_calls(self):
+        """THE MULTI-CHUNK GUARD: a mystery whose backlog exceeds RESCAN_PER_PASS is
+        worked across more than one rescan call -- the SAME (mystery, query_key) returns
+        as the first pair of a later call. The block must re-initialise per chunk:
+        `started` re-stamps when THIS call's chunk began, `remaining` re-counts from
+        THIS call's batch, and `compared` begins at zero. Without this, the block would
+        publish `remaining: 0` and a frozen `started` from the first chunk while scoring
+        continued for hours."""
+        # `_now()` is second-resolution, so two fast calls would land in the same second
+        # and mask whether the block re-stamped. Hand `rescan` a clock that advances one
+        # second per call so `started` is observably different across chunks. The clock
+        # advances every time `_now()` is read (the block reset, each `updated` stamp,
+        # and the match `at` field), so it must yield indefinitely.
+        base = datetime(2026, 9, 20, 22, 2, 33, tzinfo=timezone.utc)
+        ticks = itertools.count()
+        clock = lambda: (base + timedelta(seconds=next(ticks))).isoformat(timespec="seconds")
+        # First call: score 3 of 5 pairs for MT4 (the limit forces a partial chunk).
+        keys_a = ["u" + ("%02d" % i) * 10 for i in range(3)]
+        qs = [(4, "QC4", "4:fp")]
+        state = {"matches": [], "scored": {}, "kept": 0}
+        with mock.patch.object(harvest, "_now", clock):
+            self._rescan(state, qs, keys_a)
+        cq_after_a = state["current_query"]
+        self.assertEqual((cq_after_a["mystery"], cq_after_a["query_key"]), (4, "4:fp"))
+        self.assertEqual((cq_after_a["compared"], cq_after_a["remaining"]), (3, 0),
+                         "the first chunk scored 3, leaving 0 in its own batch")
+        started_after_a = cq_after_a["started"]
+        # Second call: the SAME (mystery, query_key) returns with a fresh batch of 2 pairs.
+        # The block must re-stamp `started`, re-count `remaining` from 2, and reset
+        # `compared` to zero -- NOT carry `remaining: 0` and `started` from the first chunk.
+        keys_b = ["u" + ("%02d" % i) * 10 for i in range(3, 5)]
+        with mock.patch.object(harvest, "_now", clock):
+            self._rescan(state, qs, keys_b)
+        cq_after_b = state["current_query"]
+        self.assertEqual((cq_after_b["mystery"], cq_after_b["query_key"]), (4, "4:fp"),
+                         "the block still names MT4 -- the same mystery continues")
+        self.assertEqual((cq_after_b["compared"], cq_after_b["remaining"]), (2, 0),
+                         "the second chunk re-counted its own batch of 2, not the first's")
+        self.assertNotEqual(cq_after_b["started"], started_after_a,
+                            "started re-stamped when the second chunk began in this call")
 
     def test_clears_the_block_when_the_backlog_is_empty(self):
         """THE STALE-READER GUARD: when the rescan backlog is empty (zero unscored

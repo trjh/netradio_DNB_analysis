@@ -83,7 +83,6 @@ CANARY = os.path.join(STATE_DIR, "canary.json")
 # this bar alone is not proof -- it is paired with a rank AND a margin check everywhere it is used.
 TRUE_MATCH_MAX = 0.050
 POOL_N = 8                  # decoys for the offline check: enough to make rank #1 mean something
-LIVE_EVERY_S = 24 * 3600
 
 # THE MARGIN, and why rank alone is not enough.
 #
@@ -405,18 +404,6 @@ def live(c_canary, mystery_queries=None):
                            % ("none" if cost is None else "%.4f" % cost))})
 
 
-def due_for_live(every_s=LIVE_EVERY_S):
-    prev = _read(RESULT, {}).get("live") or {}
-    when = prev.get("when")
-    if not when:
-        return True
-    try:
-        age = (datetime.now(timezone.utc) - datetime.fromisoformat(when)).total_seconds()
-    except (ValueError, TypeError):
-        return True
-    return age >= every_s
-
-
 def _load_canary_signature():
     """The canary's stored chroma, pulled from the working cache or the bucket by its key.
 
@@ -433,8 +420,8 @@ def _load_canary_signature():
     `$NETRADIO_CHROMA_CACHE_DIR` or `$NETRADIO_CACHE_ROOT/chroma`), and importing `harvest`
     registers the chroma cache. A `harvest` import that fails (a dependency the CLI does
     not own) falls back to reading the registry directly; if the registry is dark, the
-    legacy `.chroma-cache` directory is tried as a last resort so the CLI still works on a
-    machine where the cache policy is not configured.
+    cache is dark and the caller reports the misconfiguration rather than scoring from a
+    directory the harvester's loop never reads.
     """
     key = (os.environ.get("NETRADIO_CANARY_KEY") or "").strip()
     if not key:
@@ -464,9 +451,12 @@ def _chroma_cache_dir():
 
     Imports `harvest` lazily (which registers the chroma cache with the policy) and reads
     `harvest._chroma_dir()`. If the import fails (a dependency the CLI does not own), reads
-    the registry directly via `cache_budget.dir_of("chroma")`. If that is dark too, falls
-    back to the legacy `.chroma-cache` directory under the repo root so the CLI still works
-    on a machine where the cache policy is not configured but the legacy cache exists.
+    the registry directly via `cache_budget.dir_of("chroma")`. If that is dark too, the
+    cache is dark: return None and let the caller (`_load_canary_signature`) report the
+    misconfiguration, rather than scoring from a legacy directory the harvester's loop
+    never reads. The harvester itself refuses to start on a dark policy, so a by-hand
+    `--live` CLI that silently fell back to `<repo>/.chroma-cache` would read a directory
+    no current writer produces.
     """
     try:
         import harvest                          # lazy: registers the chroma cache
@@ -482,7 +472,7 @@ def _chroma_cache_dir():
             return d
     except Exception:
         pass
-    return os.path.join(_gt.REPO_ROOT, ".chroma-cache")
+    return None
 
 
 def _mystery_queries_for_live():

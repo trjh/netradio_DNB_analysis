@@ -1642,6 +1642,15 @@ def rescan(state, ledger, ruled, qs, limit=None, verbose=True):
     block is reset the moment the mystery changes, and `remaining` is the count left in this
     rescan batch for the mystery the block names.
 
+    A mystery whose backlog exceeds one chunk is worked across more than one rescan call:
+    the SAME `(mystery, query_key)` returns as the first pair of a later call. The block is
+    re-initialised per chunk -- `started` is when THIS call's chunk for the mystery began,
+    and `remaining` is how many pairs THIS call's batch holds for it -- so a long-running
+    mystery does not publish `remaining: 0` and a frozen `started` from its first chunk
+    while scoring continues for hours. A local `started_in_this_call` set tracks which
+    (mystery, query_key) values this call has already opened, so the second chunk for the
+    same mystery re-stamps `started` and re-counts `remaining` from its own batch.
+
     When the backlog is empty (zero unscored pairs), the block is cleared: a stale block
     with `remaining > 0` and a frozen `updated` would let a reader show "in progress"
     forever after the last rescan finished. An empty rescan means nothing is being worked
@@ -1660,18 +1669,26 @@ def rescan(state, ledger, ruled, qs, limit=None, verbose=True):
     for num, _qc, qkey, _key in pairs:
         remaining_in_batch[(num, qkey)] = remaining_in_batch.get((num, qkey), 0) + 1
     scored = state.setdefault("scored", {})
+    # The (mystery, query_key) values THIS call has already opened a block for. A mystery
+    # whose backlog exceeds RESCAN_PER_PASS is worked across more than one call: its
+    # second chunk re-stamps `started` and re-counts `remaining` from this call's batch,
+    # so the block does not freeze on the first chunk's values while scoring continues.
+    started_in_this_call = set()
     n = 0
     for num, qc, qkey, key in pairs:
         cq = state.get("current_query")
-        if not (isinstance(cq, dict) and cq.get("mystery") == num
-                and cq.get("query_key") == qkey):
-            # A new mystery, or the block is stale (a re-cut clip changed the key): start the
-            # block fresh. `started` is when THIS mystery's chunk began, `remaining` is how
-            # many pairs this batch holds for it, and `compared` begins at zero.
+        block_matches = (isinstance(cq, dict) and cq.get("mystery") == num
+                         and cq.get("query_key") == qkey)
+        if not block_matches or (num, qkey) not in started_in_this_call:
+            # A new mystery, the block is stale (a re-cut clip changed the key), or this is
+            # the first chunk for this (mystery, query_key) in THIS call: (re)start the block
+            # fresh. `started` is when THIS mystery's chunk began in this call, `remaining` is
+            # how many pairs this batch holds for it, and `compared` begins at zero.
             state["current_query"] = {"mystery": num, "query_key": qkey,
                                       "started": _now(), "compared": 0,
                                       "remaining": remaining_in_batch.get((num, qkey), 0),
                                       "updated": _now()}
+            started_in_this_call.add((num, qkey))
         before = len(scored.get(qkey, []))
         hit = score_cached(state, num, qc, qkey, key)
         if len(scored.get(qkey, [])) <= before:
