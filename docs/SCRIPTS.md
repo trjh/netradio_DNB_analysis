@@ -313,13 +313,9 @@ not a pass*:
   raises, kept apart by a `kind` field) and every "no match" it reports from there is meaningless
   until it is fixed.
 - **not checked** — `NETRADIO_CANARY_KEY` is unset (the canary is not configured), the canary's
-  signature is not in the cache or the bucket, or the canary's track is no longer in the
-  calibration set. None of those is a verdict on the matcher, so it is not a failure: the run
+  signature is not in the cache or the bucket, or there are no calibration cases to build the
+  canary's mix from. None of those is a verdict on the matcher, so it is not a failure: the run
   carries on, the same way it does when the searched hit is refused.
-
-The live check **refuses to establish a canary** if the stream it finds is not the record (it scores
-the candidate against our own copy first). A canary that cries wolf gets ignored, which is worse
-than no canary — so it retries rather than enshrining a wrong upload.
 
 **How the canary is named.** Under the new contract the canary is an ordinary entry: its file
 arrives through the harvest directories like any other, is signed once, and is named by its
@@ -327,3 +323,16 @@ arrives through the harvest directories like any other, is signed once, and is n
 SHA-1 of the canary's source URL. `scripts/make_canary.py --key <url>` prints it, or the one-line
 recipe in `.env.example` computes it. The harvester re-scores the canary's stored signature every
 pass; `--live` runs the same re-score by hand, loading the signature through `sigstore`.
+
+**Which track the canary is.** The canary's mix is built from the **first calibration case** (the
+same track `--offline` uses), so the re-score works end-to-end on a fresh machine once the key is
+set and the canary's signature is in the bucket — no `canary.json` step is needed. Feed the first
+calibration case's source URL through the queue as the canary. (A `canary.json` written by the
+by-hand `establish_canary` step overrides the default, naming a different calibration case as the
+canary.)
+
+**Establishing a canary by hand** (optional, for naming a non-default track as the canary):
+`establish_canary` in `selftest.py` searches for a stream of a solved track, fetches it, and
+scores what it fetched against the original held on disk. If the stream is not the record it is
+rejected, not enshrined — a canary that cries wolf is worse than no canary. This is the one place
+a fetch still lives; the per-pass re-score itself never fetches.

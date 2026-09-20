@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Canary self-tests — is the matcher still RIGHT, and is the live pipeline still WORKING?
+"""Canary self-tests — is the matcher still RIGHT, and does the pool still hold the canary?
 
     . .venv/bin/activate && python scripts/selftest.py --offline
     . .venv/bin/activate && python scripts/selftest.py --live
@@ -36,16 +36,19 @@ among the rivals, and a real margin. No network, no fetch — a re-score is all 
 
 The trap, and the canary URL
 ----------------------------
-If the stream the canary was established from is the *wrong upload*, the match fails — and the
-canary cries wolf, saying "matcher broken" when the matcher is fine. A canary that cries wolf
-gets ignored, and then it is worse than no canary at all.
+The re-score proves the matcher and the pool are still working. It does NOT prove the canary's
+signature is the right record: the canary's file is fed through the directories like any entry,
+and a feed that delivers the wrong upload files a signature the matcher will fail against the
+canary's mix — and the canary cries wolf, saying "matcher broken" when the matcher is fine. A
+canary that cries wolf gets ignored, and then it is worse than no canary at all.
 
-So the canary URL is **established by validation, once** (see `establish_canary`): we search for
-the record, fetch it, and score it against the **local original we already hold**. Only if that
-is a true match do we know the upload really is the record — and only then is it saved as the
-canary. From then on the URL is known-good, so a later failure is unambiguous: it is the
-*matcher*, not the pick. The canary's key is the pool's own rule applied to that URL, and the
-harvester re-scores the signature filed under it.
+So the canary's track is the **first calibration case** by default (`cases()[0]`), the same track
+`--offline` uses: feed that track's source URL through the queue as the canary, and the re-score
+has the mix it expects. For naming a DIFFERENT calibration case as the canary, `establish_canary`
+(by hand) searches for a stream of a solved track, fetches it, and scores what it fetched against
+the original held on disk — only if that is a true match is it saved as the canary. This is the
+one place a fetch still lives; the per-pass re-score itself never fetches. The canary's key is the
+pool's own rule applied to that URL, and the harvester re-scores the signature filed under it.
 
 Rank, never a bare cost
 -----------------------
@@ -266,6 +269,10 @@ def establish_canary(fetch, subject=None):
                                     % subject["name"]}
 
     c_fetched, _samples, err = fetch(url)
+    if was_stopped(err):
+        # A stop is never a verdict: a Ctrl-C during the fetch is not "the upload is bad",
+        # so it is reported as a skip (ok: None), not a failure, and no canary is saved.
+        return {"ok": None, "url": url, "why": "stopped before the fetch finished"}
     if err or c_fetched is None:
         return {"ok": False, "why": "could not fetch %s: %s" % (url, err)}
 
@@ -329,13 +336,28 @@ def live(c_canary, mystery_queries=None):
     cost in the true-match range, rank first among the rivals, and a real margin. A
     degenerate matcher -- one that scores everything low, or everything the same -- fails
     one of the three, the same way it fails offline.
-    """
-    canary = _read(CANARY, {})
-    if not canary.get("track"):
-        return record({"kind": "live", "ok": None, "when": _now(),
-                       "why": "no canary yet: the canary has not been established"})
 
-    subject = next((c for c in cases() if c["num"] == canary.get("track")), None)
+    The canary's track is the first calibration case by default (`cases()[0]`), so the
+    re-score works on a fresh machine once `NETRADIO_CANARY_KEY` is set and the canary's
+    signature is in the bucket -- no `canary.json` needed. A `canary.json` written by
+    `establish_canary` (or by hand) overrides the default, naming a different calibration
+    case as the canary. The default matches `establish_canary`'s own default
+    (`subject = subject or cs[0]`), so a canary established under the old fetch-based
+    contract and a fresh canary under the new re-score contract agree on the same track.
+    """
+    cs = cases()
+    canary = _read(CANARY, {})
+    track = canary.get("track")
+    if track is None:
+        # No canary.json: default to the first calibration case, the same track
+        # `establish_canary` would pick. This makes the re-score work end-to-end on a
+        # fresh machine once the key is set and the canary's signature is in the bucket,
+        # with no manual `canary.json` step.
+        if not cs:
+            return record({"kind": "live", "ok": None, "when": _now(),
+                           "why": "no calibration cases -- NETRADIO_SOURCES_DIR unset or empty"})
+        track = cs[0]["num"]
+    subject = next((c for c in cs if c["num"] == track), None)
     if subject is None:
         return record({"kind": "live", "ok": None, "when": _now(),
                        "why": "the canary's track is no longer in the calibration set"})
@@ -347,7 +369,7 @@ def live(c_canary, mystery_queries=None):
         # same state a missing calibration case reads, and the one a reader can tell apart
         # from a PASS or a FAIL.
         return record({"kind": "live", "ok": None, "when": _now(),
-                       "track": canary.get("track"), "name": canary.get("name"),
+                       "track": track, "name": canary.get("name") or subject["name"],
                        "why": "the canary's signature is not available -- set "
                               "NETRADIO_CANARY_KEY to the canary's key (see .env.example) and "
                               "ensure its signature is in the bucket"})
@@ -372,7 +394,7 @@ def live(c_canary, mystery_queries=None):
     ok = (cost is not None and cost <= TRUE_MATCH_MAX
           and (not n_rivals or best_rival - cost >= MIN_MARGIN))
     return record({"kind": "live", "ok": bool(ok), "when": _now(),
-                   "track": canary.get("track"), "name": canary.get("name"),
+                   "track": track, "name": canary.get("name") or subject["name"],
                    "cost": None if cost is None else round(float(cost), 4),
                    "rival": round(best_rival, 4) if n_rivals else None,
                    "semitones": shift, "at_s": None if at is None else round(float(at), 1),
@@ -401,15 +423,27 @@ def _load_canary_signature():
     `NETRADIO_CANARY_KEY` names the canary (the pool's own key rule, `u` + sha1(url)[:20]).
     The signature sits in the bucket under `<key>.npy` and is pulled back into the chroma
     cache on demand. This is the one place the `--live` command reaches for the store, and
-    it imports `sigstore` lazily so the library paths (the tests, the harvester) never pay
-    for it and never depend on it.
+    it imports `harvest` and `sigstore` lazily so the library paths (the tests, the
+    harvester's own loop) never pay for them and never depend on them.
+
+    The cache directory is resolved through `harvest._chroma_dir()` -- the SAME seam the
+    harvester's loop uses (`_load_sig`) -- so the by-hand `--live` command reads from the
+    same directory every pass does. The harvester's `_chroma_dir()` resolves through the
+    cache policy's registry (`cache_budget.dir_of("chroma")`, which reads
+    `$NETRADIO_CHROMA_CACHE_DIR` or `$NETRADIO_CACHE_ROOT/chroma`), and importing `harvest`
+    registers the chroma cache. A `harvest` import that fails (a dependency the CLI does
+    not own) falls back to reading the registry directly; if the registry is dark, the
+    legacy `.chroma-cache` directory is tried as a last resort so the CLI still works on a
+    machine where the cache policy is not configured.
     """
     key = (os.environ.get("NETRADIO_CANARY_KEY") or "").strip()
     if not key:
         return None, "NETRADIO_CANARY_KEY is not set -- the canary is not configured"
+    d = _chroma_cache_dir()
+    if d is None:
+        return None, ("the chroma cache is dark -- set NETRADIO_CACHE_ROOT (or "
+                      "NETRADIO_CHROMA_CACHE_DIR) in .env, see .env.example")
     import sigstore                                     # lazy: the library path does not import it
-    d = os.environ.get("NETRADIO_CHROMA_CACHE_DIR") \
-        or os.path.join(_gt.REPO_ROOT, ".chroma-cache")
     if not os.path.isdir(d) and not sigstore.enabled():
         return None, "the canary's signature is nowhere to be found -- no chroma cache and " \
                      "no bucket configured"
@@ -425,6 +459,32 @@ def _load_canary_signature():
         return None, "the canary's signature could not be read: %s" % exc
 
 
+def _chroma_cache_dir():
+    """The chroma cache's directory, resolved the same way the harvester resolves it.
+
+    Imports `harvest` lazily (which registers the chroma cache with the policy) and reads
+    `harvest._chroma_dir()`. If the import fails (a dependency the CLI does not own), reads
+    the registry directly via `cache_budget.dir_of("chroma")`. If that is dark too, falls
+    back to the legacy `.chroma-cache` directory under the repo root so the CLI still works
+    on a machine where the cache policy is not configured but the legacy cache exists.
+    """
+    try:
+        import harvest                          # lazy: registers the chroma cache
+        d = harvest._chroma_dir()
+        if d is not None:
+            return d
+    except Exception:
+        pass
+    try:
+        import cache_budget
+        d = cache_budget.dir_of("chroma")
+        if d is not None:
+            return d
+    except Exception:
+        pass
+    return os.path.join(_gt.REPO_ROOT, ".chroma-cache")
+
+
 def _mystery_queries_for_live():
     """The current mystery queries for the `--live` re-score, the same set the harvester's
     loop passes to `live()`. Built through `harvest.queries()` (imported lazily here, inside
@@ -433,14 +493,26 @@ def _mystery_queries_for_live():
     (no unsolved mysteries, no usable clips, librosa absent): an empty rival set is
     `live()`'s "no rivals to beat" case, not a skip -- the canary still has to score in
     range against its own mix, which is the check the CLI runs by hand when the loop is
-    not feeding it mysteries."""
+    not feeding it mysteries.
+
+    A failure that is NOT one of the expected "no queries" cases (a bug in
+    `harvest.queries()`, a malformed `track-metadata.json`, a broken clip) would silently
+    weaken the by-hand check to "no rivals to beat", which passes the canary on cost alone.
+    So the exception is printed to stderr -- the check still runs (the canary has to score
+    in range against its own mix either way), but a silent degradation is not silent."""
     try:
         import harvest                          # lazy: the library path does not import it
-    except Exception:
+    except Exception as exc:
+        print("selftest --live: could not import harvest for the mystery queries (%s); "
+              "running with no rivals -- the canary still has to score in range against its "
+              "own mix" % exc, file=sys.stderr)
         return []
     try:
         return harvest.queries()
-    except Exception:
+    except Exception as exc:
+        print("selftest --live: harvest.queries() raised (%s); running with no rivals -- "
+              "the canary still has to score in range against its own mix" % exc,
+              file=sys.stderr)
         return []
 
 

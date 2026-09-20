@@ -15,6 +15,7 @@ No network and no audio: `fetch` is injected, and the local-file paths are stubb
 """
 
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -143,14 +144,43 @@ class LiveCanary(unittest.TestCase):
         self.assertEqual(est["url"], "https://y/right")
         self.assertTrue(os.path.exists(selftest.CANARY))
 
-    def test_no_canary_established_is_skipped_not_failed(self):
-        """Without a canary on file, the re-score is "not checked" -- not a failure. The same
-        state a missing calibration case reads offline, and the one a reader can tell apart
-        from a PASS or a FAIL."""
-        with mock.patch.object(selftest, "cases", return_value=[self.case]):
+    def test_a_stopped_fetch_is_a_skip_not_a_failure(self):
+        """A Ctrl-C during the establishment fetch is not a verdict on the upload -- a stop
+        is never a failure. The canary is not saved, and the result is `ok: None` (skip),
+        not `ok: False` (failure), so a by-hand `establish_canary` interrupted by a signal
+        does not look like "the upload is bad"."""
+        with mock.patch.object(selftest, "cases", return_value=[self.case]), \
+             mock.patch.object(selftest, "_search", return_value="https://y/right"):
+            est = selftest.establish_canary(lambda url: (None, None, "stopped"))
+        self.assertIsNone(est["ok"], "a stop is a skip, not a failure")
+        self.assertIn("stopped", est["why"])
+        self.assertFalse(os.path.exists(selftest.CANARY),
+                         "a stopped fetch saves no canary")
+
+    def test_no_canary_json_defaults_to_the_first_calibration_case(self):
+        """THE FRESH-MACHINE PATH: with no `canary.json` on disk, the re-score defaults to
+        the first calibration case (the same track `establish_canary` would pick), so the
+        check works end-to-end once `NETRADIO_CANARY_KEY` is set and the canary's signature
+        is in the bucket. No manual `canary.json` step is needed."""
+        # No canary.json written -- the fresh-machine state.
+        with mock.patch.object(selftest, "cases", return_value=[self.case]), \
+             mock.patch.object(selftest._cal, "mix_query", return_value=[0.0] * 99999), \
+             mock.patch.object(selftest._cal, "chroma", return_value="C"), \
+             mock.patch.object(selftest._cm, "match", return_value=(0.009, 2, 41.0)):
+            r = selftest.live(self.canary_chroma, mystery_queries=[])
+        self.assertTrue(r["ok"], "the re-score ran against the first calibration case")
+        self.assertEqual(r["track"], 1, "the canary's track is the first case by default")
+        self.assertEqual(r["name"], "Dead Calm - Urban Style",
+                         "the name comes from the calibration case when canary.json is absent")
+
+    def test_no_calibration_cases_is_skipped_not_failed(self):
+        """With no calibration cases at all (NETRADIO_SOURCES_DIR unset), the re-score is
+        "not checked" -- not a failure. The same state a missing canary reads, and one a
+        reader can tell apart from a PASS or a FAIL."""
+        with mock.patch.object(selftest, "cases", return_value=[]):
             r = selftest.live(self.canary_chroma, mystery_queries=[])
         self.assertIsNone(r["ok"])
-        self.assertIn("no canary", r["why"])
+        self.assertIn("no calibration cases", r["why"])
 
     def test_the_canary_track_leaving_the_calibration_set_is_skipped(self):
         selftest._save(selftest.CANARY, {"track": 99, "name": "gone"})
@@ -305,6 +335,50 @@ class LiveCLI(unittest.TestCase):
             selftest.main()
         self.assertIn('"ok": false', out.getvalue())
         self.assertIn("broken", out.getvalue())
+
+    def test_the_cli_resolves_the_same_chroma_dir_as_the_harvester(self):
+        """THE DIRECTORY UNIFICATION: the by-hand `--live` CLI must read the canary's
+        signature from the SAME directory the harvester's loop reads from
+        (`harvest._chroma_dir()`), not a different legacy path. Without this, the CLI
+        would look in `<repo>/.chroma-cache` while the harvester reads
+        `$NETRADIO_CACHE_ROOT/chroma`, and a canary already in the working cache would
+        be invisible to the by-hand check -- or the CLI would pull a fresh copy into a
+        directory the cache policy does not track."""
+        try:
+            import harvest
+            import cache_budget
+        except Exception:
+            self.skipTest("harvest.py needs numpy -- not this test's job")
+        # Light the cache policy on a throwaway root and re-register the caches so the
+        # harvester's _chroma_dir() resolves through the policy (the same registration
+        # the lazy `import harvest` inside _chroma_cache_dir() triggers). Restore after.
+        tmp = tempfile.mkdtemp(prefix="chromadir-")
+        root = os.path.join(tmp, "root")
+        saved_env = {k: os.environ.get(k) for k in list(os.environ) if k.startswith("NETRADIO_")}
+        for k in saved_env:
+            os.environ.pop(k, None)
+        os.environ["NETRADIO_CACHE_ROOT"] = root
+        saved_registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        harvest.register_caches()
+        try:
+            expected = harvest._chroma_dir()
+            self.assertIsNotNone(expected, "the cache policy is lit -- _chroma_dir() resolves")
+            self.assertEqual(selftest._chroma_cache_dir(), expected,
+                             "the CLI and the harvester resolve the chroma cache to the same path")
+            # And the resolved path is under the policy's root, NOT the legacy .chroma-cache.
+            self.assertTrue(os.path.realpath(expected).startswith(os.path.realpath(root)),
+                            "the resolved path is under NETRADIO_CACHE_ROOT, not a legacy dir")
+        finally:
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(saved_registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(saved_registry[1])
+            for k in [k for k in list(os.environ) if k.startswith("NETRADIO_")]:
+                os.environ.pop(k, None)
+            os.environ.update(saved_env)
+            shutil.rmtree(tmp, ignore_errors=True)
 
     @staticmethod
     def _capture_stdout():

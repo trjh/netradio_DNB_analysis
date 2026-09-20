@@ -981,6 +981,110 @@ class TheCanaryRescore(_SignerCase):
 
 
 @unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class CurrentQueryBlock(_SignerCase):
+    """The `current_query` block (§5.6): `mystery`, `query_key`, `started`, `compared`,
+    `remaining`, `updated` -- advanced by `rescan` and `score_cached` as they work one
+    mystery, reset when the mystery changes, cleared when the backlog is empty, and
+    cleared by `forget` when it names the forgotten mystery. A reader must not show a
+    stale one forever."""
+
+    def _sig(self, key):
+        os.makedirs(self.chroma_dir, exist_ok=True)
+        np.save(os.path.join(self.chroma_dir, key + ".npy"),
+                np.zeros((12, 8), dtype="float32"))
+
+    def _ledger(self, keys):
+        rows = {k: harvest._row(k, 1, 1.0, "signed", None, "then", "e-%s" % k, {})
+                for k in keys}
+        harvest._save(harvest.LEDGER, rows)
+        return rows
+
+    def _rescan(self, state, qs, keys, remote=None):
+        for k in keys:
+            self._sig(k)
+        ledger = self._ledger(keys)
+        if remote is None:
+            remote = {k + ".npy": "e" for k in keys}
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900: remote), \
+             mock.patch.object(harvest, "_load_sig",
+                               lambda key: np.zeros((12, 8), dtype="float32")), \
+             mock.patch.object(harvest._cm, "match",
+                               lambda q, c: (None, 0, 0.0)):
+            return harvest.rescan(state, ledger, {}, qs)
+
+    def test_advances_compared_and_remaining_as_it_works_one_mystery(self):
+        """The block advances one `compared` and drops one `remaining` per pair scored
+        for the mystery it names. A rescan that scores N pairs for MT4 leaves the block
+        with `compared: N`, `remaining: 0` for MT4."""
+        keys = ["u" + ("%02d" % i) * 10 for i in range(3)]
+        qs = [(4, "QC4", "4:fp")]
+        state = {"matches": [], "scored": {}, "kept": 0}
+        self._rescan(state, qs, keys)
+        cq = state["current_query"]
+        self.assertEqual((cq["mystery"], cq["query_key"]), (4, "4:fp"))
+        self.assertEqual((cq["compared"], cq["remaining"]), (3, 0),
+                         "compared counts up, remaining counts down to zero")
+        self.assertIn("started", cq)
+        self.assertIn("updated", cq)
+
+    def test_resets_the_block_when_the_mystery_changes(self):
+        """A rescan that works MT4 then MT5 within one call resets the block when the
+        mystery changes: `started` is when MT5's chunk began, `compared` begins at zero."""
+        keys = ["u" + ("%02d" % i) * 10 for i in range(3)]
+        qs = [(4, "QC4", "4:fp"), (5, "QC5", "5:fp")]
+        state = {"matches": [], "scored": {}, "kept": 0}
+        self._rescan(state, qs, keys)
+        # the block names the LAST mystery the rescan worked
+        cq = state["current_query"]
+        self.assertEqual((cq["mystery"], cq["query_key"]), (5, "5:fp"))
+        self.assertEqual((cq["compared"], cq["remaining"]), (3, 0))
+
+    def test_clears_the_block_when_the_backlog_is_empty(self):
+        """THE STALE-READER GUARD: when the rescan backlog is empty (zero unscored
+        pairs), the block is cleared. Without this, a block with `remaining > 0` and a
+        frozen `updated` from the last finished batch would let a reader show "in
+        progress" forever after the work was done."""
+        keys = ["u" + ("%02d" % i) * 10 for i in range(3)]
+        qs = [(4, "QC4", "4:fp")]
+        state = {"matches": [], "scored": {}, "kept": 0,
+                 "current_query": {"mystery": 4, "query_key": "4:old",
+                                   "started": "then", "compared": 1, "remaining": 2,
+                                   "updated": "then"}}
+        # Mark every pair as already scored so unscored_pairs returns empty.
+        scored = state.setdefault("scored", {})
+        scored["4:fp"] = [k + ".npy" for k in keys]
+        self._rescan(state, qs, keys)
+        self.assertNotIn("current_query", state,
+                         "the stale block was cleared when the backlog was empty")
+
+    def test_forget_clears_the_block_if_it_names_the_forgotten_mystery(self):
+        """`forget(N)` clears the block if it names MTN -- otherwise the page could show
+        "the last query was MTN" right after forgetting it, and the block would stay
+        stale until the next rescan resets it."""
+        state = {"matches": [{"mystery": 4, "key": "u" + "a" * 20, "cost": 0.01}],
+                 "kept": 0, "scored": {"4:fp": ["u" + "a" * 20 + ".npy"]},
+                 "current_query": {"mystery": 4, "query_key": "4:fp",
+                                   "started": "then", "compared": 1, "remaining": 2,
+                                   "updated": "then"}}
+        harvest.forget(state, 4)
+        self.assertNotIn("current_query", state,
+                         "the block naming the forgotten mystery was cleared")
+
+    def test_forget_leaves_the_block_if_it_names_a_different_mystery(self):
+        """`forget(5)` leaves the block if it names MT4 -- the block tracks MT4, not the
+        forgotten MT5, so it is not stale."""
+        state = {"matches": [], "kept": 0, "scored": {},
+                 "current_query": {"mystery": 4, "query_key": "4:fp",
+                                   "started": "then", "compared": 1, "remaining": 2,
+                                   "updated": "then"}}
+        harvest.forget(state, 5)
+        self.assertIn("current_query", state,
+                      "the block naming a different mystery was left alone")
+        self.assertEqual(state["current_query"]["mystery"], 4)
+
+
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
 class MatchRowsCarryTheKey(_SignerCase):
     """A match row joins on the key, and the old rows move onto it at first start."""
 

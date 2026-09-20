@@ -897,6 +897,12 @@ def reconcile_ledger(state=None):
                                             and "missing" in alert)):
             state.pop("sig_alert", None)
             res["cleared"] = True             # the store healed -- stand down
+        # An alert with neither `kind` nor `missing` is a shape this code does not
+        # recognise (an older, malformed, or hand-written alert). It is left alone: clearing
+        # an unknown shape would silently dismiss an alarm a human set on purpose, and the
+        # canary path does not clear it either (it only clears a `kind: "canary"` alert).
+        # Such an alert survives until a human clears it, which is the safe default -- the
+        # alternative is an alarm that disappears on a healthy pass without anyone asking.
     why = ("dropped the etag of %d signed row(s) whose object is gone; restored %d missing "
            "etag(s) whose object is back; every other signed row still points at its object"
            % (res["dropped"], res["restored"])) if (res["dropped"] or res["restored"]) else \
@@ -1571,6 +1577,13 @@ def forget(state, num):
     dropped_keys = [k for k in scored if k.split(":", 1)[0] == str(num)]
     for k in dropped_keys:
         del scored[k]
+    # Clear the `current_query` block if it names the forgotten mystery -- otherwise the
+    # page could show "the last query was MT%d" right after forgetting it, and the block
+    # would stay stale until the next rescan resets it. The block is the scorer's
+    # "what I am working on right now"; a forgotten mystery is no longer being worked.
+    cq = state.get("current_query")
+    if isinstance(cq, dict) and cq.get("mystery") == num:
+        state.pop("current_query", None)
     return before - len(state["matches"]), len(dropped_keys)
 
 
@@ -1583,8 +1596,19 @@ def rescan(state, ledger, ruled, qs, limit=None, verbose=True):
     (`RESCAN_PER_PASS`) may finish a mystery and start the next within one call -- so the
     block is reset the moment the mystery changes, and `remaining` is the count left in this
     rescan batch for the mystery the block names.
+
+    When the backlog is empty (zero unscored pairs), the block is cleared: a stale block
+    with `remaining > 0` and a frozen `updated` would let a reader show "in progress"
+    forever after the last rescan finished. An empty rescan means nothing is being worked
+    on, so the block says so by being absent.
     """
     pairs = unscored_pairs(state, ledger, ruled, qs, limit=limit)
+    if not pairs:
+        # The backlog is empty: nothing is being worked on. Clear a stale block so a reader
+        # cannot show "in progress" forever after the last rescan finished.
+        if "current_query" in state:
+            state.pop("current_query", None)
+        return 0
     # Count the pairs per mystery in THIS batch, so `remaining` starts at the batch's size
     # for a mystery and counts down to zero as the block advances.
     remaining_in_batch = {}
