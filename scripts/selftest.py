@@ -425,6 +425,25 @@ def _load_canary_signature():
         return None, "the canary's signature could not be read: %s" % exc
 
 
+def _mystery_queries_for_live():
+    """The current mystery queries for the `--live` re-score, the same set the harvester's
+    loop passes to `live()`. Built through `harvest.queries()` (imported lazily here, inside
+    the CLI, so the library path -- `live()`, `offline()` -- never imports the harvester and
+    the tests never pay for it). Returns an empty list when the queries cannot be built
+    (no unsolved mysteries, no usable clips, librosa absent): an empty rival set is
+    `live()`'s "no rivals to beat" case, not a skip -- the canary still has to score in
+    range against its own mix, which is the check the CLI runs by hand when the loop is
+    not feeding it mysteries."""
+    try:
+        import harvest                          # lazy: the library path does not import it
+    except Exception:
+        return []
+    try:
+        return harvest.queries()
+    except Exception:
+        return []
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -441,14 +460,18 @@ def main():
     if args.live:
         # The re-score needs the canary's stored signature, named by NETRADIO_CANARY_KEY. The
         # harvester's own loop pulls it back through its chroma cache (harvest._load_sig); the
-        # `--live` command loads it through sigstore here, the same seam, so the check runs the
-        # same way by hand as it does every pass.
+        # `--live` command loads it through sigstore here, the same seam, so the check runs
+        # the same way by hand as it does every pass. The current mystery queries are built
+        # the same way the loop builds them, so the rank/margin gate runs against the same
+        # rivals -- a canary that only barely beats its own mix cannot pass the CLI when a
+        # close current mystery should reject it.
         c_canary, why = _load_canary_signature()
         if c_canary is None:
             print(json.dumps({"kind": "live", "ok": None, "when": _now(), "why": why},
                               indent=2))
             return
-        print(json.dumps(live(c_canary), indent=2))
+        print(json.dumps(live(c_canary, mystery_queries=_mystery_queries_for_live()),
+                         indent=2))
 
 
 if __name__ == "__main__":

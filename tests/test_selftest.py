@@ -230,5 +230,88 @@ class LiveCanary(unittest.TestCase):
         self.assertEqual(r["cost"], 0.009)
 
 
+@unittest.skipIf(selftest is None, "selftest.py needs the librosa venv (.venv) — skipping")
+class LiveCLI(unittest.TestCase):
+    """The `--live` CLI builds and passes the current mystery queries, so the rank/margin
+    gate runs against the same rivals the harvester's loop uses -- a canary that only
+    barely beats its own mix cannot pass the CLI when a close current mystery should
+    reject it."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        selftest.RESULT = os.path.join(self.tmp, "selftest.json")
+        selftest.CANARY = os.path.join(self.tmp, "canary.json")
+        selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
+        self.canary_chroma = "CANARY-CHROMA"
+        self.rival_qs = [(4, "RIVAL-CHROMA", "4:fp")]
+
+    def _patches(self, live_result):
+        recorded = {}
+
+        def fake_load_canary():
+            return self.canary_chroma, None
+
+        def fake_live(c_canary, mystery_queries=None):
+            recorded["c_canary"] = c_canary
+            recorded["mystery_queries"] = mystery_queries
+            return live_result
+
+        def fake_mystery_queries():
+            return self.rival_qs
+
+        return recorded, fake_load_canary, fake_live, fake_mystery_queries
+
+    def test_the_cli_passes_the_current_mystery_queries_to_live(self):
+        """The CLI builds the current mystery queries (through harvest.queries, imported
+        lazily) and hands them to live(), so the rank/margin gate runs. Without this, the
+        CLI would pass None and a close current mystery that should reject the canary would
+        be invisible to the by-hand check."""
+        recorded, fake_load, fake_live, fake_mq = self._patches(
+            {"kind": "live", "ok": True, "when": "now", "why": None, "track": 1,
+             "name": "known", "cost": 0.009, "rival": 0.06, "semitones": 0, "at_s": 30.0,
+             "took_s": 0.0})
+        with mock.patch.object(selftest, "_load_canary_signature", fake_load), \
+             mock.patch.object(selftest, "live", fake_live), \
+             mock.patch.object(selftest, "_mystery_queries_for_live", fake_mq), \
+             mock.patch.object(sys, "argv", ["selftest.py", "--live"]):
+            selftest.main()
+        self.assertEqual(recorded["c_canary"], self.canary_chroma)
+        self.assertEqual(recorded["mystery_queries"], self.rival_qs,
+                         "the CLI passed the current mystery queries to live()")
+
+    def test_the_cli_with_no_canary_signature_reports_not_checked(self):
+        _, fake_load, fake_live, fake_mq = self._patches(None)
+        with mock.patch.object(selftest, "_load_canary_signature",
+                               lambda: (None, "NETRADIO_CANARY_KEY is not set")), \
+             mock.patch.object(selftest, "live", fake_live), \
+             mock.patch.object(selftest, "_mystery_queries_for_live", fake_mq), \
+             mock.patch.object(sys, "argv", ["selftest.py", "--live"]), \
+             self._capture_stdout() as out:
+            selftest.main()
+        self.assertIn("not set", out.getvalue())
+
+    def test_the_cli_a_failing_canary_is_a_failure(self):
+        recorded, fake_load, fake_live, fake_mq = self._patches(
+            {"kind": "live", "ok": False, "when": "now",
+             "why": "a KNOWN record's stored signature did not come back as a match "
+                    "(cost 0.3100) -- the matcher or the signature is broken",
+             "track": 1, "name": "known", "cost": 0.31, "rival": None,
+             "semitones": 0, "at_s": None, "took_s": 0.0})
+        with mock.patch.object(selftest, "_load_canary_signature", fake_load), \
+             mock.patch.object(selftest, "live", fake_live), \
+             mock.patch.object(selftest, "_mystery_queries_for_live", fake_mq), \
+             mock.patch.object(sys, "argv", ["selftest.py", "--live"]), \
+             self._capture_stdout() as out:
+            selftest.main()
+        self.assertIn('"ok": false', out.getvalue())
+        self.assertIn("broken", out.getvalue())
+
+    @staticmethod
+    def _capture_stdout():
+        import contextlib
+        import io
+        return contextlib.redirect_stdout(io.StringIO())
+
+
 if __name__ == "__main__":
     unittest.main()

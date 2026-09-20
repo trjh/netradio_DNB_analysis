@@ -948,6 +948,37 @@ class TheCanaryRescore(_SignerCase):
         self.assertTrue(second["cleared"], "the healed store cleared its own alert")
         self.assertNotIn("sig_alert", state)
 
+    def test_a_legacy_kindless_store_alert_is_healed_by_reconcile(self):
+        """THE UPGRADE REGRESSION: a store alert written before the `kind` field landed has no
+        `kind` but carries the store-loss shape (`missing`/`corpus`). After this change, a
+        healthy reconcile must still clear it -- an upgrade that left a pre-existing store
+        alarm standing forever would report a healed store as broken until another loss
+        overwrote it. The canary path must leave it alone (it is not a canary alert)."""
+        keys = [("u" + ("%02d" % i) * 10) for i in range(10)]
+        rows = {k: harvest._row(k, 1, 1.0, "signed", None, "then", "e-%s" % k, {})
+                for k in keys}
+        harvest._save(harvest.LEDGER, rows)
+        canary_key = "u" + "0" * 20
+        os.environ["NETRADIO_CANARY_KEY"] = canary_key
+        self._canary_sig(canary_key)
+        self._canary_on(canary_key, ok=True)
+        # a legacy alert, as written by the base branch: no `kind`, store-loss shape
+        legacy = {"at": "then", "missing": 9, "corpus": 10,
+                  "why": "9 of 10 signed rows point at objects the listing does not hold"}
+        state = {"issues": [], "sig_alert": dict(legacy)}
+        # the canary passes; the legacy store alert is not a canary alert, so it survives
+        self.assertFalse(harvest.score_canary(state, qs=[]),
+                         "the passing canary touched nothing")
+        self.assertEqual(state["sig_alert"], legacy,
+                         "the legacy store alert survived the passing canary")
+        # the store heals: the reconcile clears the legacy store alert (kind absent, store shape)
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900:
+                               {k + ".npy": "e-%s" % k for k in keys}):
+            res = harvest.reconcile_ledger(state)
+        self.assertTrue(res["cleared"], "the healed store cleared the legacy alert")
+        self.assertNotIn("sig_alert", state)
+
 
 @unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
 class MatchRowsCarryTheKey(_SignerCase):

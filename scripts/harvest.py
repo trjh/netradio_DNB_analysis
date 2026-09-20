@@ -883,13 +883,18 @@ def reconcile_ledger(state=None):
         _save(LEDGER, ledger)
     # ANY reconcile that did not report stands the STORE alert down: `gone` can be empty here
     # with the alert still standing (a mis-listed bucket, fixed between starts), and a clear
-    # that waits for a later loss would report a healed store as broken forever. Only the
-    # store-kind alert this path raises is cleared here; a canary-kind alert (a matcher
-    # failure) is a different break and survives a healthy reconcile -- the canary's own pass
-    # is what clears it (see score_canary).
+    # that waits for a later loss would report a healed store as broken forever. Only a
+    # store-kind alert is cleared here; a canary-kind alert (a matcher failure) is a different
+    # break and survives a healthy reconcile -- the canary's own pass is what clears it (see
+    # score_canary). A legacy alert written before the `kind` field landed has no `kind` but
+    # carries the store-loss shape (`missing`/`corpus`); it is treated as store-owned here so
+    # an upgrade does not leave a pre-existing store alarm standing forever, while the
+    # canary path (which never clears a store alert) leaves it alone either way.
     if not res["reported"]:
         alert = state.get("sig_alert")
-        if isinstance(alert, dict) and alert.get("kind") == "store":
+        if isinstance(alert, dict) and (alert.get("kind") == "store"
+                                        or ("kind" not in alert
+                                            and "missing" in alert)):
             state.pop("sig_alert", None)
             res["cleared"] = True             # the store healed -- stand down
     why = ("dropped the etag of %d signed row(s) whose object is gone; restored %d missing "
