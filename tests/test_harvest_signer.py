@@ -686,13 +686,24 @@ class TheLedger(_SignerCase):
     def _objects(self, *names, etag="e-%s"):
         return {name: etag % name[:6] for name in names}
 
-    def test_the_first_start_seeds_one_signed_row_per_bucket_key(self):
-        objects = self._objects("u" + "a" * 20 + ".npy", "u" + "b" * 20 + ".npy")
+    def test_the_first_start_seeds_one_signed_row_per_complete_bucket_key(self):
+        """A `signed` row is the contract's promise that both `<key>.npy` and `<key>.json`
+        landed together. The listing carries both shapes, so the seed marks a key complete
+        only when both are there -- and a signature whose sidecar is not in the bucket is
+        `delayed` with `missing_sidecar`, so the feeder re-feeds the key for a fresh sign
+        that re-uploads both (the row's empty size and mtime mean any local file differs
+        and the scan proposes it)."""
+        complete_a = "u" + "a" * 20
+        complete_b = "u" + "b" * 20
+        sidecarless = "u" + "c" * 20
+        objects = self._objects(complete_a + ".npy", complete_a + ".json",
+                               complete_b + ".npy", complete_b + ".json",
+                               sidecarless + ".npy")
         with mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: objects):
             res = harvest.reconcile_ledger({"issues": []})
-        self.assertEqual(res["seeded"], 2)
+        self.assertEqual(res["seeded"], 2)        # the two complete keys
         rows = harvest._load(harvest.LEDGER, {})
-        for key in ("u" + "a" * 20, "u" + "b" * 20):
+        for key in (complete_a, complete_b):
             with self.subTest(key=key):
                 row = rows[key]
                 self.assertEqual((row["status"], row["key"]), ("signed", key))
@@ -705,6 +716,11 @@ class TheLedger(_SignerCase):
                 # seen a sidecar, and the contract says so
                 for field in ("url", "title", "artist", "duration_s"):
                     self.assertIsNone(row[field])
+        # the signature-only key is NOT marked complete -- it is delayed, and re-fed
+        legacy = rows[sidecarless]
+        self.assertEqual((legacy["status"], legacy["reason"]), ("delayed", "missing_sidecar"))
+        self.assertIsNone(legacy["uploaded_etag"],
+                          "no etag is recorded for a signature the contract does not vouch for")
 
     def test_a_gone_object_loses_its_etag(self):
         key = "u" + "a" * 20

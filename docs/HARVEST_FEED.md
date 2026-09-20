@@ -82,7 +82,7 @@ the file being done with. When the bucket is configured and either upload fails,
 **no row at all** and is signed again on a later pass, so a bucket that is briefly refusing
 writes costs one re-decode, never a signature with no sidecar beside it.
 
-A file can come back **delayed** instead of signed, with one of four reasons:
+A file can come back **delayed** instead of signed, with one of five reasons:
 
 | Reason | Meaning | What the feed does |
 |---|---|---|
@@ -90,6 +90,7 @@ A file can come back **delayed** instead of signed, with one of four reasons:
 | `too_long` | the file's length (the sidecar's claim, or the decode's own measure when the sidecar declares none) is over four hours — nothing is ever truncated | a verdict on the file as fed |
 | `decode_failed` | ffmpeg could not decode it, or it is under 45 s (a signature shorter than that is not trusted) | a verdict on the file as fed |
 | `no_space` | the cache policy had no room for the signature | transient: the file is retried on later passes until room is made |
+| `missing_sidecar` | the signature is in the bucket but its companion sidecar is not — a legacy object from before the sidecar was mandatory, or a half-landed sign the bucket held onto | re-feed the key: the row has no size or mtime, so the scan proposes the file for a fresh sign that re-uploads both |
 
 A sidecar with no `duration_s` makes no length claim, and no claim is never a mismatch; only
 the four-hour backstop applies to it.
@@ -171,10 +172,13 @@ written only by the harvester.
 | `url`, `title`, `artist`, `duration_s` | carried from the sidecar, unchanged |
 
 **The ledger is seeded at the harvester's first start**: one `signed` row for every key the
-signature bucket already holds, with `size`, `mtime`, `signed_at`, `url`, `title`, `artist`
-and `duration_s` all empty — a seeded row has no file to name and no sidecar to carry — so the
-ledger is the complete record of the pool from its first day. On every later start the rows
-are reconciled against the bucket's listing: a `signed` row whose object is gone loses its
+signature bucket already holds **with its companion sidecar beside it** — both objects,
+verified by the listing — with `size`, `mtime`, `signed_at`, `url`, `title`, `artist`
+and `duration_s` all empty (a seeded row has no file to name and no sidecar to carry), so the
+ledger is the complete record of the pool from its first day. A signature whose sidecar is
+NOT in the bucket is seeded `delayed` with `missing_sidecar` instead, so the feeder re-feeds
+the key for a fresh sign that re-uploads both. On every later start the rows are reconciled
+against the bucket's listing: a `signed` row whose object is gone loses its
 `uploaded_etag`, and a `signed` row missing its etag whose object is present gains it.
 
 ### What a feed reads

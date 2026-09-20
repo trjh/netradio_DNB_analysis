@@ -840,13 +840,28 @@ def reconcile_ledger(state=None):
 
     if not ledger:
         rows = {}
+        # A `signed` row is the contract's promise that both `<key>.npy` and `<key>.json`
+        # landed together (docs/HARVEST_FEED.md). The listing carries both shapes, so a
+        # signature whose companion sidecar is NOT in the bucket -- a legacy object from
+        # before the sidecar was mandatory, or a half-landed sign the bucket held onto --
+        # is NOT marked complete: it is seeded `delayed` with `missing_sidecar`, and the
+        # feeder re-feeds the key (the row's size and mtime are empty, so any local file
+        # differs and the scan proposes it for a fresh sign that re-uploads both).
         for name, etag in objects.items():
+            if not name.endswith(".npy"):
+                continue                       # the sidecar entries are checked per signature
             key = name[:-len(".npy")]
-            rows[key] = _row(key, None, None, "signed", None, None, etag or None, {})
+            has_sidecar = (key + ".json") in objects
+            if has_sidecar:
+                rows[key] = _row(key, None, None, "signed", None, None, etag or None, {})
+            else:
+                rows[key] = _row(key, None, None, "delayed", "missing_sidecar", None, None, {})
         _save(LEDGER, rows)
-        return dict(res, seeded=len(rows),
-                    why="seeded one signed row per bucket key, size and mtime empty -- the "
-                        "ledger is the pool's complete record from its first day")
+        seeded = sum(1 for r in rows.values() if r.get("status") == "signed")
+        return dict(res, seeded=seeded,
+                    why="seeded one signed row per complete bucket key (signature plus "
+                        "sidecar); legacy signature-only keys are delayed missing_sidecar "
+                        "-- the ledger is the pool's complete record from its first day")
 
     signed = [k for k, r in ledger.items()
               if isinstance(r, dict) and r.get("status") == "signed"]

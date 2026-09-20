@@ -40,6 +40,10 @@ PREFIX = "chroma/"                  # bucket prefix for signatures (same keys as
 # any stem that is not this shape, so a misnamed object would seed a ledger row no local
 # file can ever satisfy, and the pool's count would say one thing while the scan says another.
 _KEY_NAME = re.compile(r"u[0-9a-f]{20}\.npy", re.ASCII)
+# The sidecar beside every signature: `<key>.json`. The listing admits the same key shape,
+# so a sidecar filed under any other name is invisible to the seeding that decides whether
+# a signature is complete (both objects) or legacy (the signature alone).
+_SIDECAR_NAME = re.compile(r"u[0-9a-f]{20}\.json", re.ASCII)
 
 # Session memory: keys HEAD-verified this run, so eviction sweeps don't re-HEAD every pass.
 _verified = {}                      # key -> remote size
@@ -186,10 +190,15 @@ def fetch(key, dest_dir):
 
 
 def list_objects():
-    """Every signature object in the bucket: {name: etag}, or None on failure — callers
-    must treat 'unknown' differently from 'empty'. The ETags ride along because the
+    """Every signature and sidecar object in the bucket: {name: etag}, or None on failure —
+    callers must treat 'unknown' differently from 'empty'. The ETags ride along because the
     ledger's rows record them: one listing answers both "what is in the pool" and "which
-    object each row points at"."""
+    object each row points at".
+
+    Both key shapes are admitted -- `<key>.npy` and `<key>.json` -- so a caller can tell a
+    complete entry (both objects) from a legacy signature-only one (the sidecar the contract
+    now requires was never written). Callers that want only the signatures filter to `.npy`
+    themselves, or use `list_keys`."""
     if not enabled():
         return None
     objects, token = {}, None
@@ -215,7 +224,7 @@ def list_objects():
                 name, etag = entry[0][len(PREFIX):], entry[1]
             except (TypeError, IndexError):
                 continue                    # a shape the contract does not describe: skip it
-            if _KEY_NAME.fullmatch(name):
+            if _KEY_NAME.fullmatch(name) or _SIDECAR_NAME.fullmatch(name):
                 objects[name] = (etag or "").strip('"') or None
         if not token:
             return objects
@@ -225,7 +234,9 @@ def list_keys():
     """Every signature key in the bucket (u….npy under the prefix). None on failure —
     callers must treat 'unknown' differently from 'empty'."""
     objects = list_objects()
-    return None if objects is None else set(objects)
+    if objects is None:
+        return None
+    return {name for name in objects if name.endswith(".npy")}
 
 
 def evictable(path, key, scored, qkeys):
