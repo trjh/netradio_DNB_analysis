@@ -358,6 +358,11 @@ class LiveCLI(unittest.TestCase):
         for k in saved_env:
             os.environ.pop(k, None)
         os.environ["NETRADIO_CACHE_ROOT"] = root
+        # The disk floor is the host's, not the test's: this path only resolves
+        # directories (no reserve, no commit), but a future edit that did reserve
+        # would be silently refused on a host past the default 82%. Pin the floor
+        # out of the way, the same convention as tests/test_harvest_signer.py.
+        os.environ["NETRADIO_DISK_MAX_PCT"] = "100"
         saved_registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
         cache_budget._REGISTRY.clear()
         cache_budget._STATS.clear()
