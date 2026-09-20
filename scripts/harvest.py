@@ -1391,7 +1391,10 @@ def stamp_pool(state):
     prev = state.get("pool") or {}
     canary_key = (os.environ.get("NETRADIO_CANARY_KEY") or "").strip()
     canary = 1 if canary_key and (canary_key + ".npy") in objects else 0
-    pool = {"count": len(objects), "at": _now(), "canary": canary}
+    # The listing carries both .npy and .json (so reconciliation can prove an entry is
+    # complete); the pool's count is the number of SIGNATURES, so count .npy names only.
+    count = sum(1 for name in objects if name.endswith(".npy"))
+    pool = {"count": count, "at": _now(), "canary": canary}
     state["pool"] = pool
     return any(pool.get(k) != prev.get(k) for k in ("count", "canary"))
 
