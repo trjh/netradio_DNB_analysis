@@ -212,13 +212,15 @@ only the mysteries it holds a clip of** (see
 [PROCESS §8b](../PROCESS.md#8b-giving-the-harvester-a-new-or-better-mystery-track-clip)) — and
 keep an excerpt if the match is near. Then sleep and repeat.
 
-A file comes back **delayed** instead of `signed` with one of four reasons: `length_mismatch`
+A file comes back **delayed** instead of `signed` with one of five reasons: `length_mismatch`
 (the decoded length disagrees with the sidecar's `duration_s` by more than `max(10 s, 2 %)` — a
 hand-over that disagrees with its own label is not signed), `too_long` (over four hours —
 refused, never truncated; splitting long audio is the feeder's job, each part a key of its
-own), `decode_failed`, or `no_space` (transient — retried on later passes until the policy makes
-room). A file that vanishes mid-sign gets **no row at all**, so it stays on the feeder's list
-and is signed again when it comes back.
+own), `decode_failed`, `no_space` (transient — retried on later passes until the policy makes
+room), or `missing_sidecar` (the signature is in the bucket but its companion sidecar is
+not — re-feed the key, and the row's empty size and mtime make the scan propose it for a
+fresh sign that re-uploads both). A file that vanishes mid-sign gets **no row at all**, so it
+stays on the feeder's list and is signed again when it comes back.
 
 **It proposes; you dispose.** It never marks a mystery solved. It keeps the best **leads** (best 12
 per mystery, evicting the worst when a better one lands) and you rule on them on the harvest

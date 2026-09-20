@@ -143,6 +143,18 @@ class PoolStamp(unittest.TestCase):
         self.assertTrue(harvest.stamp_pool(state))
         self.assertEqual(state["pool"]["canary"], 0)
 
+    def test_the_count_is_signatures_not_signature_plus_sidecar(self):
+        """The listing carries both .npy and .json (so reconciliation can prove an entry
+        is complete), but the pool's count is the number of SIGNATURES -- one per .npy --
+        not the number of objects. A bucket of two complete pairs publishes 2, not 4."""
+        harvest._remote_objects = lambda max_age_s=900: self._objects(
+            "u" + "a" * 20 + ".npy", "u" + "a" * 20 + ".json",
+            "u" + "b" * 20 + ".npy", "u" + "b" * 20 + ".json")
+        state = {}
+        self.assertTrue(harvest.stamp_pool(state))
+        self.assertEqual(state["pool"]["count"], 2,
+                         "two complete pairs -> two signatures, not four objects")
+
 
 @unittest.skipUnless(harvest and HAVE_LIBROSA,
                      "librosa unavailable -- see requirements-streamalign.txt")

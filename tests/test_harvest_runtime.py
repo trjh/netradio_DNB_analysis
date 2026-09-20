@@ -486,6 +486,101 @@ class TheOnDemandRescanRefusesADarkPolicy(unittest.TestCase):
                          "a refused rescan writes no state")
 
 
+@unittest.skipIf(harvest is None, "needs the librosa venv")
+class AFailedLoadIsNotACompletedScore(unittest.TestCase):
+    """`rescan` used to return `len(pairs)` whether or not each signature loaded: a held
+    signature whose fetch or load failed was not recorded in `state["scored"]`, but the
+    count said it was, so `rescan_pending` went to 0 and the harvester printed "Every
+    held signature has now met every mystery" over work that never ran. A pair whose
+    `_load_sig` returns None is not scored: it stays in the pending count and is tried
+    again on the next pass, and the count never claims a completion the cache did not
+    let happen.
+    """
+
+    def setUp(self):
+        import numpy as np
+        self.tmp = tempfile.mkdtemp(prefix="rescan-load-")
+        self.cache = os.path.join(self.tmp, "chroma")
+        os.makedirs(self.cache)
+        self._chroma_dir = harvest._chroma_dir
+        harvest._chroma_dir = lambda: self.cache
+        self._paths = harvest.LEDGER, harvest.STATE
+        harvest.LEDGER = os.path.join(self.tmp, "ledger.json")
+        harvest.STATE = os.path.join(self.tmp, "state.json")
+        self.np = np
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        harvest._chroma_dir = self._chroma_dir
+        harvest.LEDGER, harvest.STATE = self._paths
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _ledger(self, *keys):
+        return {k: harvest._row(k, 1, 1.0, "signed", None, "then", "e", {}) for k in keys}
+
+    def _sig_file(self, key, chroma):
+        """Write a real signature file the held check finds and _load_sig reads."""
+        self.np.save(os.path.join(self.cache, key + ".npy"), chroma)
+
+    def test_a_failed_load_is_not_counted_and_stays_pending(self):
+        state = {"matches": [], "kept": 0, "scored": {}}
+        good, bad = "u" + "a" * 20, "u" + "b" * 20
+        ledger = self._ledger(good, bad)
+        qs = [(4, None, "4:fp")]
+        chroma = self.np.zeros((12, 8), dtype="float32")
+        # Only the good key has a signature file on disk; the bad key is held only by the
+        # bucket's listing, so unscored_pairs proposes both -- but _load_sig returns None
+        # for the bad key (a bucket fetch that failed, or a corrupt load).
+        self._sig_file(good, chroma)
+        held = {bad + ".npy": "e", good + ".npy": "e"}
+
+        def _load(key):
+            path = os.path.join(self.cache, key + ".npy")
+            try:
+                return self.np.load(path).astype("float32")
+            except (OSError, ValueError):
+                return None
+
+        # A no-match cost: the good key loads and is scored (recorded), but no hit is added.
+        with unittest.mock.patch.object(harvest, "_load_sig", _load), \
+                unittest.mock.patch.object(harvest._cm, "match",
+                                          return_value=(1.0, 0, 0.0)), \
+                unittest.mock.patch.object(harvest, "_remote_objects",
+                                           lambda max_age_s=900: held):
+            n = harvest.rescan(state, ledger, set(), qs)
+        # Only the loadable pair was scored; the failed load is not counted.
+        self.assertEqual(n, 1)
+        # The loadable pair is recorded as scored; the failed one is not.
+        self.assertEqual(state["scored"]["4:fp"], [good + ".npy"])
+        # The failed pair is still pending: a fresh rescan still proposes it.
+        with unittest.mock.patch.object(harvest, "_load_sig", _load), \
+                unittest.mock.patch.object(harvest._cm, "match",
+                                          return_value=(1.0, 0, 0.0)), \
+                unittest.mock.patch.object(harvest, "_remote_objects",
+                                           lambda max_age_s=900: held):
+            still = harvest.unscored_pairs(state, ledger, set(), qs)
+        self.assertEqual([p[3] for p in still], [bad],
+                         "the failed-load pair stays pending, not stamped complete")
+
+    def test_a_successful_no_match_score_is_counted(self):
+        """A pair that loaded but did not match is still a completed score -- `rescan` must
+        not over-correct and leave no-match pairs pending too. `score_cached` records the
+        pair in `state["scored"]` once the signature loaded, whether it matched or not."""
+        state = {"matches": [], "kept": 0, "scored": {}}
+        key = "u" + "c" * 20
+        ledger = self._ledger(key)
+        qs = [(4, None, "4:fp")]
+        chroma = self.np.zeros((12, 8), dtype="float32")
+        self._sig_file(key, chroma)
+        # A match cost above KEEP_CEILING -> score_cached returns None, but the pair IS
+        # recorded as scored (the signature loaded and was considered).
+        with unittest.mock.patch.object(harvest._cm, "match",
+                                       return_value=(1.0, 0, 0.0)):
+            n = harvest.rescan(state, ledger, set(), qs)
+        self.assertEqual(n, 1, "a loaded-but-no-match pair is a completed score")
+        self.assertEqual(state["scored"]["4:fp"], [key + ".npy"])
+
+
 if __name__ == "__main__":
     unittest.main()
 

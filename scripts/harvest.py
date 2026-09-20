@@ -829,7 +829,8 @@ def reconcile_ledger(state=None):
     Mutates the caller's `state` when it keeps one (run does); loads its own otherwise.
     Returns {"seeded", "dropped", "restored", "reported", "cleared", "why"}.
     """
-    res = {"seeded": 0, "dropped": 0, "restored": 0, "reported": False, "cleared": False}
+    res = {"seeded": 0, "dropped": 0, "restored": 0, "reported": False,
+           "cleared": False, "sidecar_lost": 0}
     objects = _remote_objects()
     if objects is None:
         return dict(res, why="the bucket cannot be listed -- cannot tell a gone object from "
@@ -840,13 +841,28 @@ def reconcile_ledger(state=None):
 
     if not ledger:
         rows = {}
+        # A `signed` row is the contract's promise that both `<key>.npy` and `<key>.json`
+        # landed together (docs/HARVEST_FEED.md). The listing carries both shapes, so a
+        # signature whose companion sidecar is NOT in the bucket -- a legacy object from
+        # before the sidecar was mandatory, or a half-landed sign the bucket held onto --
+        # is NOT marked complete: it is seeded `delayed` with `missing_sidecar`, and the
+        # feeder re-feeds the key (the row's size and mtime are empty, so any local file
+        # differs and the scan proposes it for a fresh sign that re-uploads both).
         for name, etag in objects.items():
+            if not name.endswith(".npy"):
+                continue                       # the sidecar entries are checked per signature
             key = name[:-len(".npy")]
-            rows[key] = _row(key, None, None, "signed", None, None, etag or None, {})
+            has_sidecar = (key + ".json") in objects
+            if has_sidecar:
+                rows[key] = _row(key, None, None, "signed", None, None, etag or None, {})
+            else:
+                rows[key] = _row(key, None, None, "delayed", "missing_sidecar", None, None, {})
         _save(LEDGER, rows)
-        return dict(res, seeded=len(rows),
-                    why="seeded one signed row per bucket key, size and mtime empty -- the "
-                        "ledger is the pool's complete record from its first day")
+        seeded = sum(1 for r in rows.values() if r.get("status") == "signed")
+        return dict(res, seeded=seeded,
+                    why="seeded one signed row per complete bucket key (signature plus "
+                        "sidecar); legacy signature-only keys are delayed missing_sidecar "
+                        "-- the ledger is the pool's complete record from its first day")
 
     signed = [k for k, r in ledger.items()
               if isinstance(r, dict) and r.get("status") == "signed"]
@@ -871,6 +887,19 @@ def reconcile_ledger(state=None):
         if not (isinstance(row, dict) and row.get("status") == "signed"):
             continue
         if (key + ".npy") in objects:
+            # The signature is there. The contract's `signed` row promises the companion
+            # sidecar is in the bucket beside it; a listing that no longer holds the
+            # sidecar means the entry is incomplete -- demote to `delayed` with
+            # `missing_sidecar` so the feeder re-feeds the key for a fresh sign that
+            # re-uploads both. (The mass-loss guard above is about the SIGNATURE being
+            # gone; a missing sidecar is a per-row incompleteness, repaired in place.)
+            if (key + ".json") not in objects:
+                row["status"] = "delayed"
+                row["reason"] = "missing_sidecar"
+                row["uploaded_etag"] = None
+                row["signed_at"] = None
+                res["sidecar_lost"] = res.get("sidecar_lost", 0) + 1
+                continue
             if not row.get("uploaded_etag"):
                 etag = objects[key + ".npy"]
                 if etag:
@@ -879,7 +908,7 @@ def reconcile_ledger(state=None):
         elif row.get("uploaded_etag"):
             row["uploaded_etag"] = None
             res["dropped"] += 1
-    if res["dropped"] or res["restored"]:
+    if res["dropped"] or res["restored"] or res.get("sidecar_lost"):
         _save(LEDGER, ledger)
     # ANY reconcile that did not report stands the STORE alert down: `gone` can be empty here
     # with the alert still standing (a mis-listed bucket, fixed between starts), and a clear
@@ -903,10 +932,16 @@ def reconcile_ledger(state=None):
         # canary path does not clear it either (it only clears a `kind: "canary"` alert).
         # Such an alert survives until a human clears it, which is the safe default -- the
         # alternative is an alarm that disappears on a healthy pass without anyone asking.
-    why = ("dropped the etag of %d signed row(s) whose object is gone; restored %d missing "
-           "etag(s) whose object is back; every other signed row still points at its object"
-           % (res["dropped"], res["restored"])) if (res["dropped"] or res["restored"]) else \
-          "every signed row still points at an object the bucket holds"
+    parts = []
+    if res["dropped"]:
+        parts.append("dropped the etag of %d signed row(s) whose object is gone" % res["dropped"])
+    if res["restored"]:
+        parts.append("restored %d missing etag(s) whose object is back" % res["restored"])
+    if res.get("sidecar_lost"):
+        parts.append("demoted %d signed row(s) whose companion sidecar is gone to delayed "
+                     "missing_sidecar" % res["sidecar_lost"])
+    why = ("; ".join(parts)) if parts else \
+        "every signed row still points at a complete entry the bucket holds"
     return dict(res, why=why)
 
 
@@ -1373,7 +1408,10 @@ def stamp_pool(state):
     prev = state.get("pool") or {}
     canary_key = (os.environ.get("NETRADIO_CANARY_KEY") or "").strip()
     canary = 1 if canary_key and (canary_key + ".npy") in objects else 0
-    pool = {"count": len(objects), "at": _now(), "canary": canary}
+    # The listing carries both .npy and .json (so reconciliation can prove an entry is
+    # complete); the pool's count is the number of SIGNATURES, so count .npy names only.
+    count = sum(1 for name in objects if name.endswith(".npy"))
+    pool = {"count": count, "at": _now(), "canary": canary}
     state["pool"] = pool
     return any(pool.get(k) != prev.get(k) for k in ("count", "canary"))
 
@@ -1588,7 +1626,14 @@ def forget(state, num):
 
 
 def rescan(state, ledger, ruled, qs, limit=None, verbose=True):
-    """Work through the unscored pairs. Returns how many were scored.
+    """Work through the unscored pairs. Returns how many were scored -- a pair whose
+    signature could not be loaded is not scored: it stays in the pending count and is
+    tried again on the next pass, and the harvester never reports a held signature as
+    having met every mystery while one it could not read is still outstanding.
+
+    `score_cached` records a pair in `state["scored"]` once the signature was loaded and
+    scored -- whether it matched or not -- so a pair whose `_load_sig` returned None is
+    the one that is not recorded, and that is the one this count leaves pending.
 
     Advances the `current_query` block (§5.6) as it works one mystery: `mystery`, `query_key`,
     `started` (when this mystery's chunk began), `compared`, `remaining`, `updated`. A rescan
@@ -1614,6 +1659,8 @@ def rescan(state, ledger, ruled, qs, limit=None, verbose=True):
     remaining_in_batch = {}
     for num, _qc, qkey, _key in pairs:
         remaining_in_batch[(num, qkey)] = remaining_in_batch.get((num, qkey), 0) + 1
+    scored = state.setdefault("scored", {})
+    n = 0
     for num, qc, qkey, key in pairs:
         cq = state.get("current_query")
         if not (isinstance(cq, dict) and cq.get("mystery") == num
@@ -1625,12 +1672,16 @@ def rescan(state, ledger, ruled, qs, limit=None, verbose=True):
                                       "started": _now(), "compared": 0,
                                       "remaining": remaining_in_batch.get((num, qkey), 0),
                                       "updated": _now()}
+        before = len(scored.get(qkey, []))
         hit = score_cached(state, num, qc, qkey, key)
+        if len(scored.get(qkey, [])) <= before:
+            continue                       # the load failed: not scored, stays pending
+        n += 1
         if hit and verbose:
             a = int(hit.get("at_s") or 0)
             print("  %s  MT%d  cost %.4f  at %d:%02d  %s  (from a held signature -- no decode)"
                   % (hit["verdict"], num, hit["cost"], a // 60, a % 60, key))
-    return len(pairs)
+    return n
 
 
 def evict_overfull(state, num):
@@ -2381,9 +2432,17 @@ def main():
         print("# rescanning %d (signature, mystery) pair(s) against MT%s -- no network, ~%.0f min"
               % (todo, "/MT".join(str(n) for n, _, _ in qs), todo * 0.06 / 60))
         n = rescan(state, ledger, ruled, qs)
-        state["rescan_pending"] = 0
+        # A pair whose signature could not be loaded is not scored: rescan left it out of
+        # the count, so it stays in `rescan_pending` for the next pass. The completion
+        # line is the one claim that must not over-reach -- it speaks only when every
+        # held signature actually met every mystery this pass.
+        state["rescan_pending"] = todo - n
         _save(STATE, state)
-        print("# scored %d. Every held signature has now met every mystery." % n)
+        if n < todo:
+            print("# scored %d of %d; %d pair(s) could not load their signature and stay "
+                  "pending -- re-run once the cache or bucket is whole." % (n, todo, todo - n))
+        else:
+            print("# scored %d. Every held signature has now met every mystery." % n)
         return
     if args.pause:
         open(PAUSE, "w").close()

@@ -666,7 +666,8 @@ class TheChildEntryPoint(unittest.TestCase):
                    PATH=bindir + os.pathsep + os.environ.get("PATH", ""),
                    PYTHONPATH=SCRIPTS,
                    NETRADIO_SIG_BUCKET="",          # sigstore dark: no upload, no credentials
-                   NETRADIO_CACHE_ROOT=cache_root)
+                   NETRADIO_CACHE_ROOT=cache_root,
+                   NETRADIO_DISK_MAX_PCT="100")     # the host's floor must not refuse the sign
         env.pop("NETRADIO_HARVEST_CHILD", None)
         with open(os.path.join(self.job, "sign.json"), "w") as fh:
             json.dump({"path": path, "expect_s": 50}, fh)
@@ -913,6 +914,11 @@ class ASignatureEvictedBetweenRenameAndCommit(unittest.TestCase):
         os.environ["NETRADIO_CHROMA_CACHE_DIR"] = os.path.join(self.tmp, "cache")
         os.environ["NETRADIO_CHROMA_CACHE_GB"] = "0.000002"
         os.environ["NETRADIO_HARVEST_CHILD"] = "0"
+        # The disk floor is the host's, not the test's: a machine whose cache root volume
+        # is past the default 82% refuses on the floor before the cap this case exercises,
+        # turning a "the entry was evicted between rename and commit" test into a plain
+        # `no_space`. Pin the floor out of the way so the cap is the only thing refusing.
+        os.environ["NETRADIO_DISK_MAX_PCT"] = "100"
         self._paths = harvest.LEDGER, harvest.STATE, harvest.JOBS
         harvest.LEDGER = os.path.join(self.tmp, "ledger.json")
         harvest.STATE = os.path.join(self.tmp, "state.json")

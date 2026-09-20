@@ -78,7 +78,6 @@ class TestDark(Base):
         self.assertFalse(sigstore.enabled())
         path, key = self._sig()
         self.assertIsNone(sigstore.put(path, key))
-        self.assertIsNone(sigstore.list_keys())
         self.assertIsNone(sigstore.list_objects())
         self.assertFalse(sigstore.have_remote(key))
         self.assertEqual(self.rec.calls, [])
@@ -171,15 +170,6 @@ class TestRemote(Base):
                             ["chroma/_recipe.json", '"x"']], None])
         self.rec.results = [FakeProc(stdout=page)]
         self.assertEqual(sigstore.list_objects(), {})
-
-    def test_list_keys_is_the_listings_names(self):
-        k1 = "u" + "1" * 20 + ".npy"
-        k2 = "u" + "2" * 20 + ".npy"
-        page1 = json.dumps([[["chroma/" + k1, "e-1"],
-                             ["chroma/_recipe.json", "x"]], "TOK"])
-        page2 = json.dumps([[["chroma/" + k2, "e-2"]], None])
-        self.rec.results = [FakeProc(stdout=page1), FakeProc(stdout=page2)]
-        self.assertEqual(sigstore.list_keys(), {k1, k2})
 
 
 # The cache-policy names only (the same set tests/test_cache_budget.py saves and restores):

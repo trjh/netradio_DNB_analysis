@@ -162,6 +162,11 @@ class _SignerCase(unittest.TestCase):
             os.environ.pop(k, None)
         os.environ["NETRADIO_CACHE_ROOT"] = self.root
         os.environ["NETRADIO_HARVEST_CHILD"] = "0"      # the decode runs in this process
+        # The disk floor is the host's, not the test's: a machine whose cache root volume
+        # is past the default 82% would refuse every `reserve` and turn every "signed"
+        # case into `no_space` -- a verdict on the host, not the code. The floor is
+        # exercised by tests/test_cache_budget.py; here it is pinned out of the way.
+        os.environ["NETRADIO_DISK_MAX_PCT"] = "100"
         self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
         cache_budget._REGISTRY.clear()
         cache_budget._STATS.clear()
@@ -681,13 +686,24 @@ class TheLedger(_SignerCase):
     def _objects(self, *names, etag="e-%s"):
         return {name: etag % name[:6] for name in names}
 
-    def test_the_first_start_seeds_one_signed_row_per_bucket_key(self):
-        objects = self._objects("u" + "a" * 20 + ".npy", "u" + "b" * 20 + ".npy")
+    def test_the_first_start_seeds_one_signed_row_per_complete_bucket_key(self):
+        """A `signed` row is the contract's promise that both `<key>.npy` and `<key>.json`
+        landed together. The listing carries both shapes, so the seed marks a key complete
+        only when both are there -- and a signature whose sidecar is not in the bucket is
+        `delayed` with `missing_sidecar`, so the feeder re-feeds the key for a fresh sign
+        that re-uploads both (the row's empty size and mtime mean any local file differs
+        and the scan proposes it)."""
+        complete_a = "u" + "a" * 20
+        complete_b = "u" + "b" * 20
+        sidecarless = "u" + "c" * 20
+        objects = self._objects(complete_a + ".npy", complete_a + ".json",
+                               complete_b + ".npy", complete_b + ".json",
+                               sidecarless + ".npy")
         with mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: objects):
             res = harvest.reconcile_ledger({"issues": []})
-        self.assertEqual(res["seeded"], 2)
+        self.assertEqual(res["seeded"], 2)        # the two complete keys
         rows = harvest._load(harvest.LEDGER, {})
-        for key in ("u" + "a" * 20, "u" + "b" * 20):
+        for key in (complete_a, complete_b):
             with self.subTest(key=key):
                 row = rows[key]
                 self.assertEqual((row["status"], row["key"]), ("signed", key))
@@ -700,6 +716,11 @@ class TheLedger(_SignerCase):
                 # seen a sidecar, and the contract says so
                 for field in ("url", "title", "artist", "duration_s"):
                     self.assertIsNone(row[field])
+        # the signature-only key is NOT marked complete -- it is delayed, and re-fed
+        legacy = rows[sidecarless]
+        self.assertEqual((legacy["status"], legacy["reason"]), ("delayed", "missing_sidecar"))
+        self.assertIsNone(legacy["uploaded_etag"],
+                          "no etag is recorded for a signature the contract does not vouch for")
 
     def test_a_gone_object_loses_its_etag(self):
         key = "u" + "a" * 20
@@ -710,8 +731,14 @@ class TheLedger(_SignerCase):
         rows[key] = harvest._row(key, 1, 1.0, "signed", None, "then", "keep", {})
         rows[gone] = harvest._row(gone, 1, 1.0, "signed", None, "then", "lost", {})
         harvest._save(harvest.LEDGER, rows)
-        objects = {k + ".npy": "e-%s" % k[:6]
-                   for k in list(rows) if k != gone}
+        # The listing holds both objects for every kept key (signature plus sidecar), so a
+        # complete entry stays signed; the gone key's signature is absent, so its etag drops.
+        objects = {}
+        for k in list(rows):
+            if k == gone:
+                continue
+            objects[k + ".npy"] = "e-%s" % k[:6]
+            objects[k + ".json"] = "e-%s" % k[:6]
         with mock.patch.object(harvest, "_remote_objects",
                                lambda max_age_s=900: objects):
             res = harvest.reconcile_ledger({"issues": []})
@@ -727,8 +754,10 @@ class TheLedger(_SignerCase):
         key = "u" + "a" * 20
         harvest._save(harvest.LEDGER,
                       {key: harvest._row(key, 1, 1.0, "signed", None, "then", None, {})})
+        # Both objects present: the entry is complete, and the missing etag is restored.
         with mock.patch.object(harvest, "_remote_objects",
-                               lambda max_age_s=900: self._objects(key + ".npy")):
+                               lambda max_age_s=900:
+                               self._objects(key + ".npy", key + ".json")):
             res = harvest.reconcile_ledger({"issues": []})
         self.assertEqual(res["restored"], 1)
         self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["uploaded_etag"],
@@ -779,10 +808,12 @@ class TheLedger(_SignerCase):
             first = harvest.reconcile_ledger(state)
         self.assertTrue(first["reported"])
         self.assertIn("sig_alert", state)
-        # the configuration is fixed: the next start's listing holds every object again
+        # the configuration is fixed: the next start's listing holds every object again,
+        # both the signature and the sidecar beside it (a complete entry for every key)
         with mock.patch.object(harvest, "_remote_objects",
                                lambda max_age_s=900:
-                               self._objects(*(k + ".npy" for k in keys))):
+                               self._objects(*[n for k in keys
+                                               for n in (k + ".npy", k + ".json")])):
             second = harvest.reconcile_ledger(state)
         self.assertFalse(second["reported"])
         self.assertTrue(second["cleared"], "the loss is gone, and the alert went with it")
@@ -797,6 +828,30 @@ class TheLedger(_SignerCase):
             res = harvest.reconcile_ledger({"issues": []})
         self.assertEqual(res["dropped"], 1)
         self.assertIsNone(harvest._load(harvest.LEDGER, {})[key]["uploaded_etag"])
+
+    def test_a_signed_row_whose_sidecar_leaves_is_demoted(self):
+        """A `signed` row is the contract's promise that both objects are in the bucket.
+        The signature stays but its companion sidecar is gone (a half-landed sign the
+        bucket held onto, or a sidecar deleted after a successful sign): the entry is
+        no longer complete, and leaving it `signed` with an etag would tell the feeder
+        the file is done with -- so the reconcile demotes it to `delayed` with
+        `missing_sidecar`, clearing the etag and signed_at so the feeder re-feeds the
+        key for a fresh sign that re-uploads both. The signature being still there is
+        not a reason to keep the row complete."""
+        key = "u" + "a" * 20
+        harvest._save(harvest.LEDGER,
+                      {key: harvest._row(key, 1, 1.0, "signed", None, "then", "e", {})})
+        # The listing holds the signature but not the sidecar.
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900: self._objects(key + ".npy")):
+            res = harvest.reconcile_ledger({"issues": []})
+        self.assertEqual(res["sidecar_lost"], 1)
+        self.assertEqual((res["dropped"], res["restored"]), (0, 0),
+                         "the signature is still there -- neither dropped nor restored")
+        row = harvest._load(harvest.LEDGER, {})[key]
+        self.assertEqual((row["status"], row["reason"]), ("delayed", "missing_sidecar"))
+        self.assertIsNone(row["uploaded_etag"], "no etag on an incomplete entry")
+        self.assertIsNone(row["signed_at"], "no longer certified as signed")
 
     def test_a_delayed_row_is_neither_seeded_nor_reconciled(self):
         """The reconciliation's business is the `signed` rows: a delayed row is a verdict on

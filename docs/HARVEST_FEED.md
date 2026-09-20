@@ -82,7 +82,7 @@ the file being done with. When the bucket is configured and either upload fails,
 **no row at all** and is signed again on a later pass, so a bucket that is briefly refusing
 writes costs one re-decode, never a signature with no sidecar beside it.
 
-A file can come back **delayed** instead of signed, with one of four reasons:
+A file can come back **delayed** instead of signed, with one of five reasons:
 
 | Reason | Meaning | What the feed does |
 |---|---|---|
@@ -90,9 +90,40 @@ A file can come back **delayed** instead of signed, with one of four reasons:
 | `too_long` | the file's length (the sidecar's claim, or the decode's own measure when the sidecar declares none) is over four hours — nothing is ever truncated | a verdict on the file as fed |
 | `decode_failed` | ffmpeg could not decode it, or it is under 45 s (a signature shorter than that is not trusted) | a verdict on the file as fed |
 | `no_space` | the cache policy had no room for the signature | transient: the file is retried on later passes until room is made |
+| `missing_sidecar` | the signature is in the bucket but its companion sidecar is not — a legacy object from before the sidecar was mandatory, or a half-landed sign the bucket held onto | re-feed the key: the row has no size or mtime, so the scan proposes the file for a fresh sign that re-uploads both |
 
 A sidecar with no `duration_s` makes no length claim, and no claim is never a mismatch; only
 the four-hour backstop applies to it.
+
+## The signature bucket
+
+The harvester uploads every signature, with its sidecar beside it, to one S3-compatible
+signature bucket. The bucket is what makes a signature durable: the local cache is bounded
+and evicts cold entries, and the bucket is the record the ledger is reconciled against. The
+upload, the HEAD, and the listing are all through the AWS CLI (`aws`), so the bucket is
+**configured, not assumed** — the harvester does not run a signer that promises an upload it
+cannot make.
+
+These settings live in `.env` (gitignored, machine-specific), alongside `NETRADIO_HARVEST_DIRS`
+and `NETRADIO_CACHE_ROOT`:
+
+| Variable | Required | Meaning |
+|---|---|---|
+| `NETRADIO_SIG_BUCKET` | yes, for uploads | the signature bucket's name |
+| `NETRADIO_AWS_CLI` | no | path to the `aws` executable; unset, the harvester resolves `aws` from `PATH` |
+| `NETRADIO_SIG_AWS_PROFILE` | no | an `--profile` to pass the CLI; unset, the CLI's own default profile applies |
+| `NETRADIO_SIG_S3_ENDPOINT` | no | an `--endpoint-url` for an S3-compatible provider; unset, the CLI's own default endpoint applies |
+
+AWS credentials are the CLI's own concern (environment, `~/.aws/credentials`, or the profile
+above); the harvester reads no credentials itself. The store is **on** only when both a
+bucket is named and the AWS CLI resolves to an executable; with the store on, a sign whose
+upload of either object fails writes no row, and the file is signed again on a later pass.
+
+**A dark store is a local-only sign, and it is visible.** With the store off — no bucket, or
+no `aws` resolvable — the harvester still signs, but the row carries no `uploaded_etag` and
+nothing reaches the bucket: the feed's read-back rule for a `signed` row with no etag (below)
+is what applies. The harvester does not present a dark store as a bucketed one: the row's
+absent etag is the mark, and the feed re-feeds the key.
 
 **A file that changes is signed again.** A file whose size or modification time no longer
 matches its row is re-signed, whatever the row said before — so a re-cut part can be offered
@@ -135,16 +166,19 @@ written only by the harvester.
 | `key` | the row's own key, the same as the object it is filed under |
 | `size`, `mtime` | the file as signed; a changed file is signed again |
 | `status` | `signed`, or `delayed` |
-| `reason` | for `delayed`: one of the four reasons above; `null` otherwise |
+| `reason` | for `delayed`: one of the five reasons above; `null` otherwise |
 | `signed_at` | when the signature was written; `null` on a delayed row |
 | `uploaded_etag` | the signature object's ETag in the bucket; absent when the signature is not there |
 | `url`, `title`, `artist`, `duration_s` | carried from the sidecar, unchanged |
 
 **The ledger is seeded at the harvester's first start**: one `signed` row for every key the
-signature bucket already holds, with `size`, `mtime`, `signed_at`, `url`, `title`, `artist`
-and `duration_s` all empty — a seeded row has no file to name and no sidecar to carry — so the
-ledger is the complete record of the pool from its first day. On every later start the rows
-are reconciled against the bucket's listing: a `signed` row whose object is gone loses its
+signature bucket already holds **with its companion sidecar beside it** — both objects,
+verified by the listing — with `size`, `mtime`, `signed_at`, `url`, `title`, `artist`
+and `duration_s` all empty (a seeded row has no file to name and no sidecar to carry), so the
+ledger is the complete record of the pool from its first day. A signature whose sidecar is
+NOT in the bucket is seeded `delayed` with `missing_sidecar` instead, so the feeder re-feeds
+the key for a fresh sign that re-uploads both. On every later start the rows are reconciled
+against the bucket's listing: a `signed` row whose object is gone loses its
 `uploaded_etag`, and a `signed` row missing its etag whose object is present gains it.
 
 ### What a feed reads
