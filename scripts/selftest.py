@@ -4,9 +4,12 @@
     . .venv/bin/activate && python scripts/selftest.py --offline
     . .venv/bin/activate && python scripts/selftest.py --live
 
-(`--live` currently answers "not checked": the harvester's fetch leg is gone and the check's
-replacement — re-scoring the canary's STORED signature, by its key — is the next change to this
-file. `--offline` is unaffected.)
+`--offline` re-runs one calibration case from local files (no network). `--live` re-scores
+the canary's STORED signature -- the canary's file arrives through the feeder like any entry,
+is signed once, and its signature lives in the signature bucket keyed by `NETRADIO_CANARY_KEY`;
+every pass the harvester pulls it back and scores it against the canary's mix and the current
+mysteries, demanding the known cost, rank and margin. A re-score, never a re-sign: the self-test
+needs no file and no fetch.
 
 Why this exists
 ---------------
@@ -24,22 +27,25 @@ against a pool of originals, and require its OWN original to come **first**. No 
 of seconds. This proves the matching *maths* — chroma, subsequence-DTW, the twelve transpositions
 — still works. If someone breaks `chroma_match.py`, this goes red immediately.
 
-**live()** — the streaming path (`yt-dlp` → `ffmpeg` → chroma → match) is exactly what offline()
-and the unit tests do **not** exercise, and it is the part with moving dependencies: yt-dlp breaks
-when YouTube changes, ffmpeg flags rot, a decode silently yields noise. So: fetch a **fresh
-stream** of a solved track's original, off the internet, right now, and require the harvester's
-real query path to flag it at a true-match cost.
+**live()** — the canary's STORED signature, re-scored. The canary is one known track whose file
+arrived through the feeder and was signed once; its signature sits in the bucket under its key
+(`NETRADIO_CANARY_KEY`). The check pulls that signature back and scores it against the canary's
+own mix (the query a calibration case would build from it) and against the current mystery
+queries, demanding the same three gates as offline: cost in the true-match range, rank first
+among the rivals, and a real margin. No network, no fetch — a re-score is all the live check is.
 
 The trap, and the canary URL
 ----------------------------
-If the stream we fetch is the *wrong upload*, the match fails — and the canary cries wolf, saying
-"matcher broken" when the matcher is fine. A canary that cries wolf gets ignored, and then it is
-worse than no canary at all.
+If the stream the canary was established from is the *wrong upload*, the match fails — and the
+canary cries wolf, saying "matcher broken" when the matcher is fine. A canary that cries wolf
+gets ignored, and then it is worse than no canary at all.
 
-So the canary URL is **established by validation, once**: we search for the record, fetch it, and
-score it against the **local original we already hold**. Only if that is a true match do we know
-the upload really is the record — and only then is it saved as the canary. From then on the URL is
-known-good, so a later failure is unambiguous: it is the *pipeline*, not the pick.
+So the canary URL is **established by validation, once** (see `establish_canary`): we search for
+the record, fetch it, and score it against the **local original we already hold**. Only if that
+is a true match do we know the upload really is the record — and only then is it saved as the
+canary. From then on the URL is known-good, so a later failure is unambiguous: it is the
+*matcher*, not the pick. The canary's key is the pool's own rule applied to that URL, and the
+harvester re-scores the signature filed under it.
 
 Rank, never a bare cost
 -----------------------
@@ -307,69 +313,74 @@ def best_rival_cost(mystery_queries, c_fetched):
     return (min(rivals) if rivals else 1.0), len(rivals)
 
 
-def live(fetch, mystery_queries=None):
-    """Fetch the canary FRESH off the internet and require the real query path to flag it.
+def live(c_canary, mystery_queries=None):
+    """Re-score the canary's STORED signature against the canary's mix and the mysteries.
 
-    `fetch(url) -> (chroma, samples, error)` is injected (a decode path the caller supplies)
-    so this module never imports the harvester -- and so the tests can drive it without a
-    network. The harvester's own fetch leg is gone, so nothing that runs on a schedule calls
-    this any more; the re-score of the canary's STORED signature replaces it, and until that
-    lands the `--live` command answers honestly rather than reaching for a fetch that is not
-    there (see main).
+    `c_canary` is the canary's chroma, injected by the caller (the harvester pulls it back
+    from the bucket by `NETRADIO_CANARY_KEY`; a test hands in a fake). This module never
+    imports the harvester, and the re-score needs no fetch: the canary's file arrived
+    through the feeder like any entry, was signed once, and its signature lives in the
+    bucket. Every pass the harvester calls this with the signature it pulled back, and
+    the `--live` command loads it through sigstore.
+
+    The canary is one known track. The check scores its stored signature against the
+    canary's own mix (the query a calibration case would build from the canary's track)
+    and against the current mystery queries, demanding the same three gates as offline:
+    cost in the true-match range, rank first among the rivals, and a real margin. A
+    degenerate matcher -- one that scores everything low, or everything the same -- fails
+    one of the three, the same way it fails offline.
     """
     canary = _read(CANARY, {})
-    if not canary.get("url"):
-        est = establish_canary(fetch)
-        if was_stopped(est.get("why")):
-            return {"kind": "live", "ok": None, "when": _now(),      # NOT recorded -- see STOPPED
-                    "why": "stopped while establishing the canary"}
-        if not est.get("ok"):
-            return record({"kind": "live", "ok": None, "when": _now(),
-                           "why": "no canary yet: %s" % est.get("why")})
-        canary = est
+    if not canary.get("track"):
+        return record({"kind": "live", "ok": None, "when": _now(),
+                       "why": "no canary yet: the canary has not been established"})
 
     subject = next((c for c in cases() if c["num"] == canary.get("track")), None)
     if subject is None:
         return record({"kind": "live", "ok": None, "when": _now(),
                        "why": "the canary's track is no longer in the calibration set"})
 
-    t0 = time.time()
-    c_fetched, _samples, err = fetch(canary["url"])          # the REAL path: yt-dlp -> ffmpeg -> chroma
-    if was_stopped(err):
-        return {"kind": "live", "ok": None, "when": _now(),          # NOT recorded -- see STOPPED
-                "url": canary["url"], "why": "stopped before the live check finished"}
-    if err or c_fetched is None:
-        return record({"kind": "live", "ok": False, "when": _now(), "url": canary["url"],
-                       "track": canary["track"], "name": canary["name"],
-                       "why": "the live pipeline could not fetch a KNOWN-GOOD url: %s" % err})
+    if c_canary is None:
+        # The caller could not load the signature: the cache is dark, the bucket listing
+        # failed, or the canary's key points at an object that is not there. None of those
+        # is a verdict on the matcher, so this is "not checked" rather than a failure -- the
+        # same state a missing calibration case reads, and the one a reader can tell apart
+        # from a PASS or a FAIL.
+        return record({"kind": "live", "ok": None, "when": _now(),
+                       "track": canary.get("track"), "name": canary.get("name"),
+                       "why": "the canary's signature is not available -- set "
+                              "NETRADIO_CANARY_KEY to the canary's key (see .env.example) and "
+                              "ensure its signature is in the bucket"})
 
+    t0 = time.time()
     mix = _cal.mix_query(subject)
     if mix is None:
         return record({"kind": "live", "ok": None, "when": _now(),
                        "why": "the canary's mix is too short to query with"})
     q_own = _cal.chroma(mix)
 
-    cost, shift, at = _cm.match(q_own, c_fetched)
+    cost, shift, at = _cm.match(q_own, c_canary)
 
-    # RANK: the canary's own mix must beat the mystery queries on this same candidate. Cost alone
-    # would let a degenerate matcher -- one that scores everything low -- sail through.
-    best_rival, n_rivals = best_rival_cost(mystery_queries, c_fetched)
+    # RANK: the canary's own mix must beat the mystery queries on this same candidate. Cost
+    # alone would let a degenerate matcher -- one that scores everything low -- sail through.
+    best_rival, n_rivals = best_rival_cost(mystery_queries, c_canary)
 
-    # Same three gates as offline: in range, first, and by a real margin. `rivals` are the mystery
-    # queries scored against this same candidate -- if the canary's own mix cannot beat them
-    # comfortably on a record we KNOW is the answer, nothing the harvester reports means anything.
+    # Same three gates as offline: in range, first, and by a real margin. `rivals` are the
+    # mystery queries scored against this same candidate -- if the canary's own mix cannot
+    # beat them comfortably on a record we KNOW is the answer, nothing the harvester reports
+    # means anything.
     ok = (cost is not None and cost <= TRUE_MATCH_MAX
           and (not n_rivals or best_rival - cost >= MIN_MARGIN))
-    return record({"kind": "live", "ok": bool(ok), "when": _now(), "url": canary["url"],
-                   "track": canary["track"], "name": canary["name"],
+    return record({"kind": "live", "ok": bool(ok), "when": _now(),
+                   "track": canary.get("track"), "name": canary.get("name"),
                    "cost": None if cost is None else round(float(cost), 4),
                    "rival": round(best_rival, 4) if n_rivals else None,
                    "semitones": shift, "at_s": None if at is None else round(float(at), 1),
                    "took_s": round(time.time() - t0, 1),
                    "why": None if ok else
-                          "a KNOWN record, fetched live, did not come back as a match "
-                          "(cost %s) -- the streaming path or the matcher is broken"
-                          % ("none" if cost is None else "%.4f" % cost)})
+                          ("a KNOWN record's stored signature did not come back as a match "
+                           "(cost %s) -- the matcher or the signature is broken"
+                           % ("none" if cost is None else "%.4f" % cost))})
 
 
 def due_for_live(every_s=LIVE_EVERY_S):
@@ -384,11 +395,43 @@ def due_for_live(every_s=LIVE_EVERY_S):
     return age >= every_s
 
 
+def _load_canary_signature():
+    """The canary's stored chroma, pulled from the working cache or the bucket by its key.
+
+    `NETRADIO_CANARY_KEY` names the canary (the pool's own key rule, `u` + sha1(url)[:20]).
+    The signature sits in the bucket under `<key>.npy` and is pulled back into the chroma
+    cache on demand. This is the one place the `--live` command reaches for the store, and
+    it imports `sigstore` lazily so the library paths (the tests, the harvester) never pay
+    for it and never depend on it.
+    """
+    key = (os.environ.get("NETRADIO_CANARY_KEY") or "").strip()
+    if not key:
+        return None, "NETRADIO_CANARY_KEY is not set -- the canary is not configured"
+    import sigstore                                     # lazy: the library path does not import it
+    d = os.environ.get("NETRADIO_CHROMA_CACHE_DIR") \
+        or os.path.join(_gt.REPO_ROOT, ".chroma-cache")
+    if not os.path.isdir(d) and not sigstore.enabled():
+        return None, "the canary's signature is nowhere to be found -- no chroma cache and " \
+                     "no bucket configured"
+    path = os.path.join(d, key + ".npy")
+    if not os.path.exists(path) and sigstore.enabled():
+        os.makedirs(d, exist_ok=True)
+        if not sigstore.fetch(key + ".npy", d):
+            return None, ("the canary's signature (%s.npy) is not in the bucket -- has the "
+                          "canary been signed and uploaded?" % key)
+    try:
+        return np.load(path).astype("float32"), None
+    except (OSError, ValueError) as exc:
+        return None, "the canary's signature could not be read: %s" % exc
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--offline", action="store_true", help="matching maths, local files, no network")
-    ap.add_argument("--live", action="store_true", help="the real streaming path, against a canary")
+    ap.add_argument("--live", action="store_true",
+                    help="re-score the canary's STORED signature (named by NETRADIO_CANARY_KEY) "
+                         "against the canary's mix and the current mysteries")
     args = ap.parse_args()
 
     if not args.offline and not args.live:
@@ -396,15 +439,16 @@ def main():
     if args.offline:
         print(json.dumps(offline(), indent=2))
     if args.live:
-        # The harvester no longer has a fetch to inject: its decode reads files in the
-        # configured directories, and the canary's file arrives through them like any other
-        # entry. Rather than crash on a seam that is no longer there, the check answers
-        # "not checked" -- the same state a hand-picked URL that has not been validated reads,
-        # and the one a reader of this file can tell apart from a PASS.
-        print(json.dumps({"kind": "live", "ok": None, "when": _now(),
-                          "why": "the live check is not wired to a fetch any more -- use "
-                                 "--offline; the canary's stored signature is re-scored by "
-                                 "the harvester's own loop"}, indent=2))
+        # The re-score needs the canary's stored signature, named by NETRADIO_CANARY_KEY. The
+        # harvester's own loop pulls it back through its chroma cache (harvest._load_sig); the
+        # `--live` command loads it through sigstore here, the same seam, so the check runs the
+        # same way by hand as it does every pass.
+        c_canary, why = _load_canary_signature()
+        if c_canary is None:
+            print(json.dumps({"kind": "live", "ok": None, "when": _now(), "why": why},
+                              indent=2))
+            return
+        print(json.dumps(live(c_canary), indent=2))
 
 
 if __name__ == "__main__":

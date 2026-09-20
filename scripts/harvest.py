@@ -1361,6 +1361,58 @@ def stamp_pool(state):
     return any(pool.get(k) != prev.get(k) for k in ("count", "canary"))
 
 
+def _canary_key():
+    """The canary's key, set in .env (see .env.example). Empty when unconfigured -- the
+    self-test then reports "not configured", as it does today when the searched hit is
+    refused, and the run carries on."""
+    return (os.environ.get("NETRADIO_CANARY_KEY") or "").strip()
+
+
+def score_canary(state, qs):
+    """Re-score the canary's STORED signature every pass and raise `sig_alert` on failure.
+
+    The canary is one known track whose file arrived through the feeder like any entry, was
+    signed once, and whose signature lives in the bucket keyed by `NETRADIO_CANARY_KEY`. A
+    broken harvester and a pool without the answer look identical from here -- zero matches,
+    for weeks -- so before the search reports another "no match" it proves it can still find
+    a record it KNOWS it holds: pull the canary's signature back (the working cache first, the
+    bucket if it is not local) and score it against the canary's mix and the current mysteries,
+    demanding the known cost, rank and margin. A re-score, never a re-sign: the canary needs
+    no file and no fetch.
+
+    Returns True when the state changed (worth a save). `sig_alert` is the same key the ledger's
+    reconcile reports under -- the one alarm the page shows for "the store or the matcher is
+    broken" -- and the canary stands it up on a hard failure and stands it down on a pass, the
+    same way a healed store clears its own alert: an alarm that outlives the break it was raised
+    over is a page reporting a break that is gone. A "not configured" or "not available" result
+    (the key unset, the signature missing) is NOT a failure and touches no alert: the run carries
+    on, the same way it does today when the searched hit is refused.
+    """
+    key = _canary_key()
+    if not key:
+        # The "not configured" state: the self-test reports it, no alert, no save needed.
+        # The run carries on -- signing is worth doing whatever the canary looks like.
+        return False
+    c_canary = _load_sig(key)
+    st = selftest.live(c_canary, mystery_queries=qs)
+    changed = False
+    if st.get("ok") is True:
+        # A pass stands the alert down: the matcher is working, and an alarm left over from a
+        # previous break would keep the page warning of a break that is gone.
+        if state.pop("sig_alert", None) is not None:
+            changed = True
+    elif st.get("ok") is False:
+        why = "self-test failed: %s" % st.get("why")
+        alert = state.get("sig_alert")
+        if not (isinstance(alert, dict) and alert.get("why") == why
+                and alert.get("kind") == "canary"):
+            state["sig_alert"] = {"at": _now(), "kind": "canary", "why": why}
+            state["issues"] = ((state.get("issues") or []) +
+                               [{"at": _now(), "issue": why}])[-50:]
+            changed = True
+    return changed
+
+
 def _load_sig(key):
     """A signature by hook or by crook: the working cache first, then the bucket. None if it
     exists in neither (i.e. this key genuinely needs its audio decoded). While the signature
@@ -1433,12 +1485,29 @@ def score_cached(state, num, qc, qkey, key):
 
     A match row carries `key`, never `url`: the row's join to whatever owns the candidate is
     the key alone, and the readers compute the same key from their own side.
+
+    Advances the `current_query` block when it scores the mystery the block names -- the
+    page's "what the scorer is working on right now" (§5.6): one more compared, one fewer
+    remaining, an `updated` stamp. A score against a different mystery (the sign step scores
+    a freshly signed file against every mystery inline, not through here) leaves the block
+    alone -- the block tracks the rescan, not the sign step.
     """
     c = _load_sig(key)
     if c is None:
         return None
     cost, shift, at = _cm.match(qc, c)
     state.setdefault("scored", {}).setdefault(qkey, []).append(key + ".npy")
+
+    # The `current_query` block: the scorer keeps it while it works one mystery. One more
+    # compared, one fewer remaining, an `updated` stamp -- but only when this score is the
+    # one the block names (a rescan works one mystery at a time; the sign step's inline
+    # scores are a different mystery and do not move the block).
+    cq = state.get("current_query")
+    if (isinstance(cq, dict) and cq.get("mystery") == num
+            and cq.get("query_key") == qkey):
+        cq["compared"] = int(cq.get("compared") or 0) + 1
+        cq["remaining"] = max(0, int(cq.get("remaining") or 0) - 1)
+        cq["updated"] = _now()
 
     if cost is None or cost > KEEP_CEILING:
         return None
@@ -1477,9 +1546,32 @@ def forget(state, num):
 
 
 def rescan(state, ledger, ruled, qs, limit=None, verbose=True):
-    """Work through the unscored pairs. Returns how many were scored."""
+    """Work through the unscored pairs. Returns how many were scored.
+
+    Advances the `current_query` block (§5.6) as it works one mystery: `mystery`, `query_key`,
+    `started` (when this mystery's chunk began), `compared`, `remaining`, `updated`. A rescan
+    works the mysteries in the order `qs` carries them, and a chunk per pass
+    (`RESCAN_PER_PASS`) may finish a mystery and start the next within one call -- so the
+    block is reset the moment the mystery changes, and `remaining` is the count left in this
+    rescan batch for the mystery the block names.
+    """
     pairs = unscored_pairs(state, ledger, ruled, qs, limit=limit)
+    # Count the pairs per mystery in THIS batch, so `remaining` starts at the batch's size
+    # for a mystery and counts down to zero as the block advances.
+    remaining_in_batch = {}
+    for num, _qc, qkey, _key in pairs:
+        remaining_in_batch[(num, qkey)] = remaining_in_batch.get((num, qkey), 0) + 1
     for num, qc, qkey, key in pairs:
+        cq = state.get("current_query")
+        if not (isinstance(cq, dict) and cq.get("mystery") == num
+                and cq.get("query_key") == qkey):
+            # A new mystery, or the block is stale (a re-cut clip changed the key): start the
+            # block fresh. `started` is when THIS mystery's chunk began, `remaining` is how
+            # many pairs this batch holds for it, and `compared` begins at zero.
+            state["current_query"] = {"mystery": num, "query_key": qkey,
+                                      "started": _now(), "compared": 0,
+                                      "remaining": remaining_in_batch.get((num, qkey), 0),
+                                      "updated": _now()}
         hit = score_cached(state, num, qc, qkey, key)
         if hit and verbose:
             a = int(hit.get("at_s") or 0)
@@ -1853,9 +1945,13 @@ def run(args):
             state["issues"] = (state.get("issues") or [])[-49:] + [{"at": _now(), "issue": issue}]
             _save(STATE, state)
 
-    # THE CANARY. A broken harvester and a pool without the answer look identical from here: zero
-    # matches, for weeks. So before searching for something we have never found, prove we can still
-    # find something we HAVE -- re-run one solved calibration case from local files.
+    # THE CANARY, at start: re-run one solved calibration case from local files. A broken
+    # harvester and a pool without the answer look identical from here: zero matches, for
+    # weeks. So before searching for something we have never found, prove we can still find
+    # something we HAVE -- the offline check runs the matching maths against local files and
+    # catches a break in chroma_match before the first pass. The per-pass re-score of the
+    # canary's STORED signature (score_canary, inside the loop) is the other half: it proves
+    # the pool still holds the record the canary names, every pass.
     st = selftest.offline()
     if st.get("ok"):
         print("# self-test PASS -- %s: cost %.4f, rank %d, beat the field by %.4f"
@@ -1918,6 +2014,16 @@ def run(args):
             print("dropped %d ruled-on excerpt(s) -- the leads keep their numbers" % n_dropped)
         if stamp_pool(state):
             _save(STATE, state)          # the bucket's count for the page; ≤15-min cached
+
+        # THE CANARY, re-scored every pass. A broken matcher and a pool without the answer look
+        # identical from here, so before the search reports another "no match" it proves it can
+        # still find a record it KNOWS it holds -- the canary's stored signature, pulled back
+        # from the bucket by its key, scored against the canary's mix and the current mysteries.
+        # A failure raises `sig_alert` (the same alarm the ledger's reconcile raises); a pass
+        # stands it down. Unconfigured, it reports "not configured" and carries on, as it does
+        # today when the searched hit is refused.
+        if score_canary(state, qs):
+            _save(STATE, state)
 
         # Score held signatures against any mystery they have not met yet -- a bounded chunk per
         # pass, so it rides along with the signing instead of blocking it. This is CPU only

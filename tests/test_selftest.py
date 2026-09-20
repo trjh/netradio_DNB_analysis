@@ -99,17 +99,29 @@ class OfflineCanary(unittest.TestCase):
 
 @unittest.skipIf(selftest is None, "selftest.py needs the librosa venv (.venv) — skipping")
 class LiveCanary(unittest.TestCase):
+    """The live check is a RE-SCORE of the canary's STORED signature -- no fetch.
+
+    The canary's file arrived through the feeder like any entry, was signed once, and its
+    signature lives in the bucket keyed by `NETRADIO_CANARY_KEY`. The check scores that
+    stored signature against the canary's own mix (the query a calibration case builds from
+    the canary's track) and against the current mysteries, demanding the same three gates
+    as offline. A `live(c_canary, mystery_queries=...)` callable is injected, so the tests
+    drive it without a network and without a fetch.
+    """
+
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         selftest.RESULT = os.path.join(self.tmp, "selftest.json")
         selftest.CANARY = os.path.join(self.tmp, "canary.json")
         self.case = {"num": 1, "orig": "/x/1.wav", "name": "Dead Calm - Urban Style",
                      "extract": None, "cap": None, "cstart": 0, "mb": 0, "me": 300}
+        self.canary_chroma = "CANARY-CHROMA"
 
     def test_refuses_to_enshrine_a_stream_that_is_not_the_record(self):
         """THE WOLF-CRY GUARD. If the upload we found is the wrong record, the canary would fail
         forever and we would stop believing it. So a candidate canary is validated against the
-        original we already hold, and rejected if it does not match."""
+        original we already hold, and rejected if it does not match. (Establishment is the one
+        place a fetch still lives; the re-score itself never fetches.)"""
         with mock.patch.object(selftest, "cases", return_value=[self.case]), \
              mock.patch.object(selftest, "_search", return_value="https://y/wrong"), \
              mock.patch.object(selftest._cal, "chroma", return_value="C"), \
@@ -131,58 +143,89 @@ class LiveCanary(unittest.TestCase):
         self.assertEqual(est["url"], "https://y/right")
         self.assertTrue(os.path.exists(selftest.CANARY))
 
-    def test_an_interrupted_fetch_is_not_a_canary_failure_and_is_not_recorded(self):
-        """A stop is never a verdict.
-
-        Recorded as a FAILURE, a Ctrl-C would leave /harvest saying the matcher is broken.
-        Recorded at all -- even as "not checked" -- it would satisfy `due_for_live` and stand the
-        canary down for a day. So it is reported and nothing is written.
-        """
-        selftest._save(selftest.CANARY, {"url": "https://y/known", "track": 1, "name": "known"})
+    def test_no_canary_established_is_skipped_not_failed(self):
+        """Without a canary on file, the re-score is "not checked" -- not a failure. The same
+        state a missing calibration case reads offline, and the one a reader can tell apart
+        from a PASS or a FAIL."""
         with mock.patch.object(selftest, "cases", return_value=[self.case]):
-            r = selftest.live(lambda url: (None, None, "stopped"), mystery_queries=[])
-        self.assertIsNone(r["ok"])                       # not a pass, and not a failure
-        self.assertIn("stopped", r["why"])
-        self.assertFalse(os.path.exists(selftest.RESULT))
-        self.assertTrue(selftest.due_for_live())         # the next start asks again
+            r = selftest.live(self.canary_chroma, mystery_queries=[])
+        self.assertIsNone(r["ok"])
+        self.assertIn("no canary", r["why"])
 
-    def test_a_real_fetch_failure_is_still_recorded_as_a_failure(self):
-        """The guard must not swallow the case the canary exists for."""
-        selftest._save(selftest.CANARY, {"url": "https://y/known", "track": 1, "name": "known"})
+    def test_the_canary_track_leaving_the_calibration_set_is_skipped(self):
+        selftest._save(selftest.CANARY, {"track": 99, "name": "gone"})
         with mock.patch.object(selftest, "cases", return_value=[self.case]):
-            r = selftest.live(lambda url: (None, None, "yt-dlp: video unavailable"),
-                              mystery_queries=[])
-        self.assertFalse(r["ok"])
-        self.assertTrue(os.path.exists(selftest.RESULT))
+            r = selftest.live(self.canary_chroma, mystery_queries=[])
+        self.assertIsNone(r["ok"])
+        self.assertIn("calibration set", r["why"])
+
+    def test_no_stored_signature_is_skipped_not_failed(self):
+        """The caller could not load the signature: the cache is dark, the bucket listing
+        failed, or the canary's key points at nothing. None of those is a verdict on the
+        matcher, so it is "not checked" -- the same state a missing canary reads, and one a
+        reader can tell apart from a PASS or a FAIL."""
+        selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
+        with mock.patch.object(selftest, "cases", return_value=[self.case]):
+            r = selftest.live(None, mystery_queries=[])
+        self.assertIsNone(r["ok"])
+        self.assertIn("not available", r["why"])
+
+    def test_the_canary_mix_too_short_to_query_is_skipped(self):
+        selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
+        with mock.patch.object(selftest, "cases", return_value=[self.case]), \
+             mock.patch.object(selftest._cal, "mix_query", return_value=None):
+            r = selftest.live(self.canary_chroma, mystery_queries=[])
+        self.assertIsNone(r["ok"])
+        self.assertIn("too short", r["why"])
 
     def test_a_known_record_that_stops_matching_is_a_failure(self):
-        """The whole point: a record we KNOW is the answer, fetched live, must come back a match.
-        If it doesn't, the streaming path or the matcher is broken — and this is the only check
-        that can tell us so."""
-        selftest._save(selftest.CANARY, {"url": "https://y/known", "track": 1, "name": "known"})
+        """The whole point: a record we KNOW is the answer, re-scored from its stored
+        signature, must come back a match. If it doesn't, the matcher or the signature is
+        broken -- and this is the only check that can tell us so."""
+        selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
         with mock.patch.object(selftest, "cases", return_value=[self.case]), \
              mock.patch.object(selftest._cal, "mix_query", return_value=[0.0] * 99999), \
              mock.patch.object(selftest._cal, "chroma", return_value="C"), \
              mock.patch.object(selftest._cm, "match", return_value=(0.31, 0, 0.0)):
-            r = selftest.live(lambda url: ("C", None, None), mystery_queries=[])
+            r = selftest.live(self.canary_chroma, mystery_queries=[])
         self.assertFalse(r["ok"])
         self.assertIn("broken", r["why"])
 
-    def test_a_fetch_failure_on_a_known_good_url_is_a_failure_not_a_skip(self):
-        """yt-dlp breaking is EXACTLY what this canary exists to catch. It must not be excused."""
-        selftest._save(selftest.CANARY, {"url": "https://y/known", "track": 1, "name": "known"})
-        with mock.patch.object(selftest, "cases", return_value=[self.case]):
-            r = selftest.live(lambda url: (None, None, "yt-dlp: HTTP 403"), mystery_queries=[])
+    def test_a_cost_outside_the_true_match_range_is_a_failure(self):
+        selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
+        with mock.patch.object(selftest, "cases", return_value=[self.case]), \
+             mock.patch.object(selftest._cal, "mix_query", return_value=[0.0] * 99999), \
+             mock.patch.object(selftest._cal, "chroma", return_value="C"), \
+             mock.patch.object(selftest._cm, "match", return_value=(0.070, 0, 0.0)):
+            r = selftest.live(self.canary_chroma, mystery_queries=[])
         self.assertFalse(r["ok"])
-        self.assertIn("403", r["why"])
+
+    def test_the_canary_must_beat_the_mysteries_by_a_real_margin(self):
+        """RANK: the canary's own mix must beat the mystery queries on this same candidate.
+        Cost alone passes a degenerate matcher that scores everything low; the margin is
+        what carries the gate, the same way it does offline."""
+        selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
+        rivals = [(2, "RIVAL", "2:fp")]
+
+        def fake_match(q, c):
+            # the canary's mix scores 0.040; the rival mystery scores 0.0407 -- a 0.0007 win
+            return (0.040, 0, 0.0) if c is self.canary_chroma else (0.0407, 0, 0.0)
+
+        with mock.patch.object(selftest, "cases", return_value=[self.case]), \
+             mock.patch.object(selftest._cal, "mix_query", return_value=[0.0] * 99999), \
+             mock.patch.object(selftest._cal, "chroma", return_value="C"), \
+             mock.patch.object(selftest._cm, "match", side_effect=fake_match):
+            r = selftest.live(self.canary_chroma, mystery_queries=rivals)
+        self.assertFalse(r["ok"])
+        self.assertEqual(r["cost"], 0.040)
 
     def test_the_live_canary_passes_when_everything_works(self):
-        selftest._save(selftest.CANARY, {"url": "https://y/known", "track": 1, "name": "known"})
+        selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
         with mock.patch.object(selftest, "cases", return_value=[self.case]), \
              mock.patch.object(selftest._cal, "mix_query", return_value=[0.0] * 99999), \
              mock.patch.object(selftest._cal, "chroma", return_value="C"), \
              mock.patch.object(selftest._cm, "match", return_value=(0.009, 2, 41.0)):
-            r = selftest.live(lambda url: ("C", None, None), mystery_queries=[])
+            r = selftest.live(self.canary_chroma, mystery_queries=[])
         self.assertTrue(r["ok"])
         self.assertEqual(r["cost"], 0.009)
 
