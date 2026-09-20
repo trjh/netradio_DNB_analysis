@@ -829,7 +829,8 @@ def reconcile_ledger(state=None):
     Mutates the caller's `state` when it keeps one (run does); loads its own otherwise.
     Returns {"seeded", "dropped", "restored", "reported", "cleared", "why"}.
     """
-    res = {"seeded": 0, "dropped": 0, "restored": 0, "reported": False, "cleared": False}
+    res = {"seeded": 0, "dropped": 0, "restored": 0, "reported": False,
+           "cleared": False, "sidecar_lost": 0}
     objects = _remote_objects()
     if objects is None:
         return dict(res, why="the bucket cannot be listed -- cannot tell a gone object from "
@@ -886,6 +887,19 @@ def reconcile_ledger(state=None):
         if not (isinstance(row, dict) and row.get("status") == "signed"):
             continue
         if (key + ".npy") in objects:
+            # The signature is there. The contract's `signed` row promises the companion
+            # sidecar is in the bucket beside it; a listing that no longer holds the
+            # sidecar means the entry is incomplete -- demote to `delayed` with
+            # `missing_sidecar` so the feeder re-feeds the key for a fresh sign that
+            # re-uploads both. (The mass-loss guard above is about the SIGNATURE being
+            # gone; a missing sidecar is a per-row incompleteness, repaired in place.)
+            if (key + ".json") not in objects:
+                row["status"] = "delayed"
+                row["reason"] = "missing_sidecar"
+                row["uploaded_etag"] = None
+                row["signed_at"] = None
+                res["sidecar_lost"] = res.get("sidecar_lost", 0) + 1
+                continue
             if not row.get("uploaded_etag"):
                 etag = objects[key + ".npy"]
                 if etag:
@@ -894,17 +908,23 @@ def reconcile_ledger(state=None):
         elif row.get("uploaded_etag"):
             row["uploaded_etag"] = None
             res["dropped"] += 1
-    if res["dropped"] or res["restored"]:
+    if res["dropped"] or res["restored"] or res.get("sidecar_lost"):
         _save(LEDGER, ledger)
     # ANY reconcile that did not report stands the alert down: `gone` can be empty here with
     # the alert still standing (a mis-listed bucket, fixed between starts), and a clear that
     # waits for a later loss would report a healed store as broken forever.
     if not res["reported"] and state.pop("sig_alert", None) is not None:
         res["cleared"] = True                 # the store healed -- stand down
-    why = ("dropped the etag of %d signed row(s) whose object is gone; restored %d missing "
-           "etag(s) whose object is back; every other signed row still points at its object"
-           % (res["dropped"], res["restored"])) if (res["dropped"] or res["restored"]) else \
-          "every signed row still points at an object the bucket holds"
+    parts = []
+    if res["dropped"]:
+        parts.append("dropped the etag of %d signed row(s) whose object is gone" % res["dropped"])
+    if res["restored"]:
+        parts.append("restored %d missing etag(s) whose object is back" % res["restored"])
+    if res["sidecar_lost"]:
+        parts.append("demoted %d signed row(s) whose companion sidecar is gone to delayed "
+                     "missing_sidecar" % res["sidecar_lost"])
+    why = ("; ".join(parts)) if parts else \
+        "every signed row still points at a complete entry the bucket holds"
     return dict(res, why=why)
 
 

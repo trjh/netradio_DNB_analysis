@@ -457,10 +457,14 @@ Need-to-know:
   not finished, and is neither read nor signed. A sidecar whose `key` differs from the file's
   stem is refused, with a row in the issues list.
 - `.harvest/ledger.json` is the harvester's own record: one row per key, `signed` or `delayed`
-  with a reason (`length_mismatch`, `too_long`, `decode_failed`, `no_space`). It is **seeded
-  from the signature bucket's listing at the first start**, so it is the complete record of
-  the pool from its first day, and reconciled against that listing on every start: a `signed`
-  row whose object is gone loses its `uploaded_etag`, so the feeder feeds that key again.
+  with a reason (`length_mismatch`, `too_long`, `decode_failed`, `no_space`,
+  `missing_sidecar`). It is **seeded from the signature bucket's listing at the first
+  start** -- a `signed` row for every key the bucket holds with its companion sidecar
+  beside it; a signature whose sidecar is not there is `delayed` with `missing_sidecar`
+  -- so it is the complete record of the pool from its first day, and reconciled against
+  that listing on every start: a `signed` row whose object is gone loses its
+  `uploaded_etag`, and a `signed` row whose companion sidecar leaves is demoted to
+  `delayed` with `missing_sidecar`, so the feeder feeds that key again.
 - The signature, and the sidecar beside it, are uploaded to the bucket as `<key>.npy` and
   `<key>.json` — the index the pool has never had.
 - A file whose size or modification time no longer matches its row is **signed again**: a

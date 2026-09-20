@@ -166,7 +166,7 @@ written only by the harvester.
 | `key` | the row's own key, the same as the object it is filed under |
 | `size`, `mtime` | the file as signed; a changed file is signed again |
 | `status` | `signed`, or `delayed` |
-| `reason` | for `delayed`: one of the four reasons above; `null` otherwise |
+| `reason` | for `delayed`: one of the five reasons above; `null` otherwise |
 | `signed_at` | when the signature was written; `null` on a delayed row |
 | `uploaded_etag` | the signature object's ETag in the bucket; absent when the signature is not there |
 | `url`, `title`, `artist`, `duration_s` | carried from the sidecar, unchanged |

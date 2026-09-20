@@ -198,7 +198,7 @@ def list_objects():
     Both key shapes are admitted -- `<key>.npy` and `<key>.json` -- so a caller can tell a
     complete entry (both objects) from a legacy signature-only one (the sidecar the contract
     now requires was never written). Callers that want only the signatures filter to `.npy`
-    themselves, or use `list_keys`."""
+    themselves."""
     if not enabled():
         return None
     objects, token = {}, None
@@ -228,15 +228,6 @@ def list_objects():
                 objects[name] = (etag or "").strip('"') or None
         if not token:
             return objects
-
-
-def list_keys():
-    """Every signature key in the bucket (u….npy under the prefix). None on failure —
-    callers must treat 'unknown' differently from 'empty'."""
-    objects = list_objects()
-    if objects is None:
-        return None
-    return {name for name in objects if name.endswith(".npy")}
 
 
 def evictable(path, key, scored, qkeys):
