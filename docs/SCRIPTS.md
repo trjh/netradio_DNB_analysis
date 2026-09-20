@@ -69,7 +69,7 @@ audio-dependent tests need `.venv` (`make venv`).
 |---|---|---|
 | `scripts/extract_tracks.py` | cut every well-defined track **out of the mix**, reassembling across captures. Refuses anything it cannot place precisely. | once; **re-run whenever a capture gains precise timing or a track's span changes** |
 | `scripts/calibrate.py` | score every known mix track against every known original → `docs/CALIBRATION.md` | **whenever the matcher changes.** It is the regression test for the whole matching stack |
-| `scripts/selftest.py` | the **canary**: re-identify a track we already know and demand cost, rank **and** margin — offline (small pool); the live check is not wired to a fetch at the moment | continuously, by the harvester. Surfaced on the harvest page. See [below](#the-canary-does-the-matcher-still-work) |
+| `scripts/selftest.py` | the **canary**: re-score the canary's stored signature (named by `NETRADIO_CANARY_KEY`) against the canary's mix and the current mysteries, demanding cost, rank **and** margin; `--offline` re-runs one calibration case from local files | continuously, by the harvester (every pass). Surfaced on the harvest page. See [below](#the-canary-does-the-matcher-still-work) |
 
 `calibrate.py` is not a one-off. It is how we know that the true-match and non-match populations
 **overlap** — and therefore that *rank*, not cost, is the reliable signal. Any change to
@@ -294,13 +294,28 @@ over-long, the length matches the sidecar's claim, and no stop was asked for. Th
 
 | Mode | What it proves |
 |---|---|
-| **offline** | Re-identifies a track we already know (Jamie Myerson, *Sky Blue*) out of a small pool. The matcher still **works** — not merely that the process is alive. |
-| **live** | The same, end to end, against a real stream fetched from the internet — **not wired to a fetch at the moment**: the harvester's fetch leg is gone, and the check's replacement — re-scoring the canary's *stored* signature, by its key — is the next change to `selftest.py`. `--live` answers *not checked* until then. |
+| **offline** | Re-identifies a track we already know (Jamie Myerson, *Sky Blue*) out of a small pool, from local files. The matcher still **works** — not merely that the process is alive. No network. |
+| **live** | Re-scores the canary's **stored** signature, named by `NETRADIO_CANARY_KEY`, against the canary's mix and the current mysteries. The canary is an ordinary entry: its file arrived through the harvest directories, was signed once, and its signature lives in the bucket under its key. Every pass the harvester pulls it back (the working cache first, the bucket if it is not local) and scores it — a re-score, never a re-sign. Needs `NETRADIO_CANARY_KEY` set in `.env` (see `.env.example`); `make_canary.py --key <url>` prints it. |
 
 Both demand **cost, rank *and* a margin**. Requiring only "cost in range, rank 1" is not enough: a
 degenerate matcher scores everything identically, ties sort by track number, and the subject — the
 lowest-numbered case — ranks first. The canary then vouches for a completely broken matcher. *A tie
 is not a win.*
+
+The live check's three outcomes, all reported on the harvest page as distinct states — *a skip is
+not a pass*:
+
+- **PASS** — the canary's stored signature, scored against the canary's mix and the current
+  mysteries, came back in the true-match range, first among the rivals, and by a real margin. The
+  matcher is working; a standing canary alert (a previous failure) is cleared.
+- **FAIL** — a known record's stored signature did not come back a match. The matcher or the
+  signature is broken; the harvester raises `sig_alert` (the same alarm the ledger's reconcile
+  raises, kept apart by a `kind` field) and every "no match" it reports from there is meaningless
+  until it is fixed.
+- **not checked** — `NETRADIO_CANARY_KEY` is unset (the canary is not configured), the canary's
+  signature is not in the cache or the bucket, or the canary's track is no longer in the
+  calibration set. None of those is a verdict on the matcher, so it is not a failure: the run
+  carries on, the same way it does when the searched hit is refused.
 
 The live check **refuses to establish a canary** if the stream it finds is not the record (it scores
 the candidate against our own copy first). A canary that cries wolf gets ignored, which is worse
@@ -308,7 +323,7 @@ than no canary — so it retries rather than enshrining a wrong upload.
 
 **How the canary is named.** Under the new contract the canary is an ordinary entry: its file
 arrives through the harvest directories like any other, is signed once, and is named by its
-**key** (`NETRADIO_CANARY_KEY` in `.env`). The stored-signature re-score that replaces the old
-fetch is the next change to `selftest.py`; until then the offline check above is the one that
-runs, and `--live` answers *not checked*. The harvest page reports **PASS**, **FAIL**
-and **not checked** as three distinct states: *a skip is not a pass.*
+**key** (`NETRADIO_CANARY_KEY` in `.env`) — the pool's own rule, `u` + the first 20 hex of the
+SHA-1 of the canary's source URL. `scripts/make_canary.py --key <url>` prints it, or the one-line
+recipe in `.env.example` computes it. The harvester re-scores the canary's stored signature every
+pass; `--live` runs the same re-score by hand, loading the signature through `sigstore`.

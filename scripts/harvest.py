@@ -860,8 +860,8 @@ def reconcile_ledger(state=None):
                ".venv/bin/python scripts/harvest.py --sign-one <key>"
                % (len(gone), len(signed), 100.0 * len(gone) / max(1, len(signed)), cap * 100))
         first = "sig_alert" not in state
-        state["sig_alert"] = {"at": _now(), "missing": len(gone), "corpus": len(signed),
-                              "why": why}
+        state["sig_alert"] = {"at": _now(), "kind": "store", "missing": len(gone),
+                              "corpus": len(signed), "why": why}
         if first:
             state["issues"] = ((state.get("issues") or []) +
                                [{"at": _now(), "issue": "ledger: " + why}])[-50:]
@@ -881,11 +881,17 @@ def reconcile_ledger(state=None):
             res["dropped"] += 1
     if res["dropped"] or res["restored"]:
         _save(LEDGER, ledger)
-    # ANY reconcile that did not report stands the alert down: `gone` can be empty here with
-    # the alert still standing (a mis-listed bucket, fixed between starts), and a clear that
-    # waits for a later loss would report a healed store as broken forever.
-    if not res["reported"] and state.pop("sig_alert", None) is not None:
-        res["cleared"] = True                 # the store healed -- stand down
+    # ANY reconcile that did not report stands the STORE alert down: `gone` can be empty here
+    # with the alert still standing (a mis-listed bucket, fixed between starts), and a clear
+    # that waits for a later loss would report a healed store as broken forever. Only the
+    # store-kind alert this path raises is cleared here; a canary-kind alert (a matcher
+    # failure) is a different break and survives a healthy reconcile -- the canary's own pass
+    # is what clears it (see score_canary).
+    if not res["reported"]:
+        alert = state.get("sig_alert")
+        if isinstance(alert, dict) and alert.get("kind") == "store":
+            state.pop("sig_alert", None)
+            res["cleared"] = True             # the store healed -- stand down
     why = ("dropped the etag of %d signed row(s) whose object is gone; restored %d missing "
            "etag(s) whose object is back; every other signed row still points at its object"
            % (res["dropped"], res["restored"])) if (res["dropped"] or res["restored"]) else \
@@ -1376,17 +1382,20 @@ def score_canary(state, qs):
     broken harvester and a pool without the answer look identical from here -- zero matches,
     for weeks -- so before the search reports another "no match" it proves it can still find
     a record it KNOWS it holds: pull the canary's signature back (the working cache first, the
-    bucket if it is not local) and score it against the canary's mix and the current mysteries,
-    demanding the known cost, rank and margin. A re-score, never a re-sign: the canary needs
-    no file and no fetch.
+    bucket if it is not local) and score it against the canary's mix and the current
+    mysteries, demanding the known cost, rank and margin. A re-score, never a re-sign: the
+    canary needs no file and no fetch.
 
-    Returns True when the state changed (worth a save). `sig_alert` is the same key the ledger's
-    reconcile reports under -- the one alarm the page shows for "the store or the matcher is
-    broken" -- and the canary stands it up on a hard failure and stands it down on a pass, the
-    same way a healed store clears its own alert: an alarm that outlives the break it was raised
-    over is a page reporting a break that is gone. A "not configured" or "not available" result
-    (the key unset, the signature missing) is NOT a failure and touches no alert: the run carries
-    on, the same way it does today when the searched hit is refused.
+    Returns True when the state changed (worth a save). `sig_alert` is the one alarm the page
+    shows for "the store or the matcher is broken", and the two paths that raise it -- the
+    ledger's reconcile (a mass bucket loss) and the canary (a matcher failure) -- are KEPT
+    APART by a `kind` field on the alert. The canary stands up a `kind: "canary"` alert on a
+    hard failure and stands THAT alert down on a pass; it never touches a store-loss alert
+    (`kind` absent or `"store"`), so a canary already in the local cache cannot hide a mass
+    bucket loss -- only the reconcile that raised a store alert clears it, the same way a
+    healed store clears its own alert. A "not configured" or "not available" result (the key
+    unset, the signature missing) is NOT a failure and touches no alert: the run carries on,
+    the same way it does today when the searched hit is refused.
     """
     key = _canary_key()
     if not key:
@@ -1397,15 +1406,30 @@ def score_canary(state, qs):
     st = selftest.live(c_canary, mystery_queries=qs)
     changed = False
     if st.get("ok") is True:
-        # A pass stands the alert down: the matcher is working, and an alarm left over from a
-        # previous break would keep the page warning of a break that is gone.
-        if state.pop("sig_alert", None) is not None:
+        # A pass stands the CANARY alert down (the matcher is working), and ONLY that alert:
+        # a store-loss alert the ledger's reconcile raised is a different break, and a
+        # canary already in the local cache passing while the bucket is still reporting a
+        # mass loss must not hide it. The reconcile that raised a store alert is the one
+        # that clears it, the same way a healed store clears its own.
+        alert = state.get("sig_alert")
+        if isinstance(alert, dict) and alert.get("kind") == "canary":
+            state.pop("sig_alert", None)
             changed = True
     elif st.get("ok") is False:
         why = "self-test failed: %s" % st.get("why")
         alert = state.get("sig_alert")
-        if not (isinstance(alert, dict) and alert.get("why") == why
-                and alert.get("kind") == "canary"):
+        # A STORE alert (a mass bucket loss) takes precedence: a broken store is the more
+        # fundamental break -- the pool's contents cannot be trusted -- so the canary does
+        # not clobber it with its own. A canary alert already standing with the same why is
+        # not rewritten either (no fresh issues row every pass). Only when no alert is
+        # standing, or a canary alert with a DIFFERENT why is, does the canary record its
+        # failure.
+        if isinstance(alert, dict) and alert.get("kind") == "store":
+            pass                         # the store break is the news; leave it
+        elif isinstance(alert, dict) and alert.get("kind") == "canary" \
+                and alert.get("why") == why:
+            pass                         # already recorded; no duplicate issues row
+        else:
             state["sig_alert"] = {"at": _now(), "kind": "canary", "why": why}
             state["issues"] = ((state.get("issues") or []) +
                                [{"at": _now(), "issue": why}])[-50:]

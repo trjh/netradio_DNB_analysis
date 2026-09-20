@@ -811,6 +811,145 @@ class TheLedger(_SignerCase):
 
 
 @unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class TheCanaryRescore(_SignerCase):
+    """The canary is re-scored every pass from its STORED signature, by its key. A failure
+    raises `sig_alert` (kind `canary`); a pass clears only a canary alert, never a store-loss
+    alert the ledger's reconcile raised. Unconfigured, it reports "not configured" and touches
+    no alert, and the run carries on."""
+
+    def _canary_sig(self, key, chroma=None):
+        """Drop the canary's signature into the working cache so _load_sig finds it locally."""
+        os.makedirs(self.chroma_dir, exist_ok=True)
+        np.save(os.path.join(self.chroma_dir, key + ".npy"),
+                chroma if chroma is not None else np.zeros((12, 8), dtype="float32"))
+
+    def _canary_on(self, key, ok=True, why="matched"):
+        """Patch selftest.live to answer `ok` for the canary, recording the chroma it was handed."""
+        handed = []
+
+        def fake_live(c_canary, mystery_queries=None):
+            handed.append(c_canary)
+            return {"kind": "live", "ok": ok, "when": "now", "why": why,
+                    "track": 3, "name": "Jamie Myerson - Sky Blue",
+                    "cost": 0.004, "rival": 0.06, "semitones": 0, "at_s": 30.0,
+                    "took_s": 0.0}
+        patcher = mock.patch.object(harvest.selftest, "live", fake_live)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return handed
+
+    def test_unconfigured_is_a_noop_and_no_alert(self):
+        # Without NETRADIO_CANARY_KEY, the re-score reports "not configured" and touches
+        # nothing -- the run carries on, as it does today when the searched hit is refused.
+        os.environ.pop("NETRADIO_CANARY_KEY", None)
+        state = {"issues": []}
+        changed = harvest.score_canary(state, qs=[])
+        self.assertFalse(changed)
+        self.assertNotIn("sig_alert", state)
+        self.assertEqual(state["issues"], [])
+
+    def test_a_passing_canary_raises_no_alert(self):
+        key = "u" + "a" * 20
+        os.environ["NETRADIO_CANARY_KEY"] = key
+        self._canary_sig(key)
+        self._canary_on(key, ok=True)
+        state = {"issues": []}
+        self.assertFalse(harvest.score_canary(state, qs=[]))
+        self.assertNotIn("sig_alert", state)
+
+    def test_a_failing_canary_raises_a_canary_kind_alert(self):
+        key = "u" + "b" * 20
+        os.environ["NETRADIO_CANARY_KEY"] = key
+        self._canary_sig(key)
+        self._canary_on(key, ok=False, why="the matcher is broken")
+        state = {"issues": []}
+        self.assertTrue(harvest.score_canary(state, qs=[]))
+        self.assertEqual(state["sig_alert"]["kind"], "canary")
+        self.assertIn("self-test failed", state["sig_alert"]["why"])
+        self.assertTrue(any("self-test failed" in r["issue"] for r in state["issues"]))
+
+    def test_a_passing_canary_clears_only_a_canary_alert(self):
+        """A pass stands the CANARY alert down (the matcher is working), and only that
+        alert: a store-loss alert the ledger's reconcile raised is a different break, and a
+        canary already in the local cache passing while the bucket is still reporting a mass
+        loss must not hide it."""
+        key = "u" + "c" * 20
+        os.environ["NETRADIO_CANARY_KEY"] = key
+        self._canary_sig(key)
+        self._canary_on(key, ok=True)
+        state = {"issues": [], "sig_alert": {"at": "then", "kind": "canary",
+                                              "why": "self-test failed: earlier"}}
+        self.assertTrue(harvest.score_canary(state, qs=[]))
+        self.assertNotIn("sig_alert", state, "the canary alert was cleared by the pass")
+
+    def test_a_passing_canary_does_not_clear_a_store_loss_alert(self):
+        """THE REGRESSION: a mass bucket loss reported by the ledger's reconcile raises a
+        store-kind alert, and a passing canary (an in-cache signature, no bucket listing
+        needed) must not hide it. The store alert survives the canary pass and is cleared
+        only by the reconcile that raised it."""
+        key = "u" + "d" * 20
+        os.environ["NETRADIO_CANARY_KEY"] = key
+        self._canary_sig(key)
+        self._canary_on(key, ok=True)
+        store_alert = {"at": "then", "kind": "store", "missing": 9, "corpus": 10,
+                       "why": "9 of 10 signed rows point at objects the listing does not hold"}
+        state = {"issues": [], "sig_alert": dict(store_alert)}
+        self.assertFalse(harvest.score_canary(state, qs=[]),
+                         "the canary pass changed nothing while a store alert is standing")
+        self.assertEqual(state["sig_alert"], store_alert,
+                         "the store-loss alert survives the passing canary")
+
+    def test_a_failing_canary_does_not_overwrite_a_store_loss_alert(self):
+        """A canary failure and a store loss are two different breaks; the canary does not
+        clobber the store alert with its own -- both stay visible, the store alert the
+        reconcile raised and the canary alert the re-score raised."""
+        key = "u" + "e" * 20
+        os.environ["NETRADIO_CANARY_KEY"] = key
+        self._canary_sig(key)
+        self._canary_on(key, ok=False, why="the matcher is broken")
+        store_alert = {"at": "then", "kind": "store", "missing": 9, "corpus": 10,
+                       "why": "9 of 10 signed rows point at objects the listing does not hold"}
+        state = {"issues": [], "sig_alert": dict(store_alert)}
+        # The canary fails, but the standing store alert is not the canary's to touch: the
+        # canary sees a non-canary alert and leaves it alone (it does not overwrite, and it
+        # does not duplicate an issues row either -- the store alert is the news already).
+        self.assertFalse(harvest.score_canary(state, qs=[]),
+                         "the canary did not overwrite the store alert")
+        self.assertEqual(state["sig_alert"], store_alert,
+                         "the store-loss alert stands unchanged")
+
+    def test_a_store_loss_alert_is_cleared_only_by_reconcile(self):
+        """The store alert the reconcile raises is the one that clears it: a healed store
+        stands it down, and a passing canary in between does not."""
+        keys = [("u" + ("%02d" % i) * 10) for i in range(10)]
+        rows = {k: harvest._row(k, 1, 1.0, "signed", None, "then", "e-%s" % k, {})
+                for k in keys}
+        harvest._save(harvest.LEDGER, rows)
+        canary_key = "u" + "f" * 20
+        os.environ["NETRADIO_CANARY_KEY"] = canary_key
+        self._canary_sig(canary_key)
+        self._canary_on(canary_key, ok=True)
+        state = {"issues": []}
+        # the listing holds only one of ten: the store broke, the reconcile raises a store alert
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900: {keys[0] + ".npy": "e-1"}):
+            first = harvest.reconcile_ledger(state)
+        self.assertTrue(first["reported"])
+        self.assertEqual(state["sig_alert"]["kind"], "store")
+        # the canary passes (in-cache signature); the store alert must survive it
+        self.assertFalse(harvest.score_canary(state, qs=[]))
+        self.assertEqual(state["sig_alert"]["kind"], "store",
+                         "the store alert survived the passing canary")
+        # the store heals: the next reconcile clears the store alert
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900:
+                               {k + ".npy": "e-%s" % k for k in keys}):
+            second = harvest.reconcile_ledger(state)
+        self.assertTrue(second["cleared"], "the healed store cleared its own alert")
+        self.assertNotIn("sig_alert", state)
+
+
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
 class MatchRowsCarryTheKey(_SignerCase):
     """A match row joins on the key, and the old rows move onto it at first start."""
 
