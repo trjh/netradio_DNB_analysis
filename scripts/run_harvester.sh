@@ -58,8 +58,10 @@ LOG="$STATE_DIR/harvest.log"
 # a data set — two generations of it answer "what happened last night".
 LOG_MAX_BYTES="${NETRADIO_HARVEST_LOG_MAX_BYTES:-10485760}"
 # How long `stop` waits for a clean exit before it stops being polite. harvest.py handles
-# SIGTERM itself — it finishes the candidate in hand and writes the state — so the wait is
-# the point of `stop`, not a formality.
+# SIGTERM itself: it ends the fetch in flight and leaves that URL pending — an interrupted
+# candidate is fetched again later, not finished now — and then writes its state. That last
+# write is what the wait buys: a `kill -9` instead would leave state.json claiming "working"
+# for a process that no longer exists.
 STOP_WAIT_S="${NETRADIO_HARVEST_STOP_WAIT_S:-30}"
 PYTHON="${NETRADIO_PYTHON:-$ROOT/.venv/bin/python}"
 
@@ -179,19 +181,32 @@ start_locked() {
     # distinction moot; this is the second lock on the same door, because the failure it
     # prevents — deleting a live harvester's pidfile — is invisible until someone wants
     # the harvester stopped, weeks later.
-    if [ "$(cat "$PIDFILE" 2>/dev/null || true)" = "$pid" ]; then
-      rm -f "$PIDFILE"
-    fi
+    withdraw_pidfile "$pid"
     return 1
   fi
   cmd_status
 }
 
+withdraw_pidfile() {
+  # $1 = the pid this call is entitled to withdraw. Never remove a registration that is
+  # not the one we just accounted for: a start can complete between our last look and
+  # this line, and deleting ITS pidfile would leave a live harvester that `status` calls
+  # DOWN and `stop` cannot stop — the very thing the start lock exists to prevent, reached
+  # through a different verb. `stop` takes no lock of its own on purpose: it is the
+  # recovery verb, and a leaked lock must never be able to block it.
+  if [ "$(cat "$PIDFILE" 2>/dev/null || true)" = "$1" ]; then
+    rm -f "$PIDFILE"
+  fi
+}
+
 cmd_stop() {
-  local pid
+  local pid stale
   pid="$(running_pid)"
   if [ -z "$pid" ]; then
-    rm -f "$PIDFILE"
+    stale="$(cat "$PIDFILE" 2>/dev/null || true)"
+    if [ -n "$stale" ]; then
+      withdraw_pidfile "$stale"
+    fi
     echo "harvester not running"
     return 0
   fi
@@ -207,7 +222,7 @@ cmd_stop() {
     kill -9 "$pid" 2>/dev/null || true
     sleep 1
   fi
-  rm -f "$PIDFILE"
+  withdraw_pidfile "$pid"
   echo "stopped"
 }
 

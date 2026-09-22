@@ -137,6 +137,15 @@ run once there is nothing signed and no candidates, which is exactly what a fres
 like. Same shape as the align server's `scripts/run_align.sh`, deliberately, so the two read
 alike.
 
+**The pidfile is the launcher's own, and so is what `status` can see.** A harvester started
+some other way — by hand as `harvest.py --run`, or by another front-end keeping a pidfile of
+its own — is not in `.harvest/harvester.pid`, so `status` calls it DOWN, and `start` will
+launch beside it only to be turned away by `harvest.py`'s writer flock (`the harvester exited
+immediately`, with the refusal at the end of the log) rather than by the tidy "already
+running". Only one harvester can ever run — that flock is the real guarantee, not this
+pidfile — but the launcher cannot manage a run it did not start. Stop such a run the way it
+was started.
+
 **Exit codes**, for a caller that branches on them: `status` is 0 when the harvester is up
 and **1 when it is down**; `start` is 1 when it refuses (one is already running, another
 start is in flight, no interpreter) and 0 when one is now up; `stop` is 0 either way. A `2`

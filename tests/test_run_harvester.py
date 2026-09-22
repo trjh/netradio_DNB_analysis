@@ -198,6 +198,35 @@ class StopTests(LauncherTestCase):
         self.assertIn("not running", out.stdout)
         self.assertFalse(os.path.exists(self.pidfile))
 
+    def test_stop_never_withdraws_a_registration_that_is_not_the_one_it_stopped(self):
+        """`stop` takes no lock — it is the recovery verb, and a leaked lock must never be
+        able to block it — so it withdraws the pidfile only when the file still names the
+        pid it just stopped. Without that, a start completing inside stop's force-kill
+        window loses its registration, and the harvester it launched becomes one that
+        `status` calls DOWN and `stop` says is not running.
+
+        The window is reproduced here rather than argued about: with the wait set to 0 the
+        force-kill path runs, and its `sleep 1` is when the pidfile is overwritten.
+        """
+        self.fake_interpreter(body=FAKE_PY_SLOW)      # lingers on SIGTERM, so it is force-killed
+        self.assertEqual(self.start().returncode, 0)
+        done = []
+
+        def stopper():
+            done.append(self.run_cmd("stop", env={"NETRADIO_HARVEST_STOP_WAIT_S": "0"}))
+
+        t = threading.Thread(target=stopper)
+        t.start()
+        time.sleep(0.3)                               # inside stop's post-kill second
+        self.write_pidfile(424242)                    # "another start just registered"
+        t.join(timeout=60)
+
+        self.assertEqual(len(done), 1)
+        self.assertEqual(done[0].returncode, 0, done[0].stderr)
+        self.assertTrue(os.path.exists(self.pidfile),
+                        "stop deleted a registration that was not the one it stopped")
+        self.assertEqual(self.read_pid(), 424242)
+
     def test_restart_stops_the_old_process_and_starts_a_new_one(self):
         self.fake_interpreter()
         self.assertEqual(self.start().returncode, 0)
