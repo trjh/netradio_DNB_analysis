@@ -452,7 +452,12 @@ scripts/run_harvester.sh restart
 
 `start` refuses while one is already up, and clears a pidfile left behind by a crash or a
 reboot. `make harvest-run` is the same thing. `status` exits 0 when it is up and 1 when it
-is down, so a script can branch on it. The log is `.harvest/harvest.log`, and **at the next
+is down, so a script can branch on it — **but the pidfile is the launcher's own**: a
+harvester started some other way is not in it, so `status` calls that one DOWN while it
+runs and `start` is turned away by `harvest.py`'s writer flock rather than by "already
+running". Only one harvester can ever run either way — that flock is the guarantee, not
+this pidfile — and [SCRIPTS](./docs/SCRIPTS.md) has the whole contract. The log is
+`.harvest/harvest.log`, and **at the next
 `start`** — if it is at or over 10 MB by then — it is renamed to `.harvest/harvest.log.1`,
 one generation back, nothing older kept. The rename happens between runs, never during one,
 so a run of weeks is bounded by when it is next restarted. Before the signing pass has ever
