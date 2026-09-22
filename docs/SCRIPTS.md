@@ -96,11 +96,17 @@ own original, the change is wrong.
 ## The harvester
 
 ```bash
-make harvest-run                                                      # runs for weeks
+scripts/run_harvester.sh start                                        # runs for weeks
+scripts/run_harvester.sh status                                       # pid, phase, ledger
+scripts/run_harvester.sh stop                                         # / restart
+make harvest-run                                                      # alias for `start`
 
 set -a && . ./.env && set +a
 . .venv/bin/activate && python scripts/harvest.py --status
 . .venv/bin/activate && MallocLargeCache=0 python scripts/harvest.py --run
+                                                                      # the foreground form:
+                                                                      # no pidfile, no log,
+                                                                      # dies with the terminal
 . .venv/bin/activate && python scripts/harvest.py --pause        # / --resume
 . .venv/bin/activate && python scripts/harvest.py --purge-audio  # throw every retained excerpt away
 . .venv/bin/activate && python scripts/harvest.py --forget 7     # drop MT7's leads + pairings
@@ -112,6 +118,20 @@ set -a && . ./.env && set +a
                                                                       # signature is LOST (refuses
                                                                       # while a writer runs)
 ```
+
+**`scripts/run_harvester.sh` is the way in.** A run lasts weeks, so it belongs in the
+background under something that remembers it: the launcher reads `.env`, sets
+`MallocLargeCache=0` (the memory bound, which only works if it is in the environment at
+process start), writes one pidfile at `.harvest/harvester.pid` and appends to one log at
+`.harvest/harvest.log`, renaming it to `harvest.log.1` once it passes 10 MB — one generation
+back (`NETRADIO_HARVEST_LOG_MAX_BYTES` moves the cap). `start` refuses while a harvester is
+already up and clears a pidfile whose process is gone or is now something else; `stop` asks
+for a clean exit and waits up to 30 seconds for it (`NETRADIO_HARVEST_STOP_WAIT_S`) before it
+resorts to `kill -9`. `status` prints whether it is up, its pid, the phase it last wrote to
+`.harvest/state.json`, and whether the ledger is there — and **an absent ledger is a normal
+answer**, not an error: before the signing pass has run once there is nothing signed and no
+candidates, which is exactly what a fresh clone looks like. Same shape as the align server's
+`scripts/run_align.sh`, deliberately, so the two read alike.
 
 **Clip formats: `.wav`, `.wv`, `.flac`, `.m4a`, `.mp3`** — lossless preferred, in that order
 (everything decodes through ffmpeg, which reads WavPack natively). `.wv` earned its place the

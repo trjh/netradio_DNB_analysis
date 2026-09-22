@@ -441,6 +441,21 @@ the rate difference, solved downstream by `speed = (trackB − trackA) / (origB 
 `harvest.py` streams candidates, reduces each to a chroma signature, discards the audio,
 scores against every unsolved mystery, for weeks. Watch it — and rule — at **`/harvest`**.
 
+Start and stop it with its own launcher — one pidfile, one log, one harvester:
+
+```bash
+scripts/run_harvester.sh start      # in the background; it runs for weeks
+scripts/run_harvester.sh status     # up or down, the pid, the phase, the ledger
+scripts/run_harvester.sh stop       # asks for a clean exit, and waits for it
+scripts/run_harvester.sh restart
+```
+
+`start` refuses while one is already up, and clears a pidfile left behind by a crash or a
+reboot. `make harvest-run` is the same thing. The log is `.harvest/harvest.log`, renamed to
+`.harvest/harvest.log.1` once it passes 10 MB — one generation back, nothing older kept.
+Before the signing pass has ever run there is no ledger, and `status` says so plainly
+(`ledger: absent`): nothing signed yet is a state, not a fault.
+
 Give it a YouTube session — set **one** of these in `.env` (gitignored), then restart:
 
 ```
