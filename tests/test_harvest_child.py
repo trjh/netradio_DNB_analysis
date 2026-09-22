@@ -1392,6 +1392,51 @@ class ASignatureEvictedBetweenRenameAndCommit(unittest.TestCase):
         self.assertEqual(self.put, [], "nothing uploaded for a signature that is not there")
         self.assertFalse(os.path.exists(harvest.sig_path(self.url)))
 
+    def test_a_refused_reserve_writes_no_signature_and_uploads_nothing(self):
+        """The other half of the policy gate: `reserve` before the write. Past the disk
+        floor the signature is NOT written, the fetch reports the refusal, and nothing is
+        uploaded -- the URL's recovery is requeue_missing_sigs, which offers it again once
+        the disk has room. Without the gate a full disk is filled the rest of the way."""
+        cache_budget._disk_usage = lambda _p: (100 * 1000, 50 * 1000, 50 * 1000)
+        self.addCleanup(setattr, cache_budget, "_disk_usage", cache_budget._disk_usage)
+        os.environ["NETRADIO_DISK_MAX_PCT"] = "0"          # past the floor: every reserve refuses
+        harvest.register_caches()
+        with mock.patch.object(harvest.subprocess, "Popen",
+                               fake_decode(pcm=_pcm(LONG_ENOUGH))), \
+                mock.patch.object(harvest.chroma_recipe, "compute_chroma",
+                                  lambda y, sr=None: np.zeros((12, 60), dtype="float32")), \
+                mock.patch.object(harvest.sigstore, "enabled", lambda: True), \
+                mock.patch.object(harvest.sigstore, "put",
+                                  lambda *a: self.put.append(a) or True):
+            result = harvest._fetch_and_sign(self.url, self.job)
+        self.assertFalse(result["ok"], result)
+        self.assertIn("refused room for the signature", result["error"])
+        self.assertNotIn("403", result["error"])           # never read as a host problem
+        self.assertNotIn("429", result["error"])
+        self.assertNotIn("blocked", result["error"].lower())
+        self.assertEqual(self.put, [], "nothing uploaded for a signature never written")
+        self.assertFalse(os.path.exists(harvest.sig_path(self.url)))
+
+    def test_a_signature_write_that_dies_part_way_leaves_no_tmp_in_the_cache(self):
+        """A write that raises mid-flight must not leave its `.tmp` behind: inside the cache
+        it counts against the cap and the policy holds it from eviction for an hour. The
+        writer knows the write is over, so it clears it now."""
+        def boom(fh, arr, *a, **k):
+            fh.write(b"half a signature")
+            raise OSError("no space left on device")
+
+        with mock.patch.object(harvest.subprocess, "Popen",
+                               fake_decode(pcm=_pcm(LONG_ENOUGH))), \
+                mock.patch.object(harvest.chroma_recipe, "compute_chroma",
+                                  lambda y, sr=None: np.zeros((12, 60), dtype="float32")), \
+                mock.patch.object(harvest.sigstore, "enabled", lambda: False), \
+                mock.patch.object(harvest.np, "save", boom):
+            with self.assertRaises(OSError):
+                harvest._decode_and_sign(self.url, self.job)
+        cache = harvest._chroma_dir()
+        left = os.listdir(cache) if os.path.isdir(cache) else []
+        self.assertEqual(left, [], "no half-written entry is left in the cache")
+
 
 if __name__ == "__main__":
     unittest.main()

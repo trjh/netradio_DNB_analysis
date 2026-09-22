@@ -38,7 +38,7 @@ import soundfile as sf                               # noqa: E402
 import harvest                                       # noqa: E402
 import sigstore                                      # noqa: E402
 from harvest import (                                # noqa: E402
-    KEEP, KEEP_CEILING, KEEP_TOP, MATCH_COST, QUEUE, RESCAN_PER_PASS, STATE,
+    KEEP_CEILING, KEEP_TOP, MATCH_COST, QUEUE, RESCAN_PER_PASS, STATE,
     _load, _now, _save, blank_state, evict_overfull, listen_queue_split, queries,
     write_excerpt,
 )
@@ -95,7 +95,13 @@ def _score_new(state, url, c, samples, qs):
         board.sort(key=lambda m: m["cost"])
         if len(board) >= KEEP_TOP and cost >= board[-1]["cost"]:
             continue                       # not good enough to displace anyone
-        excerpt = os.path.join(KEEP, "MT%d-%.4f-%s.wav"
+        # The board's directory is asked of the registry at each call, never bound at
+        # import: `KEEP` is a policy-derived value now, and a `from harvest import KEEP`
+        # would freeze whatever it happened to be when this module was first imported --
+        # so the gate above (which asks the registry) and the write here could name
+        # different directories, and a write could land outside the registered cache,
+        # unbounded and unaccounted.
+        excerpt = os.path.join(harvest._keep_dir(), "MT%d-%.4f-%s.wav"
                                % (num, cost, hashlib.sha1(url.encode()).hexdigest()[:8]))
         kept = os.path.exists(excerpt)
         if not kept:

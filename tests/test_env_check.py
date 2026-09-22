@@ -217,7 +217,7 @@ class TheRepo(unittest.TestCase):
         # stopped using.
         read = env_check.read_names()
         self.assertNotIn("NETRADIO_ALIGN_CACHE", read)
-        self.assertNotIn("NETRUDIO_ALIGN_CACHE_MAX_FRAC", read)
+        self.assertNotIn("NETRADIO_ALIGN_CACHE_MAX_FRAC", read)
         self.assertNotIn("NETRADIO_ALIGN_CACHE_DISK_FULL_FRAC", read)
         self.assertNotIn("NETRADIO_TRACKS_DIR", read)
 

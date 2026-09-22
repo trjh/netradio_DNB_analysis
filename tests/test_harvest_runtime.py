@@ -498,6 +498,51 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
                          "PROVENANCE.txt" in os.listdir(self.keep_dir),
                          "a landing that did not survive writes no board note")
 
+    def test_purge_audio_deletes_through_the_policy(self):
+        """Every deletion of a cache entry goes through the policy's one door, so it is
+        checked against the cache's directory and recorded with its reason. A bare
+        `os.unlink` here would empty the board behind the policy's back, leaving its
+        accounting and its event log describing a cache that no longer holds what they say."""
+        state = os.path.join(self.tmp, "state.json")
+        saved = harvest.STATE
+        harvest.STATE = state
+        self.addCleanup(setattr, harvest, "STATE", saved)
+        with open(state, "w") as fh:
+            json.dump({"matches": [{"url": "u1", "audio": "x"}], "kept": 1}, fh)
+        self._excerpt("MT4-0.0600-one.wav", 100)
+        self._excerpt("MT4-0.0700-two.wav", 100)
+        note = os.path.join(self.keep_dir, "PROVENANCE.txt")
+        with open(note, "w") as fh:
+            fh.write("note")
+        harvest.purge_audio()
+        self.assertEqual(sorted(os.listdir(self.keep_dir)), ["PROVENANCE.txt"],
+                         "every excerpt went; the note is not audio and stays")
+        removals = [e for e in self._events() if e["event"] == "remove"]
+        self.assertEqual(sorted((e["entry"], e["reason"]) for e in removals),
+                         [("MT4-0.0600-one.wav", "purge-audio"),
+                          ("MT4-0.0700-two.wav", "purge-audio")],
+                         "the policy recorded each removal, with the caller's reason")
+
+    def test_a_board_trimmed_back_to_keep_top_deletes_through_the_policy(self):
+        """`evict_overfull` trims a mystery's board to the best KEEP_TOP. The row goes from
+        the state whatever happens, but the FILE is the policy's to delete and to record --
+        a bare unlink would leave the cache's accounting describing an entry that is gone."""
+        matches, paths = [], []
+        for i in range(harvest.KEEP_TOP + 1):
+            name = "MT4-%.4f-%02d.wav" % (0.01 * i, i)
+            paths.append(self._excerpt(name, 100))
+            matches.append({"mystery": 4, "cost": 0.01 * i, "url": "u%d" % i,
+                            "audio": paths[-1]})
+        state = {"matches": matches, "kept": len(matches)}
+        harvest.evict_overfull(state, 4)
+        self.assertEqual(len(state["matches"]), harvest.KEEP_TOP)
+        self.assertEqual(state["kept"], harvest.KEEP_TOP)
+        self.assertFalse(os.path.exists(paths[-1]), "the priciest row's excerpt went")
+        removals = [e for e in self._events() if e["event"] == "remove"]
+        self.assertEqual([(e["entry"], e["reason"]) for e in removals],
+                         [(os.path.basename(paths[-1]), "board-overfull")],
+                         "through the policy's door, recorded with its reason")
+
     def test_the_boards_provenance_note_is_pinned(self):
         """PROVENANCE.txt's name parses to no cost, so the by-score order counts it as an
         ordinary entry -- an age-, cap- or floor-driven eviction run could take the
@@ -571,7 +616,7 @@ class TheOnDemandRescanRefusesADarkPolicy(unittest.TestCase):
                 unittest.mock.patch.object(harvest, "queries",
                                           refused("query set")), \
                 unittest.mock.patch.object(harvest, "listen_queue_split",
-                                          refused("player's queue")), \
+                                          refused("ruled-on set")), \
                 contextlib.redirect_stdout(io.StringIO()) as out:
             harvest.main()
         self.assertIn("the signature cache is dark", out.getvalue())

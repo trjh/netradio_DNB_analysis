@@ -146,6 +146,16 @@ def register_caches():
     KEEP = _KEEP_AT_IMPORT = cache_budget.dir_of(CANDIDATES_CACHE)
 
 
+def _discard(tmp):
+    """Remove a write-in-progress file whose write is over. Nothing to report if it is
+    already gone, or if the directory will not give it up -- the policy evicts a stale
+    .tmp on its own once it is an hour old."""
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+
+
 def _chroma_dir():
     """The signature cache's directory, resolved through the registry at each call -- a root
     configured after import is honoured. A CACHE set by hand, or patched by a test, still
@@ -900,9 +910,16 @@ def _decode_and_sign(url, job, duration=None):
     # .tmp, so a parent running an eviction while this child writes cannot delete the
     # half-written entry (np.save is handed a file handle so it cannot rename .tmp to .npy).
     tmp = "%s.%d.tmp" % (sig, os.getpid())
-    with open(tmp, "wb") as fh:
-        np.save(fh, c.astype(chroma_recipe.STORE_DTYPE))
-    os.replace(tmp, sig)
+    try:
+        with open(tmp, "wb") as fh:
+            np.save(fh, c.astype(chroma_recipe.STORE_DTYPE))
+        os.replace(tmp, sig)
+    except BaseException:
+        # A write that died part-way leaves its .tmp inside the cache, where it counts
+        # against the cap and is held from eviction for an hour. Clear it here rather than
+        # waiting out that hour: this process knows the write is over.
+        _discard(tmp)
+        raise
     cache_budget.commit(CHROMA_CACHE, sig)
     if not os.path.isfile(sig):
         # THE LANDING CHECK. The rename and the commit are two calls, and a bounded cache may
@@ -1096,9 +1113,13 @@ def write_excerpt(samples, at_s, path):
     # A .tmp name, written whole and renamed into place, so no eviction this process or another
     # runs can delete the half-written entry (the policy holds a fresh .tmp for an hour).
     tmp = "%s.%d.tmp" % (path, os.getpid())
-    with open(tmp, "wb") as fh:
-        sf.write(fh, clip, _audio.SR, format="WAV")
-    os.replace(tmp, path)
+    try:
+        with open(tmp, "wb") as fh:
+            sf.write(fh, clip, _audio.SR, format="WAV")
+        os.replace(tmp, path)
+    except BaseException:
+        _discard(tmp)                        # see the signature write for the reason
+        raise
     cache_budget.commit(CANDIDATES_CACHE, path)
     if not os.path.isfile(path):
         # THE LANDING CHECK (see the signature write for the reason): an eviction run that
@@ -2417,8 +2438,8 @@ def run(args):
                     continue
                 # A refused excerpt (past the disk floor, the board's cap with nothing
                 # evictable) is not on disk, so it is neither counted as kept nor named as
-                # the lead's audio: the lead itself survives and /harvest plays it from the
-                # source embed.
+                # the lead's audio: the lead itself survives with its numbers, and it is
+                # reviewable from its own source URL as any lead without a clip is.
                 kept = write_excerpt(samples, at or 0, excerpt)   # from memory; NO second fetch
                 if kept:
                     state["kept"] += 1

@@ -56,7 +56,8 @@ class Base(unittest.TestCase):
             (collector, "RESULTS", os.path.join(t, "results")),
             (collector, "STATE", os.path.join(t, "state.json")),
             (collector, "QUEUE", os.path.join(t, "queue.json")),
-            (collector, "KEEP", os.path.join(t, "keep")),
+            # no `collector.KEEP`: the board's directory is asked of the registry at each
+            # call now (harvest._keep_dir()), so patching harvest.KEEP above is the one seam.
         ]:
             p = unittest.mock.patch.object(mod, attr, val)
             p.start()
@@ -439,6 +440,103 @@ class TestCollector(Base):
         self.assertEqual(os.listdir(collector.RESULTS) if os.path.isdir(collector.RESULTS)
                          else [], [harvest._sig_key(URL) + ".json"],
                          "the spool keeps its record: nothing crashed, nothing was lost")
+
+    def test_run_refuses_a_dark_cache_before_it_takes_the_writer_lock(self):
+        """The fold loop's own gate, beside --once's: `run()` must refuse before it makes
+        its state directory or takes the ONE queue/state writer lock, naming the setting.
+        Without it the loop runs with nowhere to keep an excerpt, and the first match
+        reaches a directory that does not exist."""
+        saved = {k: os.environ.get(k) for k in list(os.environ)
+                 if k.startswith("NETRADIO_") and ("CACHE" in k or
+                                                   k in ("NETRADIO_CACHE_ROOT",
+                                                         "NETRADIO_DOWNLOAD_ROOT",
+                                                         "NETRADIO_DISK_MAX_PCT",
+                                                         "NETRADIO_CACHE_EVENTS_DAYS"))}
+        for k in saved:
+            os.environ.pop(k, None)
+        import cache_budget
+        registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+
+        def restore():
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(registry[1])
+            for k, v in saved.items():
+                os.environ[k] = v
+        self.addCleanup(restore)
+        harvest.register_caches()             # re-read: both caches are dark
+        self.assertIsNone(harvest._keep_dir())
+
+        state_dir = os.path.join(self.tmp.name, "never-made")
+        out = io.StringIO()
+        with unittest.mock.patch.object(collector, "STATE_DIR", state_dir), \
+                unittest.mock.patch.object(harvest, "acquire_writer_lock",
+                                          lambda *a, **k: (_ for _ in ()).throw(
+                                              AssertionError("refused before the lock"))), \
+                contextlib.redirect_stdout(out):
+            collector.run()
+        self.assertIn("dark", out.getvalue())
+        self.assertIn("NETRADIO_CACHE_ROOT", out.getvalue())
+        self.assertFalse(os.path.exists(state_dir),
+                         "refused before the state directory was made: no fold ever started")
+
+    def test_the_board_directory_follows_a_re_registration(self):
+        """The board's directory is a policy-derived value now, not a constant: a
+        re-registration moves it. So the fold must ask the registry at each write rather
+        than hold the value it saw when it was first imported -- a
+        `from harvest import KEEP` snapshot would keep sending excerpts to the directory
+        the policy no longer owns: outside the registered cache, unbounded and unaccounted,
+        while the gate that reads the registry reported all was well."""
+        saved = {k: os.environ.get(k) for k in list(os.environ)
+                 if k.startswith("NETRADIO_") and ("CACHE" in k or
+                                                   k in ("NETRADIO_CACHE_ROOT",
+                                                         "NETRADIO_DOWNLOAD_ROOT",
+                                                         "NETRADIO_DISK_MAX_PCT",
+                                                         "NETRADIO_CACHE_EVENTS_DAYS"))}
+        for k in saved:
+            os.environ.pop(k, None)
+        import cache_budget
+        registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+
+        def restore():
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(registry[1])
+            for k in [k for k in list(os.environ)
+                      if k.startswith("NETRADIO_") and ("CACHE" in k or
+                                                        k in ("NETRADIO_CACHE_ROOT",
+                                                              "NETRADIO_DOWNLOAD_ROOT",
+                                                              "NETRADIO_DISK_MAX_PCT",
+                                                              "NETRADIO_CACHE_EVENTS_DAYS"))]:
+                os.environ.pop(k, None)
+            os.environ.update(saved)
+        self.addCleanup(restore)
+        # An empty volume, so the policy's disk floor never trips: what is under test is
+        # WHERE the excerpt lands, not whether the machine running the suite has room.
+        self.addCleanup(setattr, cache_budget, "_disk_usage", cache_budget._disk_usage)
+        cache_budget._disk_usage = lambda _p: (100 * 10 ** 9, 0, 100 * 10 ** 9)
+        first = os.path.join(self.tmp.name, "root-one")
+        second = os.path.join(self.tmp.name, "root-two")
+        os.environ["NETRADIO_CACHE_ROOT"] = first
+        harvest.register_caches()
+        os.environ["NETRADIO_CACHE_ROOT"] = second        # the root moves; the caches follow
+        harvest.register_caches()
+        board = os.path.join(second, "candidates")
+        self.assertEqual(harvest._keep_dir(), board)
+
+        state = harvest.blank_state()
+        with unittest.mock.patch.object(collector, "_cm") as cm:
+            cm.match.return_value = (0.031, 2, 12.0)      # a MATCH, excerpt worth keeping
+            collector._score_new(state, URL, self._chroma(), self._samples(), 
+                                 [(4, self._chroma(), "4:fp")])
+        self.assertEqual(state["kept"], 1)
+        self.assertEqual(os.path.dirname(state["matches"][0]["audio"]), board,
+                         "the excerpt landed in the board the registry names now")
+        self.assertTrue(os.path.isfile(state["matches"][0]["audio"]))
+        self.assertFalse(os.path.isdir(os.path.join(first, "candidates")),
+                         "and nothing was written into the board the policy left behind")
 
     def test_no_retained_audio_scores_but_cannot_excerpt(self):
         q = self._harvested()
