@@ -626,6 +626,124 @@ class TheOnDemandRescanRefusesADarkPolicy(unittest.TestCase):
                          "stamped to a completion it did not do")
 
 
+@unittest.skipIf(harvest is None, "needs the librosa venv")
+class TheOtherCacheReadingModesRefuseADarkPolicy(unittest.TestCase):
+    """`--rescan` is not the only mode that reads the signature cache, and the other two
+    refuse for their own reasons. Both refusals are the branch's, and neither was held by a
+    test: deleting either left the whole suite green.
+
+    `--migrate-sigs` walks the cache directory. With the cache dark there is no directory
+    at all, so without the gate it reaches `os.path.isdir(None)` and dies with a TypeError
+    where it should print the setting to fix.
+
+    `requeue_missing_sigs` asks of every done URL "is its signature still held?". A dark
+    cache has no local half, so every answer is no; with the store dark too, the remote
+    half is empty as well, and the whole corpus reads as lost -- either a false "the store
+    broke" alert or a requeue of everything. It is the same epistemic refusal the
+    unlistable bucket gets: cannot tell, do nothing."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="dark-modes-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self._paths = harvest.STATE_DIR, harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK
+        harvest.STATE_DIR = os.path.join(self.tmp, "harvest")
+        harvest.STATE = os.path.join(self.tmp, "state.json")
+        harvest.QUEUE = os.path.join(self.tmp, "queue.json")
+        harvest.WRITER_LOCK = os.path.join(self.tmp, "writer.lock")
+        self.addCleanup(self._restore_paths)
+        self._saved = {k: os.environ.get(k) for k in list(os.environ)
+                       if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
+        for k in self._saved:
+            os.environ.pop(k, None)
+        self._attrs = (harvest.CACHE, harvest.KEEP, harvest._CACHE_AT_IMPORT,
+                       harvest._KEEP_AT_IMPORT)
+        self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        self.addCleanup(self._restore_policy)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        harvest.register_caches()             # re-read: the signature cache is dark
+        self.assertIsNone(harvest._chroma_dir())
+
+    def _restore_paths(self):
+        (harvest.STATE_DIR, harvest.STATE, harvest.QUEUE,
+         harvest.WRITER_LOCK) = self._paths
+
+    def _restore_policy(self):
+        cache_budget._REGISTRY.clear()
+        cache_budget._REGISTRY.update(self._registry[0])
+        cache_budget._STATS.clear()
+        cache_budget._STATS.update(self._registry[1])
+        for k in [k for k in list(os.environ)
+                  if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)]:
+            os.environ.pop(k, None)
+        os.environ.update(self._saved)
+        for name, value in zip(("CACHE", "KEEP", "_CACHE_AT_IMPORT", "_KEEP_AT_IMPORT"),
+                               self._attrs):
+            setattr(harvest, name, value)
+
+    def test_migrate_sigs_refuses_instead_of_crashing_on_a_directory_that_is_none(self):
+        """The store is configured -- so the mode is past its own sigstore gate -- and the
+        cache is dark. It must name the setting and stop, not walk a directory that does
+        not exist: `os.path.isdir(None)` is a TypeError, a traceback where an operator
+        needs a sentence."""
+        uploaded = []
+        argv = ["harvest.py", "--migrate-sigs"]
+        with unittest.mock.patch.object(sys, "argv", argv), \
+                unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: True), \
+                unittest.mock.patch.object(harvest.sigstore, "put",
+                                          lambda *a: uploaded.append(a) or True), \
+                unittest.mock.patch.object(harvest.sigstore, "evict_cold",
+                                          lambda *a: (_ for _ in ()).throw(
+                                              AssertionError("refused before any eviction"))), \
+                unittest.mock.patch.object(harvest, "queries",
+                                          lambda state=None: (_ for _ in ()).throw(
+                                              AssertionError("refused before the query set"))), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            harvest.main()                     # no TypeError escapes: that is half the test
+        self.assertIn("the signature cache is dark", out.getvalue())
+        self.assertIn("NETRADIO_CACHE_ROOT", out.getvalue())
+        self.assertEqual(uploaded, [], "nothing was uploaded, and nothing was listed")
+        self.assertFalse(os.path.exists(harvest.STATE), "a refused migrate writes no state")
+
+    def test_requeue_missing_sigs_cannot_tell_lost_from_held_and_does_nothing(self):
+        """A dark cache makes every done signature read as lost. The refusal says so and
+        stops: nothing is requeued, and no "the store broke" alert is stamped over a
+        corpus that is intact."""
+        state = harvest.blank_state()
+        q = {"pending": [], "done": ["https://example.invalid/%d" % i for i in range(10)]}
+        with unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: False):
+            res = harvest.requeue_missing_sigs(state, q, set())
+        self.assertIn("the signature cache is dark", res["why"])
+        self.assertIn("NETRADIO_CACHE_ROOT", res["why"])
+        self.assertEqual((res["requeued"], res["reported"]), (0, False))
+        self.assertEqual(res["missing"], 0, "nothing was even counted as lost")
+        self.assertEqual(q["done"], ["https://example.invalid/%d" % i for i in range(10)],
+                         "the corpus stayed where it was")
+        self.assertEqual(q["pending"], [], "and nothing was requeued behind it")
+        self.assertEqual(state.get("issues") or [], [],
+                         "no false 'the store broke' row was stamped")
+
+    def test_the_on_demand_requeue_mode_prints_that_refusal_and_writes_nothing(self):
+        """...and the CLI mode that calls it reports the refusal rather than a recovery.
+        `--requeue-missing-sigs` has no gate of its own: this refusal is the only one."""
+        with open(harvest.QUEUE, "w") as fh:
+            json.dump({"pending": [], "done": ["https://example.invalid/x"]}, fh)
+        argv = ["harvest.py", "--requeue-missing-sigs"]
+        with unittest.mock.patch.object(sys, "argv", argv), \
+                unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: False), \
+                unittest.mock.patch.object(harvest, "listen_queue_split",
+                                          lambda: ([], set())), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            harvest.main()
+        self.assertIn("the signature cache is dark", out.getvalue())
+        self.assertFalse(os.path.exists(harvest.STATE),
+                         "nothing was requeued or reported, so no state was written")
+        with open(harvest.QUEUE) as fh:
+            self.assertEqual(json.load(fh),
+                             {"pending": [], "done": ["https://example.invalid/x"]},
+                             "the queue is untouched")
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -346,8 +346,15 @@ def main():
         else:
             landed = assemble_track(pieces, starts, out)
         if not landed:
-            print("  %3s SKIP  %-42s the cache policy refused the room: the disk is past its "
-                  "floor, or the tracks cache is over its cap with nothing evictable"
+            # Two different things end here, and the message names both. `reserve` can
+            # refuse the room; or the cut landed and an eviction took it back before the
+            # policy had recorded it, in which case there is nothing to free and a re-run
+            # is the whole remedy. Naming only the first sends an operator hunting for
+            # disk space they do not need.
+            print("  %3s SKIP  %-42s the cut did not land: the policy refused the room "
+                  "(the disk is past its floor, or the tracks cache is over its cap with "
+                  "nothing evictable), or an eviction took the cut back before the policy "
+                  "recorded it -- that one needs only a re-run"
                   % (num, title[:42]))
             skipped += 1
             continue

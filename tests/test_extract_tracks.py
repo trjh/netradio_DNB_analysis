@@ -461,6 +461,33 @@ class TheTracksCache(unittest.TestCase):
                          "no half-assembled track is left in the cache")
         self.assertFalse(os.path.isdir(scratch["dir"]), "the scratch directory went too")
 
+    def test_the_not_landed_message_names_both_reasons_a_cut_can_fail(self):
+        """A cut that does not land ends here for either of two reasons, and they want
+        different things of the operator: `reserve` refusing the room needs disk freed,
+        while an eviction taking the cut back between its landing and the policy's record
+        of it needs only a re-run. Naming only the first sends them hunting for space they
+        already have."""
+        out_dir = os.path.join(self.tmp, "stream_tracks")
+        argv = ["extract_tracks.py", "--out", out_dir, "--only", "4"]
+        pieces = [("d000-018", 0.0, 120.0)]
+        with unittest.mock.patch.object(sys, "argv", argv), \
+                unittest.mock.patch.object(extract_tracks, "positions",
+                                          lambda: {"d000-018": 0.0}), \
+                unittest.mock.patch.object(extract_tracks, "windows", lambda s, v: []), \
+                unittest.mock.patch.object(extract_tracks, "plan",
+                                          lambda mb, me, places: (pieces, None)), \
+                unittest.mock.patch.object(extract_tracks, "cut",
+                                          lambda *a, **k: False), \
+                contextlib.redirect_stdout(io.StringIO()) as buf:
+            extract_tracks.main()
+        text = buf.getvalue()
+        self.assertIn("SKIP", text)
+        self.assertIn("refused the room", text, "the reserve refusal is still named")
+        self.assertIn("before the policy recorded it", text,
+                      "and so is the landing an eviction took back")
+        self.assertIn("re-run", text, "with what that second case actually needs")
+        self.assertIn("1 refused", text, "and the track is counted as refused, not made")
+
     def test_the_help_names_the_variable_the_code_reads(self):
         """The --out help is the operator-facing spelling of the default's override; a name
         that differs by one letter silently gets the default instead."""
