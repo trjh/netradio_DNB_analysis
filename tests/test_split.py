@@ -4,6 +4,7 @@ All offline: stream_chroma and the matcher are stubbed; soundfile writes real (t
 the retained-audio → excerpt path is exercised for real.
 """
 
+import contextlib
 import io
 import json
 import os
@@ -55,7 +56,8 @@ class Base(unittest.TestCase):
             (collector, "RESULTS", os.path.join(t, "results")),
             (collector, "STATE", os.path.join(t, "state.json")),
             (collector, "QUEUE", os.path.join(t, "queue.json")),
-            (collector, "KEEP", os.path.join(t, "keep")),
+            # no `collector.KEEP`: the board's directory is asked of the registry at each
+            # call now (harvest._keep_dir()), so patching harvest.KEEP above is the one seam.
         ]:
             p = unittest.mock.patch.object(mod, attr, val)
             p.start()
@@ -107,6 +109,26 @@ class TestHarvester(Base):
         self.assertFalse(os.path.exists(collector.STATE))
         self.assertEqual(q, {"pending": [URL], "done": []})   # queue is read-only here
         self.assertEqual(hstate["analyzed"], 1)
+
+    def test_run_refuses_a_dark_signature_cache(self):
+        """The fetch half's own gate, beside --once's: harvester.run() must refuse before it
+        opens its lock or writes its state, naming the setting -- a fetched track's signature
+        would have nowhere to live, exactly as Mode A and --once refuse. A dropped gate must
+        fail this test immediately, not hang the suite in a fetch loop that runs for weeks."""
+        lock = os.path.join(self.tmp.name, "split.lock")
+        out = io.StringIO()
+        with unittest.mock.patch.object(harvest, "CACHE", None), \
+                unittest.mock.patch.object(harvest, "install_signal_handlers", lambda: None), \
+                unittest.mock.patch.object(harvester, "LOCK", lock), \
+                unittest.mock.patch.object(harvester, "work_once",
+                                          lambda *a, **k: (_ for _ in ()).throw(
+                                              AssertionError("refused before any fetch"))), \
+                contextlib.redirect_stdout(out):
+            harvester.run()
+        self.assertIn("the signature cache is dark", out.getvalue())
+        self.assertIn("NETRADIO_CACHE_ROOT", out.getvalue())
+        self.assertFalse(os.path.exists(lock),
+                         "refused before the lock was opened: no fetch half ever started")
 
     def test_already_held_skips_without_fetching(self):
         np.save(harvest.sig_path(URL), self._chroma().astype("float16"))
@@ -374,6 +396,147 @@ class TestCollector(Base):
         q3 = harvest._load(collector.QUEUE, {})
         self.assertEqual(q3.get("retry_later"), [URL])            # reconciled DURABLY
         self.assertEqual(q3.get("done") or [], [])
+
+    def test_once_refuses_a_dark_cache_instead_of_crashing_on_a_match(self):
+        """`--once` is the cron entry point, not a test seam: with the cache policy dark it
+        must refuse exactly as run() does, before a matching result reaches an excerpt
+        path that is None. A queued MATCH and a dark cache, and the one-shot pass folds
+        nothing and crashes nothing."""
+        q = self._harvested()                 # a real job dir + a spooled ok result
+        saved = {k: os.environ.get(k) for k in list(os.environ)
+                 if k.startswith("NETRADIO_") and ("CACHE" in k or
+                                                   k in ("NETRADIO_CACHE_ROOT",
+                                                         "NETRADIO_DOWNLOAD_ROOT",
+                                                         "NETRADIO_DISK_MAX_PCT",
+                                                         "NETRADIO_CACHE_EVENTS_DAYS"))}
+        for k in saved:
+            os.environ.pop(k, None)
+        import cache_budget
+        registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+
+        def restore():
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(registry[1])
+            for k, v in saved.items():
+                os.environ[k] = v
+        self.addCleanup(restore)
+        harvest.register_caches()             # re-read: both caches are dark
+        self.assertIsNone(harvest._keep_dir())
+
+        collector.STATE = os.path.join(self.tmp.name, "state2.json")
+        with unittest.mock.patch.object(collector, "_cm") as cm, \
+                unittest.mock.patch.object(collector, "queries",
+                                          lambda state=None: (_ for _ in ()).throw(
+                                              AssertionError("refused before queries"))), \
+                unittest.mock.patch.dict(os.environ, {"NETRADIO_COLLECTOR": "on"}), \
+                unittest.mock.patch.object(sys, "argv", ["collector.py", "--once"]):
+            cm.match.return_value = (0.031, 2, 12.0)     # a MATCH, waiting to be folded
+            collector.main()
+        self.assertFalse(os.path.exists(collector.STATE),
+                         "the one-shot pass folded nothing: no state was written")
+        self.assertEqual(q["pending"], [URL], "the queued URL was left where it was")
+        self.assertEqual(os.listdir(collector.RESULTS) if os.path.isdir(collector.RESULTS)
+                         else [], [harvest._sig_key(URL) + ".json"],
+                         "the spool keeps its record: nothing crashed, nothing was lost")
+
+    def test_run_refuses_a_dark_cache_before_it_takes_the_writer_lock(self):
+        """The fold loop's own gate, beside --once's: `run()` must refuse before it makes
+        its state directory or takes the ONE queue/state writer lock, naming the setting.
+        Without it the loop runs with nowhere to keep an excerpt, and the first match
+        reaches a directory that does not exist."""
+        saved = {k: os.environ.get(k) for k in list(os.environ)
+                 if k.startswith("NETRADIO_") and ("CACHE" in k or
+                                                   k in ("NETRADIO_CACHE_ROOT",
+                                                         "NETRADIO_DOWNLOAD_ROOT",
+                                                         "NETRADIO_DISK_MAX_PCT",
+                                                         "NETRADIO_CACHE_EVENTS_DAYS"))}
+        for k in saved:
+            os.environ.pop(k, None)
+        import cache_budget
+        registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+
+        def restore():
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(registry[1])
+            for k, v in saved.items():
+                os.environ[k] = v
+        self.addCleanup(restore)
+        harvest.register_caches()             # re-read: both caches are dark
+        self.assertIsNone(harvest._keep_dir())
+
+        state_dir = os.path.join(self.tmp.name, "never-made")
+        out = io.StringIO()
+        with unittest.mock.patch.object(collector, "STATE_DIR", state_dir), \
+                unittest.mock.patch.object(harvest, "acquire_writer_lock",
+                                          lambda *a, **k: (_ for _ in ()).throw(
+                                              AssertionError("refused before the lock"))), \
+                contextlib.redirect_stdout(out):
+            collector.run()
+        self.assertIn("dark", out.getvalue())
+        self.assertIn("NETRADIO_CACHE_ROOT", out.getvalue())
+        self.assertFalse(os.path.exists(state_dir),
+                         "refused before the state directory was made: no fold ever started")
+
+    def test_the_board_directory_follows_a_re_registration(self):
+        """The board's directory is a policy-derived value now, not a constant: a
+        re-registration moves it. So the fold must ask the registry at each write rather
+        than hold the value it saw when it was first imported -- a
+        `from harvest import KEEP` snapshot would keep sending excerpts to the directory
+        the policy no longer owns: outside the registered cache, unbounded and unaccounted,
+        while the gate that reads the registry reported all was well."""
+        saved = {k: os.environ.get(k) for k in list(os.environ)
+                 if k.startswith("NETRADIO_") and ("CACHE" in k or
+                                                   k in ("NETRADIO_CACHE_ROOT",
+                                                         "NETRADIO_DOWNLOAD_ROOT",
+                                                         "NETRADIO_DISK_MAX_PCT",
+                                                         "NETRADIO_CACHE_EVENTS_DAYS"))}
+        for k in saved:
+            os.environ.pop(k, None)
+        import cache_budget
+        registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+
+        def restore():
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(registry[1])
+            for k in [k for k in list(os.environ)
+                      if k.startswith("NETRADIO_") and ("CACHE" in k or
+                                                        k in ("NETRADIO_CACHE_ROOT",
+                                                              "NETRADIO_DOWNLOAD_ROOT",
+                                                              "NETRADIO_DISK_MAX_PCT",
+                                                              "NETRADIO_CACHE_EVENTS_DAYS"))]:
+                os.environ.pop(k, None)
+            os.environ.update(saved)
+        self.addCleanup(restore)
+        # An empty volume, so the policy's disk floor never trips: what is under test is
+        # WHERE the excerpt lands, not whether the machine running the suite has room.
+        self.addCleanup(setattr, cache_budget, "_disk_usage", cache_budget._disk_usage)
+        cache_budget._disk_usage = lambda _p: (100 * 10 ** 9, 0, 100 * 10 ** 9)
+        first = os.path.join(self.tmp.name, "root-one")
+        second = os.path.join(self.tmp.name, "root-two")
+        os.environ["NETRADIO_CACHE_ROOT"] = first
+        harvest.register_caches()
+        os.environ["NETRADIO_CACHE_ROOT"] = second        # the root moves; the caches follow
+        harvest.register_caches()
+        board = os.path.join(second, "candidates")
+        self.assertEqual(harvest._keep_dir(), board)
+
+        state = harvest.blank_state()
+        with unittest.mock.patch.object(collector, "_cm") as cm:
+            cm.match.return_value = (0.031, 2, 12.0)      # a MATCH, excerpt worth keeping
+            collector._score_new(state, URL, self._chroma(), self._samples(), 
+                                 [(4, self._chroma(), "4:fp")])
+        self.assertEqual(state["kept"], 1)
+        self.assertEqual(os.path.dirname(state["matches"][0]["audio"]), board,
+                         "the excerpt landed in the board the registry names now")
+        self.assertTrue(os.path.isfile(state["matches"][0]["audio"]))
+        self.assertFalse(os.path.isdir(os.path.join(first, "candidates")),
+                         "and nothing was written into the board the policy left behind")
 
     def test_no_retained_audio_scores_but_cannot_excerpt(self):
         q = self._harvested()

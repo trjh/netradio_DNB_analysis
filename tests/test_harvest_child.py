@@ -12,6 +12,7 @@ is a fake `Popen`, and the two things worth being careful about are pinned:
     argv ever gained that flag, the supervisor would adopt a child that lives for one track.
 """
 
+import contextlib
 import io
 import json
 import os
@@ -33,6 +34,8 @@ try:
     import memwatch                     # noqa: E402
 except Exception:                       # a dependency this test does not own
     harvest = memwatch = None
+
+import cache_budget                     # noqa: E402  (the machine's one cache policy)
 
 try:
     import harvester                    # noqa: E402  (split mode; also needs soundfile)
@@ -157,7 +160,9 @@ def _fetch_with(case, popen, url, duration):
     real_save = np.save
 
     def _save(path, arr, *a, **k):
-        case.saved.append(os.path.basename(str(path)))
+        # np.save is handed a file handle for the cache's .tmp write, so take the handle's
+        # name: what is recorded is what a write aimed at, whichever side of the rename.
+        case.saved.append(os.path.basename(str(getattr(path, "name", path))))
         return real_save(path, arr, *a, **k)
 
     with mock.patch.object(harvest.subprocess, "Popen", popen), \
@@ -169,6 +174,13 @@ def _fetch_with(case, popen, url, duration):
         return harvest._fetch_and_sign(url, case.job, duration)
 
 
+def _sig_writes(case, url):
+    """The np.save calls aimed at this URL's signature: the write goes to a `.npy.<pid>.tmp`
+    and is renamed into place, so match the stem, not the whole name."""
+    stem = os.path.basename(harvest.sig_path(url))[:-len(".npy")]
+    return [n for n in case.saved if n.startswith(stem)]
+
+
 def _assert_refused(case, result, error_contains):
     """Refused, and refused the way the callers read a refusal: no signature written, no upload,
     no spool left behind, and no word in the message that `run()` reads as a HOST problem --
@@ -178,7 +190,7 @@ def _assert_refused(case, result, error_contains):
     case.assertNotIn("403", result["error"])
     case.assertNotIn("429", result["error"])
     case.assertNotIn("blocked", result["error"].lower())
-    case.assertNotIn(os.path.basename(harvest.sig_path(case.url)), case.saved)
+    case.assertEqual(_sig_writes(case, case.url), [], "a refused fetch wrote no signature")
     case.assertNotIn("chroma32.npy", case.saved)
     case.assertEqual(case.put, [])
     case.assertFalse(os.path.exists(os.path.join(case.job, "pcm.f32le.part")))
@@ -518,7 +530,9 @@ class NoSignatureFromAPartialDecode(unittest.TestCase):
         real_save = np.save
 
         def _save(path, arr, *a, **k):
-            self.saved.append(os.path.basename(str(path)))
+            # np.save is handed a file handle for the cache's .tmp write, so take the handle's
+            # name: what is recorded is what a write aimed at, whichever side of the rename.
+            self.saved.append(os.path.basename(str(getattr(path, "name", path))))
             return real_save(path, arr, *a, **k)
 
         with mock.patch.object(harvest.subprocess, "Popen", popen), \
@@ -535,7 +549,7 @@ class NoSignatureFromAPartialDecode(unittest.TestCase):
     def _assert_no_signature(self, result, error_contains):
         self.assertFalse(result["ok"])
         self.assertIn(error_contains, result["error"])
-        self.assertNotIn(os.path.basename(harvest.sig_path(self.url)), self.saved)
+        self.assertEqual(_sig_writes(self, self.url), [], "no signature was written")
         self.assertNotIn("chroma32.npy", self.saved)
         self.assertEqual(self.put, [])
         self.assertFalse(os.path.exists(os.path.join(self.job, "pcm.f32le.part")))
@@ -578,7 +592,7 @@ class NoSignatureFromAPartialDecode(unittest.TestCase):
     def test_a_clean_decode_writes_the_signature_once(self):
         result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)))
         self.assertTrue(result["ok"], result)
-        self.assertEqual(self.saved.count(os.path.basename(harvest.sig_path(self.url))), 1)
+        self.assertEqual(len(_sig_writes(self, self.url)), 1)
         self.assertIn("chroma32.npy", self.saved)
         self.assertEqual(len(self.put), 1)
         self.assertEqual(result["n_samples"], LONG_ENOUGH)
@@ -600,6 +614,37 @@ class NoSignatureFromAPartialDecode(unittest.TestCase):
             result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)))
         self.assertTrue(result["ok"], result)
         self.assertFalse(os.path.exists(os.path.dirname(missing)))
+
+    def test_a_dark_signature_cache_refuses_the_fetch_and_writes_nothing(self):
+        """The child's own dark-cache gate. `--fetch-one` runs before any parent gate, so
+        the fetch itself must refuse honestly when the signature has nowhere to live:
+        name the setting, write no signature, upload nothing -- and carry no word a parent
+        reads as a host problem, so the URL's recovery (requeue_missing_sigs) owns it."""
+        saved_env = {k: os.environ.get(k) for k in list(os.environ)
+                     if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
+        for k in saved_env:
+            os.environ.pop(k, None)
+        registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        attrs = (harvest.CACHE, harvest.KEEP, harvest._CACHE_AT_IMPORT,
+                 harvest._KEEP_AT_IMPORT)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        harvest.register_caches()         # the policy dark: the signature has nowhere to live
+        self.assertIsNone(harvest.sig_path(self.url))
+        try:
+            result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        finally:
+            for name, value in zip(("CACHE", "KEEP", "_CACHE_AT_IMPORT",
+                                    "_KEEP_AT_IMPORT"), attrs):
+                setattr(harvest, name, value)
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(registry[1])
+            for k, v in saved_env.items():
+                os.environ[k] = v
+        self._assert_no_signature(result, "the signature cache is dark")
+        self.assertIn("NETRADIO_CACHE_ROOT", result["error"])
 
 
 @unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
@@ -742,7 +787,7 @@ class TheLengthMismatchGuard(unittest.TestCase):
         cut_url = self.url + "#t=0,60"
         result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)), url=cut_url)
         self.assertTrue(result["ok"], result)
-        self.assertEqual(self.saved.count(os.path.basename(harvest.sig_path(cut_url))), 1)
+        self.assertEqual(len(_sig_writes(self, cut_url)), 1)
         self.assertIn("chroma32.npy", self.saved)
         self.assertEqual(len(self.put), 1)
         self.assertEqual(result["n_samples"], LONG_ENOUGH)
@@ -769,7 +814,17 @@ class RetryLaterIsNotDone(unittest.TestCase):
         harvest.QUEUE = os.path.join(self.tmp, "queue.json")
         harvest.WRITER_LOCK = os.path.join(self.tmp, "writer.lock")
         harvest.JOBS = os.path.join(self.tmp, "jobs")
+        # run() refuses to start while its caches are dark, so this test's run needs the
+        # policy on -- a throwaway root, with the harvester's registrations re-read onto it.
+        self._saved_env = {k: os.environ.get(k) for k in list(os.environ)
+                           if k.startswith("NETRADIO_")}
         self.addCleanup(self._restore)
+        for k in self._saved_env:
+            os.environ.pop(k, None)
+        os.environ["NETRADIO_CACHE_ROOT"] = os.path.join(self.tmp, "root")
+        import cache_budget
+        self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        harvest.register_caches()
 
     def _restore(self):
         (harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK, harvest.JOBS) = self._paths
@@ -778,6 +833,14 @@ class RetryLaterIsNotDone(unittest.TestCase):
         # clear it on the way OUT, so leaving it set would hand the next test's fetch this
         # test's verdict.
         harvest._LAST_CHILD.clear()
+        import cache_budget
+        cache_budget._REGISTRY.clear()
+        cache_budget._REGISTRY.update(self._registry[0])
+        cache_budget._STATS.clear()
+        cache_budget._STATS.update(self._registry[1])
+        for k in [k for k in list(os.environ) if k.startswith("NETRADIO_")]:
+            os.environ.pop(k, None)
+        os.environ.update(self._saved_env)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _refused_fetch(self, url, duration=None):
@@ -809,6 +872,28 @@ class RetryLaterIsNotDone(unittest.TestCase):
                                   lambda *a, **k: (0, 0, None)):
             harvest.run(None)
         return harvest._load(harvest.QUEUE, {}), harvest._load(harvest.STATE, {})
+
+    def test_run_refuses_to_start_on_a_dark_cache(self):
+        """Mode A's own gate: run() refuses before the canary, the recovery or any fetch,
+        naming the setting -- the same refusal --once and the split fetch half make. Without
+        it, a dark cache grinds the whole queue into done, failing every URL the same way.
+        The hand-set None is the test seam the module documents: a dark cache has no
+        directory for anything else to stand in for."""
+        qs = [(4, np.zeros((12, 8), dtype="float32"), "4:f00")]
+        out = io.StringIO()
+        with mock.patch.object(harvest, "CACHE", None), \
+                mock.patch.object(harvest, "KEEP", None), \
+                mock.patch.object(harvest, "queries", lambda state=None: qs), \
+                mock.patch.object(harvest.memwatch, "allocator_canary",
+                                  lambda *a, **k: (0, 0, None)), \
+                mock.patch.object(harvest.selftest, "offline",
+                                  lambda: (_ for _ in ()).throw(
+                                      AssertionError("refused before the canary"))), \
+                contextlib.redirect_stdout(out):
+            harvest.run(None)
+        text = out.getvalue()
+        self.assertIn("the chroma and the candidates cache are dark", text)
+        self.assertIn("NETRADIO_CACHE_ROOT", text)
 
     def test_run_sets_the_url_aside_instead_of_retiring_it(self):
         q, state = self._one_pass({"pending": [self.url], "done": []})
@@ -919,14 +1004,15 @@ class TheChildEntryPoint(unittest.TestCase):
         self._stub(bindir, "ffmpeg", "cat %s\n" % pcm_src)
 
         url = "https://example.invalid/real"
-        # The signature cache is the repo's own gitignored directory; put the one file this test
-        # creates back afterwards.
-        self.addCleanup(lambda: os.path.exists(harvest.sig_path(url))
-                        and os.unlink(harvest.sig_path(url)))
+        # The signature cache has no directory while the cache policy is dark, so the child
+        # gets a throwaway root and puts its one signature under that -- nothing lands in any
+        # real directory, and nothing needs putting back afterwards.
+        cache_root = os.path.join(self.tmp, "root")
         env = dict(os.environ,
                    PATH=bindir + os.pathsep + os.environ.get("PATH", ""),
                    PYTHONPATH=SCRIPTS,
-                   NETRADIO_SIG_BUCKET="")          # sigstore dark: no upload, no credentials
+                   NETRADIO_SIG_BUCKET="",          # sigstore dark: no upload, no credentials
+                   NETRADIO_CACHE_ROOT=cache_root)
         import subprocess
         out = subprocess.run(
             [sys.executable, os.path.join(SCRIPTS, "harvest.py"),
@@ -1232,6 +1318,124 @@ class TheInProcessEscapeHatchAlsoStops(unittest.TestCase):
         self.assertTrue(harvest._stop_requested())
         self.assertEqual(order, ["ffmpeg", "yt-dlp"])
         self.assertEqual(harvest._STOP["procs"], [])
+
+
+# The cache-policy names the landing test saves and restores (the same set
+# tests/test_cache_budget.py uses).
+CACHE_ENV = ("NETRADIO_CACHE_ROOT", "NETRADIO_DOWNLOAD_ROOT", "NETRADIO_DISK_MAX_PCT",
+             "NETRADIO_CACHE_EVENTS_DAYS")
+
+
+@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+class ASignatureEvictedBetweenRenameAndCommit(unittest.TestCase):
+    """The rename and the commit are two calls, and a bounded cache may lose any entry at any
+    time: an eviction run that starts between them takes a signature the policy has not
+    recorded yet. The writer must never report a success whose entry is not there -- the
+    fetch reports the failure (and the lost-signature recovery offers the URL again), and
+    nothing is uploaded for a signature that is not on disk."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.job = os.path.join(self.tmp, "job")
+        self.url = "https://example.invalid/watch?v=landing"
+        self.put = []
+        self._saved = {k: os.environ.get(k) for k in list(os.environ)
+                       if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
+        for k in self._saved:
+            os.environ.pop(k, None)
+        self.addCleanup(self._restore)
+        # The policy ON, with the chroma cache registered over this test's own directory:
+        # its cap (2000 bytes) admits the ~1440-byte signature, and another writer asking
+        # for 1000 bytes of room must take the just-published, not-yet-recorded entry.
+        os.environ["NETRADIO_CACHE_ROOT"] = os.path.join(self.tmp, "root")
+        os.environ["NETRADIO_CHROMA_CACHE_DIR"] = os.path.join(self.tmp, "cache")
+        os.environ["NETRADIO_CHROMA_CACHE_GB"] = "0.000002"
+        self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        harvest.register_caches()
+
+    def _restore(self):
+        cache_budget._REGISTRY.clear()
+        cache_budget._REGISTRY.update(self._registry[0])
+        cache_budget._STATS.clear()
+        cache_budget._STATS.update(self._registry[1])
+        for k in [k for k in list(os.environ)
+                  if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)]:
+            os.environ.pop(k, None)
+        os.environ.update(self._saved)
+        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_the_fetch_reports_the_failure_and_nothing_is_uploaded(self):
+        real_replace = os.replace
+
+        def racing_replace(a, b):
+            real_replace(a, b)
+            # another writer asks for room, between the signature's rename and its commit
+            cache_budget.reserve("chroma", 1000)
+
+        with mock.patch.object(harvest.subprocess, "Popen",
+                               fake_decode(pcm=_pcm(LONG_ENOUGH))), \
+                mock.patch.object(harvest.chroma_recipe, "compute_chroma",
+                                  lambda y, sr=None: np.zeros((12, 60), dtype="float32")), \
+                mock.patch.object(harvest.sigstore, "enabled", lambda: True), \
+                mock.patch.object(harvest.sigstore, "put",
+                                  lambda *a: self.put.append(a) or True), \
+                mock.patch("os.replace", side_effect=racing_replace):
+            result = harvest._fetch_and_sign(self.url, self.job)
+        self.assertFalse(result["ok"], result)
+        self.assertIn("did not survive its own landing", result["error"])
+        self.assertNotIn("403", result["error"])       # never read as a host problem
+        self.assertNotIn("429", result["error"])
+        self.assertNotIn("blocked", result["error"].lower())
+        self.assertEqual(self.put, [], "nothing uploaded for a signature that is not there")
+        self.assertFalse(os.path.exists(harvest.sig_path(self.url)))
+
+    def test_a_refused_reserve_writes_no_signature_and_uploads_nothing(self):
+        """The other half of the policy gate: `reserve` before the write. Past the disk
+        floor the signature is NOT written, the fetch reports the refusal, and nothing is
+        uploaded -- the URL's recovery is requeue_missing_sigs, which offers it again once
+        the disk has room. Without the gate a full disk is filled the rest of the way."""
+        cache_budget._disk_usage = lambda _p: (100 * 1000, 50 * 1000, 50 * 1000)
+        self.addCleanup(setattr, cache_budget, "_disk_usage", cache_budget._disk_usage)
+        os.environ["NETRADIO_DISK_MAX_PCT"] = "0"          # past the floor: every reserve refuses
+        harvest.register_caches()
+        with mock.patch.object(harvest.subprocess, "Popen",
+                               fake_decode(pcm=_pcm(LONG_ENOUGH))), \
+                mock.patch.object(harvest.chroma_recipe, "compute_chroma",
+                                  lambda y, sr=None: np.zeros((12, 60), dtype="float32")), \
+                mock.patch.object(harvest.sigstore, "enabled", lambda: True), \
+                mock.patch.object(harvest.sigstore, "put",
+                                  lambda *a: self.put.append(a) or True):
+            result = harvest._fetch_and_sign(self.url, self.job)
+        self.assertFalse(result["ok"], result)
+        self.assertIn("refused room for the signature", result["error"])
+        self.assertNotIn("403", result["error"])           # never read as a host problem
+        self.assertNotIn("429", result["error"])
+        self.assertNotIn("blocked", result["error"].lower())
+        self.assertEqual(self.put, [], "nothing uploaded for a signature never written")
+        self.assertFalse(os.path.exists(harvest.sig_path(self.url)))
+
+    def test_a_signature_write_that_dies_part_way_leaves_no_tmp_in_the_cache(self):
+        """A write that raises mid-flight must not leave its `.tmp` behind: inside the cache
+        it counts against the cap and the policy holds it from eviction for an hour. The
+        writer knows the write is over, so it clears it now."""
+        def boom(fh, arr, *a, **k):
+            fh.write(b"half a signature")
+            raise OSError("no space left on device")
+
+        with mock.patch.object(harvest.subprocess, "Popen",
+                               fake_decode(pcm=_pcm(LONG_ENOUGH))), \
+                mock.patch.object(harvest.chroma_recipe, "compute_chroma",
+                                  lambda y, sr=None: np.zeros((12, 60), dtype="float32")), \
+                mock.patch.object(harvest.sigstore, "enabled", lambda: False), \
+                mock.patch.object(harvest.np, "save", boom):
+            with self.assertRaises(OSError):
+                harvest._decode_and_sign(self.url, self.job)
+        cache = harvest._chroma_dir()
+        left = os.listdir(cache) if os.path.isdir(cache) else []
+        self.assertEqual(left, [], "no half-written entry is left in the cache")
 
 
 if __name__ == "__main__":

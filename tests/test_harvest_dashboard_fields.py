@@ -236,9 +236,28 @@ class NothingToSearchForIsAState(unittest.TestCase):
         harvest.STATE = os.path.join(self.tmp, "state.json")
         harvest.QUEUE = os.path.join(self.tmp, "queue.json")
         harvest.WRITER_LOCK = os.path.join(self.tmp, "collector.lock")
+        # run() refuses to start while its caches are dark, and the test below needs to get
+        # PAST that refusal (it stops the run on the excerpt sweep). A throwaway root, with
+        # the harvester's registrations re-read onto it, put back afterwards.
+        import cache_budget
+        self._saved_env = {k: os.environ.get(k) for k in list(os.environ)
+                           if k.startswith("NETRADIO_")}
+        for k in self._saved_env:
+            os.environ.pop(k, None)
+        os.environ["NETRADIO_CACHE_ROOT"] = os.path.join(self.tmp, "root")
+        self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        harvest.register_caches()
 
     def tearDown(self):
         harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK = self._paths
+        import cache_budget
+        cache_budget._REGISTRY.clear()
+        cache_budget._REGISTRY.update(self._registry[0])
+        cache_budget._STATS.clear()
+        cache_budget._STATS.update(self._registry[1])
+        for k in [k for k in list(os.environ) if k.startswith("NETRADIO_")]:
+            os.environ.pop(k, None)
+        os.environ.update(self._saved_env)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_an_empty_query_set_is_stamped_before_the_exit(self):

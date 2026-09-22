@@ -38,7 +38,7 @@ import soundfile as sf                               # noqa: E402
 import harvest                                       # noqa: E402
 import sigstore                                      # noqa: E402
 from harvest import (                                # noqa: E402
-    KEEP, KEEP_CEILING, KEEP_TOP, MATCH_COST, QUEUE, RESCAN_PER_PASS, STATE,
+    KEEP_CEILING, KEEP_TOP, MATCH_COST, QUEUE, RESCAN_PER_PASS, STATE,
     _load, _now, _save, blank_state, evict_overfull, listen_queue_split, queries,
     write_excerpt,
 )
@@ -95,16 +95,27 @@ def _score_new(state, url, c, samples, qs):
         board.sort(key=lambda m: m["cost"])
         if len(board) >= KEEP_TOP and cost >= board[-1]["cost"]:
             continue                       # not good enough to displace anyone
-        excerpt = os.path.join(KEEP, "MT%d-%.4f-%s.wav"
+        # The board's directory is asked of the registry at each call, never bound at
+        # import: `KEEP` is a policy-derived value now, and a `from harvest import KEEP`
+        # would freeze whatever it happened to be when this module was first imported --
+        # so the gate above (which asks the registry) and the write here could name
+        # different directories, and a write could land outside the registered cache,
+        # unbounded and unaccounted.
+        excerpt = os.path.join(harvest._keep_dir(), "MT%d-%.4f-%s.wav"
                                % (num, cost, hashlib.sha1(url.encode()).hexdigest()[:8]))
-        if not os.path.exists(excerpt):
+        kept = os.path.exists(excerpt)
+        if not kept:
             if samples is None:            # no retained audio -> a lead without a clip
                 continue
-            write_excerpt(samples, at or 0, excerpt)
-            state["kept"] += 1
+            # A refused excerpt (the cache policy past the disk floor, the board's cap with
+            # nothing evictable) is not on disk: not counted as kept, not named as the lead's
+            # audio. The lead survives with its numbers.
+            kept = write_excerpt(samples, at or 0, excerpt)
+            if kept:
+                state["kept"] += 1
         hit = {"at": _now(), "mystery": num, "cost": round(cost, 4),
                "semitones": shift, "at_s": round(at or 0, 1), "url": url,
-               "audio": excerpt,
+               "audio": excerpt if kept else None,
                "verdict": "MATCH" if cost <= MATCH_COST else "near"}
         state["matches"].append(hit)
         evict_overfull(state, num)
@@ -341,7 +352,28 @@ def refresh_dashboard_state(state):
     return qs, changed
 
 
+def _caches_ready():
+    """(True, None) when the signature cache and the excerpt board are registered, else
+    (False, the refusal to print). While NETRADIO_CACHE_ROOT is unset (or a registration
+    was refused) this runtime has nowhere to keep a signature or an excerpt, so neither the
+    fold loop nor a one-shot pass may run: a matching result would reach a directory that
+    does not exist and crash before it could be reported. Shared by run() and --once,
+    because --once is the cron entry point, not a test seam."""
+    dark = [n for n, d in ((harvest.CHROMA_CACHE, harvest._chroma_dir()),
+                           (harvest.CANDIDATES_CACHE, harvest._keep_dir())) if d is None]
+    if not dark:
+        return True, None
+    return False, ("the %s cache %s dark (NETRADIO_CACHE_ROOT unset, or the registration "
+                   "was refused): this runtime has nowhere to keep a signature or an excerpt. "
+                   "Set NETRADIO_CACHE_ROOT in .env (see .env.example) and start again."
+                   % (" and the ".join(dark), "is" if len(dark) == 1 else "are"))
+
+
 def run():
+    ok, why = _caches_ready()
+    if not ok:
+        print(why)
+        return
     os.makedirs(STATE_DIR, exist_ok=True)
     lock = harvest.acquire_writer_lock()
     if lock is None:
@@ -370,7 +402,7 @@ def run():
             state["rescan_pending"] = max(0, todo - done)
             _save(STATE, state)
         elif sigstore.enabled():
-            n_ev, freed = sigstore.evict_cold(harvest.CACHE, state.get("scored") or {},
+            n_ev, freed = sigstore.evict_cold(harvest._chroma_dir(), state.get("scored") or {},
                                               [qk for _, _, qk in qs])
             if n_ev:
                 print("evicted %d cold signature(s) (%.1f MB freed)" % (n_ev, freed / 1e6))
@@ -402,6 +434,10 @@ def main():
                           "updated": s.get("updated")}, indent=1))
         return
     if args.once:
+        ok, why = _caches_ready()
+        if not ok:
+            print(why)
+            return
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})
         print(collect_once(state, q, queries()))
