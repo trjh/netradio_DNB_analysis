@@ -630,12 +630,18 @@ class FindAudioFileTests(unittest.TestCase):
         self.assertTrue(audio.find_audio_file("b.au", self.dir).endswith("b.au"))
 
     def test_wav_preferred_over_au_then_mp3(self):
-        # the preference order is unchanged: .wav, then .au, then the transcode
+        # the preference order is unchanged: .wav, then .au, then the transcode.
+        # All three steps are pinned: .wav over both, and .au over the transcode --
+        # without the second pair the order could be .wav > .mp3 > .au and still pass.
         self._touch("c.wav")
         self._touch("c.au")
         self._touch("c.mp3")
         self.assertTrue(audio.find_audio_file("c", self.dir).endswith("c.wav"))
         self.assertTrue(audio.find_audio_file("c.mp3", self.dir).endswith("c.wav"))
+        self._touch("f.au")
+        self._touch("f.mp3")
+        self.assertTrue(audio.find_audio_file("f", self.dir).endswith("f.au"))
+        self.assertTrue(audio.find_audio_file("f.mp3", self.dir).endswith("f.au"))
 
     def test_a_directory_holding_only_the_mp3_still_resolves(self):
         # a machine can hold only the transcodes, so a stem with no capture
@@ -719,6 +725,15 @@ class CachePolicyTests(unittest.TestCase):
         return os.path.join(self.cache_dir, audio._cache_key(
             os.path.join(self.audio_dir, name), audio.SR, True) + ".npy")
 
+    @staticmethod
+    def _events():
+        """The policy's event log, as records. Empty when nothing was written."""
+        path = cache_budget.events_path()
+        if not path or not os.path.isfile(path):
+            return []
+        with open(path, encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+
     def test_a_load_writes_through_the_policy(self):
         self._source("a.wav")
         rec = audio.register_cache()
@@ -730,6 +745,16 @@ class CachePolicyTests(unittest.TestCase):
         row = cache_budget.status()["caches"][0]
         self.assertEqual((row["name"], row["entries"], row["refill"]),
                          ("streamalign", 1, "re-decode"))
+        # the `commit` after the write is what tells the policy the entry landed:
+        # it records the admit and runs the eviction when the write pushed the
+        # cache over its cap. Without this the whole call could be deleted and
+        # every other assertion here would still pass -- a file on disk inside
+        # the cache directory is not the same thing as an entry the policy knows.
+        admits = [e for e in self._events()
+                  if e["event"] == "admit" and e["cache"] == "streamalign"]
+        self.assertEqual(len(admits), 1, "load_audio must commit the entry it wrote")
+        self.assertEqual(admits[0]["entry"], os.path.basename(self._entry("a.wav")))
+        self.assertEqual(admits[0]["bytes"], os.path.getsize(self._entry("a.wav")))
 
     def test_a_second_load_reads_the_cache_without_decoding_again(self):
         self._source("a.wav")

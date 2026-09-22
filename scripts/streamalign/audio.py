@@ -128,7 +128,7 @@ def _ffmpeg_decode(path, sr, mono):
                           check=False)
     if proc.returncode != 0:
         raise RuntimeError("ffmpeg failed on %s: %s"
-                          % (path, proc.stderr.decode("utf-8", "replace")[-400:]))
+                           % (path, proc.stderr.decode("utf-8", "replace")[-400:]))
     data = np.frombuffer(proc.stdout, dtype="<f4")
     if not mono:
         data = data.reshape(-1, 2)
