@@ -17,6 +17,7 @@ import shutil
 import signal
 import subprocess
 import tempfile
+import threading
 import time
 import unittest
 
@@ -295,6 +296,94 @@ class LogRotationTests(LauncherTestCase):
         self.assertFalse(os.path.exists(self.log + ".1"))
         with open(self.log) as fh:
             self.assertIn("keep me", fh.read())
+
+
+class ConcurrentStartTests(LauncherTestCase):
+    """Two starts at once must resolve to one harvester, and one pidfile that names it.
+
+    The pidfile cannot arbitrate this by itself: both starts look, both see nothing, both
+    launch, and the second one's pidfile write buries the first one's. `harvest.py` would
+    then refuse the loser at its own flock -- no data is ever corrupted -- but the loser's
+    cleanup could carry off the WINNER's registration, leaving a harvester running for
+    weeks that `status` calls DOWN and `stop` cannot stop. The lock directory is what makes
+    that impossible; these two tests are its ends.
+    """
+
+    def _live_stand_ins(self):
+        """Every live process whose command line names this test's temp root."""
+        out = subprocess.run(["ps", "-A", "-o", "pid=,command="],
+                             capture_output=True, text=True).stdout
+        return [ln for ln in out.splitlines()
+                if self.root in ln and "harvest.py" in ln]
+
+    def test_a_start_is_refused_while_another_holds_the_lock(self):
+        self.fake_interpreter()
+        os.makedirs(os.path.join(self.state_dir, "harvester.start.lock"))
+        out = self.run_cmd("start")
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("another start is in flight", out.stderr)
+        self.assertFalse(os.path.exists(self.pidfile))
+
+    def test_two_starts_at_once_leave_one_harvester_and_one_pidfile(self):
+        self.fake_interpreter()
+        results = []
+        guard = threading.Lock()
+
+        def go():
+            out = self.run_cmd("start")
+            with guard:
+                results.append(out)
+
+        threads = [threading.Thread(target=go) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(len(results), 2)
+        winners = [r for r in results if r.returncode == 0]
+        self.assertEqual(len(winners), 1,
+                         "exactly one start should succeed: %s" % [r.stderr for r in results])
+        # The invariant that matters: whatever is up is what the pidfile names, so `status`
+        # can see it and `stop` can stop it.
+        self.assertTrue(os.path.exists(self.pidfile), "the live harvester lost its pidfile")
+        pid = self.read_pid()
+        self._started.append(pid)
+        self.assertTrue(self.alive(pid))
+        self.assertEqual(self.run_cmd("status").returncode, 0)
+        # And no second one was left running beside it.
+        self.assertEqual(len(self._live_stand_ins()), 1, self._live_stand_ins())
+
+
+class KnobTests(LauncherTestCase):
+    """A knob that names a guarantee may not disable it by being misspelt."""
+
+    def test_a_units_suffixed_log_cap_refuses_the_run(self):
+        self.fake_interpreter()
+        out = self.start(env={"NETRADIO_HARVEST_LOG_MAX_BYTES": "10MB"})
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("NETRADIO_HARVEST_LOG_MAX_BYTES must be a plain number", out.stderr)
+        self.assertFalse(os.path.exists(self.pidfile))
+
+    def test_a_units_suffixed_stop_wait_refuses_the_run(self):
+        self.fake_interpreter()
+        out = self.start(env={"NETRADIO_HARVEST_STOP_WAIT_S": "30s"})
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("NETRADIO_HARVEST_STOP_WAIT_S must be a plain number", out.stderr)
+        self.assertFalse(os.path.exists(self.pidfile))
+
+    def test_a_bad_knob_does_not_quietly_skip_the_rotation(self):
+        """The failure this guards against: `test -ge` on a non-number exits 2, the `||`
+        branch reads that as "under the cap", and the log is never rotated again."""
+        self.fake_interpreter()
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(self.log, "w") as fh:
+            fh.write("first generation\n" * 64)
+        out = self.start(env={"NETRADIO_HARVEST_LOG_MAX_BYTES": "1KB"})
+        self.assertEqual(out.returncode, 2)
+        self.assertFalse(os.path.exists(self.log + ".1"))
+        with open(self.log) as fh:
+            self.assertIn("first generation", fh.read())
 
 
 class UsageTests(LauncherTestCase):

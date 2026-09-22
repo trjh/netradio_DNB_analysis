@@ -123,15 +123,26 @@ set -a && . ./.env && set +a
 background under something that remembers it: the launcher reads `.env`, sets
 `MallocLargeCache=0` (the memory bound, which only works if it is in the environment at
 process start), writes one pidfile at `.harvest/harvester.pid` and appends to one log at
-`.harvest/harvest.log`, renaming it to `harvest.log.1` once it passes 10 MB — one generation
-back (`NETRADIO_HARVEST_LOG_MAX_BYTES` moves the cap). `start` refuses while a harvester is
-already up and clears a pidfile whose process is gone or is now something else; `stop` asks
-for a clean exit and waits up to 30 seconds for it (`NETRADIO_HARVEST_STOP_WAIT_S`) before it
-resorts to `kill -9`. `status` prints whether it is up, its pid, the phase it last wrote to
-`.harvest/state.json`, and whether the ledger is there — and **an absent ledger is a normal
-answer**, not an error: before the signing pass has run once there is nothing signed and no
-candidates, which is exactly what a fresh clone looks like. Same shape as the align server's
-`scripts/run_align.sh`, deliberately, so the two read alike.
+`.harvest/harvest.log`, which it renames to `harvest.log.1` **at a start**, when the log is
+at or over 10 MB by then — one generation back (`NETRADIO_HARVEST_LOG_MAX_BYTES` moves the
+cap). The rename happens between runs and never during one, so a single run's log is bounded
+by when it is next restarted. `start` refuses while a harvester is already up, clears a
+pidfile whose process is gone or is now something else, and takes a lock directory
+(`.harvest/harvester.start.lock`) so two simultaneous starts resolve to one harvester and one
+pidfile. `stop` asks for a clean exit and waits up to 30 seconds for it
+(`NETRADIO_HARVEST_STOP_WAIT_S`) before it resorts to `kill -9`. `status` prints whether it is
+up, its pid, the phase it last wrote to `.harvest/state.json`, and whether the ledger is
+there — and **an absent ledger is a normal answer**, not an error: before the signing pass has
+run once there is nothing signed and no candidates, which is exactly what a fresh clone looks
+like. Same shape as the align server's `scripts/run_align.sh`, deliberately, so the two read
+alike.
+
+**Exit codes**, for a caller that branches on them: `status` is 0 when the harvester is up
+and **1 when it is down**; `start` is 1 when it refuses (one is already running, another
+start is in flight, no interpreter) and 0 when one is now up; `stop` is 0 either way. A `2`
+is a usage error: an unknown verb, or a `NETRADIO_HARVEST_*` value that is not a plain
+number — `NETRADIO_HARVEST_LOG_MAX_BYTES=10MB` is refused rather than quietly taken as "never
+rotate". The interpreter is `.venv/bin/python` unless `NETRADIO_PYTHON` names another one.
 
 **Clip formats: `.wav`, `.wv`, `.flac`, `.m4a`, `.mp3`** — lossless preferred, in that order
 (everything decodes through ffmpeg, which reads WavPack natively). `.wv` earned its place the

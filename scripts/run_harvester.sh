@@ -43,17 +43,40 @@ STATE_DIR="$ROOT/.harvest"
 STATE="$STATE_DIR/state.json"
 LEDGER="$STATE_DIR/ledger.json"
 PIDFILE="$STATE_DIR/harvester.pid"          # this launcher's own; nothing else writes it
+# `start` runs under this lock directory. The pidfile alone cannot make two simultaneous
+# starts resolve to one — both would look, both would see nothing, and both would launch;
+# harvest.py's flock would then kill the loser's child, and the loser's cleanup could carry
+# off the WINNER's pidfile with it, leaving a harvester running for weeks that `status`
+# calls DOWN and `stop` cannot stop. `mkdir` is atomic, so exactly one start gets past it.
+# A start holds it for about a second.
+LOCKDIR="$STATE_DIR/harvester.start.lock"
 LOG="$STATE_DIR/harvest.log"
-# The log rotation, one generation: over the cap, harvest.log becomes harvest.log.1 and a
-# fresh harvest.log is opened. 10 MB because the log is a narrative read after the fact,
-# not a data set — two generations of it answer "what happened last night" and nothing
-# larger ever gets read.
+# The log rotation, one generation: at a start, a harvest.log at or over the cap becomes
+# harvest.log.1 and a fresh harvest.log is opened. Between runs, not during one — a run
+# lasts weeks and its log is bounded by the next start, which is what the old foreground
+# target had no bound at all. 10 MB because the log is a narrative read after the fact, not
+# a data set — two generations of it answer "what happened last night".
 LOG_MAX_BYTES="${NETRADIO_HARVEST_LOG_MAX_BYTES:-10485760}"
 # How long `stop` waits for a clean exit before it stops being polite. harvest.py handles
 # SIGTERM itself — it finishes the candidate in hand and writes the state — so the wait is
 # the point of `stop`, not a formality.
 STOP_WAIT_S="${NETRADIO_HARVEST_STOP_WAIT_S:-30}"
 PYTHON="${NETRADIO_PYTHON:-$ROOT/.venv/bin/python}"
+
+require_count() {
+  # $1 = the variable's name, $2 = its value. Both knobs above are plain counts, and a
+  # units suffix is the natural mistake: `10MB`, `30s`. Unvalidated, `test -ge` on one
+  # exits 2 as an error and the `||` branch reads that as "under the cap" — the rotation,
+  # or the wait, silently stops happening. Refuse loudly instead: a knob that names a
+  # guarantee must not be able to turn it off by being misspelt.
+  case "$2" in
+    ''|*[!0-9]*)
+      echo "$1 must be a plain number, no units — got: $2" >&2
+      exit 2 ;;
+  esac
+}
+require_count NETRADIO_HARVEST_LOG_MAX_BYTES "$LOG_MAX_BYTES"
+require_count NETRADIO_HARVEST_STOP_WAIT_S "$STOP_WAIT_S"
 
 is_harvester() {
   # $1 = pid. A live process is only OUR process if its command line still names the
@@ -105,6 +128,23 @@ rotate_log() {
 }
 
 cmd_start() {
+  # The lock first, then the real work: everything between "is one already running" and
+  # "the pidfile names mine" has to be one start's alone.
+  mkdir -p "$STATE_DIR"
+  if ! mkdir "$LOCKDIR" 2>/dev/null; then
+    echo "another start is in flight — leaving it to that one" >&2
+    echo "  (if none is, remove $LOCKDIR)" >&2
+    return 1
+  fi
+  trap 'rmdir "$LOCKDIR" 2>/dev/null || true' EXIT INT TERM
+  local rc=0
+  start_locked || rc=$?
+  trap - EXIT INT TERM
+  rmdir "$LOCKDIR" 2>/dev/null || true
+  return "$rc"
+}
+
+start_locked() {
   local pid
   pid="$(running_pid)"
   if [ -n "$pid" ]; then
@@ -121,7 +161,6 @@ cmd_start() {
     echo "no interpreter at $PYTHON — run: make venv" >&2
     return 1
   fi
-  mkdir -p "$STATE_DIR"
   rotate_log
   echo "starting the harvester (interpreter: $PYTHON)"
   # MallocLargeCache=0 tells macOS not to keep freed large blocks inside the process.
@@ -136,7 +175,13 @@ cmd_start() {
   sleep 1
   if ! is_harvester "$pid"; then
     echo "the harvester exited immediately — see the end of $LOG" >&2
-    rm -f "$PIDFILE"
+    # Withdraw OUR OWN registration and nobody else's. The lock above should make that
+    # distinction moot; this is the second lock on the same door, because the failure it
+    # prevents — deleting a live harvester's pidfile — is invisible until someone wants
+    # the harvester stopped, weeks later.
+    if [ "$(cat "$PIDFILE" 2>/dev/null || true)" = "$pid" ]; then
+      rm -f "$PIDFILE"
+    fi
     return 1
   fi
   cmd_status
