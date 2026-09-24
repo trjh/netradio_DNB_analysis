@@ -5,11 +5,13 @@
     . .venv/bin/activate && python scripts/selftest.py --live
 
 `--offline` re-runs one calibration case from local files (no network). `--live` re-scores
-the canary's STORED signature -- the canary's file arrives through the feeder like any entry,
-is signed once, and its signature lives in the signature bucket keyed by `NETRADIO_CANARY_KEY`;
-every pass the harvester pulls it back and scores it against the canary's mix and the current
-mysteries, demanding the known cost, rank and margin. A re-score, never a re-sign: the self-test
-needs no file and no fetch.
+the canary's STORED signature by hand -- the canary's file arrives through the feeder like any
+entry, is signed once, and its signature lives in the signature bucket keyed by
+`NETRADIO_CANARY_KEY` -- against the canary's mix and the current mysteries, demanding the known
+cost, rank and margin. The by-hand check needs no file and no fetch. The harvester's own canary
+pass goes further: whenever the feeder puts the canary's file back, it re-signs the file as if
+new, compares the new signature with the stored one, and hands the NEW signature to `live()`
+(see `harvest.canary_pass`).
 
 Why this exists
 ---------------
@@ -27,12 +29,13 @@ against a pool of originals, and require its OWN original to come **first**. No 
 of seconds. This proves the matching *maths* — chroma, subsequence-DTW, the twelve transpositions
 — still works. If someone breaks `chroma_match.py`, this goes red immediately.
 
-**live()** — the canary's STORED signature, re-scored. The canary is one known track whose file
-arrived through the feeder and was signed once; its signature sits in the bucket under its key
-(`NETRADIO_CANARY_KEY`). The check pulls that signature back and scores it against the canary's
-own mix (the query a calibration case would build from it) and against the current mystery
-queries, demanding the same three gates as offline: cost in the true-match range, rank first
-among the rivals, and a real margin. No network, no fetch — a re-score is all the live check is.
+**live()** — the canary's signature, scored. The canary is one known track whose file arrives
+through the feeder; its signature sits in the bucket under its key (`NETRADIO_CANARY_KEY`). The
+check scores a signature of it against the canary's own mix (the query a calibration case would
+build from it) and against the current mystery queries, demanding the same three gates as
+offline: cost in the true-match range, rank first among the rivals, and a real margin. The
+harvester hands it the signature it has just re-signed from the canary's file; `--live` hands it
+the stored one. No network, no fetch inside the check itself.
 
 The trap, and the canary URL
 ----------------------------
@@ -47,8 +50,9 @@ So the canary's track is the **first calibration case** by default (`cases()[0]`
 has the mix it expects. For naming a DIFFERENT calibration case as the canary, `establish_canary`
 (by hand) searches for a stream of a solved track, fetches it, and scores what it fetched against
 the original held on disk — only if that is a true match is it saved as the canary. This is the
-one place a fetch still lives; the per-pass re-score itself never fetches. The canary's key is the
-pool's own rule applied to that URL, and the harvester re-scores the signature filed under it.
+one place a fetch still lives; the harvester's canary pass never fetches. The canary's key is the
+pool's own rule applied to that URL, and the harvester compares its re-sign with the signature
+filed under it.
 
 Rank, never a bare cost
 -----------------------
@@ -320,14 +324,13 @@ def best_rival_cost(mystery_queries, c_fetched):
 
 
 def live(c_canary, mystery_queries=None):
-    """Re-score the canary's STORED signature against the canary's mix and the mysteries.
+    """Score a signature of the canary against the canary's mix and the mysteries.
 
-    `c_canary` is the canary's chroma, injected by the caller (the harvester pulls it back
-    from the bucket by `NETRADIO_CANARY_KEY`; a test hands in a fake). This module never
-    imports the harvester, and the re-score needs no fetch: the canary's file arrived
-    through the feeder like any entry, was signed once, and its signature lives in the
-    bucket. Every pass the harvester calls this with the signature it pulled back, and
-    the `--live` command loads it through sigstore.
+    `c_canary` is the canary's chroma, injected by the caller: the harvester's canary pass
+    hands in the signature it has just re-signed from the canary's file (see
+    `harvest.canary_pass`), the `--live` command hands in the STORED signature it loads
+    through sigstore by `NETRADIO_CANARY_KEY`, and a test hands in a fake. This module never
+    imports the harvester, and the check needs no fetch.
 
     The canary is one known track. The check scores its stored signature against the
     canary's own mix (the query a calibration case would build from the canary's track)
@@ -515,10 +518,10 @@ def main():
     if args.offline:
         print(json.dumps(offline(), indent=2))
     if args.live:
-        # The re-score needs the canary's stored signature, named by NETRADIO_CANARY_KEY. The
-        # harvester's own loop pulls it back through its chroma cache (harvest._load_sig); the
-        # `--live` command loads it through sigstore here, the same seam, so the check runs
-        # the same way by hand as it does every pass. The current mystery queries are built
+        # The by-hand re-score reads the canary's STORED signature, named by
+        # NETRADIO_CANARY_KEY, through the chroma cache and sigstore -- no file, no fetch.
+        # (The harvester's canary pass scores a fresh re-sign instead, and compares it with
+        # this stored one.) The current mystery queries are built
         # the same way the loop builds them, so the rank/margin gate runs against the same
         # rivals -- a canary that only barely beats its own mix cannot pass the CLI when a
         # close current mystery should reject it.

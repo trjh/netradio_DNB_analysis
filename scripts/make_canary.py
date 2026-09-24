@@ -18,8 +18,8 @@ Deterministic: given the same source dir it picks the same files (sorted) and of
 rebuild is repeatable. `ffmpeg` comes from --ffmpeg, then $NETRADIO_FFMPEG, then imageio-ffmpeg,
 then PATH.
 
-The harvester's self-test re-scores one known track's STORED signature every pass, named by its
-key (`NETRADIO_CANARY_KEY`). `--key <url>` prints that key for a URL — the pool's one rule
+The harvester's self-test re-signs one known track's file whenever the feeder puts it back and
+compares the result with the signature stored under its key (`NETRADIO_CANARY_KEY`). `--key <url>` prints that key for a URL — the pool's one rule
 (`u` + sha1(url)[:20]), the same stem every signature in the bucket is filed under:
 
     python scripts/make_canary.py --key "<the canary URL>"
@@ -151,7 +151,7 @@ def main():
                     help="print the pool's key for URL (u + sha1(url)[:20]) and exit; the same "
                          "rule every signature in the bucket is filed under. Set "
                          "NETRADIO_CANARY_KEY in .env to the result to name the canary the "
-                         "harvester re-scores every pass.")
+                         "harvester re-signs and compares.")
     args = ap.parse_args()
 
     if args.key is not None:
