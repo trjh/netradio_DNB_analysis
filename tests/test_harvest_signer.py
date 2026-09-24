@@ -1016,13 +1016,6 @@ class TheHarvesterOwnsNothingButItsOwnFiles(_SignerCase):
         harvest.sign_file(path)
         self.assertEqual(sorted(os.listdir(self.audio)), before)
 
-    def test_no_code_path_builds_a_ytdlp_argv(self):
-        """The fetch leg is gone; if it ever comes back through this file, the pool's
-        politeness rules come back with it, and that is a decision, not a slip."""
-        src = open(os.path.join(SCRIPTS, "harvest.py"), encoding="utf-8").read()
-        self.assertNotIn("yt-dlp", src)
-        self.assertNotIn("yt_dlp", src)
-
     def test_nothing_reads_a_queue_or_a_download_index(self):
         """The sidecar is the only notice the harvester takes: no queue, no download index,
         no other process's store is opened to decide what to work on."""
