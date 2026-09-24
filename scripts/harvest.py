@@ -61,6 +61,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -542,8 +543,13 @@ def sweep_job_dirs(max_age_s=JOB_STALE_S):
     return n
 
 
-def _decode_and_sign(path, job, expect_s=None):
+def _decode_and_sign(path, job, expect_s=None, publish=True):
     """Decode one file and write its signature. THE CHILD'S WHOLE JOB. Returns `result.json`.
+
+    `publish=False` is the canary's re-sign (see `canary_pass`): the same decode, the same
+    recipe and the same checks, but the signature lands in NEITHER the working cache nor the
+    bucket -- the float32 chroma is left in the job directory for the parent to compare with
+    the stored one, and the stored one is never replaced.
 
     ffmpeg reads the FILE, whole: no `-ss`, no `-t`, no fragment -- a part's file is already
     on the part's own clock, and the harvester parses no fragment (docs/HARVEST_FEED.md).
@@ -646,6 +652,17 @@ def _decode_and_sign(path, job, expect_s=None):
         if _stop_requested():                      # nothing half-decoded reaches the cache
             return {"ok": False, "error": STOPPED}
 
+        if not publish:
+            # The canary's re-sign: nothing is written into the cache or the bucket. The stored
+            # signature is the thing being checked, so it must still be the stored one after.
+            np.save(os.path.join(job, "chroma32.npy"), c)
+            current, peak = memwatch.footprint_mb()
+            return {"ok": True, "error": None, "reason": None, "uploaded_etag": None,
+                    "n_samples": int(n_samples), "seconds": round(seconds, 1),
+                    "took_s": round(time.time() - started, 1),
+                    "footprint_mb": current, "peak_mb": peak,
+                    "footprint_kind": memwatch.kind()}
+
         # The signature is the harvester's product, so its write goes through the cache policy
         # like every other write into the `chroma` cache: `reserve` makes room (a planned size
         # -- the matrix is in hand) and refuses past the disk floor, `commit` records the entry
@@ -717,7 +734,7 @@ def _spawn_argv(job):
     return [sys.executable, os.path.abspath(__file__), "--sign-job", job]
 
 
-def _run_sign_child(path, job, expect_s=None):
+def _run_sign_child(path, job, expect_s=None, publish=True):
     """Spawn `harvest.py --sign-job DIR` and read back its result."""
     env = dict(os.environ)
     # macOS libmalloc caches freed LARGE blocks inside the process instead of returning them to
@@ -733,7 +750,7 @@ def _run_sign_child(path, job, expect_s=None):
     # carrying that substring anywhere would be adopted by the supervisor as the harvester
     # itself. So look, and run the decode here rather than spawn something that will be misread.
     if "--run" in " ".join(argv):
-        return _decode_and_sign(path, job, expect_s)
+        return _decode_and_sign(path, job, expect_s, publish)
     if _stop_requested():
         return {"ok": False, "error": STOPPED}   # do not start a decode we are about to abandon
     # THE JOB FILE DESCRIBES THE JOB -- all of it. The audio path moved here because the command
@@ -741,7 +758,8 @@ def _run_sign_child(path, job, expect_s=None):
     # of one fact ("decode this, and it is this long"), and a job half-described in one place and
     # half on an argv is how the two drift apart. Absent when the sidecar declared no length,
     # which is honest: an unmeasurable length is not a mismatch, it is simply unmeasured.
-    _save(os.path.join(job, "sign.json"), {"path": path, "expect_s": expect_s})
+    _save(os.path.join(job, "sign.json"), {"path": path, "expect_s": expect_s,
+                                           "publish": bool(publish)})
     try:
         child = subprocess.Popen(argv, cwd=HOME, env=env,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -876,8 +894,8 @@ def reconcile_ledger(state=None):
                ".venv/bin/python scripts/harvest.py --sign-one <key>"
                % (len(gone), len(signed), 100.0 * len(gone) / max(1, len(signed)), cap * 100))
         first = "sig_alert" not in state
-        state["sig_alert"] = {"at": _now(), "missing": len(gone), "corpus": len(signed),
-                              "why": why}
+        state["sig_alert"] = {"at": _now(), "kind": "store", "missing": len(gone),
+                              "corpus": len(signed), "why": why}
         if first:
             state["issues"] = ((state.get("issues") or []) +
                                [{"at": _now(), "issue": "ledger: " + why}])[-50:]
@@ -910,17 +928,34 @@ def reconcile_ledger(state=None):
             res["dropped"] += 1
     if res["dropped"] or res["restored"] or res.get("sidecar_lost"):
         _save(LEDGER, ledger)
-    # ANY reconcile that did not report stands the alert down: `gone` can be empty here with
-    # the alert still standing (a mis-listed bucket, fixed between starts), and a clear that
-    # waits for a later loss would report a healed store as broken forever.
-    if not res["reported"] and state.pop("sig_alert", None) is not None:
-        res["cleared"] = True                 # the store healed -- stand down
+    # ANY reconcile that did not report stands the STORE alert down: `gone` can be empty here
+    # with the alert still standing (a mis-listed bucket, fixed between starts), and a clear
+    # that waits for a later loss would report a healed store as broken forever. Only a
+    # store-kind alert is cleared here; a canary-kind alert (a matcher failure) is a different
+    # break and survives a healthy reconcile -- the canary's own pass is what clears it (see
+    # canary_pass). A legacy alert written before the `kind` field landed has no `kind` but
+    # carries the store-loss shape (`missing`/`corpus`); it is treated as store-owned here so
+    # an upgrade does not leave a pre-existing store alarm standing forever, while the
+    # canary path (which never clears a store alert) leaves it alone either way.
+    if not res["reported"]:
+        alert = state.get("sig_alert")
+        if isinstance(alert, dict) and (alert.get("kind") == "store"
+                                        or ("kind" not in alert
+                                            and "missing" in alert)):
+            state.pop("sig_alert", None)
+            res["cleared"] = True             # the store healed -- stand down
+        # An alert with neither `kind` nor `missing` is a shape this code does not
+        # recognise (an older, malformed, or hand-written alert). It is left alone: clearing
+        # an unknown shape would silently dismiss an alarm a human set on purpose, and the
+        # canary path does not clear it either (it only clears a `kind: "canary"` alert).
+        # Such an alert survives until a human clears it, which is the safe default -- the
+        # alternative is an alarm that disappears on a healthy pass without anyone asking.
     parts = []
     if res["dropped"]:
         parts.append("dropped the etag of %d signed row(s) whose object is gone" % res["dropped"])
     if res["restored"]:
         parts.append("restored %d missing etag(s) whose object is back" % res["restored"])
-    if res["sidecar_lost"]:
+    if res.get("sidecar_lost"):
         parts.append("demoted %d signed row(s) whose companion sidecar is gone to delayed "
                      "missing_sidecar" % res["sidecar_lost"])
     why = ("; ".join(parts)) if parts else \
@@ -1083,11 +1118,18 @@ def scan_directories(ledger, issues=None, said=None):
 
 # --- signing ------------------------------------------------------------------------------------
 
-def sign_file(path, issues=None):
+def sign_file(path, issues=None, publish=True):
     """Sign one audio file: decode it (in the child), upload the signature and the sidecar
     beside it in the bucket, and write the ledger row. Returns `(chroma, samples)` when the
     file is signed -- the chroma to score, the decoded samples as a memory map so the caller
     can cut an excerpt without a second decode -- and `(None, None)` otherwise.
+
+    `publish=False` is the canary's re-sign (`canary_pass`): the same path end to end, but
+    nothing is uploaded, nothing lands in the working cache, and NO ROW IS WRITTEN. The one
+    ledger change it may make is to advance `signed_at` on the key's row when that row is
+    `signed`, so the row records when the canary was last re-signed. A re-sign that fails writes no
+    `delayed` row either: the stored signature is still good, and the failure is the canary's
+    verdict to report, not the row's.
 
     THE ROW IS THE VERDICT. A file that decodes badly, or whose length disagrees with its own
     sidecar, or that the cache policy has no room for, is `delayed` with its reason, and the
@@ -1142,9 +1184,9 @@ def sign_file(path, issues=None):
     os.makedirs(job, exist_ok=True)
     try:
         if os.environ.get("NETRADIO_HARVEST_CHILD") == "0":
-            result = _decode_and_sign(path, job, expect_s)
+            result = _decode_and_sign(path, job, expect_s, publish)
         else:
-            result = _run_sign_child(path, job, expect_s)
+            result = _run_sign_child(path, job, expect_s, publish)
         _LAST_CHILD.update(result)
         if _stop_requested() or was_stopped(result.get("error")):
             return None, None
@@ -1163,6 +1205,18 @@ def sign_file(path, issues=None):
             return None, None
 
         ledger = load_ledger()
+        if not publish:
+            # The canary's re-sign: no new row, ever. On success the existing row's
+            # `signed_at` advances and nothing else about it changes -- its etag still names
+            # the stored object, which this pass did not replace.
+            if not result.get("ok"):
+                return None, None
+            if (ledger.get(key) or {}).get("status") == "signed":
+                ledger[key]["signed_at"] = _now()
+                _save(LEDGER, ledger)
+            c = np.load(os.path.join(job, "chroma32.npy"))
+            samples = np.memmap(os.path.join(job, "pcm.f32le"), dtype="float32", mode="r")
+            return c, samples
         if result.get("ok"):
             etag = result.get("uploaded_etag")
             # THE SIDECAR BESIDE THE SIGNATURE, the index the pool has never had
@@ -1399,6 +1453,169 @@ def stamp_pool(state):
     return any(pool.get(k) != prev.get(k) for k in ("count", "canary"))
 
 
+def _canary_key():
+    """The canary's key, set in .env (see .env.example). Empty when unconfigured -- the
+    canary pass then never runs, the canary's file (if one is ever fed) is signed like any
+    other, and the run carries on."""
+    return (os.environ.get("NETRADIO_CANARY_KEY") or "").strip()
+
+
+# The canary files this process has already put through a pass, `{key: (size, mtime)}`. A
+# canary pass writes no new row and does not change the existing row's size or mtime, so
+# the scan keeps proposing the same bytes; this is what stops the loop re-signing them every
+# pass. A restart forgets it, and the canary then runs once more -- a self-test, not a cost.
+_canary_checked = {}
+
+
+def _file_id(path):
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return st.st_size, st.st_mtime
+
+
+def stored_signature(key):
+    """The signature already stored for `key`, as stored (float16), or None.
+
+    With the bucket configured this is the bucket's `<key>.npy`, fetched into a scratch
+    directory and NOT into the working cache: the canary is compared with what the pool
+    holds, and a local copy is only a copy. With the bucket dark it is the working cache's
+    copy. None when neither holds it, or when the fetch or the read failed; the loop tells
+    those apart with the bucket's listing before it lets an ordinary sign replace it."""
+    if sigstore.enabled():
+        os.makedirs(JOBS, exist_ok=True)
+        scratch = tempfile.mkdtemp(prefix="canary-", dir=JOBS)
+        try:
+            got = sigstore.fetch(key + ".npy", scratch)
+            if not got:
+                return None
+            try:
+                return np.load(got)
+            except (OSError, ValueError):
+                return None
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+    d = _chroma_dir()
+    if d is None:
+        return None
+    try:
+        return np.load(os.path.join(d, key + ".npy"))
+    except (OSError, ValueError):
+        return None
+
+
+def _canary_alert(state, why):
+    """Raise (or keep) the canary's `sig_alert`. Returns True when the state changed.
+
+    `sig_alert` is the one alarm the page shows for "the store or the matcher is broken", and
+    the two paths that raise it -- the ledger's reconcile (a mass bucket loss) and the canary
+    -- are KEPT APART by a `kind` field. A store alert takes precedence and is never
+    overwritten here; a canary alert already standing with the same why is not rewritten
+    (no fresh issues row every pass)."""
+    alert = state.get("sig_alert")
+    if isinstance(alert, dict) and alert.get("kind") == "store":
+        return False                     # the store break is the news; leave it
+    if isinstance(alert, dict) and alert.get("kind") == "canary" and alert.get("why") == why:
+        return False                     # already recorded
+    state["sig_alert"] = {"at": _now(), "kind": "canary", "why": why}
+    state["issues"] = ((state.get("issues") or []) + [{"at": _now(), "issue": why}])[-50:]
+    return True
+
+
+def _canary_clear(state):
+    """Stand the CANARY alert down, and only that one: a store-loss alert is cleared by the
+    reconcile that raised it. Returns True when the state changed."""
+    alert = state.get("sig_alert")
+    if isinstance(alert, dict) and alert.get("kind") == "canary":
+        state.pop("sig_alert", None)
+        return True
+    return False
+
+
+def canary_pass(state, path, stored, qs):
+    """The canary's self-test: re-sign its fed file as if new, compare, score, flag.
+
+    The canary is one known track whose signature and whose match are known. The feeder puts
+    its file back in a harvest directory now and then; the scan finds it like any file, and
+    the loop hands it here instead of to the ordinary sign because its key is
+    `NETRADIO_CANARY_KEY` and a signature is already stored under it (`stored`). Then:
+
+      1. the file is signed through `sign_file`, the ordinary path end to end, with
+         `publish=False`: nothing is uploaded, nothing replaces the stored signature, and
+         no new ledger row is written (the existing row's `signed_at` advances);
+      2. the new signature, as it would be stored, is compared with the stored one -- an
+         identical signature is the pass, any difference is flagged;
+      3. the new signature is scored as if new against every mystery: against the canary's
+         own mix it must show the known cost, rank and margin (`selftest.live`), and against
+         the current mysteries it must not MATCH (cost at or under MATCH_COST, the search's
+         own bar) anywhere the pool has not already recorded a lead for this key -- a new
+         match is flagged. The bar is MATCH_COST, not the keep-board ceiling: an unrelated
+         pair routinely scores inside the ceiling (the non-match median is above it), so a
+         near-miss is noise, while a MATCH on a mystery for a track already solved is news.
+
+    Anything flagged raises `sig_alert` (kind `canary`). A pass with nothing flagged and the
+    known match confirmed stands a canary alert down; one that could not check the known
+    match (no calibration cases) leaves a standing alert alone. The outcome is recorded in
+    `state["canary"]` for the page. Returns None on a stop (never a verdict), else the record.
+    """
+    key = file_key(path)
+    # The canary cuts no excerpt: the decoded samples are dropped with the tuple.
+    c = sign_file(path, issues=state.setdefault("issues", []), publish=False)[0]
+    if _stop_requested() or was_stopped(_LAST_CHILD.get("error")):
+        return None
+    ident = _file_id(path)
+    if ident is not None:
+        _canary_checked[key] = ident
+    problems = []
+    rec = {"at": _now(), "key": key, "signature": None, "live": None, "new_hits": []}
+    if c is None:
+        rec["signature"] = "not signed"
+        problems.append("the canary's file did not sign: %s"
+                        % (_LAST_CHILD.get("error") or _LAST_CHILD.get("reason")
+                           or "its sidecar was not readable"))
+    else:
+        new = c.astype(chroma_recipe.STORE_DTYPE)
+        old = np.asarray(stored)
+        if new.shape != old.shape:
+            rec["signature"] = "differs"
+            problems.append("the canary re-signed to a different signature: shape %s, "
+                            "stored %s" % (list(new.shape), list(old.shape)))
+        elif not np.array_equal(new, old, equal_nan=True):
+            diff = np.abs(new.astype("float32") - old.astype("float32"))
+            rec["signature"] = "differs"
+            problems.append("the canary re-signed to a different signature: %d of %d values "
+                            "differ, by up to %.4g"
+                            % (int(np.count_nonzero(diff)), diff.size, float(np.nanmax(diff))))
+        else:
+            rec["signature"] = "same"
+
+        st = selftest.live(c, mystery_queries=qs)
+        rec["live"] = {k: st.get(k) for k in ("ok", "cost", "rival", "why")}
+        if st.get("ok") is False:
+            problems.append("self-test failed: %s" % st.get("why"))
+
+        known = {m.get("mystery") for m in state.get("matches") or [] if m.get("key") == key}
+        for num, qc, _qkey in qs:
+            cost, _shift, _at = _cm.match(qc, c)
+            if cost is None or cost > MATCH_COST or num in known:
+                continue
+            rec["new_hits"].append({"mystery": num, "cost": round(float(cost), 4)})
+        if rec["new_hits"]:
+            problems.append("the canary matched mystery %s, where the pool holds no lead for it"
+                            % ", ".join("MT%d (cost %.4f)" % (h["mystery"], h["cost"])
+                                        for h in rec["new_hits"]))
+
+    rec["ok"] = False if problems else (True if (rec["live"] or {}).get("ok") else None)
+    rec["why"] = "; ".join(problems) or None
+    state["canary"] = rec
+    if problems:
+        _canary_alert(state, rec["why"])
+    elif rec["ok"]:
+        _canary_clear(state)
+    return rec
+
+
 def _load_sig(key):
     """A signature by hook or by crook: the working cache first, then the bucket. None if it
     exists in neither (i.e. this key genuinely needs its audio decoded). While the signature
@@ -1471,12 +1688,29 @@ def score_cached(state, num, qc, qkey, key):
 
     A match row carries `key`, never `url`: the row's join to whatever owns the candidate is
     the key alone, and the readers compute the same key from their own side.
+
+    Advances the `current_query` block when it scores the mystery the block names -- the
+    page's "what the scorer is working on right now" (§5.6): one more compared, one fewer
+    remaining, an `updated` stamp. A score against a different mystery (the sign step scores
+    a freshly signed file against every mystery inline, not through here) leaves the block
+    alone -- the block tracks the rescan, not the sign step.
     """
     c = _load_sig(key)
     if c is None:
         return None
     cost, shift, at = _cm.match(qc, c)
     state.setdefault("scored", {}).setdefault(qkey, []).append(key + ".npy")
+
+    # The `current_query` block: the scorer keeps it while it works one mystery. One more
+    # compared, one fewer remaining, an `updated` stamp -- but only when this score is the
+    # one the block names (a rescan works one mystery at a time; the sign step's inline
+    # scores are a different mystery and do not move the block).
+    cq = state.get("current_query")
+    if (isinstance(cq, dict) and cq.get("mystery") == num
+            and cq.get("query_key") == qkey):
+        cq["compared"] = int(cq.get("compared") or 0) + 1
+        cq["remaining"] = max(0, int(cq.get("remaining") or 0) - 1)
+        cq["updated"] = _now()
 
     if cost is None or cost > KEEP_CEILING:
         return None
@@ -1511,6 +1745,13 @@ def forget(state, num):
     dropped_keys = [k for k in scored if k.split(":", 1)[0] == str(num)]
     for k in dropped_keys:
         del scored[k]
+    # Clear the `current_query` block if it names the forgotten mystery -- otherwise the
+    # page could show "the last query was MT%d" right after forgetting it, and the block
+    # would stay stale until the next rescan resets it. The block is the scorer's
+    # "what I am working on right now"; a forgotten mystery is no longer being worked.
+    cq = state.get("current_query")
+    if isinstance(cq, dict) and cq.get("mystery") == num:
+        state.pop("current_query", None)
     return before - len(state["matches"]), len(dropped_keys)
 
 
@@ -1523,11 +1764,61 @@ def rescan(state, ledger, ruled, qs, limit=None, verbose=True):
     `score_cached` records a pair in `state["scored"]` once the signature was loaded and
     scored -- whether it matched or not -- so a pair whose `_load_sig` returned None is
     the one that is not recorded, and that is the one this count leaves pending.
+
+    Advances the `current_query` block (§5.6) as it works one mystery: `mystery`, `query_key`,
+    `started` (when this mystery's chunk began), `compared`, `remaining`, `updated`. A rescan
+    works the mysteries in the order `qs` carries them, and a chunk per pass
+    (`RESCAN_PER_PASS`) may finish a mystery and start the next within one call -- so the
+    block is reset the moment the mystery changes, and `remaining` is the count left in this
+    rescan batch for the mystery the block names.
+
+    A mystery whose backlog exceeds one chunk is worked across more than one rescan call:
+    the SAME `(mystery, query_key)` returns as the first pair of a later call. The block is
+    re-initialised per chunk -- `started` is when THIS call's chunk for the mystery began,
+    and `remaining` is how many pairs THIS call's batch holds for it -- so a long-running
+    mystery does not publish `remaining: 0` and a frozen `started` from its first chunk
+    while scoring continues for hours. A local `started_in_this_call` set tracks which
+    (mystery, query_key) values this call has already opened, so the second chunk for the
+    same mystery re-stamps `started` and re-counts `remaining` from its own batch.
+
+    When the backlog is empty (zero unscored pairs), the block is cleared: a stale block
+    with `remaining > 0` and a frozen `updated` would let a reader show "in progress"
+    forever after the last rescan finished. An empty rescan means nothing is being worked
+    on, so the block says so by being absent.
     """
     pairs = unscored_pairs(state, ledger, ruled, qs, limit=limit)
+    if not pairs:
+        # The backlog is empty: nothing is being worked on. Clear a stale block so a reader
+        # cannot show "in progress" forever after the last rescan finished.
+        if "current_query" in state:
+            state.pop("current_query", None)
+        return 0
+    # Count the pairs per mystery in THIS batch, so `remaining` starts at the batch's size
+    # for a mystery and counts down to zero as the block advances.
+    remaining_in_batch = {}
+    for num, _qc, qkey, _key in pairs:
+        remaining_in_batch[(num, qkey)] = remaining_in_batch.get((num, qkey), 0) + 1
     scored = state.setdefault("scored", {})
+    # The (mystery, query_key) values THIS call has already opened a block for. A mystery
+    # whose backlog exceeds RESCAN_PER_PASS is worked across more than one call: its
+    # second chunk re-stamps `started` and re-counts `remaining` from this call's batch,
+    # so the block does not freeze on the first chunk's values while scoring continues.
+    started_in_this_call = set()
     n = 0
     for num, qc, qkey, key in pairs:
+        cq = state.get("current_query")
+        block_matches = (isinstance(cq, dict) and cq.get("mystery") == num
+                         and cq.get("query_key") == qkey)
+        if not block_matches or (num, qkey) not in started_in_this_call:
+            # A new mystery, the block is stale (a re-cut clip changed the key), or this is
+            # the first chunk for this (mystery, query_key) in THIS call: (re)start the block
+            # fresh. `started` is when THIS mystery's chunk began in this call, `remaining` is
+            # how many pairs this batch holds for it, and `compared` begins at zero.
+            state["current_query"] = {"mystery": num, "query_key": qkey,
+                                      "started": _now(), "compared": 0,
+                                      "remaining": remaining_in_batch.get((num, qkey), 0),
+                                      "updated": _now()}
+            started_in_this_call.add((num, qkey))
         before = len(scored.get(qkey, []))
         hit = score_cached(state, num, qc, qkey, key)
         if len(scored.get(qkey, [])) <= before:
@@ -1905,9 +2196,14 @@ def run(args):
             state["issues"] = (state.get("issues") or [])[-49:] + [{"at": _now(), "issue": issue}]
             _save(STATE, state)
 
-    # THE CANARY. A broken harvester and a pool without the answer look identical from here: zero
-    # matches, for weeks. So before searching for something we have never found, prove we can still
-    # find something we HAVE -- re-run one solved calibration case from local files.
+    # THE CANARY, at start: re-run one solved calibration case from local files. A broken
+    # harvester and a pool without the answer look identical from here: zero matches, for
+    # weeks. So before searching for something we have never found, prove we can still find
+    # something we HAVE -- the offline check runs the matching maths against local files and
+    # catches a break in chroma_match before the first pass. The canary pass (canary_pass,
+    # inside the loop, whenever the feeder puts the canary's file back) is the other half: it
+    # re-signs a known file as if new and proves the whole process still produces the
+    # signature and the match the pool already holds.
     st = selftest.offline()
     if st.get("ok"):
         print("# self-test PASS -- %s: cost %.4f, rank %d, beat the field by %.4f"
@@ -1977,12 +2273,17 @@ def run(args):
         # clip lands, every signature the pool holds gets scored against it, without a single
         # new decode. Positions (`at_s`) on old rows get filled in on the way.
         todo = len(unscored_pairs(state, ledger, ruled, qs))
-        if todo:
-            state["rescan_pending"] = todo
-            n = rescan(state, ledger, ruled, qs, limit=RESCAN_PER_PASS)
-            state["rescan_pending"] = max(0, todo - n)
-            _save(STATE, state)
-        elif sigstore.enabled():
+        # rescan is called every pass, even when the backlog is empty: an empty call clears a
+        # stale `current_query` block (the stale-reader guard inside rescan) and returns 0, so
+        # the loop's own "cleared when the backlog is empty" contract holds without a second
+        # clear site here. The block's contract is "absent means idle"; honouring it from the
+        # loop means a block whose final batch completed does not stay in state.json with
+        # `remaining: 0` and a frozen `updated` until new work or forget() replaces it.
+        state["rescan_pending"] = todo
+        n = rescan(state, ledger, ruled, qs, limit=RESCAN_PER_PASS)
+        state["rescan_pending"] = max(0, todo - n)
+        _save(STATE, state)
+        if not todo and sigstore.enabled():
             # Rescan backlog empty = every held signature is scored vs every current mystery,
             # which is exactly when cold ones may leave the disk (verified-remote only).
             n_ev, freed = sigstore.evict_cold(_chroma_dir(), state.get("scored") or {},
@@ -2015,6 +2316,15 @@ def run(args):
             said.update(fresh)
             state["skipped_cached"] += len(fresh)
             _save(STATE, state)
+        # THE CANARY, when the feeder has put its file back: routed to the canary pass
+        # rather than the ordinary sign. The file is reached like any other -- the scan found
+        # it -- and only its handling differs. Bytes this process has already put through a
+        # pass are not proposed again (the pass writes no row that would cover them).
+        canary = _canary_key()
+        if canary:
+            todo_files = [rec for rec in todo_files
+                          if not (rec["key"] == canary
+                                  and _canary_checked.get(canary) == _file_id(rec["path"]))]
         if not todo_files:
             state["current"] = None
             if _nap(PASS_GAP_S):
@@ -2024,6 +2334,45 @@ def run(args):
         rec_file = todo_files[0]
         state["current"] = rec_file["key"]
         _save(STATE, state)
+        # Only a canary whose row is `signed` takes the canary pass. A row that is not (a
+        # sidecar lost from the bucket, say) is healed the published way: an ordinary sign
+        # that uploads both objects again.
+        stored = (stored_signature(canary)
+                  if rec_file["key"] == canary
+                  and (ledger.get(canary) or {}).get("status") == "signed" else None)
+        if (stored is None and rec_file["key"] == canary and sigstore.enabled()
+                and (ledger.get(canary) or {}).get("status") == "signed"):
+            # A signed canary whose stored signature did not come back. If the listing says
+            # the object is gone, the ordinary sign below heals it. If the object is (or may
+            # be) there, the fetch or the read failed: signing now would publish over the
+            # very reference the canary compares with, so these bytes are skipped with an
+            # issue row, and the next feed tries again.
+            objs = _remote_objects()
+            if objs is None or canary + ".npy" in objs:
+                ident = _file_id(rec_file["path"])
+                if ident is not None:
+                    _canary_checked[canary] = ident
+                state["issues"] = ((state.get("issues") or []) + [{
+                    "at": _now(), "key": canary,
+                    "issue": "the canary's stored signature could not be fetched or read -- "
+                             "this feed is skipped rather than signed over it"}])[-50:]
+                state["current"] = None
+                _save(STATE, state)
+                continue
+        if stored is not None:
+            rec = canary_pass(state, rec_file["path"], stored, qs)
+            if rec is None:
+                return _stopped(state)
+            print("  canary %s: %s" % (rec_file["key"],
+                                       "PASS" if rec["ok"] else
+                                       "not checked" if rec["ok"] is None else
+                                       "FAIL -- %s" % rec["why"]))
+            if check_memory(state, rec_file["key"], dict(_LAST_CHILD)):
+                _save(STATE, state)
+                return
+            state["updated"] = _now()
+            _save(STATE, state)
+            continue
         c, samples = sign_file(rec_file["path"], issues=state["issues"])
         # A stop is never a verdict, and it arrives by either route: this process was signalled
         # (the flag), or only the decode child was (the sentinel error). Checking one and not
@@ -2142,7 +2491,8 @@ def main():
                   file=sys.stderr)
             return 2
         try:
-            result = _decode_and_sign(path, job, spec.get("expect_s"))
+            result = _decode_and_sign(path, job, spec.get("expect_s"),
+                                      spec.get("publish", True) is not False)
         except Exception:                    # a crash is the parent's "child failed" path
             traceback.print_exc()
             return 1

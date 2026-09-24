@@ -15,6 +15,7 @@ No network and no audio: `fetch` is injected, and the local-file paths are stubb
 """
 
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -99,17 +100,29 @@ class OfflineCanary(unittest.TestCase):
 
 @unittest.skipIf(selftest is None, "selftest.py needs the librosa venv (.venv) — skipping")
 class LiveCanary(unittest.TestCase):
+    """The live check is a RE-SCORE of the canary's STORED signature -- no fetch.
+
+    The canary's file arrived through the feeder like any entry, was signed once, and its
+    signature lives in the bucket keyed by `NETRADIO_CANARY_KEY`. The check scores that
+    stored signature against the canary's own mix (the query a calibration case builds from
+    the canary's track) and against the current mysteries, demanding the same three gates
+    as offline. A `live(c_canary, mystery_queries=...)` callable is injected, so the tests
+    drive it without a network and without a fetch.
+    """
+
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         selftest.RESULT = os.path.join(self.tmp, "selftest.json")
         selftest.CANARY = os.path.join(self.tmp, "canary.json")
         self.case = {"num": 1, "orig": "/x/1.wav", "name": "Dead Calm - Urban Style",
                      "extract": None, "cap": None, "cstart": 0, "mb": 0, "me": 300}
+        self.canary_chroma = "CANARY-CHROMA"
 
     def test_refuses_to_enshrine_a_stream_that_is_not_the_record(self):
         """THE WOLF-CRY GUARD. If the upload we found is the wrong record, the canary would fail
         forever and we would stop believing it. So a candidate canary is validated against the
-        original we already hold, and rejected if it does not match."""
+        original we already hold, and rejected if it does not match. (Establishment is the one
+        place a fetch still lives; the re-score itself never fetches.)"""
         with mock.patch.object(selftest, "cases", return_value=[self.case]), \
              mock.patch.object(selftest, "_search", return_value="https://y/wrong"), \
              mock.patch.object(selftest._cal, "chroma", return_value="C"), \
@@ -131,60 +144,301 @@ class LiveCanary(unittest.TestCase):
         self.assertEqual(est["url"], "https://y/right")
         self.assertTrue(os.path.exists(selftest.CANARY))
 
-    def test_an_interrupted_fetch_is_not_a_canary_failure_and_is_not_recorded(self):
-        """A stop is never a verdict.
-
-        Recorded as a FAILURE, a Ctrl-C would leave /harvest saying the matcher is broken.
-        Recorded at all -- even as "not checked" -- it would satisfy `due_for_live` and stand the
-        canary down for a day. So it is reported and nothing is written.
-        """
-        selftest._save(selftest.CANARY, {"url": "https://y/known", "track": 1, "name": "known"})
-        with mock.patch.object(selftest, "cases", return_value=[self.case]):
-            r = selftest.live(lambda url: (None, None, "stopped"), mystery_queries=[])
-        self.assertIsNone(r["ok"])                       # not a pass, and not a failure
-        self.assertIn("stopped", r["why"])
-        self.assertFalse(os.path.exists(selftest.RESULT))
-        self.assertTrue(selftest.due_for_live())         # the next start asks again
-
-    def test_a_real_fetch_failure_is_still_recorded_as_a_failure(self):
-        """The guard must not swallow the case the canary exists for."""
-        selftest._save(selftest.CANARY, {"url": "https://y/known", "track": 1, "name": "known"})
-        with mock.patch.object(selftest, "cases", return_value=[self.case]):
-            r = selftest.live(lambda url: (None, None, "yt-dlp: video unavailable"),
-                              mystery_queries=[])
-        self.assertFalse(r["ok"])
-        self.assertTrue(os.path.exists(selftest.RESULT))
-
-    def test_a_known_record_that_stops_matching_is_a_failure(self):
-        """The whole point: a record we KNOW is the answer, fetched live, must come back a match.
-        If it doesn't, the streaming path or the matcher is broken — and this is the only check
-        that can tell us so."""
-        selftest._save(selftest.CANARY, {"url": "https://y/known", "track": 1, "name": "known"})
+    def test_a_stopped_fetch_is_a_skip_not_a_failure(self):
+        """A Ctrl-C during the establishment fetch is not a verdict on the upload -- a stop
+        is never a failure. The canary is not saved, and the result is `ok: None` (skip),
+        not `ok: False` (failure), so a by-hand `establish_canary` interrupted by a signal
+        does not look like "the upload is bad"."""
         with mock.patch.object(selftest, "cases", return_value=[self.case]), \
-             mock.patch.object(selftest._cal, "mix_query", return_value=[0.0] * 99999), \
-             mock.patch.object(selftest._cal, "chroma", return_value="C"), \
-             mock.patch.object(selftest._cm, "match", return_value=(0.31, 0, 0.0)):
-            r = selftest.live(lambda url: ("C", None, None), mystery_queries=[])
-        self.assertFalse(r["ok"])
-        self.assertIn("broken", r["why"])
+             mock.patch.object(selftest, "_search", return_value="https://y/right"):
+            est = selftest.establish_canary(lambda url: (None, None, "stopped"))
+        self.assertIsNone(est["ok"], "a stop is a skip, not a failure")
+        self.assertIn("stopped", est["why"])
+        self.assertFalse(os.path.exists(selftest.CANARY),
+                         "a stopped fetch saves no canary")
 
-    def test_a_fetch_failure_on_a_known_good_url_is_a_failure_not_a_skip(self):
-        """yt-dlp breaking is EXACTLY what this canary exists to catch. It must not be excused."""
-        selftest._save(selftest.CANARY, {"url": "https://y/known", "track": 1, "name": "known"})
-        with mock.patch.object(selftest, "cases", return_value=[self.case]):
-            r = selftest.live(lambda url: (None, None, "yt-dlp: HTTP 403"), mystery_queries=[])
-        self.assertFalse(r["ok"])
-        self.assertIn("403", r["why"])
-
-    def test_the_live_canary_passes_when_everything_works(self):
-        selftest._save(selftest.CANARY, {"url": "https://y/known", "track": 1, "name": "known"})
+    def test_no_canary_json_defaults_to_the_first_calibration_case(self):
+        """THE FRESH-MACHINE PATH: with no `canary.json` on disk, the re-score defaults to
+        the first calibration case (the same track `establish_canary` would pick), so the
+        check works end-to-end once `NETRADIO_CANARY_KEY` is set and the canary's signature
+        is in the bucket. No manual `canary.json` step is needed."""
+        # No canary.json written -- the fresh-machine state.
         with mock.patch.object(selftest, "cases", return_value=[self.case]), \
              mock.patch.object(selftest._cal, "mix_query", return_value=[0.0] * 99999), \
              mock.patch.object(selftest._cal, "chroma", return_value="C"), \
              mock.patch.object(selftest._cm, "match", return_value=(0.009, 2, 41.0)):
-            r = selftest.live(lambda url: ("C", None, None), mystery_queries=[])
+            r = selftest.live(self.canary_chroma, mystery_queries=[])
+        self.assertTrue(r["ok"], "the re-score ran against the first calibration case")
+        self.assertEqual(r["track"], 1, "the canary's track is the first case by default")
+        self.assertEqual(r["name"], "Dead Calm - Urban Style",
+                         "the name comes from the calibration case when canary.json is absent")
+
+    def test_no_calibration_cases_is_skipped_not_failed(self):
+        """With no calibration cases at all (NETRADIO_SOURCES_DIR unset), the re-score is
+        "not checked" -- not a failure. The same state a missing canary reads, and one a
+        reader can tell apart from a PASS or a FAIL."""
+        with mock.patch.object(selftest, "cases", return_value=[]):
+            r = selftest.live(self.canary_chroma, mystery_queries=[])
+        self.assertIsNone(r["ok"])
+        self.assertIn("no calibration cases", r["why"])
+
+    def test_the_canary_track_leaving_the_calibration_set_is_skipped(self):
+        selftest._save(selftest.CANARY, {"track": 99, "name": "gone"})
+        with mock.patch.object(selftest, "cases", return_value=[self.case]):
+            r = selftest.live(self.canary_chroma, mystery_queries=[])
+        self.assertIsNone(r["ok"])
+        self.assertIn("calibration set", r["why"])
+
+    def test_no_stored_signature_is_skipped_not_failed(self):
+        """The caller could not load the signature: the cache is dark, the bucket listing
+        failed, or the canary's key points at nothing. None of those is a verdict on the
+        matcher, so it is "not checked" -- the same state a missing canary reads, and one a
+        reader can tell apart from a PASS or a FAIL."""
+        selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
+        with mock.patch.object(selftest, "cases", return_value=[self.case]):
+            r = selftest.live(None, mystery_queries=[])
+        self.assertIsNone(r["ok"])
+        self.assertIn("not available", r["why"])
+
+    def test_the_canary_mix_too_short_to_query_is_skipped(self):
+        selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
+        with mock.patch.object(selftest, "cases", return_value=[self.case]), \
+             mock.patch.object(selftest._cal, "mix_query", return_value=None):
+            r = selftest.live(self.canary_chroma, mystery_queries=[])
+        self.assertIsNone(r["ok"])
+        self.assertIn("too short", r["why"])
+
+    def test_a_known_record_that_stops_matching_is_a_failure(self):
+        """The whole point: a record we KNOW is the answer, re-scored from its stored
+        signature, must come back a match. If it doesn't, the matcher or the signature is
+        broken -- and this is the only check that can tell us so."""
+        selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
+        with mock.patch.object(selftest, "cases", return_value=[self.case]), \
+             mock.patch.object(selftest._cal, "mix_query", return_value=[0.0] * 99999), \
+             mock.patch.object(selftest._cal, "chroma", return_value="C"), \
+             mock.patch.object(selftest._cm, "match", return_value=(0.31, 0, 0.0)):
+            r = selftest.live(self.canary_chroma, mystery_queries=[])
+        self.assertFalse(r["ok"])
+        self.assertIn("broken", r["why"])
+
+    def test_a_cost_outside_the_true_match_range_is_a_failure(self):
+        selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
+        with mock.patch.object(selftest, "cases", return_value=[self.case]), \
+             mock.patch.object(selftest._cal, "mix_query", return_value=[0.0] * 99999), \
+             mock.patch.object(selftest._cal, "chroma", return_value="C"), \
+             mock.patch.object(selftest._cm, "match", return_value=(0.070, 0, 0.0)):
+            r = selftest.live(self.canary_chroma, mystery_queries=[])
+        self.assertFalse(r["ok"])
+
+    def test_the_canary_must_beat_the_mysteries_by_a_real_margin(self):
+        """RANK: the canary's own mix must beat the mystery queries on this same candidate.
+        Cost alone passes a degenerate matcher that scores everything low; the margin is
+        what carries the gate, the same way it does offline."""
+        selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
+        rivals = [(2, "RIVAL", "2:fp")]
+
+        def fake_match(q, c):
+            # the canary's mix scores 0.040; the rival mystery scores 0.0407 -- a 0.0007 win
+            return (0.040, 0, 0.0) if c is self.canary_chroma else (0.0407, 0, 0.0)
+
+        with mock.patch.object(selftest, "cases", return_value=[self.case]), \
+             mock.patch.object(selftest._cal, "mix_query", return_value=[0.0] * 99999), \
+             mock.patch.object(selftest._cal, "chroma", return_value="C"), \
+             mock.patch.object(selftest._cm, "match", side_effect=fake_match):
+            r = selftest.live(self.canary_chroma, mystery_queries=rivals)
+        self.assertFalse(r["ok"])
+        self.assertEqual(r["cost"], 0.040)
+
+    def test_the_live_canary_passes_when_everything_works(self):
+        selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
+        with mock.patch.object(selftest, "cases", return_value=[self.case]), \
+             mock.patch.object(selftest._cal, "mix_query", return_value=[0.0] * 99999), \
+             mock.patch.object(selftest._cal, "chroma", return_value="C"), \
+             mock.patch.object(selftest._cm, "match", return_value=(0.009, 2, 41.0)):
+            r = selftest.live(self.canary_chroma, mystery_queries=[])
         self.assertTrue(r["ok"])
         self.assertEqual(r["cost"], 0.009)
+
+
+@unittest.skipIf(selftest is None, "selftest.py needs the librosa venv (.venv) — skipping")
+class LiveCLI(unittest.TestCase):
+    """The `--live` CLI builds and passes the current mystery queries, so the rank/margin
+    gate runs against the same rivals the harvester's loop uses -- a canary that only
+    barely beats its own mix cannot pass the CLI when a close current mystery should
+    reject it."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        selftest.RESULT = os.path.join(self.tmp, "selftest.json")
+        selftest.CANARY = os.path.join(self.tmp, "canary.json")
+        selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
+        self.canary_chroma = "CANARY-CHROMA"
+        self.rival_qs = [(4, "RIVAL-CHROMA", "4:fp")]
+
+    def _patches(self, live_result):
+        recorded = {}
+
+        def fake_load_canary():
+            return self.canary_chroma, None
+
+        def fake_live(c_canary, mystery_queries=None):
+            recorded["c_canary"] = c_canary
+            recorded["mystery_queries"] = mystery_queries
+            return live_result
+
+        def fake_mystery_queries():
+            return self.rival_qs
+
+        return recorded, fake_load_canary, fake_live, fake_mystery_queries
+
+    def test_the_cli_passes_the_current_mystery_queries_to_live(self):
+        """The CLI builds the current mystery queries (through harvest.queries, imported
+        lazily) and hands them to live(), so the rank/margin gate runs. Without this, the
+        CLI would pass None and a close current mystery that should reject the canary would
+        be invisible to the by-hand check."""
+        recorded, fake_load, fake_live, fake_mq = self._patches(
+            {"kind": "live", "ok": True, "when": "now", "why": None, "track": 1,
+             "name": "known", "cost": 0.009, "rival": 0.06, "semitones": 0, "at_s": 30.0,
+             "took_s": 0.0})
+        with mock.patch.object(selftest, "_load_canary_signature", fake_load), \
+             mock.patch.object(selftest, "live", fake_live), \
+             mock.patch.object(selftest, "_mystery_queries_for_live", fake_mq), \
+             mock.patch.object(sys, "argv", ["selftest.py", "--live"]):
+            selftest.main()
+        self.assertEqual(recorded["c_canary"], self.canary_chroma)
+        self.assertEqual(recorded["mystery_queries"], self.rival_qs,
+                         "the CLI passed the current mystery queries to live()")
+
+    def test_the_cli_with_no_canary_signature_reports_not_checked(self):
+        _, fake_load, fake_live, fake_mq = self._patches(None)
+        with mock.patch.object(selftest, "_load_canary_signature",
+                               lambda: (None, "NETRADIO_CANARY_KEY is not set")), \
+             mock.patch.object(selftest, "live", fake_live), \
+             mock.patch.object(selftest, "_mystery_queries_for_live", fake_mq), \
+             mock.patch.object(sys, "argv", ["selftest.py", "--live"]), \
+             self._capture_stdout() as out:
+            selftest.main()
+        self.assertIn("not set", out.getvalue())
+
+    def test_the_cli_a_failing_canary_is_a_failure(self):
+        recorded, fake_load, fake_live, fake_mq = self._patches(
+            {"kind": "live", "ok": False, "when": "now",
+             "why": "a KNOWN record's stored signature did not come back as a match "
+                    "(cost 0.3100) -- the matcher or the signature is broken",
+             "track": 1, "name": "known", "cost": 0.31, "rival": None,
+             "semitones": 0, "at_s": None, "took_s": 0.0})
+        with mock.patch.object(selftest, "_load_canary_signature", fake_load), \
+             mock.patch.object(selftest, "live", fake_live), \
+             mock.patch.object(selftest, "_mystery_queries_for_live", fake_mq), \
+             mock.patch.object(sys, "argv", ["selftest.py", "--live"]), \
+             self._capture_stdout() as out:
+            selftest.main()
+        self.assertIn('"ok": false', out.getvalue())
+        self.assertIn("broken", out.getvalue())
+
+    def test_the_cli_resolves_the_same_chroma_dir_as_the_harvester(self):
+        """THE DIRECTORY UNIFICATION: the by-hand `--live` CLI must read the canary's
+        signature from the SAME directory the harvester's loop reads from
+        (`harvest._chroma_dir()`), not a different legacy path. Without this, the CLI
+        would look in `<repo>/.chroma-cache` while the harvester reads
+        `$NETRADIO_CACHE_ROOT/chroma`, and a canary already in the working cache would
+        be invisible to the by-hand check -- or the CLI would pull a fresh copy into a
+        directory the cache policy does not track."""
+        try:
+            import harvest
+            import cache_budget
+        except Exception:
+            self.skipTest("harvest.py needs numpy -- not this test's job")
+        # Light the cache policy on a throwaway root and re-register the caches so the
+        # harvester's _chroma_dir() resolves through the policy (the same registration
+        # the lazy `import harvest` inside _chroma_cache_dir() triggers). Restore after.
+        tmp = tempfile.mkdtemp(prefix="chromadir-")
+        root = os.path.join(tmp, "root")
+        saved_env = {k: os.environ.get(k) for k in list(os.environ) if k.startswith("NETRADIO_")}
+        for k in saved_env:
+            os.environ.pop(k, None)
+        os.environ["NETRADIO_CACHE_ROOT"] = root
+        # The disk floor is the host's, not the test's: this path only resolves
+        # directories (no reserve, no commit), but a future edit that did reserve
+        # would be silently refused on a host past the default 82%. Pin the floor
+        # out of the way, the same convention as tests/test_harvest_signer.py.
+        os.environ["NETRADIO_DISK_MAX_PCT"] = "100"
+        saved_registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        harvest.register_caches()
+        try:
+            expected = harvest._chroma_dir()
+            self.assertIsNotNone(expected, "the cache policy is lit -- _chroma_dir() resolves")
+            self.assertEqual(selftest._chroma_cache_dir(), expected,
+                             "the CLI and the harvester resolve the chroma cache to the same path")
+            # And the resolved path is under the policy's root, NOT the legacy .chroma-cache.
+            self.assertTrue(os.path.realpath(expected).startswith(os.path.realpath(root)),
+                            "the resolved path is under NETRADIO_CACHE_ROOT, not a legacy dir")
+        finally:
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(saved_registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(saved_registry[1])
+            for k in [k for k in list(os.environ) if k.startswith("NETRADIO_")]:
+                os.environ.pop(k, None)
+            os.environ.update(saved_env)
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    @staticmethod
+    def _capture_stdout():
+        import contextlib
+        import io
+        return contextlib.redirect_stdout(io.StringIO())
+
+    def test_a_dark_cache_reports_the_misconfiguration_not_a_legacy_dir(self):
+        """THE DARK-CACHE REPORT: when the cache policy is dark (NETRADIO_CACHE_ROOT and
+        NETRADIO_CHROMA_CACHE_DIR both unset), `_chroma_cache_dir()` returns None and the
+        `--live` CLI reports 'the chroma cache is dark -- set NETRADIO_CACHE_ROOT ...'
+        rather than silently scoring from a legacy directory the harvester's loop never
+        reads. Without this, a future edit that reintroduced a silent fallback tier would
+        let the by-hand CLI score a canary from a directory no current writer of the
+        pool's signatures produces, and the operator would see a green check from a
+        misconfigured machine."""
+        try:
+            import harvest
+            import cache_budget
+        except Exception:
+            self.skipTest("harvest.py needs numpy -- not this test's job")
+        saved_env = {k: os.environ.get(k) for k in list(os.environ) if k.startswith("NETRADIO_")}
+        for k in saved_env:
+            os.environ.pop(k, None)
+        # The cache policy is dark: no NETRADIO_CACHE_ROOT, no NETRADIO_CHROMA_CACHE_DIR.
+        # 'chroma' stays unregistered (register() returns None while the policy is dark),
+        # so both tiers of _chroma_cache_dir() yield None.
+        saved_registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        harvest.register_caches()       # re-read: 'chroma' is dark, registers nothing
+        os.environ["NETRADIO_CANARY_KEY"] = "u" + "a" * 20
+        try:
+            self.assertIsNone(harvest._chroma_dir(),
+                             "the cache policy is dark -- _chroma_dir() resolves to None")
+            self.assertIsNone(selftest._chroma_cache_dir(),
+                             "the dark policy leaves _chroma_cache_dir() with nowhere to read")
+            with mock.patch.object(sys, "argv", ["selftest.py", "--live"]), \
+                    self._capture_stdout() as out:
+                selftest.main()
+            text = out.getvalue()
+            self.assertIn("the chroma cache is dark", text,
+                          "the --live CLI reported the dark-cache misconfiguration")
+            self.assertIn("NETRADIO_CACHE_ROOT", text,
+                          "the report names the env var that lights the policy")
+            self.assertIn('"ok": null', text,
+                          "a dark cache is 'not checked', not a failure")
+        finally:
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(saved_registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(saved_registry[1])
+            for k in [k for k in list(os.environ) if k.startswith("NETRADIO_")]:
+                os.environ.pop(k, None)
+            os.environ.update(saved_env)
 
 
 if __name__ == "__main__":

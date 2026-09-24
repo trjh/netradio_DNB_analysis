@@ -17,6 +17,14 @@ private path, so it is passed in — this script names none:
 Deterministic: given the same source dir it picks the same files (sorted) and offsets, so a
 rebuild is repeatable. `ffmpeg` comes from --ffmpeg, then $NETRADIO_FFMPEG, then imageio-ffmpeg,
 then PATH.
+
+The harvester's self-test re-signs one known track's file whenever the feeder puts it back and
+compares the result with the signature stored under its key (`NETRADIO_CANARY_KEY`). `--key <url>` prints that key for a URL — the pool's one rule
+(`u` + sha1(url)[:20]), the same stem every signature in the bucket is filed under:
+
+    python scripts/make_canary.py --key '<the canary URL>'
+
+(Single quotes: inside double quotes the shell would run any $(...) or backticks in the URL.)
 """
 
 import argparse
@@ -121,6 +129,14 @@ def build(source_dir, out_dir, ffmpeg, count, seconds, offset, exts=(".mp3", ".f
     return manifest
 
 
+def sig_key_for(url):
+    """The signature file name a URL is filed under: the pool's one key rule
+    (docs/HARVEST_FEED.md) -- `u` + the first 20 hex of the SHA-1 of the URL as given,
+    fragment included. The stem of every signature in the bucket is this rule, and it
+    never changes."""
+    return "u" + hashlib.sha1(url.encode()).hexdigest()[:20]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -128,12 +144,24 @@ def main():
                     or os.environ.get("NETRADIO_MP3_DIR"),
                     help="corpus audio to cut excerpts from (or $NETRADIO_CANARY_SOURCE_DIR / "
                          "$NETRADIO_MP3_DIR)")
-    ap.add_argument("--out", required=True, help="output dir for the canary set")
+    ap.add_argument("--out", help="output dir for the canary set")
     ap.add_argument("--ffmpeg")
     ap.add_argument("--count", type=int, default=3)
     ap.add_argument("--seconds", type=float, default=75.0)
     ap.add_argument("--offset", type=float, default=120.0)
+    ap.add_argument("--key", metavar="URL",
+                    help="print the pool's key for URL (u + sha1(url)[:20]) and exit; the same "
+                         "rule every signature in the bucket is filed under. Set "
+                         "NETRADIO_CANARY_KEY in .env to the result to name the canary the "
+                         "harvester re-signs and compares.")
     args = ap.parse_args()
+
+    if args.key is not None:
+        print(sig_key_for(args.key))
+        return
+
+    if not args.out:
+        raise SystemExit("--out is required (or use --key <url> to print the canary's key)")
     if not args.source_dir:
         raise SystemExit("--source-dir (or $NETRADIO_CANARY_SOURCE_DIR / $NETRADIO_MP3_DIR) "
                          "is required")
