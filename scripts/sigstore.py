@@ -23,6 +23,7 @@ after import).
 """
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -33,6 +34,16 @@ import cache_budget                                 # the chroma cache's policy:
 _run = subprocess.run
 
 PREFIX = "chroma/"                  # bucket prefix for signatures (same keys as the local cache)
+
+# The key's shape, the one rule everywhere the pool writes a name (`u` + 20 hex -- see
+# docs/HARVEST_FEED.md). The listing admits nothing else under the prefix: the scan refuses
+# any stem that is not this shape, so a misnamed object would seed a ledger row no local
+# file can ever satisfy, and the pool's count would say one thing while the scan says another.
+_KEY_NAME = re.compile(r"u[0-9a-f]{20}\.npy", re.ASCII)
+# The sidecar beside every signature: `<key>.json`. The listing admits the same key shape,
+# so a sidecar filed under any other name is invisible to the seeding that decides whether
+# a signature is complete (both objects) or legacy (the signature alone).
+_SIDECAR_NAME = re.compile(r"u[0-9a-f]{20}\.json", re.ASCII)
 
 # Session memory: keys HEAD-verified this run, so eviction sweeps don't re-HEAD every pass.
 _verified = {}                      # key -> remote size
@@ -69,25 +80,41 @@ def _base_cmd():
     return cmd
 
 
-def remote_size(key):
-    """HEAD the object -> size in bytes, or None if absent/unreachable. Cached per session
-    once seen (an immutable object's size does not change)."""
+def _head(key):
+    """HEAD the object -> (size, etag), or (None, None) if absent/unreachable.
+
+    One call answers both questions the callers ask, because they always arrive together:
+    a put verifies its size and records the etag the ledger's row carries, and the eviction
+    sweep asks for the size alone. The ETag comes back quoted by the S3 API (it is an MD5
+    in quotes for un-multipart objects), so the quotes are stripped here, once.
+
+    Cached per session once seen (an immutable object's size and ETag do not change)."""
     if key in _verified:
         return _verified[key]
     cmd = _base_cmd() + ["s3api", "head-object", "--bucket", _bucket(),
-                         "--key", PREFIX + key, "--query", "ContentLength", "--output", "text"]
+                         "--key", PREFIX + key, "--query", "[ContentLength, ETag]",
+                         "--output", "json"]
     try:
         proc = _run(cmd, capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.TimeoutExpired):
-        return None
+        return (None, None)
     if proc.returncode != 0:
-        return None
+        return (None, None)
+    import json
     try:
-        size = int(proc.stdout.strip())
+        size, etag = json.loads(proc.stdout or "[null, null]")
     except ValueError:
-        return None
-    _verified[key] = size
-    return size
+        return (None, None)
+    if size is None:
+        return (None, None)
+    _verified[key] = (size, (etag or "").strip('"') or None)
+    return _verified[key]
+
+
+def remote_size(key):
+    """HEAD the object -> size in bytes, or None if absent/unreachable. Cached per session
+    once seen (an immutable object's size does not change)."""
+    return _head(key)[0]
 
 
 def have_remote(key):
@@ -95,23 +122,29 @@ def have_remote(key):
 
 
 def put(path, key):
-    """Upload one signature and VERIFY it landed (remote size == local size). True on success."""
+    """Upload one object and VERIFY it landed (remote size == local size).
+
+    Returns the object's ETag on success, or None on any failure. A non-empty string is
+    truthy, so a caller that only asks whether the object landed keeps reading the result
+    as a bool; the ledger is the caller that wants the etag itself (its `uploaded_etag`
+    is the mark a feeder reads)."""
     if not enabled():
-        return False
+        return None
     try:
         local = os.path.getsize(path)
     except OSError:
-        return False
+        return None
     cmd = _base_cmd() + ["s3", "cp", path, "s3://%s/%s%s" % (_bucket(), PREFIX, key),
                          "--no-progress"]
     try:
         proc = _run(cmd, capture_output=True, text=True, timeout=300)
     except (OSError, subprocess.TimeoutExpired):
-        return False
+        return None
     if proc.returncode != 0:
-        return False
+        return None
     _verified.pop(key, None)                      # force a fresh HEAD, not a stale cache entry
-    return remote_size(key) == local
+    size, etag = _head(key)
+    return etag if size == local else None
 
 
 def fetch(key, dest_dir):
@@ -156,15 +189,22 @@ def fetch(key, dest_dir):
             pass
 
 
-def list_keys():
-    """Every signature key in the bucket (u….npy under the prefix). None on failure —
-    callers must treat 'unknown' differently from 'empty'."""
+def list_objects():
+    """Every signature and sidecar object in the bucket: {name: etag}, or None on failure —
+    callers must treat 'unknown' differently from 'empty'. The ETags ride along because the
+    ledger's rows record them: one listing answers both "what is in the pool" and "which
+    object each row points at".
+
+    Both key shapes are admitted -- `<key>.npy` and `<key>.json` -- so a caller can tell a
+    complete entry (both objects) from a legacy signature-only one (the sidecar the contract
+    now requires was never written). Callers that want only the signatures filter to `.npy`
+    themselves."""
     if not enabled():
         return None
-    keys, token = set(), None
+    objects, token = {}, None
     while True:
         cmd = _base_cmd() + ["s3api", "list-objects-v2", "--bucket", _bucket(),
-                             "--prefix", PREFIX, "--query", "[Contents[].Key, NextToken]",
+                             "--prefix", PREFIX, "--query", "[Contents[].[Key, ETag], NextToken]",
                              "--output", "json"]
         if token:
             cmd += ["--starting-token", token]
@@ -177,14 +217,17 @@ def list_keys():
         import json
         try:
             contents, token = json.loads(proc.stdout or "[[], null]")
-        except ValueError:
+        except (ValueError, TypeError):
             return None
-        for k in contents or []:
-            name = k[len(PREFIX):]
-            if name.startswith("u") and name.endswith(".npy") and "/" not in name:
-                keys.add(name)
+        for entry in contents or []:
+            try:
+                name, etag = entry[0][len(PREFIX):], entry[1]
+            except (TypeError, IndexError):
+                continue                    # a shape the contract does not describe: skip it
+            if _KEY_NAME.fullmatch(name) or _SIDECAR_NAME.fullmatch(name):
+                objects[name] = (etag or "").strip('"') or None
         if not token:
-            return keys
+            return objects
 
 
 def evictable(path, key, scored, qkeys):

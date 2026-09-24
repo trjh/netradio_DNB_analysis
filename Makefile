@@ -126,7 +126,7 @@ env-check:            ## list NETRADIO_* names set in .env that no code reads, a
 # holds the pages anyway, and under pressure they end up compressed and swapped. It has to be in
 # the environment at process start, which is why it is here and not inside the script. Harmless on
 # other platforms (an unknown variable). The fetch child sets it again for itself.
-harvest-run:          ## work the queue (runs for weeks), with the memory bound in place
+harvest-run:          ## run the harvester's loop (signs and scores; runs for weeks), memory bound in place
 	set -a; [ -f .env ] && . ./.env; set +a; \
 	MallocLargeCache=0 .venv/bin/python scripts/harvest.py --run
 

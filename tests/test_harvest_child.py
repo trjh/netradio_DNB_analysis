@@ -1,15 +1,15 @@
-"""The per-candidate fetch child, the stop path, and the memory rows.
+"""The per-file decode child, the stop path, and the memory rows.
 
-Nothing here touches the network. Every `yt-dlp` and `ffmpeg` is a fake object, every fetch child
-is a fake `Popen`, and the two things worth being careful about are pinned:
+Nothing here touches the network and nothing decodes real audio: `ffmpeg` is a fake object,
+every decode child is a fake `Popen`, and the two things worth being careful about are pinned:
 
-  * **A partial decode must never become a signature.** A signature is written once per URL and
-    never fetched again, so a truncated one is not a transient error -- it is a permanently wrong
-    answer, cached locally and uploaded to the pool. Several tests exist only to show that each
-    way a fetch can end badly produces no signature at all.
-  * **The child must not look like the harvester.** The player's supervisor discovers a live
-    harvester by looking for a `harvest.py` command line containing `--run`. If a fetch child's
-    argv ever gained that flag, the supervisor would adopt a child that lives for one track.
+  * **A partial decode must never become a signature.** A signature is written once per key and
+    never decoded again, so a truncated or wrong-length one is not a transient error -- it is a
+    permanently wrong answer, cached locally and uploaded to the pool. Several tests exist only
+    to show that each way a decode can end badly produces no signature at all.
+  * **The child must not look like the harvester.** The supervisor discovers a live harvester by
+    looking for a `harvest.py` command line containing `--run`. If a decode child's argv ever
+    gained that flag, the supervisor would adopt a child that lives for one file.
 """
 
 import contextlib
@@ -40,15 +40,24 @@ import cache_budget                     # noqa: E402  (the machine's one cache p
 SR = 16000
 LONG_ENOUGH = int(60 * SR)              # comfortably over chroma_recipe.MIN_SECONDS
 
+# The cache-policy names the landing test saves and restores (the same set
+# tests/test_cache_budget.py uses).
+CACHE_ENV = ("NETRADIO_CACHE_ROOT", "NETRADIO_DOWNLOAD_ROOT", "NETRADIO_DISK_MAX_PCT",
+             "NETRADIO_CACHE_EVENTS_DAYS")
+
 
 def _pcm(n_samples):
     """Decoded PCM as ffmpeg would write it: mono float32 little-endian."""
     return (np.arange(n_samples, dtype="float32") % 7.0 - 3.0).tobytes()
 
 
+def _key(url):
+    return "u" + __import__("hashlib").sha1(url.encode()).hexdigest()[:20]
+
+
 def _job_of(argv):
     """The job directory from a spawned child's argv, however the flag is spelled."""
-    for flag in ("--fetch-job", "--job"):
+    for flag in ("--sign-job", "--job"):
         if flag in argv:
             return argv[argv.index(flag) + 1]
     raise AssertionError("no job directory on %r" % (argv,))
@@ -60,7 +69,7 @@ class _FakeProc:
     def __init__(self, argv, returncode=0, stderr=b"", alive=False, order=None):
         self.argv = argv
         self.returncode = returncode
-        self.stdout = io.BytesIO()          # yt-dlp's; the code closes it and never reads it
+        self.stdout = io.BytesIO()          # never read; the code closes it
         self.stderr = io.BytesIO(stderr)
         self.alive = alive
         self.order = order if order is not None else []
@@ -85,132 +94,72 @@ class _FakeProc:
         self.alive = False
 
 
-def fake_decode(pcm=b"", yt_rc=0, yt_err=b"", ff_rc=0, ff_err=b"", alive=False, order=None):
-    """A `subprocess.Popen` stand-in for the yt-dlp | ffmpeg pair.
+def fake_decode(pcm=b"", rc=0, stderr=b"", alive=False, order=None, vanish=None):
+    """A `subprocess.Popen` stand-in for the one ffmpeg the child spawns.
 
-    The fake ffmpeg writes `pcm` straight into the spool file it is handed as `stdout`, which is
+    The fake writes `pcm` straight into the spool file it is handed as `stdout`, which is
     exactly what the real one does -- the point of the change being tested is that Python never
-    holds the decoded audio.
+    holds the decoded audio. `vanish` unlinks that path while "decoding".
     """
     made = {}
 
     def _popen(argv, **kwargs):
-        proc = _FakeProc(argv, order=order, alive=alive)
-        if "ffmpeg" in argv[0]:
-            proc.returncode, proc.stderr = ff_rc, io.BytesIO(ff_err)
-            if pcm:
-                kwargs["stdout"].write(pcm)
-            made["ff"] = proc
-        else:
-            proc.returncode, proc.stderr = yt_rc, io.BytesIO(yt_err)
-            made["yt"] = proc
+        proc = _FakeProc(argv, returncode=rc, stderr=stderr, alive=alive, order=order)
+        if pcm:
+            kwargs["stdout"].write(pcm)
+        made["ff"] = proc
+        if vanish:
+            os.unlink(vanish)
         return proc
 
     _popen.made = made
     return _popen
 
 
-def fake_slow_decode(chunks, order=None, yt_rc=0, ff_rc=0):
-    """A yt-dlp | ffmpeg pair that takes several polls to finish.
-
-    The real ffmpeg fills the spool over minutes while the parent waits on it a second at a time.
-    This one writes one element of `chunks` each time that poll times out, so the spool GROWS
-    while `_wait` is watching it -- which is the only moment the two-hour stop can happen at all.
-    A terminated ffmpeg writes nothing more, as the real one does not.
-    """
-    made = {}
-
-    class _Slow(_FakeProc):
-        def __init__(self, argv, spool):
-            _FakeProc.__init__(self, argv, returncode=ff_rc, alive=True, order=order)
-            self.spool, self.left, self.written = spool, list(chunks), 0
-
-        def wait(self, timeout=None):
-            if self.left and timeout is not None:
-                chunk = self.left.pop(0)
-                self.spool.write(chunk)
-                self.spool.flush()
-                self.written += len(chunk)
-                raise subprocess.TimeoutExpired(self.argv, timeout)
-            self.alive = False
-            return self.returncode
-
-        def terminate(self):
-            self.left = []
-            _FakeProc.terminate(self)
-
-    def _popen(argv, **kwargs):
-        if "ffmpeg" in argv[0]:
-            made["ff"] = _Slow(argv, kwargs["stdout"])
-            return made["ff"]
-        made["yt"] = _FakeProc(argv, returncode=yt_rc, alive=True, order=order)
-        return made["yt"]
-
-    _popen.made = made
-    return _popen
+def _feed(case, key, url="https://example.invalid/watch?v=abc", duration_s=60.0):
+    """One audio file + its sidecar in the case's directory, the contract's own shape."""
+    path = os.path.join(case.audio, key + ".mp3")
+    with open(path, "wb") as fh:
+        fh.write(b"")
+    with open(os.path.join(case.audio, key + ".json"), "w") as fh:
+        json.dump({"key": key, "url": url, "duration_s": duration_s,
+                   "fed_at": "2026-09-19T00:00:00+00:00"}, fh)
+    return path
 
 
-def _fetch_with(case, popen, url, duration):
-    """`_fetch_and_sign` behind the subprocess seam, recording what it would have written."""
-    real_save = np.save
-
-    def _save(path, arr, *a, **k):
-        # np.save is handed a file handle for the cache's .tmp write, so take the handle's
-        # name: what is recorded is what a write aimed at, whichever side of the rename.
-        case.saved.append(os.path.basename(str(getattr(path, "name", path))))
-        return real_save(path, arr, *a, **k)
-
-    with mock.patch.object(harvest.subprocess, "Popen", popen), \
-            mock.patch.object(harvest.np, "save", _save), \
-            mock.patch.object(harvest.sigstore, "enabled", lambda: True), \
-            mock.patch.object(harvest.sigstore, "put", lambda *a: case.put.append(a) or True), \
-            mock.patch.object(harvest.chroma_recipe, "compute_chroma",
-                              lambda y, sr=None: np.zeros((12, 4), dtype="float32")):
-        return harvest._fetch_and_sign(url, case.job, duration)
-
-
-def _sig_writes(case, url):
-    """The np.save calls aimed at this URL's signature: the write goes to a `.npy.<pid>.tmp`
-    and is renamed into place, so match the stem, not the whole name."""
-    stem = os.path.basename(harvest.sig_path(url))[:-len(".npy")]
-    return [n for n in case.saved if n.startswith(stem)]
-
-
-def _assert_refused(case, result, error_contains):
-    """Refused, and refused the way the callers read a refusal: no signature written, no upload,
-    no spool left behind, and no word in the message that `run()` reads as a HOST problem --
-    "403", "429" or "blocked" send it down the back-off path, where the URL is never popped."""
-    case.assertFalse(result["ok"])
-    case.assertIn(error_contains, result["error"])
-    case.assertNotIn("403", result["error"])
-    case.assertNotIn("429", result["error"])
-    case.assertNotIn("blocked", result["error"].lower())
-    case.assertEqual(_sig_writes(case, case.url), [], "a refused fetch wrote no signature")
-    case.assertNotIn("chroma32.npy", case.saved)
-    case.assertEqual(case.put, [])
-    case.assertFalse(os.path.exists(os.path.join(case.job, "pcm.f32le.part")))
-    case.assertFalse(os.path.exists(os.path.join(case.job, "pcm.f32le")))
-
-
-@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+@unittest.skipUnless(harvest is not None, "harvest.py needs numpy -- not this test's job")
 class ChildBoundary(unittest.TestCase):
-    """`stream_chroma` keeps its three-tuple contract while the work moves to another process."""
+    """`sign_file` keeps its contract while the decode happens in another process."""
 
     def setUp(self):
-        self.tmp = tempfile.mkdtemp()
-        self.jobs = os.path.join(self.tmp, "tmp")
-        self._jobs = harvest.JOBS
+        self.tmp = tempfile.mkdtemp(prefix="child-")
+        self.audio = os.path.join(self.tmp, "audio")
+        os.makedirs(self.audio)
+        self.jobs = os.path.join(self.tmp, "jobs")
+        self._paths = (harvest.JOBS, harvest.HARVEST_DIRS, harvest.LEDGER, harvest.STATE)
         harvest.JOBS = self.jobs
-        self.url = "https://example.invalid/watch?v=abc"
+        harvest.HARVEST_DIRS = self.audio
+        harvest.LEDGER = os.path.join(self.tmp, "ledger.json")
+        harvest.STATE = os.path.join(self.tmp, "state.json")
+        self.key = _key("https://example.invalid/watch?v=abc")
+        self.path = _feed(self, self.key)
         self.addCleanup(self._restore)
+        # The child path (NETRADIO_HARVEST_CHILD unset), so the spawn is what runs.
+        os.environ.pop("NETRADIO_HARVEST_CHILD", None)
+        self._child_env = dict(os.environ)
 
     def _restore(self):
-        harvest.JOBS = self._jobs
+        (harvest.JOBS, harvest.HARVEST_DIRS, harvest.LEDGER, harvest.STATE) = self._paths
         harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
+        for k in [k for k in list(os.environ) if k.startswith("NETRADIO_HARVEST_")]:
+            os.environ.pop(k, None)
+        os.environ.clear()
+        os.environ.update(self._child_env)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _child_writes(self, result, chroma=None, pcm=b""):
-        """A fake fetch child: it drops the files a real one leaves, then exits."""
+        """A fake decode child: it drops the files a real one leaves, then exits."""
+
         def _popen(argv, **kwargs):
             job = _job_of(argv)
             os.makedirs(job, exist_ok=True)
@@ -232,30 +181,31 @@ class ChildBoundary(unittest.TestCase):
         def _popen(argv, **kwargs):
             seen["argv"], seen["kwargs"] = argv, kwargs
             job = _job_of(argv)
-            # Read it here: the job directory is unlinked the moment stream_chroma returns.
-            with open(os.path.join(job, "url.json")) as fh:
+            # Read it here: the job directory is unlinked the moment sign_file returns.
+            with open(os.path.join(job, "sign.json")) as fh:
                 seen["handoff"] = json.load(fh)
             with open(os.path.join(job, "result.json"), "w") as fh:
                 json.dump({"ok": False, "error": "nope"}, fh)
             return _FakeChild(argv)
 
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
-            harvest.stream_chroma(self.url)
+            harvest.sign_file(self.path)
 
         self.assertEqual(seen["argv"][0], sys.executable)
         self.assertTrue(seen["argv"][1].endswith("harvest.py"))
-        self.assertEqual(seen["argv"][2], "--fetch-job")
+        self.assertEqual(seen["argv"][2], "--sign-job")
         self.assertTrue(seen["argv"][3].startswith(self.jobs))
-        # The URL is NOT on the command line -- it travels in the job directory.
-        self.assertNotIn(self.url, " ".join(seen["argv"]))
-        self.assertEqual(seen["handoff"]["url"], self.url)
+        # The audio path is NOT on the command line -- it travels in the job directory.
+        self.assertNotIn(self.path, " ".join(seen["argv"]))
+        self.assertEqual(seen["handoff"]["path"], self.path)
+        self.assertEqual(seen["handoff"]["expect_s"], 60.0)
         self.assertEqual(seen["kwargs"]["cwd"], harvest.HOME)
         self.assertEqual(seen["kwargs"]["env"]["MallocLargeCache"], "0")
         # Same process group as the parent, so the supervisor's killpg reaches the whole family.
         self.assertNotIn("start_new_session", seen["kwargs"])
 
-    def _spawned_command_line(self, url):
-        """What `ps -axo command=` would show for the child -- which is what `_discover` reads."""
+    def _spawned_command_line(self, path):
+        """What `ps -axo command=` would show for the child -- which is what discovery reads."""
         seen = {}
 
         def _popen(argv, **kwargs):
@@ -267,7 +217,7 @@ class ChildBoundary(unittest.TestCase):
             return _FakeChild(argv)
 
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
-            harvest.stream_chroma(url)
+            harvest.sign_file(path)
         return " ".join(seen["argv"])
 
     def test_the_child_command_line_never_says_run(self):
@@ -275,31 +225,38 @@ class ChildBoundary(unittest.TestCase):
         this has to be checked. Asserting `"--run" not in argv` on the LIST tests element
         membership, which no command line ever satisfies -- it passes while the invariant it
         claims to protect is broken."""
-        self.assertNotIn("--run", self._spawned_command_line(self.url))
+        self.assertNotIn("--run", self._spawned_command_line(self.path))
 
-    def test_a_url_that_contains_the_flag_cannot_be_read_as_it(self):
-        """A YouTube id's alphabet includes `-`, so `--run` is a legal substring of one. With the
-        URL on the argv the supervisor would adopt a process that lives for one track, refuse to
-        start the real harvester, and later signal the wrong process group."""
-        hostile = "https://www.youtube.com/watch?v=a--runXY9zQ"
+    def test_a_path_that_contains_the_flag_cannot_be_read_as_it(self):
+        """A key is 20 hex characters with a `u` in front, but the PATH around it is not ours
+        to promise: a directory named to contain `--run` would put the flag on the command
+        line, and the supervisor would adopt a process that lives for one file."""
+        hostile_dir = os.path.join(self.tmp, "dir--runXY9z")
+        os.makedirs(hostile_dir)
+        harvest.HARVEST_DIRS = hostile_dir
+        hostile = os.path.join(hostile_dir, self.key + ".mp3")
+        with open(hostile, "wb") as fh:
+            fh.write(b"")
+        with open(os.path.join(hostile_dir, self.key + ".json"), "w") as fh:
+            json.dump({"key": self.key, "fed_at": "2026-09-19T00:00:00+00:00"}, fh)
         line = self._spawned_command_line(hostile)
         self.assertNotIn("--run", line)
         self.assertNotIn(hostile, line)
 
     def test_a_command_line_that_would_be_misread_is_never_spawned(self):
-        """The interpreter path and the repo path are not ours to promise. If either carried the
-        flag, the fetch runs in this process rather than as a child that will be misread."""
+        """The interpreter path and the repo path are not ours to promise. If either carried
+        the flag, the decode runs in this process rather than as a child that will be misread."""
         called = []
         with mock.patch.object(harvest, "_spawn_argv",
                                lambda job: ["/opt/py--run/bin/python", "harvest.py",
-                                            "--fetch-job", job]), \
+                                            "--sign-job", job]), \
                 mock.patch.object(harvest.subprocess, "Popen",
                                   lambda *a, **k: called.append(a)), \
-                mock.patch.object(harvest, "_fetch_and_sign",
-                                  return_value={"ok": False, "error": "ran in process"}) as fetch:
-            err = harvest.stream_chroma(self.url)[2]
-        self.assertEqual(err, "ran in process")
-        self.assertEqual(fetch.call_count, 1)
+                mock.patch.object(harvest, "_decode_and_sign",
+                                  return_value={"ok": False, "error": "ran in process"}) as dec:
+            err = harvest.sign_file(self.path)
+        self.assertEqual(err, (None, None))
+        self.assertEqual(dec.call_count, 1)
         self.assertEqual(called, [])
 
     def test_an_existing_malloc_setting_is_not_overridden(self):
@@ -316,24 +273,23 @@ class ChildBoundary(unittest.TestCase):
 
         with mock.patch.dict(os.environ, {"MallocLargeCache": "1"}), \
                 mock.patch.object(harvest.subprocess, "Popen", _popen):
-            harvest.stream_chroma(self.url)
+            harvest.sign_file(self.path)
         self.assertEqual(seen["env"]["MallocLargeCache"], "1")
 
     def test_success_returns_a_memmap_and_leaves_no_files_behind(self):
         chroma = np.arange(12 * 5, dtype="float32").reshape(12, 5)
         pcm = _pcm(4000)
         with mock.patch.object(harvest.subprocess, "Popen",
-                               self._child_writes({"ok": True, "error": None, "seconds": 0.25,
-                                                   "peak_mb": 901.5, "footprint_mb": 590.0},
+                               self._child_writes({"ok": True, "error": None, "reason": None,
+                                                   "seconds": 0.25, "peak_mb": 901.5,
+                                                   "footprint_mb": 590.0},
                                                   chroma=chroma, pcm=pcm)):
-            c, samples, err = harvest.stream_chroma(self.url)
+            c, samples = harvest.sign_file(self.path)
 
-        self.assertIsNone(err)
         self.assertTrue(np.array_equal(c, chroma))
         self.assertEqual(c.dtype, np.dtype("float32"))
-        # The memmap still reads the right samples although the file is already gone.
-        self.assertFalse(os.path.exists(os.path.join(self.jobs)) and
-                         os.listdir(self.jobs))
+        # The memmap still reads the right samples although the job dir is already gone.
+        self.assertFalse(os.path.exists(self.jobs) and os.listdir(self.jobs))
         self.assertTrue(np.array_equal(np.asarray(samples),
                                        np.frombuffer(pcm, dtype="float32")))
         # ...and it slices like the array it replaced, which is all write_excerpt needs.
@@ -348,9 +304,9 @@ class ChildBoundary(unittest.TestCase):
         chroma = np.zeros((12, 3), dtype="float32")
         pcm = _pcm(SR * 40)
         with mock.patch.object(harvest.subprocess, "Popen",
-                               self._child_writes({"ok": True, "error": None},
+                               self._child_writes({"ok": True, "error": None, "reason": None},
                                                   chroma=chroma, pcm=pcm)):
-            _c, samples, _e = harvest.stream_chroma(self.url)
+            _c, samples = harvest.sign_file(self.path)
 
         a = os.path.join(self.tmp, "a.wav")
         b = os.path.join(self.tmp, "b.wav")
@@ -368,28 +324,29 @@ class ChildBoundary(unittest.TestCase):
         return soundfile
 
     def test_a_handled_error_comes_back_as_the_string_callers_already_know(self):
-        wall = "ERROR: Sign in to confirm you're not a bot"
+        err = "ffmpeg: pipe:0: Invalid data found"
         with mock.patch.object(harvest.subprocess, "Popen",
-                               self._child_writes({"ok": False, "error": wall})):
-            c, samples, err = harvest.stream_chroma(self.url)
+                               self._child_writes({"ok": False, "reason": "decode_failed",
+                                                   "error": err})):
+            c, samples = harvest.sign_file(self.path)
         self.assertEqual((c, samples), (None, None))
-        self.assertEqual(err, wall)
-        self.assertTrue(harvest.is_bot_wall(err))      # the halt path still recognises it
+        self.assertEqual(harvest._LAST_CHILD["reason"], "decode_failed")
 
     def test_a_crashed_child_is_reported_not_swallowed(self):
         def _popen(argv, **kwargs):
             return _FakeChild(argv, returncode=1,
                               stderr=b"Traceback (most recent call last):\nValueError: boom\n")
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
-            c, samples, err = harvest.stream_chroma(self.url)
+            c, samples = harvest.sign_file(self.path)
         self.assertEqual((c, samples), (None, None))
-        self.assertEqual(err, "child failed (exit 1): ValueError: boom")
+        self.assertEqual(harvest._LAST_CHILD["error"], "child failed (exit 1): ValueError: boom")
 
     def test_a_child_killed_by_a_signal_reads_as_stopped(self):
         def _popen(argv, **kwargs):
             return _FakeChild(argv, returncode=143)
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
-            self.assertEqual(harvest.stream_chroma(self.url)[2], harvest.STOPPED)
+            self.assertEqual(harvest.sign_file(self.path), (None, None))
+        self.assertEqual(harvest._LAST_CHILD["error"], harvest.STOPPED)
 
     def test_a_child_signalled_ALONE_still_raises_the_parents_flag(self):
         """The flag and the exit code are two routes for the same event, and the callers' guards
@@ -398,24 +355,23 @@ class ChildBoundary(unittest.TestCase):
         flag down and the stop looking like an ordinary failure."""
         self.assertFalse(harvest._stop_requested())
         with mock.patch.object(harvest.subprocess, "Popen",
-                               lambda argv, **k: _FakeChild(argv, returncode=143)):
-            err = harvest.stream_chroma(self.url)[2]
-        self.assertEqual(err, harvest.STOPPED)
+                              lambda argv, **k: _FakeChild(argv, returncode=143)):
+            harvest.sign_file(self.path)
         self.assertTrue(harvest._stop_requested())
         self.assertEqual(harvest._stop_name(), "SIGTERM")
 
-    def test_a_stop_before_the_spawn_starts_no_fetch(self):
+    def test_a_stop_before_the_spawn_starts_no_decode(self):
         called = []
         harvest._STOP["signum"] = signal.SIGTERM
         with mock.patch.object(harvest.subprocess, "Popen",
-                               lambda *a, **k: called.append(a)):
-            self.assertEqual(harvest.stream_chroma(self.url)[2], harvest.STOPPED)
+                              lambda *a, **k: called.append(a)):
+            self.assertEqual(harvest.sign_file(self.path), (None, None))
         self.assertEqual(called, [])
 
     def test_a_signal_between_the_spawn_and_the_registration_still_reaches_the_child(self):
         """The handler passes a signal to `_STOP["child"]`, which is assigned after `Popen`
-        returns. A signal in that window found nothing to pass itself to, and a whole fetch then
-        ran unwatched while this process sat in `communicate()`."""
+        returns. A signal in that window found nothing to pass itself to, and a whole decode
+        then ran unwatched while this process sat in communicate()."""
         terminated = []
 
         class _Racing(_FakeChild):
@@ -445,32 +401,32 @@ class ChildBoundary(unittest.TestCase):
             return _Racing(argv)
 
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
-            self.assertEqual(harvest.stream_chroma(self.url)[2], harvest.STOPPED)
+            self.assertEqual(harvest.sign_file(self.path), (None, None))
         self.assertEqual(terminated, [True])
 
     def test_a_missing_result_file_is_a_failure_not_a_success(self):
         def _popen(argv, **kwargs):
             return _FakeChild(argv, returncode=0, stderr=b"segmentation fault\n")
         with mock.patch.object(harvest.subprocess, "Popen", _popen):
-            err = harvest.stream_chroma(self.url)[2]
-        self.assertTrue(err.startswith("child failed (exit 0): "), err)
+            harvest.sign_file(self.path)
+        self.assertTrue(harvest._LAST_CHILD["error"].startswith("child failed (exit 0): "))
 
-    def test_the_escape_hatch_runs_the_fetch_in_process(self):
+    def test_the_escape_hatch_runs_the_decode_in_process(self):
         """NETRADIO_HARVEST_CHILD=0 is for diagnosing the child's environment, so it must not
         spawn one."""
         called = []
         with mock.patch.dict(os.environ, {"NETRADIO_HARVEST_CHILD": "0"}), \
                 mock.patch.object(harvest.subprocess, "Popen",
                                   lambda *a, **k: called.append(a) or _FakeChild(["x"])), \
-                mock.patch.object(harvest, "_fetch_and_sign",
-                                  return_value={"ok": False, "error": "in-process"}) as fetch:
-            err = harvest.stream_chroma(self.url)[2]
-        self.assertEqual(err, "in-process")
-        self.assertEqual(fetch.call_count, 1)
+                mock.patch.object(harvest, "_decode_and_sign",
+                                  return_value={"ok": False, "error": "in-process"}) as dec:
+            err = harvest.sign_file(self.path)
+        self.assertEqual(err, (None, None))
+        self.assertEqual(dec.call_count, 1)
         self.assertEqual(called, [])
 
     def test_stale_job_directories_are_swept_but_recent_ones_are_left(self):
-        """A crashed child's spool is dead weight; a fetch child still mid-fetch is not ours."""
+        """A crashed child's spool is dead weight; a decode child still mid-decode is not ours."""
         os.makedirs(os.path.join(self.jobs, "old"))
         os.makedirs(os.path.join(self.jobs, "recent"))
         old = os.path.join(self.jobs, "old")
@@ -481,7 +437,7 @@ class ChildBoundary(unittest.TestCase):
 
 
 class _FakeChild:
-    """A fake fetch child: it has already exited by the time the parent looks."""
+    """A fake decode child: it has already exited by the time the parent looks."""
 
     def __init__(self, argv, returncode=0, stderr=b""):
         self.argv = argv
@@ -498,27 +454,40 @@ class _FakeChild:
         pass
 
 
-@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
-class NoSignatureFromAPartialDecode(unittest.TestCase):
+@unittest.skipUnless(harvest is not None, "harvest.py needs numpy -- not this test's job")
+class NoSignatureFromABadDecode(unittest.TestCase):
     """Every way the decode can end badly, and none of them writes a signature.
 
-    A signature is written once per URL, uploaded to the pool, and never fetched again. A
+    A signature is written once per key, uploaded to the pool, and never decoded again. A
     truncated one is not a transient error; it is a wrong answer that outlives the run.
     """
 
     def setUp(self):
-        self.tmp = tempfile.mkdtemp()
+        self.tmp = tempfile.mkdtemp(prefix="child-decode-")
+        self.audio = os.path.join(self.tmp, "audio")
+        os.makedirs(self.audio)
         self.job = os.path.join(self.tmp, "job")
+        self.key = _key("https://example.invalid/watch?v=partial")
         self.url = "https://example.invalid/watch?v=partial"
         self.saved = []
         self.put = []
+        self._paths = (harvest.JOBS, harvest.HARVEST_DIRS, harvest.LEDGER, harvest.STATE)
+        harvest.JOBS = os.path.join(self.tmp, "harvest-tmp")
+        harvest.HARVEST_DIRS = self.audio
+        harvest.LEDGER = os.path.join(self.tmp, "ledger.json")
+        harvest.STATE = os.path.join(self.tmp, "state.json")
+        self.path = _feed(self, self.key, url=self.url)
         self._cache = harvest.CACHE
         harvest.CACHE = os.path.join(self.tmp, "cache")
         self.addCleanup(self._restore)
+        os.environ.pop("NETRADIO_HARVEST_CHILD", None)
 
     def _restore(self):
         harvest.CACHE = self._cache
+        (harvest.JOBS, harvest.HARVEST_DIRS, harvest.LEDGER, harvest.STATE) = self._paths
         harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
+        for k in [k for k in list(os.environ) if k.startswith("NETRADIO_HARVEST_")]:
+            os.environ.pop(k, None)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _run(self, popen, **patches):
@@ -532,41 +501,39 @@ class NoSignatureFromAPartialDecode(unittest.TestCase):
 
         with mock.patch.object(harvest.subprocess, "Popen", popen), \
                 mock.patch.object(harvest.np, "save", _save), \
+                mock.patch.object(harvest.chroma_recipe, "compute_chroma",
+                                  lambda y, sr=None: np.zeros((12, 4), dtype="float32")), \
                 mock.patch.object(harvest.sigstore, "enabled", lambda: True), \
                 mock.patch.object(harvest.sigstore, "put",
-                                  lambda *a: self.put.append(a) or True), \
-                mock.patch.object(harvest.chroma_recipe, "compute_chroma",
-                                  lambda y, sr=None: np.zeros((12, 4), dtype="float32")):
+                                  lambda path, key: self.put.append(key) or "etag"):
             for name, value in patches.items():
                 setattr(harvest, name, value)
-            return harvest._fetch_and_sign(self.url, self.job)
+            os.environ["NETRADIO_HARVEST_CHILD"] = "0"     # the decode runs right here
+            return harvest.sign_file(self.path)
 
     def _assert_no_signature(self, result, error_contains):
-        self.assertFalse(result["ok"])
-        self.assertIn(error_contains, result["error"])
-        self.assertEqual(_sig_writes(self, self.url), [], "no signature was written")
+        self.assertEqual(result, (None, None))
+        self.assertEqual([n for n in self.saved if n.startswith(self.key)], [],
+                         "no signature was written")
         self.assertNotIn("chroma32.npy", self.saved)
         self.assertEqual(self.put, [])
         self.assertFalse(os.path.exists(os.path.join(self.job, "pcm.f32le.part")))
 
-    def test_ytdlp_killed_mid_stream(self):
-        """yt-dlp dies, ffmpeg sees EOF and exits 0 on what it has. That is the trap."""
-        result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH), yt_rc=-15,
-                                       yt_err=b"ERROR: interrupted\n"))
-        self._assert_no_signature(result, "interrupted")
-
     def test_ffmpeg_failed(self):
-        result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH), ff_rc=1,
-                                       ff_err=b"pipe:0: Invalid data found\n"))
-        self._assert_no_signature(result, "ffmpeg: pipe:0: Invalid data found")
+        result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH), rc=1,
+                                       stderr=b"pipe:0: Invalid data found\n"))
+        self._assert_no_signature(result, "ffmpeg")
+        self.assertEqual(harvest._LAST_CHILD["reason"], "decode_failed")
 
     def test_nothing_decoded_at_all(self):
-        result = self._run(fake_decode(pcm=b"", yt_err=b"ERROR: video unavailable\n"))
-        self._assert_no_signature(result, "video unavailable")
+        result = self._run(fake_decode(pcm=b"", stderr=b"moov atom not found\n"))
+        self._assert_no_signature(result, "moov atom")
+        self.assertEqual(harvest._LAST_CHILD["reason"], "decode_failed")
 
     def test_too_short_to_trust(self):
         result = self._run(fake_decode(pcm=_pcm(SR * 5)))
-        self._assert_no_signature(result, "too short (5s)")
+        self._assert_no_signature(result, "too short")
+        self.assertEqual(harvest._LAST_CHILD["reason"], "decode_failed")
 
     def test_a_stop_between_the_decode_and_the_recipe(self):
         """The flag can go up after the decode finished cleanly. Nothing is written."""
@@ -580,430 +547,96 @@ class NoSignatureFromAPartialDecode(unittest.TestCase):
                 mock.patch.object(harvest, "_wait",
                                   side_effect=lambda p, **k: (harvest._STOP.__setitem__(
                                       "signum", signal.SIGTERM), p.wait())[1]):
-            result = harvest._fetch_and_sign(self.url, self.job)
-        self.assertFalse(result["ok"])
-        self.assertEqual(result["error"], "stopped")
+            os.environ["NETRADIO_HARVEST_CHILD"] = "0"
+            result = harvest.sign_file(self.path)
+        self.assertEqual(result, (None, None))
+        self.assertEqual(harvest._LAST_CHILD["error"], "stopped")
 
     def test_a_clean_decode_writes_the_signature_once(self):
         result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)))
-        self.assertTrue(result["ok"], result)
-        self.assertEqual(len(_sig_writes(self, self.url)), 1)
+        self.assertEqual(result[0].shape, (12, 4))
+        self.assertEqual(len([n for n in self.saved if n.startswith(self.key)]), 1)
         self.assertIn("chroma32.npy", self.saved)
-        self.assertEqual(len(self.put), 1)
-        self.assertEqual(result["n_samples"], LONG_ENOUGH)
-        self.assertEqual(result["seconds"], 60.0)
-        self.assertIn("peak_mb", result)
-        self.assertTrue(os.path.exists(os.path.join(self.job, "pcm.f32le")))
+        # the signature, and the sidecar beside it -- the two uploads of one sign
+        self.assertEqual(self.put, [self.key + ".npy", self.key + ".json"])
+        self.assertEqual(harvest._LAST_CHILD["seconds"], 60.0)
+        self.assertIn("peak_mb", harvest._LAST_CHILD)
 
     def test_a_flood_of_stderr_does_not_deadlock_the_decode(self):
-        """yt-dlp's stderr pipe holds 64 KB. Nobody read it until ffmpeg exited, so a chatty
-        yt-dlp and a long decode could wedge each other."""
-        noise = (b"[download] progress line\n" * 12000)[:256 * 1024]
-        result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH), yt_err=noise))
-        self.assertTrue(result["ok"], result)
+        """ffmpeg's stderr pipe holds 64 KB. Nobody read it until the decode exited, so a chatty
+        source and a long decode could wedge each other."""
+        noise = (b"[parse] progress line\n" * 12000)[:256 * 1024]
+        result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH), stderr=noise))
+        self.assertEqual(result[0].shape, (12, 4))
 
-    def test_the_child_never_writes_the_state_or_the_queue(self):
+    def test_the_child_never_writes_the_state_or_the_ledger(self):
+        """The decode child's whole job: decode, signature, upload -- and NOT ONE ROW of the
+        ledger or the state, which are the parent's and sit under the writer's lock."""
         missing = os.path.join(self.tmp, "nowhere", "state.json")
         with mock.patch.object(harvest, "STATE", missing), \
-                mock.patch.object(harvest, "QUEUE", missing):
-            result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+                mock.patch.object(harvest, "LEDGER", missing), \
+                mock.patch.object(harvest.subprocess, "Popen",
+                                  fake_decode(pcm=_pcm(LONG_ENOUGH))), \
+                mock.patch.object(harvest.chroma_recipe, "compute_chroma",
+                                  lambda y, sr=None: np.zeros((12, 4), dtype="float32")), \
+                mock.patch.object(harvest.sigstore, "enabled", lambda: True), \
+                mock.patch.object(harvest.sigstore, "put", lambda *a: "etag"):
+            result = harvest._decode_and_sign(self.path, self.job, 60.0)
         self.assertTrue(result["ok"], result)
         self.assertFalse(os.path.exists(os.path.dirname(missing)))
 
-    def test_a_dark_signature_cache_refuses_the_fetch_and_writes_nothing(self):
-        """The child's own dark-cache gate. `--fetch-one` runs before any parent gate, so
-        the fetch itself must refuse honestly when the signature has nowhere to live:
-        name the setting, write no signature, upload nothing -- and carry no word a parent
-        reads as a host problem, so the URL's recovery (requeue_missing_sigs) owns it."""
-        saved_env = {k: os.environ.get(k) for k in list(os.environ)
-                     if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
-        for k in saved_env:
-            os.environ.pop(k, None)
-        registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
-        attrs = (harvest.CACHE, harvest.KEEP, harvest._CACHE_AT_IMPORT,
-                 harvest._KEEP_AT_IMPORT)
-        cache_budget._REGISTRY.clear()
-        cache_budget._STATS.clear()
-        harvest.register_caches()         # the policy dark: the signature has nowhere to live
-        self.assertIsNone(harvest.sig_path(self.url))
-        try:
-            result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)))
-        finally:
-            for name, value in zip(("CACHE", "KEEP", "_CACHE_AT_IMPORT",
-                                    "_KEEP_AT_IMPORT"), attrs):
-                setattr(harvest, name, value)
-            cache_budget._REGISTRY.clear()
-            cache_budget._REGISTRY.update(registry[0])
-            cache_budget._STATS.clear()
-            cache_budget._STATS.update(registry[1])
-            for k, v in saved_env.items():
-                os.environ[k] = v
-        self._assert_no_signature(result, "the signature cache is dark")
-        self.assertIn("NETRADIO_CACHE_ROOT", result["error"])
 
-
-@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
-class TheTwoHourStop(unittest.TestCase):
-    """The hole `too_long` cannot close, and the stop that closes it.
-
-    `too_long` refuses on a CLAIM -- a `#t=` fragment's span, or a declared duration. An entry
-    carrying neither is, by its own account, no evidence of length, and both doors wave it
-    through however many hours sit behind the URL. So the length is MEASURED as the audio
-    arrives: the spool's size is its length, the parent's one-second poll reads it, and past
-    WHOLE_MAX_S the pipe is stopped with the rest of the file never decoded at all.
-    """
-
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp()
-        self.job = os.path.join(self.tmp, "job")
-        self.url = "https://example.invalid/watch?v=long"
-        self.saved = []
-        self.put = []
-        self.order = []
-        self._cache = harvest.CACHE
-        harvest.CACHE = os.path.join(self.tmp, "cache")
-        self.addCleanup(self._restore)
-
-    def _restore(self):
-        harvest.CACHE = self._cache
-        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def _run(self, popen, url=None, duration=None):
-        return _fetch_with(self, popen, url or self.url, duration)
-
-    def test_a_spool_that_passes_the_mark_stops_the_pipeline(self):
-        """FOUR polls' worth of audio is behind this URL; the mark is one poll's worth, so the
-        second poll is where the spool passes it. The fake ffmpeg is still running and still
-        writing when the parent acts -- which is the point: a length read after the decode has
-        already paid for the hours it is refusing.
-
-        The two chunks the stop leaves unwritten are what makes the last assertion mean
-        something. With only as many chunks as the mark needs, `written` would be low whether
-        the stop fired or not."""
-        popen = fake_slow_decode([_pcm(SR)] * 4, order=self.order)
-        with mock.patch.object(harvest, "WHOLE_MAX_S", 1):
-            result = self._run(popen)
-        _assert_refused(self, result, "too long")
-        self.assertTrue(result.get("retry_later"),
-                        "the refusal is not flagged, so run() files it to `done` -- which is "
-                        "never re-fetched, and this audio is still wanted")
-        self.assertEqual(self.order, ["ffmpeg", "yt-dlp"],
-                         "both children have to be stopped, ffmpeg first -- leaving yt-dlp "
-                         "pulling bandwidth is the thing the stop path exists to prevent")
-        self.assertLess(popen.made["ff"].written, 3 * SR * 4,
-                        "the rest of the file was decoded anyway -- the stop has to happen "
-                        "DURING the poll, not after ffmpeg finishes")
-
-    def test_the_shipped_mark_is_two_hours(self):
-        """Every other case here patches WHOLE_MAX_S down to a second so the arithmetic is
-        testable, which leaves the shipped value pinned by nothing. It is not a free choice: it
-        has to equal the player's chunk threshold, and no test can see across the two
-        repositories to check that."""
-        self.assertEqual(harvest.WHOLE_MAX_S, 2 * 3600)
-
-    def test_a_cut_url_is_never_measured_against_the_mark(self):
-        """A `#t=` fragment means ffmpeg was given `-ss`/`-t`, so the spool holds the SLICE. The
-        master cannot be signed whole from here however long it is, and an over-long span was
-        refused by `too_long` before either child was spawned -- so there is nothing left for
-        this measure to catch and one thing for it to get wrong. ffmpeg applies `-t` at frame
-        granularity, so a part cut at exactly the mark can end a frame past it; measuring it
-        would set aside a part that is exactly what was asked for, onto a list nothing drains.
-        The length of a cut decode is the mismatch check's question, and it passes that."""
-        popen = fake_slow_decode([_pcm(30 * SR), _pcm(30 * SR)], order=self.order)
-        with mock.patch.object(harvest, "WHOLE_MAX_S", 1):
-            result = self._run(popen, url=self.url + "#t=0,60")
-        self.assertTrue(result["ok"], result)
-        self.assertEqual(self.order, [], "a cut decode was stopped -- nothing may stop one")
-        self.assertFalse(result.get("retry_later"))
-        self.assertEqual(result["n_samples"], 60 * SR)
-        self.assertEqual(len(self.put), 1)
-
-    def test_a_decode_that_finished_before_the_first_poll_is_still_measured(self):
-        """The poll cannot catch what never made it to a poll. A source ffmpeg chews through
-        faster than the poll comes round -- a local file, a fast cache -- passes the mark and
-        exits between two polls, and `_wait` returns an ordinary exit status with nothing
-        measured. No decode time is saved by refusing it here; what is saved is the signature,
-        which is the thing that must never exist for a master."""
-        popen = fake_decode(pcm=_pcm(2 * SR))
-        with mock.patch.object(harvest, "WHOLE_MAX_S", 1):
-            result = self._run(popen)
-        _assert_refused(self, result, "too long")
-        self.assertTrue(result.get("retry_later"))
-
-    def test_a_spool_under_the_mark_is_signed(self):
-        """The same slow pipeline, below the mark: the poll asks its extra question every second
-        and the decode finishes untouched. A guard that refused this would refuse everything."""
-        popen = fake_slow_decode([_pcm(SR), _pcm(LONG_ENOUGH)], order=self.order)
-        with mock.patch.object(harvest, "WHOLE_MAX_S", 3600):
-            result = self._run(popen)
-        self.assertTrue(result["ok"], result)
-        self.assertEqual(self.order, [])
-        self.assertEqual(len(self.put), 1)
-
-
-@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
-class TheLengthMismatchGuard(unittest.TestCase):
-    """The second and separate fault: a decode that ended EARLY. yt-dlp killed mid-stream leaves
-    ffmpeg reading a clean EOF off a partial pipe and exiting 0, so neither exit status says
-    anything is wrong -- only the spool's length against what was asked for does. A truncated
-    decode is the WRONG audio, not audio to fetch again later, so this one is a verdict."""
-
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp()
-        self.job = os.path.join(self.tmp, "job")
-        self.url = "https://example.invalid/watch?v=short"
-        self.saved = []
-        self.put = []
-        self._cache = harvest.CACHE
-        harvest.CACHE = os.path.join(self.tmp, "cache")
-        self.addCleanup(self._restore)
-
-    def _restore(self):
-        harvest.CACHE = self._cache
-        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def _run(self, popen, url=None, duration=None):
-        return _fetch_with(self, popen, url or self.url, duration)
-
-    def test_a_spool_off_the_expected_length_is_refused(self):
-        """The URL asks for a one-hour slice (`-ss 0 -t 3600`); the fake ffmpeg only ever wrote
-        60s to the spool before exiting 0."""
-        result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)), url=self.url + "#t=0,3600")
-        _assert_refused(self, result, "length mismatch: decoded 60 s, expected 3600 s")
-        self.assertFalse(result.get("retry_later"),
-                         "truncated audio is the wrong audio -- fetching it again later is not "
-                         "the remedy, and `done` is where it belongs")
-
-    def test_a_spool_within_tolerance_is_signed_as_before(self):
-        """Exactly the requested span: the guard is silent, and the rest of the function runs
-        exactly as it did before this guard existed."""
-        cut_url = self.url + "#t=0,60"
-        result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)), url=cut_url)
-        self.assertTrue(result["ok"], result)
-        self.assertEqual(len(_sig_writes(self, cut_url)), 1)
-        self.assertIn("chroma32.npy", self.saved)
-        self.assertEqual(len(self.put), 1)
-        self.assertEqual(result["n_samples"], LONG_ENOUGH)
-
-    def test_a_declared_duration_within_tolerance_is_signed(self):
-        """No fragment this time -- the declared duration alone is `expect`, and a decode a
-        couple of seconds short of it is still inside `max(10, 2%)`."""
-        result = self._run(fake_decode(pcm=_pcm(LONG_ENOUGH)), duration=61)
-        self.assertTrue(result["ok"], result)
-        self.assertEqual(len(self.put), 1)
-
-
-@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
-class RetryLaterIsNotDone(unittest.TestCase):
-    """Where a stopped-at-the-mark URL ends up. `done` is never re-fetched and this audio is
-    still wanted -- the player splits the master into parts, and the parts are signable -- so the
-    URL is set aside on a third list, and a re-read of the player's queue leaves it there."""
-
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp()
-        self.url = "https://example.invalid/watch?v=master"
-        self._paths = harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK, harvest.JOBS, harvest.RULINGS
-        harvest.STATE = os.path.join(self.tmp, "state.json")
-        harvest.QUEUE = os.path.join(self.tmp, "queue.json")
-        harvest.WRITER_LOCK = os.path.join(self.tmp, "writer.lock")
-        harvest.JOBS = os.path.join(self.tmp, "jobs")
-        # run() refuses to start while the rulings file is absent (the same refusal the process
-        # that starts the harvester makes), so this class's run() tests need one in place.
-        harvest.RULINGS = os.path.join(self.tmp, "rulings.json")
-        harvest._save(harvest.RULINGS, {})
-        # run() refuses to start while its caches are dark, so this test's run needs the
-        # policy on -- a throwaway root, with the harvester's registrations re-read onto it.
-        self._saved_env = {k: os.environ.get(k) for k in list(os.environ)
-                           if k.startswith("NETRADIO_")}
-        self.addCleanup(self._restore)
-        for k in self._saved_env:
-            os.environ.pop(k, None)
-        os.environ["NETRADIO_CACHE_ROOT"] = os.path.join(self.tmp, "root")
-        import cache_budget
-        self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
-        harvest.register_caches()
-
-    def _restore(self):
-        (harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK, harvest.JOBS,
-         harvest.RULINGS) = self._paths
-        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
-        # The real `stream_chroma` clears this the moment it is called; the stub below does not
-        # clear it on the way OUT, so leaving it set would hand the next test's fetch this
-        # test's verdict.
-        harvest._LAST_CHILD.clear()
-        import cache_budget
-        cache_budget._REGISTRY.clear()
-        cache_budget._REGISTRY.update(self._registry[0])
-        cache_budget._STATS.clear()
-        cache_budget._STATS.update(self._registry[1])
-        for k in [k for k in list(os.environ) if k.startswith("NETRADIO_")]:
-            os.environ.pop(k, None)
-        os.environ.update(self._saved_env)
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def _refused_fetch(self, url, duration=None):
-        """`stream_chroma` as it returns from a decode stopped at the mark: no signature, and the
-        flag on the child's result, which is where `run()` reads the difference."""
-        harvest._LAST_CHILD.clear()
-        harvest._LAST_CHILD.update({"ok": False, "retry_later": True,
-                                    "error": "too long: passed 2.0 h of audio, stopped before "
-                                             "decoding the rest"})
-        return None, None, harvest._LAST_CHILD["error"]
-
-    def _one_pass(self, queue):
-        """Run the loop over `queue` once. It empties `pending` and then returns on its own."""
-        harvest._save(harvest.QUEUE, queue)
-        qs = [(4, np.zeros((12, 8), dtype="float32"), "4:f00")]
-        with mock.patch.object(harvest, "queries", lambda state=None: qs), \
-                mock.patch.object(harvest, "sweep_excerpts", lambda: None), \
-                mock.patch.object(harvest, "sweep_job_dirs", lambda *a, **k: 0), \
-                mock.patch.object(harvest, "recover_missing_sigs_at_start", lambda *a: None), \
-                mock.patch.object(harvest, "stamp_pool", lambda state: False), \
-                mock.patch.object(harvest, "listen_queue_split", lambda issues=None: []), \
-                mock.patch.object(harvest, "check_memory", lambda *a, **k: False), \
-                mock.patch.object(harvest, "_load_sig", lambda url: None), \
-                mock.patch.object(harvest, "stream_chroma", self._refused_fetch), \
-                mock.patch.object(harvest.sigstore, "enabled", lambda: False), \
-                mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
-                mock.patch.object(harvest.selftest, "due_for_live", lambda: False), \
-                mock.patch.object(harvest.memwatch, "allocator_canary",
-                                  lambda *a, **k: (0, 0, None)):
-            harvest.run(None)
-        return harvest._load(harvest.QUEUE, {}), harvest._load(harvest.STATE, {})
-
-    def test_run_refuses_to_start_on_a_dark_cache(self):
-        """Mode A's own gate: run() refuses before the canary, the recovery or any fetch,
-        naming the setting -- the same refusal every cache-reading mode makes. Without
-        it, a dark cache grinds the whole queue into done, failing every URL the same way.
-        The hand-set None is the test seam the module documents: a dark cache has no
-        directory for anything else to stand in for."""
-        qs = [(4, np.zeros((12, 8), dtype="float32"), "4:f00")]
-        out = io.StringIO()
-        with mock.patch.object(harvest, "CACHE", None), \
-                mock.patch.object(harvest, "KEEP", None), \
-                mock.patch.object(harvest, "queries", lambda state=None: qs), \
-                mock.patch.object(harvest.memwatch, "allocator_canary",
-                                  lambda *a, **k: (0, 0, None)), \
-                mock.patch.object(harvest.selftest, "offline",
-                                  lambda: (_ for _ in ()).throw(
-                                      AssertionError("refused before the canary"))), \
-                contextlib.redirect_stdout(out):
-            harvest.run(None)
-        text = out.getvalue()
-        self.assertIn("the chroma and the candidates cache are dark", text)
-        self.assertIn("NETRADIO_CACHE_ROOT", text)
-
-    def test_run_sets_the_url_aside_instead_of_retiring_it(self):
-        q, state = self._one_pass({"pending": [self.url], "done": []})
-        self.assertEqual(q["retry_later"], [self.url])
-        self.assertEqual(q["done"], [],
-                         "`done` is never re-fetched -- a master filed there can never be "
-                         "picked up again, as parts or otherwise")
-        self.assertEqual(q["pending"], [])
-        rows = [r for r in state["issues"] if r.get("url") == self.url]
-        self.assertEqual([r["reason"] for r in rows], ["too_long"])
-
-    def test_a_queue_written_before_the_third_list_existed_still_loads(self):
-        """The list is absent from every queue file written so far, and from the default every
-        loader passes. Its absence has to read as 'empty', not as a KeyError in the one loop that
-        is meant to run for weeks."""
-        q, _ = self._one_pass({"pending": [self.url], "done": ["https://example.invalid/old"]})
-        self.assertEqual(q["retry_later"], [self.url])
-        self.assertEqual(q["done"], ["https://example.invalid/old"])
-
-    def test_a_listen_queue_re_read_does_not_hand_it_back(self):
-        """The player's queue still offers the URL -- nothing there has changed, and nothing
-        will until the master is split. Without `retry_later` in the seen set the next pass puts
-        it straight back in `pending` and the harvester decodes two hours of it again, every few
-        minutes, for as long as the entry exists."""
-        q = {"pending": [], "done": [], "retry_later": [self.url]}
-        with mock.patch.object(harvest, "listen_queue_split",
-                               lambda issues=None: [self.url]):
-            added, dropped = harvest.sync_listen_queue(q, set())
-        self.assertEqual((added, dropped), (0, 0))
-        self.assertEqual(q["pending"], [])
-        self.assertEqual(q["retry_later"], [self.url])
-
-    def test_a_run_stands_down_when_the_rulings_file_goes_unreadable(self):
-        """The file was there at start and then could not be read mid-run: the run must NOT
-        carry on -- "unreadable" is never "nothing ruled", and a pass on an empty retired set
-        would score records already rejected. It stands down instead, with a phase that names
-        the file, so the supervisor's restart gate (which refuses the same thing) holds the
-        run down until the file is back."""
-        harvest._save(harvest.QUEUE, {"pending": [self.url], "done": []})
-        qs = [(4, np.zeros((12, 8), dtype="float32"), "4:f00")]
-        reads = mock.MagicMock(side_effect=[set(), None])
-        with mock.patch.object(harvest, "queries", lambda state=None: qs), \
-                mock.patch.object(harvest, "sweep_excerpts", lambda: None), \
-                mock.patch.object(harvest, "sweep_job_dirs", lambda *a, **k: 0), \
-                mock.patch.object(harvest, "recover_missing_sigs_at_start", lambda *a: None), \
-                mock.patch.object(harvest, "stamp_pool", lambda state: False), \
-                mock.patch.object(harvest, "check_memory", lambda *a, **k: False), \
-                mock.patch.object(harvest, "load_rulings", reads), \
-                mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
-                mock.patch.object(harvest.selftest, "due_for_live", lambda: False), \
-                mock.patch.object(harvest.memwatch, "allocator_canary",
-                                  lambda *a, **k: (0, 0, None)), \
-                contextlib.redirect_stdout(io.StringIO()) as out:
-            harvest.run(None)
-        state = harvest._load(harvest.STATE, {})
-        self.assertIn("rulings file", state["session"]["phase"])
-        self.assertIn("could not be read", out.getvalue())
-        self.assertEqual(harvest._load(harvest.QUEUE, {})["pending"], [self.url],
-                         "the interrupted URL stays pending, exactly as a stop leaves it")
-        self.assertEqual(reads.call_count, 2, "once at the start gate, once on the first pass")
-
-
-@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+@unittest.skipUnless(harvest is not None, "harvest.py needs numpy -- not this test's job")
 class TheChildEntryPoint(unittest.TestCase):
-    """`--fetch-one` really runs, and it runs before anything that could touch shared state."""
+    """`--sign-job` really runs, and it runs before anything that could touch shared state."""
 
     def setUp(self):
-        self.tmp = tempfile.mkdtemp()
+        self.tmp = tempfile.mkdtemp(prefix="child-main-")
         self.job = os.path.join(self.tmp, "job")
+        os.makedirs(self.job)
+        self.audio = os.path.join(self.tmp, "audio")
+        os.makedirs(self.audio)
+        self.path = os.path.join(self.audio, "u" + "a" * 20 + ".mp3")
+        with open(self.path, "wb") as fh:
+            fh.write(b"")
+        with open(os.path.join(self.audio, "u" + "a" * 20 + ".json"), "w") as fh:
+            json.dump({"key": "u" + "a" * 20, "fed_at": "2026-09-19T00:00:00+00:00"}, fh)
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def test_main_dispatches_the_child_before_taking_the_writer_lock(self):
-        argv = ["harvest.py", "--fetch-one", "https://example.invalid/x", "--job", self.job]
+        argv = ["harvest.py", "--sign-job", self.job]
+        with open(os.path.join(self.job, "sign.json"), "w") as fh:
+            json.dump({"path": self.path, "expect_s": 60}, fh)
         with mock.patch.object(sys, "argv", argv), \
                 mock.patch.object(harvest, "acquire_writer_lock") as lock, \
-                mock.patch.object(harvest, "_fetch_and_sign",
-                                  return_value={"ok": True, "error": None}) as fetch:
+                mock.patch.object(harvest, "_decode_and_sign",
+                                  return_value={"ok": True, "error": None}) as dec:
             rc = harvest.main()
         self.assertEqual(rc, 0)
-        # The trailing None is `--duration`: absent on this argv, so no length is claimed.
-        fetch.assert_called_once_with("https://example.invalid/x", self.job, None)
+        # The job file describes the job: the path and, when the sidecar made one, its length.
+        dec.assert_called_once_with(self.path, self.job, 60)
         lock.assert_not_called()
         with open(os.path.join(self.job, "result.json")) as fh:
             self.assertTrue(json.load(fh)["ok"])
 
-    def test_the_child_honours_a_duration_on_its_argv(self):
-        """The parent passes the queue's declared length so the child's refusal weighs the same
-        facts the queue door weighed. The child knows only what this argv carries."""
-        argv = ["harvest.py", "--fetch-one", "https://example.invalid/x", "--job", self.job,
-                "--duration", "21600"]
-        with mock.patch.object(sys, "argv", argv), \
-                mock.patch.object(harvest, "acquire_writer_lock"), \
-                mock.patch.object(harvest, "_fetch_and_sign",
-                                  return_value={"ok": True, "error": None}) as fetch:
-            self.assertEqual(harvest.main(), 0)
-        fetch.assert_called_once_with("https://example.invalid/x", self.job, 21600.0)
+    def test_a_job_without_a_path_is_refused(self):
+        with mock.patch.object(sys, "argv", ["harvest.py", "--sign-job", self.job]):
+            self.assertEqual(harvest.main(), 2)
 
     def test_a_crash_in_the_child_exits_nonzero(self):
-        argv = ["harvest.py", "--fetch-one", "https://example.invalid/x", "--job", self.job]
-        with mock.patch.object(sys, "argv", argv), \
-                mock.patch.object(harvest, "_fetch_and_sign", side_effect=ValueError("boom")):
+        with open(os.path.join(self.job, "sign.json"), "w") as fh:
+            json.dump({"path": self.path, "expect_s": None}, fh)
+        with mock.patch.object(sys, "argv", ["harvest.py", "--sign-job", self.job]), \
+                mock.patch.object(harvest, "_decode_and_sign", side_effect=ValueError("boom")):
             self.assertEqual(harvest.main(), 1)
         self.assertFalse(os.path.exists(os.path.join(self.job, "result.json")))
 
     def test_a_real_child_process_signs_a_real_decode(self):
-        """End to end through a genuine subprocess, with stand-in binaries on PATH.
+        """End to end through a genuine subprocess, with a stand-in ffmpeg on PATH.
 
-        This is the only test that runs the whole child -- argv, spool, recipe, result.json -- as
-        the parent will. No network: `yt-dlp` writes nothing and the stand-in `ffmpeg` writes the
-        PCM the real one would have produced.
+        This is the only test that runs the whole child -- argv, spool, recipe, result.json --
+        as the parent will. No network: the stand-in `ffmpeg` reads the file it is given and
+        writes the PCM the real one would have produced.
         """
         try:
             import librosa            # noqa: F401
@@ -1015,24 +648,34 @@ class TheChildEntryPoint(unittest.TestCase):
         pcm_src = os.path.join(self.tmp, "pcm.raw")
         with open(pcm_src, "wb") as fh:
             fh.write(_pcm(SR * 50))
-        self._stub(bindir, "yt-dlp", "exit 0\n")
-        self._stub(bindir, "ffmpeg", "cat %s\n" % pcm_src)
+        self._stub(bindir, "ffmpeg", 'cat "$4" > /dev/null 2>&1; cat %s\n' % pcm_src)
 
-        url = "https://example.invalid/real"
+        key = _key("https://example.invalid/real")
+        path = os.path.join(self.audio, key + ".mp3")
+        with open(path, "wb") as fh:
+            fh.write(b"")
+        with open(os.path.join(self.audio, key + ".json"), "w") as fh:
+            json.dump({"key": key, "duration_s": 50.0,
+                       "fed_at": "2026-09-19T00:00:00+00:00"}, fh)
         # The signature cache has no directory while the cache policy is dark, so the child
         # gets a throwaway root and puts its one signature under that -- nothing lands in any
         # real directory, and nothing needs putting back afterwards.
         cache_root = os.path.join(self.tmp, "root")
+        jobs = os.path.join(self.tmp, "harvest-jobs")
         env = dict(os.environ,
                    PATH=bindir + os.pathsep + os.environ.get("PATH", ""),
                    PYTHONPATH=SCRIPTS,
                    NETRADIO_SIG_BUCKET="",          # sigstore dark: no upload, no credentials
-                   NETRADIO_CACHE_ROOT=cache_root)
-        import subprocess
+                   NETRADIO_CACHE_ROOT=cache_root,
+                   NETRADIO_DISK_MAX_PCT="100")     # the host's floor must not refuse the sign
+        env.pop("NETRADIO_HARVEST_CHILD", None)
+        with open(os.path.join(self.job, "sign.json"), "w") as fh:
+            json.dump({"path": path, "expect_s": 50}, fh)
         out = subprocess.run(
             [sys.executable, os.path.join(SCRIPTS, "harvest.py"),
-             "--fetch-one", url, "--job", self.job],
-            capture_output=True, text=True, env=env, timeout=600)
+             "--sign-job", self.job],
+            capture_output=True, text=True, env=env, timeout=600,
+            cwd=os.path.dirname(SCRIPTS))
         self.assertEqual(out.returncode, 0, out.stderr[-2000:])
         with open(os.path.join(self.job, "result.json")) as fh:
             result = json.load(fh)
@@ -1043,6 +686,8 @@ class TheChildEntryPoint(unittest.TestCase):
         self.assertEqual(chroma.shape[0], 12)
         self.assertEqual(chroma.dtype, np.dtype("float32"))
         self.assertEqual(os.path.getsize(os.path.join(self.job, "pcm.f32le")), SR * 50 * 4)
+        # the signature landed in the throwaway root, under the key
+        self.assertTrue(os.path.isfile(os.path.join(cache_root, "chroma", key + ".npy")))
 
     @staticmethod
     def _stub(bindir, name, body):
@@ -1052,7 +697,7 @@ class TheChildEntryPoint(unittest.TestCase):
         os.chmod(path, 0o755)
 
 
-@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+@unittest.skipUnless(harvest is not None, "harvest.py needs numpy -- not this test's job")
 class Stopping(unittest.TestCase):
     def setUp(self):
         self.addCleanup(lambda: harvest._STOP.update(
@@ -1075,33 +720,33 @@ class Stopping(unittest.TestCase):
         self.assertTrue(harvest._nap(30))
         self.assertLess(harvest.time.time() - started, 5)
 
-    def test_the_child_stops_ffmpeg_before_ytdlp(self):
-        """Killing yt-dlp first makes ffmpeg exit 0 on a truncated stream."""
-        order = []
-        ff = _FakeProc(["ffmpeg"], alive=True, order=order)
-        yt = _FakeProc(["yt-dlp"], alive=True, order=order)
+    def test_the_child_stops_its_decode(self):
+        ff = _FakeProc(["ffmpeg"], alive=True)
         part = tempfile.mktemp()
         open(part, "wb").close()
-        harvest._STOP.update({"procs": [ff, yt], "part": part})
+        harvest._STOP.update({"procs": [ff], "part": part})
         exits = []
         with mock.patch.object(harvest.os, "_exit", exits.append):
             harvest._child_stop(signal.SIGTERM, None)
-        self.assertEqual(order, ["ffmpeg", "yt-dlp"])
-        self.assertFalse(os.path.exists(part))
+        self.assertFalse(ff.alive, "the one child the stop exists for was left running")
+        self.assertFalse(os.path.exists(part), "the spool file was left behind")
         self.assertEqual(exits, [128 + int(signal.SIGTERM)])
 
-    def test_run_stops_cleanly_and_leaves_the_url_pending(self):
+    def test_run_stops_cleanly_and_leaves_the_file_unsigned(self):
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp, True)
         state_path = os.path.join(tmp, "state.json")
-        state = {"session": {"phase": "working", "until": 0}, "current": "https://x.invalid/1"}
+        state = {"current": "u" + "a" * 20, "issues": []}
         harvest._STOP["signum"] = signal.SIGTERM
-        with mock.patch.object(harvest, "STATE", state_path):
+        out = io.StringIO()
+        with mock.patch.object(harvest, "STATE", state_path), \
+                contextlib.redirect_stdout(out):
             harvest._stopped(state)
         with open(state_path) as fh:
             saved = json.load(fh)
-        self.assertEqual(saved["session"]["phase"], "stopped (SIGTERM)")
-        self.assertIsNone(saved["current"])
+        self.assertIsNone(saved["current"], "nothing is left claiming to be in flight")
+        self.assertIn("no row", out.getvalue())
+        self.assertIn("a later pass", out.getvalue())
 
 
 @unittest.skipUnless(memwatch is not None, "memwatch needs the scripts path")
@@ -1124,7 +769,7 @@ class Footprint(unittest.TestCase):
         import subprocess
         try:
             out = subprocess.run(["footprint", "-p", str(os.getpid())],
-                                 capture_output=True, text=True, timeout=30).stdout
+                                capture_output=True, text=True, timeout=30).stdout
         except (OSError, subprocess.SubprocessError):
             self.skipTest("the footprint CLI is not available")
         m = re.search(r"Footprint:\s+([\d.]+)\s*(KB|MB|GB)", out)
@@ -1164,58 +809,59 @@ class Footprint(unittest.TestCase):
         self.assertIsNone(memwatch.canary_issue(retained))
 
 
-@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+@unittest.skipUnless(harvest is not None, "harvest.py needs numpy -- not this test's job")
 class MemoryRowsAndCeiling(unittest.TestCase):
     def setUp(self):
         self.state = {"issues": []}
-        self.url = "https://example.invalid/watch?v=mem"
+        self.key = "u" + "a" * 20
 
     def _at(self, parent_mb):
         return mock.patch.object(harvest.memwatch, "footprint_mb",
                                  lambda: (parent_mb, parent_mb))
 
-    def test_a_row_is_written_for_a_cached_candidate_with_no_child_numbers(self):
+    def test_a_row_is_written_for_a_candidate_with_no_child_numbers(self):
         with self._at(310.0):
-            row = harvest.record_memory(self.state, self.url, None)
+            row = harvest.record_memory(self.state, self.key, None)
         self.assertEqual(row["parent_mb"], 310.0)
         self.assertIsNone(row["child_peak_mb"])
+        self.assertEqual(row["key"], self.key)
         self.assertEqual(self.state["mem"], row)
         self.assertEqual(self.state["mem_log"], [row])
 
     def test_a_row_carries_the_childs_peak_when_one_ran(self):
         child = {"peak_mb": 905.2, "footprint_mb": 591.0, "seconds": 7020.0}
         with self._at(310.0):
-            row = harvest.record_memory(self.state, self.url, child)
+            row = harvest.record_memory(self.state, self.key, child)
         self.assertEqual((row["child_peak_mb"], row["child_after_mb"]), (905.2, 591.0))
         self.assertEqual(row["seconds"], 7020.0)
 
     def test_the_log_keeps_the_last_fifty_rows(self):
         with self._at(100.0):
             for i in range(60):
-                harvest.record_memory(self.state, "%s#%d" % (self.url, i), None)
+                harvest.record_memory(self.state, "%s%d" % ("u", i) * 1, None)
         self.assertEqual(len(self.state["mem_log"]), harvest.MEM_LOG_KEEP)
-        self.assertTrue(self.state["mem_log"][-1]["url"].endswith("#59"))
+        self.assertTrue(self.state["mem_log"][-1]["key"].endswith("59"))
 
     def test_the_ceiling_is_off_unless_it_is_set(self):
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("NETRADIO_HARVEST_MEM_CEILING_MB", None)
             with self._at(9000.0):
-                self.assertFalse(harvest.check_memory(self.state, self.url, None))
+                self.assertFalse(harvest.check_memory(self.state, self.key, None))
         self.assertEqual(self.state["issues"], [])
 
     def test_a_parent_over_the_ceiling_stands_down(self):
         with mock.patch.dict(os.environ, {"NETRADIO_HARVEST_MEM_CEILING_MB": "3000"}):
             with self._at(3001.0):
-                self.assertTrue(harvest.check_memory(self.state, self.url, None))
-        self.assertEqual(self.state["session"]["phase"], "restarting: memory ceiling")
+                self.assertTrue(harvest.check_memory(self.state, self.key, None))
+        self.assertIn("standing down", self.state["issues"][-1]["issue"])
         self.assertIn("3000", self.state["issues"][-1]["issue"])
 
     def test_a_child_over_the_ceiling_only_reports(self):
         """The child's memory left with the child, so restarting the parent would fix nothing."""
         with mock.patch.dict(os.environ, {"NETRADIO_HARVEST_MEM_CEILING_MB": "3000"}):
             with self._at(300.0):
-                self.assertFalse(harvest.check_memory(self.state, self.url, {"peak_mb": 5000.0}))
-        self.assertIn("fetch child peaked at 5000 MB", self.state["issues"][-1]["issue"])
+                self.assertFalse(harvest.check_memory(self.state, self.key, {"peak_mb": 5000.0}))
+        self.assertIn("decode child peaked at 5000 MB", self.state["issues"][-1]["issue"])
         self.assertNotIn("session", self.state)
 
     def test_a_nonsense_ceiling_is_ignored_rather_than_crashing_the_run(self):
@@ -1223,45 +869,38 @@ class MemoryRowsAndCeiling(unittest.TestCase):
             self.assertEqual(harvest.mem_ceiling_mb(), 0.0)
 
 
-@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+@unittest.skipUnless(harvest is not None, "harvest.py needs numpy -- not this test's job")
 class TheInProcessEscapeHatchAlsoStops(unittest.TestCase):
-    """NETRADIO_HARVEST_CHILD=0 runs yt-dlp and ffmpeg from THIS process, and the parent handler
-    has to stop them. Leaving them pulling bandwidth from someone else's server against a parent
-    that has gone is the exact behaviour the handlers were added to end."""
+    """NETRADIO_HARVEST_CHILD=0 runs ffmpeg from THIS process, and the parent handler has to
+    stop it. Leaving it decoding against a parent that has gone is the exact behaviour the
+    handlers were added to end."""
 
     def setUp(self):
         self.addCleanup(lambda: harvest._STOP.update(
             {"signum": 0, "child": None, "procs": [], "part": None}))
 
-    def test_the_parent_handler_stops_ffmpeg_before_ytdlp(self):
-        order = []
-        ff = _FakeProc(["ffmpeg"], alive=True, order=order)
-        yt = _FakeProc(["yt-dlp"], alive=True, order=order)
-        harvest._STOP["procs"] = [ff, yt]
+    def test_the_parent_handler_stops_the_decode(self):
+        ff = _FakeProc(["ffmpeg"], alive=True)
+        harvest._STOP["procs"] = [ff]
         harvest._parent_stop(signal.SIGTERM, None)
         self.assertTrue(harvest._stop_requested())
-        self.assertEqual(order, ["ffmpeg", "yt-dlp"])
+        self.assertFalse(ff.alive)
         self.assertEqual(harvest._STOP["procs"], [])
 
 
-# The cache-policy names the landing test saves and restores (the same set
-# tests/test_cache_budget.py uses).
-CACHE_ENV = ("NETRADIO_CACHE_ROOT", "NETRADIO_DOWNLOAD_ROOT", "NETRADIO_DISK_MAX_PCT",
-             "NETRADIO_CACHE_EVENTS_DAYS")
-
-
-@unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")
+@unittest.skipUnless(harvest is not None, "harvest.py needs numpy -- not this test's job")
 class ASignatureEvictedBetweenRenameAndCommit(unittest.TestCase):
     """The rename and the commit are two calls, and a bounded cache may lose any entry at any
     time: an eviction run that starts between them takes a signature the policy has not
     recorded yet. The writer must never report a success whose entry is not there -- the
-    fetch reports the failure (and the lost-signature recovery offers the URL again), and
-    nothing is uploaded for a signature that is not on disk."""
+    decode reports `no_space`, and nothing is uploaded for a signature that is not on disk."""
 
     def setUp(self):
-        self.tmp = tempfile.mkdtemp()
-        self.job = os.path.join(self.tmp, "job")
-        self.url = "https://example.invalid/watch?v=landing"
+        self.tmp = tempfile.mkdtemp(prefix="child-landing-")
+        self.audio = os.path.join(self.tmp, "audio")
+        os.makedirs(self.audio)
+        self.key = _key("https://example.invalid/watch?v=landing")
+        self.path = _feed(self, self.key, url="https://example.invalid/watch?v=landing")
         self.put = []
         self._saved = {k: os.environ.get(k) for k in list(os.environ)
                        if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
@@ -1269,11 +908,21 @@ class ASignatureEvictedBetweenRenameAndCommit(unittest.TestCase):
             os.environ.pop(k, None)
         self.addCleanup(self._restore)
         # The policy ON, with the chroma cache registered over this test's own directory:
-        # its cap (2000 bytes) admits the ~1440-byte signature, and another writer asking
+        # its cap (2000 bytes) admits the ~400-byte signature, and another writer asking
         # for 1000 bytes of room must take the just-published, not-yet-recorded entry.
         os.environ["NETRADIO_CACHE_ROOT"] = os.path.join(self.tmp, "root")
         os.environ["NETRADIO_CHROMA_CACHE_DIR"] = os.path.join(self.tmp, "cache")
         os.environ["NETRADIO_CHROMA_CACHE_GB"] = "0.000002"
+        os.environ["NETRADIO_HARVEST_CHILD"] = "0"
+        # The disk floor is the host's, not the test's: a machine whose cache root volume
+        # is past the default 82% refuses on the floor before the cap this case exercises,
+        # turning a "the entry was evicted between rename and commit" test into a plain
+        # `no_space`. Pin the floor out of the way so the cap is the only thing refusing.
+        os.environ["NETRADIO_DISK_MAX_PCT"] = "100"
+        self._paths = harvest.LEDGER, harvest.STATE, harvest.JOBS
+        harvest.LEDGER = os.path.join(self.tmp, "ledger.json")
+        harvest.STATE = os.path.join(self.tmp, "state.json")
+        harvest.JOBS = os.path.join(self.tmp, "jobs")
         self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
         cache_budget._REGISTRY.clear()
         cache_budget._STATS.clear()
@@ -1284,6 +933,7 @@ class ASignatureEvictedBetweenRenameAndCommit(unittest.TestCase):
         cache_budget._REGISTRY.update(self._registry[0])
         cache_budget._STATS.clear()
         cache_budget._STATS.update(self._registry[1])
+        (harvest.LEDGER, harvest.STATE, harvest.JOBS) = self._paths
         for k in [k for k in list(os.environ)
                   if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)]:
             os.environ.pop(k, None)
@@ -1291,7 +941,7 @@ class ASignatureEvictedBetweenRenameAndCommit(unittest.TestCase):
         harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_the_fetch_reports_the_failure_and_nothing_is_uploaded(self):
+    def test_the_decode_reports_no_space_and_nothing_is_uploaded(self):
         real_replace = os.replace
 
         def racing_replace(a, b):
@@ -1305,16 +955,14 @@ class ASignatureEvictedBetweenRenameAndCommit(unittest.TestCase):
                                   lambda y, sr=None: np.zeros((12, 60), dtype="float32")), \
                 mock.patch.object(harvest.sigstore, "enabled", lambda: True), \
                 mock.patch.object(harvest.sigstore, "put",
-                                  lambda *a: self.put.append(a) or True), \
+                                  lambda path, key: self.put.append(key) or "etag"), \
                 mock.patch("os.replace", side_effect=racing_replace):
-            result = harvest._fetch_and_sign(self.url, self.job)
-        self.assertFalse(result["ok"], result)
-        self.assertIn("did not survive its own landing", result["error"])
-        self.assertNotIn("403", result["error"])       # never read as a host problem
-        self.assertNotIn("429", result["error"])
-        self.assertNotIn("blocked", result["error"].lower())
+            c, samples = harvest.sign_file(self.path)
+        self.assertEqual((c, samples), (None, None))
+        self.assertEqual(harvest._LAST_CHILD["reason"], "no_space")
+        self.assertIn("did not survive its own landing", harvest._LAST_CHILD["error"])
         self.assertEqual(self.put, [], "nothing uploaded for a signature that is not there")
-        self.assertFalse(os.path.exists(harvest.sig_path(self.url)))
+        self.assertFalse(os.path.exists(os.path.join(harvest._chroma_dir(), self.key + ".npy")))
 
 
 if __name__ == "__main__":

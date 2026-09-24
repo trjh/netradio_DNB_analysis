@@ -4,6 +4,10 @@
     . .venv/bin/activate && python scripts/selftest.py --offline
     . .venv/bin/activate && python scripts/selftest.py --live
 
+(`--live` currently answers "not checked": the harvester's fetch leg is gone and the check's
+replacement — re-scoring the canary's STORED signature, by its key — is the next change to this
+file. `--offline` is unaffected.)
+
 Why this exists
 ---------------
 A broken harvester and a pool that does not contain the answer produce the **identical** output:
@@ -112,12 +116,12 @@ def last():
 
 # A STOP IS NEVER A VERDICT.
 #
-# `fetch` (harvest.stream_chroma) returns exactly this error when a signal interrupted the fetch.
-# It says nothing about the matcher or the streaming path, so it must not become a canary result:
-# recorded as a FAILURE it would sit on /harvest saying the matcher is broken until the next daily
-# run, and recorded at all -- even as "not checked" -- it would satisfy `due_for_live` and stand
-# the canary down for 24 hours because somebody pressed Ctrl-C. So it is reported and NOT recorded,
-# and the next start asks again.
+# A fetch callable returns exactly this error when a signal interrupted the decode. It says
+# nothing about the matcher, so it must not become a canary result: recorded as a FAILURE it
+# would sit on the harvest page saying the matcher is broken until the next daily
+# run, and recorded at all -- even as "not checked" -- it would satisfy a due-date check and
+# stand the canary down for 24 hours because somebody pressed Ctrl-C. So it is reported and
+# NOT recorded, and the next start asks again.
 STOPPED = "stopped"
 
 
@@ -306,8 +310,12 @@ def best_rival_cost(mystery_queries, c_fetched):
 def live(fetch, mystery_queries=None):
     """Fetch the canary FRESH off the internet and require the real query path to flag it.
 
-    `fetch(url) -> (chroma, samples, error)` is injected (harvest.stream_chroma) so this module
-    never imports the harvester -- and so the tests can drive it without a network.
+    `fetch(url) -> (chroma, samples, error)` is injected (a decode path the caller supplies)
+    so this module never imports the harvester -- and so the tests can drive it without a
+    network. The harvester's own fetch leg is gone, so nothing that runs on a schedule calls
+    this any more; the re-score of the canary's STORED signature replaces it, and until that
+    lands the `--live` command answers honestly rather than reaching for a fetch that is not
+    there (see main).
     """
     canary = _read(CANARY, {})
     if not canary.get("url"):
@@ -388,8 +396,15 @@ def main():
     if args.offline:
         print(json.dumps(offline(), indent=2))
     if args.live:
-        import harvest                                  # only here: it pulls in the whole harvester
-        print(json.dumps(live(harvest.stream_chroma, harvest.queries()), indent=2))
+        # The harvester no longer has a fetch to inject: its decode reads files in the
+        # configured directories, and the canary's file arrives through them like any other
+        # entry. Rather than crash on a seam that is no longer there, the check answers
+        # "not checked" -- the same state a hand-picked URL that has not been validated reads,
+        # and the one a reader of this file can tell apart from a PASS.
+        print(json.dumps({"kind": "live", "ok": None, "when": _now(),
+                          "why": "the live check is not wired to a fetch any more -- use "
+                                 "--offline; the canary's stored signature is re-scored by "
+                                 "the harvester's own loop"}, indent=2))
 
 
 if __name__ == "__main__":
