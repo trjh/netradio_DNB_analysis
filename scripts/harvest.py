@@ -1481,8 +1481,8 @@ def stored_signature(key):
     With the bucket configured this is the bucket's `<key>.npy`, fetched into a scratch
     directory and NOT into the working cache: the canary is compared with what the pool
     holds, and a local copy is only a copy. With the bucket dark it is the working cache's
-    copy. None when neither holds it -- the key has never been signed, and the canary's
-    file is then signed like any other, once."""
+    copy. None when neither holds it, or when the fetch or the read failed; the loop tells
+    those apart with the bucket's listing before it lets an ordinary sign replace it."""
     if sigstore.enabled():
         os.makedirs(JOBS, exist_ok=True)
         scratch = tempfile.mkdtemp(prefix="canary-", dir=JOBS)
@@ -2340,6 +2340,25 @@ def run(args):
         stored = (stored_signature(canary)
                   if rec_file["key"] == canary
                   and (ledger.get(canary) or {}).get("status") == "signed" else None)
+        if (stored is None and rec_file["key"] == canary and sigstore.enabled()
+                and (ledger.get(canary) or {}).get("status") == "signed"):
+            # A signed canary whose stored signature did not come back. If the listing says
+            # the object is gone, the ordinary sign below heals it. If the object is (or may
+            # be) there, the fetch or the read failed: signing now would publish over the
+            # very reference the canary compares with, so these bytes are skipped with an
+            # issue row, and the next feed tries again.
+            objs = _remote_objects()
+            if objs is None or canary + ".npy" in objs:
+                ident = _file_id(rec_file["path"])
+                if ident is not None:
+                    _canary_checked[canary] = ident
+                state["issues"] = ((state.get("issues") or []) + [{
+                    "at": _now(), "key": canary,
+                    "issue": "the canary's stored signature could not be fetched or read -- "
+                             "this feed is skipped rather than signed over it"}])[-50:]
+                state["current"] = None
+                _save(STATE, state)
+                continue
         if stored is not None:
             rec = canary_pass(state, rec_file["path"], stored, qs)
             if rec is None:

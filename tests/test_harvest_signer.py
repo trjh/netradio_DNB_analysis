@@ -1155,7 +1155,7 @@ class TheCanaryPass(_SignerCase):
 
     # -- the loop ---------------------------------------------------------------------------
 
-    def _run_loop(self, qs, naps_before_stop=2):
+    def _run_loop(self, qs, naps_before_stop=2, remote=None):
         harvest._save(harvest.RULINGS, {})
         naps = []
 
@@ -1176,7 +1176,7 @@ class TheCanaryPass(_SignerCase):
             return fh
         with mock.patch.object(harvest, "acquire_writer_lock", record_then_return), \
                 mock.patch.object(harvest, "queries", lambda state=None: qs), \
-                mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: None), \
+                mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: remote), \
                 mock.patch.object(harvest.sigstore, "evict_cold", lambda *a: (0, 0)), \
                 mock.patch.object(harvest, "_nap", _nap), \
                 mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
@@ -1224,6 +1224,44 @@ class TheCanaryPass(_SignerCase):
         self.assertEqual(row["status"], "signed")
         self.assertIn((key + ".json", key + ".json"), self.put)
         self.assertNotIn("canary", harvest._load(harvest.STATE, {}))
+
+    def test_a_failed_fetch_of_a_listed_signature_never_signs_over_it(self):
+        """A bucket blip while the canary is fed: the object is listed, the fetch fails. The
+        ordinary sign must not run -- it would publish over the reference the canary
+        compares with. The feed is skipped with an issue row."""
+        self.addCleanup(lambda: getattr(harvest, "_canary_checked", {}).clear())
+        key, _path, _stored = self._canary(store=True)
+        p = mock.patch.object(harvest.sigstore, "fetch", lambda name, dest_dir: None)
+        p.start()
+        self.addCleanup(p.stop)
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)), chroma=self.CHROMA)
+        self._match({})
+        before = harvest._load(harvest.LEDGER, {})
+        with mock.patch.object(harvest, "reconcile_ledger",
+                               lambda state=None: {"seeded": 0, "dropped": 0, "restored": 0,
+                                                  "reported": 0, "cleared": 0, "why": "test"}):
+            self._run_loop([], naps_before_stop=1,
+                           remote={key + ".npy": "etag-stored", key + ".json": "e"})
+        self.assertEqual(self.put, [], "nothing published over the stored signature")
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), before)
+        state = harvest._load(harvest.STATE, {})
+        self.assertTrue(any("could not be fetched" in r["issue"] for r in state["issues"]))
+
+    def test_a_signed_canary_the_listing_shows_gone_is_healed(self):
+        """The object is not in the listing: the fetch failed because it is gone, and the
+        ordinary sign puts it back."""
+        self.addCleanup(lambda: getattr(harvest, "_canary_checked", {}).clear())
+        key, _path, _stored = self._canary(store=True)
+        p = mock.patch.object(harvest.sigstore, "fetch", lambda name, dest_dir: None)
+        p.start()
+        self.addCleanup(p.stop)
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)), chroma=self.CHROMA)
+        self._match({})
+        with mock.patch.object(harvest, "reconcile_ledger",
+                               lambda state=None: {"seeded": 0, "dropped": 0, "restored": 0,
+                                                  "reported": 0, "cleared": 0, "why": "test"}):
+            self._run_loop([], naps_before_stop=1, remote={})
+        self.assertIn((key + ".npy", key + ".npy"), self.put)
 
     def test_a_canary_never_signed_is_signed_like_any_file(self):
         """No stored signature yet: the canary's first sign is the ordinary one, uploaded."""

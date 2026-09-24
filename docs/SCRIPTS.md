@@ -350,7 +350,9 @@ Anything flagged raises `sig_alert` with `kind: "canary"`. The outcome is record
 as the `canary` block (`at`, `key`, `signature` — `same`, `differs` or `not signed` — `live`,
 `new_hits`, `ok`, `why`). A canary whose key has no stored signature yet is signed like any other
 file, once, and the pass runs from its next feed. So is a canary whose row is not `signed` (a
-sidecar lost from the bucket, for example): the ordinary sign uploads both objects again. The harvester re-signs the same bytes at most once
+sidecar lost from the bucket, for example): the ordinary sign uploads both objects again. When
+the stored signature is listed in the bucket but cannot be fetched or read, the feed is skipped
+with an issue row instead, so a bucket blip never lets a sign replace the reference. The harvester re-signs the same bytes at most once
 per process.
 
 **Which track the canary is.** The canary's mix is built from the **first calibration case** (the
