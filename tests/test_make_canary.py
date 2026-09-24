@@ -1,8 +1,8 @@
 """The `--key` flag on `scripts/make_canary.py` prints the pool's key for a URL.
 
 The key is the pool's one rule (docs/HARVEST_FEED.md): `u` + the first 20 hex of the
-SHA-1 of the URL as given, fragment included. The harvester's self-test re-scores the
-canary's stored signature every pass, named by this key (`NETRADIO_CANARY_KEY` in
+SHA-1 of the URL as given, fragment included. The harvester's canary pass re-signs the
+canary's file and compares it with the signature stored under this key (`NETRADIO_CANARY_KEY` in
 `.env`). `--key` is how the operator computes it from the canary's URL; the same rule
 the one-line recipe in `.env.example` uses, callable from a script.
 

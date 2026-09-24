@@ -1024,6 +1024,20 @@ class TheCanaryPass(_SignerCase):
         self.assertIn("MT5", state["sig_alert"]["why"])
         self.assertEqual(state["matches"], [], "the canary pass records no lead of its own")
 
+    def test_a_near_miss_is_not_a_new_hit(self):
+        """An unrelated pair routinely scores under the keep-board ceiling (0.130): the
+        non-match median sits near 0.095. Only a MATCH is news; a near-miss is noise, or a
+        healthy canary would raise an alert on every feed."""
+        _key_, path, stored = self._canary()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)), chroma=self.CHROMA)
+        self._live(ok=True)
+        self._match({4.0: 0.095, 5.0: harvest.MATCH_COST + 0.001})
+        state = {"issues": [], "matches": []}
+        rec = harvest.canary_pass(state, path, stored, self._qs(4, 5))
+        self.assertEqual(rec["new_hits"], [])
+        self.assertIs(rec["ok"], True)
+        self.assertNotIn("sig_alert", state)
+
     def test_a_hit_the_pool_already_records_for_the_canary_is_expected(self):
         key, path, stored = self._canary()
         self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)), chroma=self.CHROMA)
@@ -1070,6 +1084,17 @@ class TheCanaryPass(_SignerCase):
         self.assertNotEqual(after[key]["signed_at"], before[key]["signed_at"])
         for field in set(before[key]) - {"signed_at"}:
             self.assertEqual(after[key][field], before[key][field], field)
+
+    def test_a_row_that_is_not_signed_is_left_alone(self):
+        key, path, stored = self._canary(row=False)
+        delayed = harvest._row(key, 1, 1.0, "delayed", "decode_failed", None, None, {})
+        harvest._save(harvest.LEDGER, {key: delayed})
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)), chroma=self.CHROMA)
+        self._live(ok=True)
+        self._match({})
+        harvest.canary_pass({"issues": [], "matches": []}, path, stored, [])
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {key: delayed},
+                         "only a signed row's signed_at advances")
 
     def test_without_a_row_it_writes_none(self):
         key, path, stored = self._canary(row=False)
@@ -1183,6 +1208,22 @@ class TheCanaryPass(_SignerCase):
         self.assertIs(state["canary"]["ok"], True)
         self.assertNotIn("sig_alert", state)
         self.assertEqual(state.get("analyzed", 0), 0, "a canary pass is not a new signing")
+
+    def test_a_canary_whose_row_is_not_signed_is_healed_by_the_ordinary_sign(self):
+        """A `delayed` row (the sidecar lost from the bucket, say) is healed the published
+        way -- a fresh sign that uploads both objects -- even for the canary's key."""
+        self.addCleanup(lambda: getattr(harvest, "_canary_checked", {}).clear())
+        key, _path, _stored = self._canary(store=True, row=False)
+        harvest._save(harvest.LEDGER, {key: harvest._row(
+            key, 1, 1.0, "delayed", "missing_sidecar", None, "etag-stored", {})})
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)), chroma=self.CHROMA)
+        self._live(ok=True)
+        self._match({})
+        self._run_loop([], naps_before_stop=1)
+        row = harvest._load(harvest.LEDGER, {})[key]
+        self.assertEqual(row["status"], "signed")
+        self.assertIn((key + ".json", key + ".json"), self.put)
+        self.assertNotIn("canary", harvest._load(harvest.STATE, {}))
 
     def test_a_canary_never_signed_is_signed_like_any_file(self):
         """No stored signature yet: the canary's first sign is the ordinary one, uploaded."""

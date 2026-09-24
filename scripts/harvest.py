@@ -1126,8 +1126,8 @@ def sign_file(path, issues=None, publish=True):
 
     `publish=False` is the canary's re-sign (`canary_pass`): the same path end to end, but
     nothing is uploaded, nothing lands in the working cache, and NO ROW IS WRITTEN. The one
-    ledger change it may make is to advance `signed_at` on the row the key already has, which
-    is how the harvest page shows when the canary last ran. A re-sign that fails writes no
+    ledger change it may make is to advance `signed_at` on the key's row when that row is
+    `signed`, so the row records when the canary was last re-signed. A re-sign that fails writes no
     `delayed` row either: the stored signature is still good, and the failure is the canary's
     verdict to report, not the row's.
 
@@ -1211,7 +1211,7 @@ def sign_file(path, issues=None, publish=True):
             # the stored object, which this pass did not replace.
             if not result.get("ok"):
                 return None, None
-            if key in ledger:
+            if (ledger.get(key) or {}).get("status") == "signed":
                 ledger[key]["signed_at"] = _now()
                 _save(LEDGER, ledger)
             c = np.load(os.path.join(job, "chroma32.npy"))
@@ -1548,8 +1548,11 @@ def canary_pass(state, path, stored, qs):
          identical signature is the pass, any difference is flagged;
       3. the new signature is scored as if new against every mystery: against the canary's
          own mix it must show the known cost, rank and margin (`selftest.live`), and against
-         the current mysteries it must not hit anywhere the pool has not already recorded a
-         lead for this key -- a new hit is flagged.
+         the current mysteries it must not MATCH (cost at or under MATCH_COST, the search's
+         own bar) anywhere the pool has not already recorded a lead for this key -- a new
+         match is flagged. The bar is MATCH_COST, not the keep-board ceiling: an unrelated
+         pair routinely scores inside the ceiling (the non-match median is above it), so a
+         near-miss is noise, while a MATCH on a mystery for a track already solved is news.
 
     Anything flagged raises `sig_alert` (kind `canary`). A pass with nothing flagged and the
     known match confirmed stands a canary alert down; one that could not check the known
@@ -1595,11 +1598,11 @@ def canary_pass(state, path, stored, qs):
         known = {m.get("mystery") for m in state.get("matches") or [] if m.get("key") == key}
         for num, qc, _qkey in qs:
             cost, _shift, _at = _cm.match(qc, c)
-            if cost is None or cost > KEEP_CEILING or num in known:
+            if cost is None or cost > MATCH_COST or num in known:
                 continue
             rec["new_hits"].append({"mystery": num, "cost": round(float(cost), 4)})
         if rec["new_hits"]:
-            problems.append("the canary hit mystery %s, where the pool holds no lead for it"
+            problems.append("the canary matched mystery %s, where the pool holds no lead for it"
                             % ", ".join("MT%d (cost %.4f)" % (h["mystery"], h["cost"])
                                         for h in rec["new_hits"]))
 
@@ -2331,7 +2334,12 @@ def run(args):
         rec_file = todo_files[0]
         state["current"] = rec_file["key"]
         _save(STATE, state)
-        stored = stored_signature(canary) if rec_file["key"] == canary else None
+        # Only a canary whose row is `signed` takes the canary pass. A row that is not (a
+        # sidecar lost from the bucket, say) is healed the published way: an ordinary sign
+        # that uploads both objects again.
+        stored = (stored_signature(canary)
+                  if rec_file["key"] == canary
+                  and (ledger.get(canary) or {}).get("status") == "signed" else None)
         if stored is not None:
             rec = canary_pass(state, rec_file["path"], stored, qs)
             if rec is None:

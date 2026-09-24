@@ -297,7 +297,7 @@ over-long, the length matches the sidecar's claim, and no stop was asked for. Th
 | Mode | What it proves |
 |---|---|
 | **offline** | Re-identifies a track we already know (Jamie Myerson, *Sky Blue*) out of a small pool, from local files. The matcher still **works** — not merely that the process is alive. No network. |
-| **live** | Scores a signature of the canary, named by `NETRADIO_CANARY_KEY`, against the canary's mix and the current mysteries. By hand (`--live`) it scores the **stored** signature. The harvester's canary pass scores a **fresh re-sign** of the canary's file instead, and compares it with the stored one first — see [the canary pass](#the-canary-pass-re-signed-compared-scored). Needs `NETRADIO_CANARY_KEY` set in `.env` (see `.env.example`); `make_canary.py --key <url>` prints it. |
+| **live** | Scores a signature of the canary, named by `NETRADIO_CANARY_KEY`, against the canary's mix and the current mysteries. By hand (`--live`) it scores the **stored** signature. The harvester's canary pass scores a **fresh re-sign** of the canary's file instead, and compares it with the stored one first — see [the canary pass](#the-canary-pass-re-signed-compared-scored). Needs `NETRADIO_CANARY_KEY` set in `.env` (see `.env.example`); `make_canary.py --key '<url>'` prints it. |
 
 Both demand **cost, rank *and* a margin**. Requiring only "cost in range, rank 1" is not enough: a
 degenerate matcher scores everything identically, ties sort by track number, and the subject — the
@@ -322,7 +322,7 @@ not a pass*:
 **How the canary is named.** Under the new contract the canary is an ordinary entry: its file
 arrives through the harvest directories like any other, is signed once, and is named by its
 **key** (`NETRADIO_CANARY_KEY` in `.env`) — the pool's own rule, `u` + the first 20 hex of the
-SHA-1 of the canary's source URL. `scripts/make_canary.py --key <url>` prints it, or the one-line
+SHA-1 of the canary's source URL. `scripts/make_canary.py --key '<url>'` prints it, or the one-line
 recipe in `.env.example` computes it. `--live` re-scores the stored signature by hand, loading it
 through `sigstore`.
 
@@ -335,19 +335,22 @@ process, not only the matcher:
 
 1. **Re-signed as if new**, through `sign_file` — the same decode, recipe and checks as any file.
    Nothing is uploaded, nothing replaces the stored signature, and **no new ledger row** is
-   written: the existing row's `signed_at` advances, which is how the harvest page shows when the
-   canary last ran. A canary file that will not decode is flagged; its signed row is left alone.
+   written: the existing row's `signed_at` advances (a `signed` row only), so the row records when
+   the canary was last re-signed. A canary file that will not decode is flagged; its signed row is left alone.
 2. **Compared** with the stored `<key>.npy` — the bucket's copy when the bucket is configured, the
    working cache's otherwise. An identical signature is the pass; any difference (shape or value)
    is flagged.
 3. **Scored as if new against every mystery.** Against the canary's own mix it must show the known
-   cost, rank and margin (`selftest.live`, above). Against the current mysteries it must not hit
-   anywhere the pool has not already recorded a lead for the canary's key; a new hit is flagged.
+   cost, rank and margin (`selftest.live`, above). Against the current mysteries it must not
+   **match** (cost at or under the search's own match bar, 0.050) anywhere the pool has not already
+   recorded a lead for the canary's key; a new match is flagged. The bar is the match bar, not the
+   0.130 ceiling for keeping a lead: an unrelated pair routinely scores under that ceiling.
 
 Anything flagged raises `sig_alert` with `kind: "canary"`. The outcome is recorded in `state.json`
 as the `canary` block (`at`, `key`, `signature` — `same`, `differs` or `not signed` — `live`,
 `new_hits`, `ok`, `why`). A canary whose key has no stored signature yet is signed like any other
-file, once, and the pass runs from its next feed. The harvester re-signs the same bytes at most once
+file, once, and the pass runs from its next feed. So is a canary whose row is not `signed` (a
+sidecar lost from the bucket, for example): the ordinary sign uploads both objects again. The harvester re-signs the same bytes at most once
 per process.
 
 **Which track the canary is.** The canary's mix is built from the **first calibration case** (the

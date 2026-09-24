@@ -22,7 +22,9 @@ The harvester's self-test re-signs one known track's file whenever the feeder pu
 compares the result with the signature stored under its key (`NETRADIO_CANARY_KEY`). `--key <url>` prints that key for a URL — the pool's one rule
 (`u` + sha1(url)[:20]), the same stem every signature in the bucket is filed under:
 
-    python scripts/make_canary.py --key "<the canary URL>"
+    python scripts/make_canary.py --key '<the canary URL>'
+
+(Single quotes: inside double quotes the shell would run any $(...) or backticks in the URL.)
 """
 
 import argparse
