@@ -97,8 +97,9 @@ RULINGS = os.path.join(STATE_DIR, "rulings.json")
 # Neither is a fixed path any more. Each registers on the cache policy at import, so its
 # directory comes from the machine's settings: NETRADIO_CHROMA_CACHE_DIR /
 # NETRADIO_CANDIDATES_CACHE_DIR, defaulting to $NETRADIO_CACHE_ROOT/<name>. The policy bounds
-# them: `chroma` by a 14-day age (each entry is used the moment it is computed, and the bucket
-# is its long-term home), `candidates` by a 250 MB cap evicting the worst excerpt of a mystery
+# them: `chroma` by a 14-day age while the bucket is configured (each entry is used the moment
+# it is computed, and the bucket is its long-term home), with every signature the bucket has not
+# verified pinned, `candidates` by a 250 MB cap evicting the worst excerpt of a mystery
 # first -- the same rule KEEP_TOP applies to the board -- and by the same 30-day age. While
 # NETRADIO_CACHE_ROOT is unset there is no cache directory at all: the harvester refuses to
 # run rather than fetch tracks whose signatures it then cannot keep.
@@ -134,6 +135,34 @@ def _excerpt_pinned(path):
     return os.path.basename(path) == "PROVENANCE.txt"
 
 
+def _chroma_pinned(path):
+    """The signature cache's pin: a signature the bucket has not verified is the only copy, so
+    the policy's age, cap and floor passes must not take it. Returns False for a signature the
+    bucket holds, and for anything that is not a signature (a `.tmp` or `.part` is held by the
+    policy's own write-in-progress rule while fresh).
+
+    "The bucket holds it" is one of two facts this process already has, and never a new
+    request -- the policy calls this for every entry on every run:
+      * sigstore's session record of a HEAD that returned this file's exact size (`put`
+        verifies each upload that way, and `evictable` before a cold eviction);
+      * the key in the last successful listing of the bucket (`_remote_keys`' cache). An S3
+        object appears in a listing only once its upload is complete.
+    With the bucket unset every signature is pinned: nothing else holds a copy."""
+    name = os.path.basename(path)
+    if not (name.startswith("u") and name.endswith(".npy")):
+        return False
+    if not sigstore.enabled():
+        return True
+    try:
+        local = os.path.getsize(path)
+    except OSError:
+        return False                            # gone: nothing left to hold
+    if sigstore.verified_size(name) == local:
+        return False
+    listed = _REMOTE_KEYS["keys"]
+    return not (listed is not None and name in listed)
+
+
 def register_caches():
     """(Re-)register the two caches on the cache policy, reading the environment now -- call it
     again to re-read it. While the policy is dark (NETRADIO_CACHE_ROOT unset) both stay
@@ -146,7 +175,11 @@ def register_caches():
     # come back only when something asks to play it). The literal names, not the
     # constants above, so env_check.py's code scan sees the registrations and counts their
     # variable families as read.
-    cache_budget.register("chroma", max_age=CHROMA_CACHE_MAX_AGE_DAYS,
+    # The age limit applies only while the bucket is configured: with no bucket, the local
+    # file is the signature's only home, and `_chroma_pinned` holds every one of them anyway.
+    cache_budget.register("chroma",
+                         max_age=CHROMA_CACHE_MAX_AGE_DAYS if sigstore.enabled() else None,
+                         pinned=_chroma_pinned,
                          refill="bucket:chroma/", rank=4)
     cache_budget.register("candidates", cap=CANDIDATES_CACHE_CAP, order="by-score",
                          score=_excerpt_score, max_age=KEEP_TTL_DAYS,
@@ -940,10 +973,9 @@ def _decode_and_sign(url, job, duration=None):
                 "error": "the signature did not survive its own landing: an eviction run "
                          "took it before the policy recorded it"}
     # The bucket is the signature's long-term home (see sigstore). Upload now, verified; on
-    # failure the local file stays until the cache policy's age limit takes it (the `chroma`
-    # cache has no pins -- requeue_missing_sigs offers the URL again once its signature is
-    # gone from cache and bucket alike), while sigstore's own cold eviction still refuses any
-    # key the bucket has not verified, so a flaky upload costs disk space, never data.
+    # failure the local file stays: the `chroma` cache pins every signature the bucket has not
+    # verified (`_chroma_pinned`), and sigstore's own cold eviction refuses the same keys, so a
+    # flaky upload costs disk space, never data.
     if sigstore.enabled():
         sigstore.put(sig, _sig_key(url))
     # The float32 chroma, for the parent's matcher. NOT the float16 round-trip: the matcher scores
