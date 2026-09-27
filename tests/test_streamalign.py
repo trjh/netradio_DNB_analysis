@@ -785,6 +785,19 @@ class CachePolicyTests(unittest.TestCase):
         os.environ["NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS"] = "none"
         self.assertIsNone(audio.register_cache()["max_age"])
 
+    def test_the_reservation_is_the_file_np_save_writes(self):
+        """A cap of exactly the raw array's bytes cannot hold the .npy file (its header is on
+        top), so the entry is refused rather than written past the cap."""
+        self._source("a.wav")
+        os.environ["NETRADIO_STREAMALIGN_CACHE_GB"] = repr(self.SAMPLES * 4 / cache_budget.GB)
+        audio.register_cache()
+        signal = audio.load_audio("a", audio_dir=self.audio_dir)
+        self.assertEqual(len(signal), self.SAMPLES)             # the decode is still returned
+        self.assertFalse(os.path.isfile(self._entry("a.wav")))
+        row = cache_budget.status()["caches"][0]
+        self.assertLessEqual(row["size"], row["cap"])
+        self.assertEqual(audio._npy_bytes(signal), self.SAMPLES * 4 + 128)
+
     def test_a_load_ages_out_a_stale_entry_under_the_cap(self):
         """The cache is under its cap, so commit evicts nothing; the write's own eviction run
         applies the 14-day default and takes the entry older than that."""
