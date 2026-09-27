@@ -1,4 +1,5 @@
 """Tests for the streaming-link matcher (offline — no network)."""
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -110,6 +111,7 @@ class SpotifyImportTests(unittest.TestCase):
         import json
         import tempfile
         fd = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        self.addCleanup(os.unlink, fd.name)
         json.dump(items, fd)
         fd.close()
         return fd.name

@@ -10,6 +10,7 @@ for the real MB-sized arrays; the cap then holds ~2 entries so eviction is actua
 
 import collections
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -28,6 +29,7 @@ ENTRY_FLOATS = 2000                  # -> 8000 data bytes + ~128 header per .npy
 class CacheBounding(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
         self._saved = (audio.CACHE_DIR, audio.shutil.disk_usage, audio._ffmpeg_decode,
                        audio.CACHE_MAX_FRAC, audio.DISK_FULL_FRAC)
         audio.CACHE_DIR = self.dir

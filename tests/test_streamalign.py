@@ -246,6 +246,7 @@ class TrackMixTests(unittest.TestCase):
     def test_pairs_plain_and_numbered_track_sync(self):
         import tempfile
         d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
         with open(os.path.join(d, "x.labels.tsv"), "w") as f:
             f.write("10.0\t10.0\torig041 sync: 2\n")        # plain `track sync`
             f.write("11.0\t11.0\ttrack sync: 2\n")
@@ -260,6 +261,7 @@ class TrackMixTests(unittest.TestCase):
         # file and must NOT be paired as a current-file sync point.
         import tempfile
         d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
         with open(os.path.join(d, "x.labels.tsv"), "w") as f:
             f.write("5.0\t5.0\torig065 sync: 9\n")
             f.write("100.0\t100.0\tnote d336-355: track sync: 9\n")
@@ -271,6 +273,7 @@ class TrackMixTests(unittest.TestCase):
         # section. The rate must come from f1's A/B, never f1.A paired with f2.B.
         import tempfile
         d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
         with open(os.path.join(d, "f1.labels.tsv"), "w") as f:
             f.write("100.0\t100.0\torig047 sync: A\n")
             f.write("101.0\t101.0\ttrack047 sync: A\n")
@@ -411,6 +414,7 @@ class EmitLabelsTests(unittest.TestCase):
     def test_emit_roundtrips_and_is_auto_generated(self):
         import tempfile
         out = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, out, True)
         positions = {"d900-901": 100.5, "d902-903": 250.0}
         emit_labels.emit_labels(positions, out, {"d900-901": 60.0, "d902-903": 60.0})
         files = sorted(os.listdir(out))
@@ -427,6 +431,7 @@ class EmitLabelsTests(unittest.TestCase):
     def test_always_auto_suffix_and_never_overwrites_hand(self):
         import tempfile
         out = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, out, True)
         # a hand <stem>.labels.tsv sitting in the SAME dir must be left untouched
         hand_path = os.path.join(out, "d900-901.labels.tsv")
         with open(hand_path, "w") as f:
