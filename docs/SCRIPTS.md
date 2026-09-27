@@ -204,22 +204,27 @@ already rejected. An empty file is fine — that is nothing ruled on yet; only a
 unreadable file is a refusal.
 
 **What it does.** For each audio file in the configured directories with a complete sidecar and
-no ledger row — or with a row whose size or modification time no longer matches, or a
-`no_space` delay: decode it with ffmpeg in a child process, compute the **chroma signature**
+no ledger row — or with a row whose size or modification time no longer matches, or a delay
+for one of the two automatic reasons, `no_space` and `missing_sidecar`, whether the file changed
+or not: decode it with ffmpeg in a child process, compute the **chroma signature**
 (12×N float16, ~55 KB against ~8 MB), upload the signature and the sidecar beside it to the
 bucket, write the ledger row, score the signature against every unsolved Mystery Track — **but
 only the mysteries it holds a clip of** (see
 [PROCESS §8b](../PROCESS.md#8b-giving-the-harvester-a-new-or-better-mystery-track-clip)) — and
 keep an excerpt if the match is near. Then sleep and repeat.
 
-A file comes back **delayed** instead of `signed` with one of five reasons: `length_mismatch`
+A file comes back **delayed** instead of `signed` with one of five reasons, three of them
+verdicts on the file as fed and two automatic: `length_mismatch`
 (the decoded length disagrees with the sidecar's `duration_s` by more than `max(10 s, 2 %)` — a
 hand-over that disagrees with its own label is not signed), `too_long` (over four hours —
 refused, never truncated; splitting long audio is the feeder's job, each part a key of its
-own), `decode_failed`, `no_space` (transient — retried on later passes until the policy makes
-room), or `missing_sidecar` (the signature is in the bucket but its companion sidecar is
-not — re-feed the key, and the row's empty size and mtime make the scan propose it for a
-fresh sign that re-uploads both). A file that vanishes mid-sign gets **no row at all**, so it
+own), `decode_failed`, `no_space` (automatic — retried on later passes until the policy makes
+room), or `missing_sidecar` (automatic — the signature is in the bucket but its companion
+sidecar is not). A `missing_sidecar` row is seeded from the bucket with no size or mtime, or
+demoted by the reconciliation from a `signed` row that keeps the size and mtime of the file it
+signed; either way the scan proposes any file under the key, changed or not, for a fresh sign
+that re-uploads both, and a key with no file in the directories is fed again like a key with
+no row. A file that vanishes mid-sign gets **no row at all**, so it
 stays on the feeder's list and is signed again when it comes back.
 
 **It proposes; you dispose.** It never marks a mystery solved. It keeps the best **leads** (best 12
