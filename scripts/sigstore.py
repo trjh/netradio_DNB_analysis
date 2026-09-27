@@ -117,6 +117,13 @@ def remote_size(key):
     return _head(key)[0]
 
 
+def verified_size(key):
+    """The remote size a HEAD in this process has already returned for `key`, or None. Never
+    asks the bucket: the cache policy's pin reads it for every entry on every run."""
+    seen = _verified.get(key)
+    return seen[0] if seen else None
+
+
 def have_remote(key):
     return enabled() and remote_size(key) is not None
 

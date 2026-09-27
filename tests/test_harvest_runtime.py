@@ -272,6 +272,8 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
             return [json.loads(line) for line in fh]
 
     def test_the_two_registrations(self):
+        with unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: True):
+            harvest.register_caches()
         rows = {r["name"]: r for r in cache_budget.status()["caches"]}
         self.assertEqual(set(rows), {"chroma", "candidates"})
         chroma, candidates = rows["chroma"], rows["candidates"]
@@ -288,6 +290,13 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         self.assertEqual((candidates["refill"], candidates["rank"]), ("on-play", 10))
         # the module's path constants follow the registry
         self.assertEqual((harvest.CACHE, harvest.KEEP), (self.chroma_dir, self.keep_dir))
+
+    def test_with_no_bucket_the_signature_cache_has_no_age_limit(self):
+        """The local file is a signature's only home while the bucket is unset."""
+        with unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: False):
+            harvest.register_caches()
+        rows = {r["name"]: r for r in cache_budget.status()["caches"]}
+        self.assertIsNone(rows["chroma"]["max_age_days"])
 
     def test_the_variable_family_overrides_every_setting_it_names(self):
         os.environ["NETRADIO_CHROMA_CACHE_DIR"] = os.path.join(self.tmp, "elsewhere-chroma")
@@ -447,6 +456,102 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         removals = [e for e in self._events() if e["event"] == "evict"]
         self.assertEqual([e["entry"] for e in removals], ["MT4-0.0600-old.wav"],
                          "the policy's own record: the note was never a candidate")
+
+
+    # --- the signature pin: the bucket's verification is what lets a signature go -------
+
+    def _signature(self, url, age_s=0, size=100):
+        os.makedirs(self.chroma_dir, exist_ok=True)
+        path = os.path.join(self.chroma_dir, harvest._sig_key(url))
+        with open(path, "wb") as fh:
+            fh.write(b"s" * size)
+        t = time.time() - age_s
+        os.utime(path, (t, t))
+        return path
+
+    def _bucket(self, enabled, signed=(), verified=None, etag="etag"):
+        """Register with the bucket on or off, the ledger holding a `signed` row with
+        `uploaded_etag=etag` for each key in `signed`, and the session's HEAD record holding
+        `verified` ({object name: size})."""
+        patcher = unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: enabled)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(setattr, harvest, "LEDGER", harvest.LEDGER)
+        harvest.LEDGER = os.path.join(self.tmp, "ledger.json")
+        harvest._save(harvest.LEDGER, {k: harvest._row(k, 1, 1.0, "signed", None, "then",
+                                                       etag, {}) for k in signed})
+        self.addCleanup(harvest.sigstore._verified.clear)
+        harvest.sigstore._verified.clear()
+        harvest.sigstore._verified.update({k: (v, "e") for k, v in (verified or {}).items()})
+        harvest.register_caches()
+
+    def _past_the_floor(self):
+        """The volume past its floor while any signature is left, back under once none is."""
+        chroma_dir = self.chroma_dir
+
+        def volume(_path):
+            held = [n for n in os.listdir(chroma_dir) if n.endswith(".npy")] \
+                if os.path.isdir(chroma_dir) else []
+            used = 99 if held else 1
+            return (100 * self.KB, used * self.KB, (100 - used) * self.KB)
+        cache_budget._disk_usage = volume
+
+    def test_an_unverified_signature_survives_the_age_limit(self):
+        self._bucket(True)                              # no ledger row for it
+        sig = self._signature("https://example.invalid/unverified", age_s=40 * 86400)
+        cache_budget.run_eviction("chroma")
+        self.assertTrue(os.path.exists(sig), "the bucket never verified it: the only copy")
+
+    def test_an_unverified_signature_survives_the_floor(self):
+        self._bucket(True)
+        sig = self._signature("https://example.invalid/unverified")
+        self._past_the_floor()
+        cache_budget.run_eviction()
+        self.assertTrue(os.path.exists(sig), "the floor may not take the only copy either")
+
+    def test_a_signature_the_ledger_records_as_uploaded_is_evicted_by_age(self):
+        url = "https://example.invalid/listed"
+        self._bucket(True, signed={harvest._sig_key(url)[:-4]})
+        sig = self._signature(url, age_s=40 * 86400)
+        cache_budget.run_eviction("chroma")
+        self.assertFalse(os.path.exists(sig), "the bucket holds it: the local copy may go")
+
+    def test_a_signature_a_head_verified_is_evicted_by_the_floor(self):
+        url = "https://example.invalid/headed"
+        self._bucket(True, verified={harvest._sig_key(url): 100})
+        sig = self._signature(url, size=100)
+        self._past_the_floor()
+        cache_budget.run_eviction()
+        self.assertFalse(os.path.exists(sig))
+
+    def test_a_head_of_a_different_size_does_not_count_as_verified(self):
+        url = "https://example.invalid/short"
+        self._bucket(True, verified={harvest._sig_key(url): 99})
+        sig = self._signature(url, size=100, age_s=40 * 86400)
+        cache_budget.run_eviction("chroma")
+        self.assertTrue(os.path.exists(sig))
+
+    def test_a_signed_row_whose_etag_was_cleared_is_pinned(self):
+        """`reconcile_ledger` clears the etag of a row whose object left the bucket: the
+        local file is the only copy again."""
+        url = "https://example.invalid/gone-from-bucket"
+        self._bucket(True, signed={harvest._sig_key(url)[:-4]}, etag=None)
+        sig = self._signature(url, age_s=40 * 86400)
+        cache_budget.run_eviction("chroma")
+        self.assertTrue(os.path.exists(sig))
+
+    def test_with_the_bucket_off_nothing_ages_out(self):
+        self._bucket(False)
+        sig = self._signature("https://example.invalid/bucketless", age_s=400 * 86400)
+        cache_budget.run_eviction("chroma")
+        self.assertTrue(os.path.exists(sig))
+
+    def test_with_the_bucket_off_an_age_set_by_hand_takes_nothing_either(self):
+        os.environ["NETRADIO_CHROMA_CACHE_MAX_AGE_DAYS"] = "1"
+        self._bucket(False)
+        sig = self._signature("https://example.invalid/bucketless", age_s=40 * 86400)
+        cache_budget.run_eviction("chroma")
+        self.assertTrue(os.path.exists(sig), "no bucket: every signature is pinned")
 
 
 @unittest.skipIf(harvest is None, "needs the librosa venv")
