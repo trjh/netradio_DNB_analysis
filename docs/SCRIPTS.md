@@ -150,11 +150,11 @@ pidfile whose process is gone or is now something else, and takes a lock directo
 pidfile. `stop` asks for a clean exit and waits up to 30 seconds for it
 (`NETRADIO_HARVEST_STOP_WAIT_S`) before it resorts to `kill -9`. `status` prints whether it is
 up, its pid, the `updated` stamp in `.harvest/state.json` (set at the end of each signing
-pass, so it stands still while the harvester is paused or idle), and whether the ledger is
-there — and **an absent ledger is a normal answer**, not an error: before the signing pass
-has run once there is nothing signed and no candidates, which is exactly what a fresh clone
-looks like. Same shape as the align server's `scripts/run_align.sh`, deliberately, so the two
-read alike.
+pass, so it stands still while the harvester is paused, idle, or mid-decode of a long file),
+and whether the ledger is there — and **an absent ledger is a normal answer**, not an error:
+before the signing pass has run once there is nothing signed and no candidates, which is
+exactly what a fresh clone looks like. Same shape as the align server's `scripts/run_align.sh`,
+deliberately, so the two read alike.
 
 **`start` and `restart` take one optional argument, `--accept-ledger-rebuild`**, forwarded to
 `harvest.py --run` unchanged and only for that one start — the operator's override for the
