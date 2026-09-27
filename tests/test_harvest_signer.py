@@ -891,7 +891,6 @@ class TheLedger(_SignerCase):
         self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["status"], "delayed")
 
 
-@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
 class TheKeyRule(unittest.TestCase):
     """`_sig_key` is this side's one copy of the URL-to-key rule, kept for the one-time move of
     old match rows onto keys. Whoever feeds the directories applies the same rule to name its
@@ -906,6 +905,7 @@ class TheKeyRule(unittest.TestCase):
         self.assertEqual(name[:-len(".npy")], "udf2c6f7afc1a58783e15")   # the key is the stem
 
 
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
 class MatchRowsCarryTheKey(_SignerCase):
     """A match row joins on the key, and the old rows move onto it at first start."""
 
