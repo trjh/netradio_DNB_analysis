@@ -1,7 +1,7 @@
 """The retired set is a file another process writes -- the search reads only the keys.
 
 The harvester used to derive its never-again set -- every key the search must not propose,
-for any mystery, present or future -- from the listen queue's ruling flags, read directly every
+for any mystery, present or future -- from the queue's ruling flags, read directly every
 pass. The rulings are the writer's own, so the file it computes them into is too:
 `.harvest/rulings.json`, `{key: reason}`, written whole and atomically at its start and after
 every ruling. These tests pin the read side: which keys the file retires, that nothing else is
