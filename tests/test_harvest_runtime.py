@@ -581,7 +581,7 @@ class TheOnDemandRescanRefusesADarkPolicy(unittest.TestCase):
     counted the pairs (a bucket-held signature reads as held), `_load_sig` answered None for
     every one, and the run stamped `rescan_pending` to 0 over "Every cached signature has now
     met every mystery" -- a completion claim about work that never ran, where every sibling
-    mode refuses (run(), --migrate-sigs, --requeue-missing-sigs).
+    mode refuses (run(), --migrate-sigs).
     It refuses now, before the query set is even read, with the message --migrate-sigs uses."""
 
     def test_rescan_refuses_before_the_query_set_is_read(self):
