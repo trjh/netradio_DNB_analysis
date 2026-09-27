@@ -15,6 +15,7 @@ No network and no audio: `fetch` is injected, and the local-file paths are stubb
 """
 
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -35,6 +36,7 @@ class OfflineCanary(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         selftest.RESULT = os.path.join(self.tmp, "selftest.json")
         selftest.CANARY = os.path.join(self.tmp, "canary.json")
         self.cases = [{"num": n, "orig": "/x/%d.wav" % n, "name": "T%d" % n,
@@ -101,6 +103,7 @@ class OfflineCanary(unittest.TestCase):
 class LiveCanary(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         selftest.RESULT = os.path.join(self.tmp, "selftest.json")
         selftest.CANARY = os.path.join(self.tmp, "canary.json")
         self.case = {"num": 1, "orig": "/x/1.wav", "name": "Dead Calm - Urban Style",

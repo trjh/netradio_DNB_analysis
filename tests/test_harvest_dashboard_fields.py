@@ -163,7 +163,9 @@ class PoolStamp(unittest.TestCase):
 class QueryKeysArePublished(unittest.TestCase):
     def test_queries_publishes_the_current_key_per_mystery(self):
         state = {}
-        clip = os.path.join(tempfile.mkdtemp(prefix="qk_"), "Mystery Track 4.wav")
+        clip_dir = tempfile.mkdtemp(prefix="qk_")
+        self.addCleanup(shutil.rmtree, clip_dir, True)
+        clip = os.path.join(clip_dir, "Mystery Track 4.wav")
         open(clip, "wb").close()
         fake_audio = types.SimpleNamespace(SR=harvest._audio.SR,
                                            duration=lambda p: 120.0,
