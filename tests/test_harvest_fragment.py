@@ -122,12 +122,17 @@ class TheFragment(unittest.TestCase):
 
     def test_each_chunk_of_one_master_has_its_own_key(self):
         """The fragment stays in the URL, so the signature key is per chunk -- which is the whole
-        mechanism: two chunks of one master must not share a cached signature."""
-        base = "https://y/watch?v=long"
-        first = harvest.sig_path(base + "#t=0,7200")
-        second = harvest.sig_path(base + "#t=7200,14400")
-        self.assertNotEqual(first, second)
-        self.assertNotEqual(first, harvest.sig_path(base))
+        mechanism: two chunks of a master must not share a cached signature."""
+        # A directory is patched in because the signature cache has no directory at all while
+        # the cache policy is dark; the KEYS are what is under test, not the path.
+        tmp = tempfile.mkdtemp(prefix="sig-keys-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        with mock.patch.object(harvest, "CACHE", os.path.join(tmp, "cache")):
+            base = "https://y/watch?v=long"
+            first = harvest.sig_path(base + "#t=0,7200")
+            second = harvest.sig_path(base + "#t=7200,14400")
+            self.assertNotEqual(first, second)
+            self.assertNotEqual(first, harvest.sig_path(base))
 
 
 @unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")

@@ -48,6 +48,7 @@ from streamalign import groundtruth as _gt       # noqa: E402
 from streamalign import track_mix as _tm         # noqa: E402
 from streamalign import tracklist2017 as _tl     # noqa: E402
 
+import cache_budget                                # noqa: E402  (the machine's one cache policy)
 import chroma_recipe                              # noqa: E402  (THE recipe, single source)
 
 HOP = chroma_recipe.HOP
@@ -119,15 +120,28 @@ def build_cases(tracks, starts, src):
                 if ms <= mb and me <= ms + _audio.duration_seconds(stem):
                     cap = (stem, ms)
                     break
-        # a clean extract, if extract_tracks.py has made one
+        # a clean extract, if extract_tracks.py has made one: the stream_tracks cache's
+        # directory (the same variable that tool's --out defaults to)
         ex = None
-        exdir = os.path.expanduser(os.environ.get("NETRADIO_TRACKS_DIR",
-                                                  "~/media/netradio-tracks"))
-        if os.path.isdir(exdir):
-            for f in os.listdir(exdir):
-                if f.startswith("%03d - " % int(num)):
-                    ex = os.path.join(exdir, f)
-                    break
+        exdir = os.environ.get("NETRADIO_STREAM_TRACKS_CACHE_DIR", "").strip()
+        if exdir:
+            exdir = os.path.expanduser(exdir)
+        else:
+            root = cache_budget.root()      # None while the cache policy is dark
+            exdir = os.path.join(root, "stream_tracks") if root else None
+        if exdir and os.path.isdir(exdir):
+            # The .flac re-cut wins over any .wav the old tool left beside it: during the
+            # cut-over both exist for a track, and raw listdir order is filesystem order,
+            # which could read one track's .wav and another's .flac in the same run. The
+            # same cut either way -- this is for determinism, and the wav still serves a
+            # directory the re-cut has not reached yet.
+            matches = sorted(f for f in os.listdir(exdir)
+                             if f.startswith("%03d - " % int(num)))
+            flac = [f for f in matches if f.endswith(".flac")]
+            if flac:
+                ex = os.path.join(exdir, flac[0])
+            elif matches:
+                ex = os.path.join(exdir, matches[0])
         if cap or ex:
             cases.append({"num": int(num), "orig": orig,
                           "cap": cap[0] if cap else None,

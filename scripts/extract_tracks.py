@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Cut every well-defined track OUT of the mix, reassembling across captures where it must.
 
-    . .venv/bin/activate && python scripts/extract_tracks.py --out ~/media/netradio-tracks
     . .venv/bin/activate && python scripts/extract_tracks.py --dry-run
+    . .venv/bin/activate && python scripts/extract_tracks.py
+
+The cuts land in the `stream_tracks` cache (below), as FLAC: each cut is written whole
+under a temporary name and renamed into its final `.flac` name once ffmpeg has it, so a
+cache eviction between the two can never leave a partial cut wearing the final name.
 
 Why
 ---
@@ -45,16 +49,81 @@ future bug will hide.
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import cache_budget                              # noqa: E402  (the machine's one cache policy)
 from streamalign import audio as _audio          # noqa: E402
 from streamalign import groundtruth as _gt       # noqa: E402
 from streamalign import tracklist2017 as _tl     # noqa: E402
 
 MIN_S = 30.0
+
+# --- the tracks cache, on the machine's one cache policy ------------------------------------
+#
+# Every cut lands in the `stream_tracks` cache: the tracks as they played, reassembled across
+# captures -- derived from captures this repo already holds, and re-cut in minutes. The policy
+# bounds it: cap NETRADIO_STREAM_TRACKS_CACHE_GB (default 2 GB -- the flac set is a little over
+# that, so the oldest re-cuts rotate out and come back by re-cut), age
+# NETRADIO_STREAM_TRACKS_CACHE_MAX_AGE_DAYS (default 14 -- a calibration run is a day's work,
+# a re-cut is minutes), directory NETRADIO_STREAM_TRACKS_CACHE_DIR (default
+# $NETRADIO_CACHE_ROOT/stream_tracks). While NETRADIO_CACHE_ROOT is unset there is no default
+# directory at all: pass --out, or set the root in .env.
+STREAM_TRACKS_CACHE = "stream_tracks"
+STREAM_TRACKS_CACHE_GB = 2
+STREAM_TRACKS_CACHE_MAX_AGE_DAYS = 14
+
+
+def tracks_dir():
+    """The tracks cache's directory: NETRADIO_STREAM_TRACKS_CACHE_DIR, else
+    $NETRADIO_CACHE_ROOT/stream_tracks, else None (no --out default)."""
+    d = os.environ.get("NETRADIO_STREAM_TRACKS_CACHE_DIR", "").strip()
+    if d:
+        return os.path.expanduser(d)
+    root = cache_budget.root()
+    return os.path.join(root, "stream_tracks") if root else None
+
+
+def register_cache():
+    """Put the tracks cache on the one cache policy, reading the environment now. Returns the
+    record, or None while the policy is dark (NETRADIO_CACHE_ROOT unset) or the directory is
+    refused."""
+    # rank 8: of the caches sharing the policy's floor, the tracks give up entries after the
+    # decoded captures and signatures -- each one comes back by a re-cut. The literal name,
+    # not the constant above, so env_check.py's code scan sees the registration and counts
+    # its variable family as read.
+    return cache_budget.register("stream_tracks",
+                                 cap=int(STREAM_TRACKS_CACHE_GB * cache_budget.GB),
+                                 max_age=STREAM_TRACKS_CACHE_MAX_AGE_DAYS,
+                                 refill="re-extract", rank=8)
+
+
+register_cache()                  # at import: the wrapper sources .env before any import
+
+
+def _discard(tmp):
+    """Remove a write-in-progress file whose write is over. Nothing to report if it is
+    already gone, or if the directory will not give it up -- the policy evicts a stale
+    .tmp on its own once it is an hour old."""
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+
+
+def _on_policy(out_path):
+    """True when a cut landing at `out_path` lands inside the registered tracks cache, so its
+    write goes through the policy. A --out outside the cache is the operator's own directory:
+    written as before, not accounted."""
+    d = cache_budget.dir_of(STREAM_TRACKS_CACHE)
+    if not d or not out_path:
+        return False
+    a, b = os.path.realpath(out_path), os.path.realpath(d)
+    return os.path.commonpath([a, b]) == b
 
 
 def imprecise(stem):
@@ -102,24 +171,132 @@ def plan(mb, me, places):
 
 
 def cut(stem, m_from, m_to, cstart, out_path):
+    """Cut [m_from, m_to) of the master out of `stem` into `out_path`, as FLAC.
+
+    Through the cache policy when the cut lands inside the registered tracks cache: `reserve`
+    first (the cut's length is not known until ffmpeg has run, so an unplanned one -- admitted
+    while the cache is under its cap) and `commit` after. A refusal (the disk past its floor,
+    the cap with nothing evictable) skips the cut and returns False.
+
+    The write lands whole under a `.tmp` name -- the policy's write-in-progress mark, held by
+    every eviction run while it is fresh -- and is renamed into place only once ffmpeg has
+    succeeded, so the final name never exists as a half-written file another writer's
+    eviction could take. The tmp's extension says nothing, so the container is named for it
+    explicitly; the final keeps the cut's `.flac` name. After the commit the cut verifies its
+    own landing: a bounded cache may lose any entry at any time, and an eviction run that
+    starts between the rename and the commit can take a cut not yet recorded -- what a
+    writer must never do is report success over a path that is not there.
+
+    A refusal returns False and the caller prints the reason: the disk past its floor, or
+    the cap with nothing evictable -- the two things `reserve` can refuse for.
+    """
     src = _audio.find_audio_file(stem)
     lo = m_from - cstart
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "%.4f" % lo,
-                    "-t", "%.4f" % (m_to - m_from), "-i", src,
-                    "-ac", "2", "-ar", "44100", out_path], check=True)
+    policy = _on_policy(out_path)
+    if policy and not cache_budget.reserve(STREAM_TRACKS_CACHE, None):
+        return False
+    tmp = "%s.%d.tmp" % (out_path, os.getpid())
+    try:
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "%.4f" % lo,
+                        "-t", "%.4f" % (m_to - m_from), "-i", src,
+                        "-ac", "2", "-ar", "44100", "-f", "flac", tmp], check=True)
+        os.replace(tmp, out_path)
+    except BaseException:
+        # ffmpeg failing (a capture that will not decode) leaves its .tmp inside the
+        # cache, where it counts against the cap and is held from eviction for an hour.
+        # Clear it here rather than waiting out that hour: the write is over.
+        _discard(tmp)
+        raise
+    if policy:
+        cache_budget.commit(STREAM_TRACKS_CACHE, out_path)
+    return os.path.isfile(out_path)
+
+
+def assemble_track(pieces, starts, out):
+    """Reassemble a track that straddles capture boundaries into `out`, and land it under
+    the same policy gate a direct cut uses: one `reserve` before the assembled file, one
+    `commit` after. Returns False when the policy refuses the room.
+
+    The part files and the concat list live in a scratch directory OUTSIDE the cache: a
+    policy run may evict anything inside the cache's directory to make room, and an active
+    part is not an entry to give up -- a concat that lost a part mid-flight would leave a
+    partial track wearing the final name. Only the assembled track lands in the cache, and
+    it lands whole the same way a direct cut does: written under a `.tmp` the policy holds,
+    renamed into place once the concat succeeds."""
+    scratch = tempfile.mkdtemp(prefix="stream-tracks-parts-")
+    try:
+        parts = []
+        for i, (stem, a, b) in enumerate(pieces):
+            p = os.path.join(scratch, "part%d.flac" % i)
+            if not cut(stem, a, b, starts[stem], p):
+                return False
+            parts.append(p)
+        lst = os.path.join(scratch, "concat.txt")
+        with open(lst, "w") as fh:
+            for p in parts:
+                fh.write("file '%s'\n" % p.replace("'", "'\\''"))
+        policy = _on_policy(out)
+        if policy and not cache_budget.reserve(STREAM_TRACKS_CACHE, None):
+            return False
+        tmp = "%s.%d.tmp" % (out, os.getpid())
+        try:
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0",
+                            "-i", lst, "-c", "copy", "-f", "flac", tmp], check=True)
+            os.replace(tmp, out)
+        except BaseException:
+            _discard(tmp)                   # see cut() for the reason
+            raise
+        if policy:
+            cache_budget.commit(STREAM_TRACKS_CACHE, out)
+        # The same landing check a direct cut makes (see there for the reason): never report
+        # success over a path an eviction between the rename and the commit took away.
+        return os.path.isfile(out)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
 
 
 def safe(name):
     return "".join(c if (c.isalnum() or c in " -_&.,'()") else "_" for c in name).strip()[:90]
 
 
+def resolve_out(explicit_out=None):
+    """(directory, None) to cut into, or (None, the refusal to print and exit on).
+
+    The default must be a REGISTERED cache. A directory the policy refused (one that
+    overlaps another cache's, or holds the cache root) is a misconfiguration, and cutting
+    into it unbounded -- no cap, no age sweep, no accounting -- is the growth this tool's
+    cache exists to end; refuse and name the setting, as the harvester refuses to run on a
+    cache that did not register. An explicit --out is the operator's own directory and may
+    be anywhere, accounted or not. A --dry-run never reaches a directory at all (main()
+    lets it past this refusal: it plans cuts, it writes none)."""
+    out = explicit_out or tracks_dir()
+    if not out:
+        return None, ("no tracks directory: set NETRADIO_CACHE_ROOT (or "
+                      "NETRADIO_STREAM_TRACKS_CACHE_DIR) in .env -- see .env.example -- or "
+                      "pass --out")
+    if explicit_out is None and cache_budget.dir_of(STREAM_TRACKS_CACHE) != out:
+        return None, ("the tracks cache did not register on the policy: %s\n"
+                      "Its directory may overlap another cache's, or hold the cache root. Fix "
+                      "NETRADIO_STREAM_TRACKS_CACHE_DIR (or NETRADIO_CACHE_ROOT) in .env, or "
+                      "pass --out to cut into a directory of your own -- with no cap, no age "
+                      "limit and no accounting." % out)
+    return out, None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", default=os.path.expanduser("~/media/netradio-tracks"))
+    ap.add_argument("--out", default=None,
+                    help="where the cuts land (default: the stream_tracks cache -- "
+                         "NETRADIO_STREAM_TRACKS_CACHE_DIR, else $NETRADIO_CACHE_ROOT/stream_tracks)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--only", type=int, action="append")
     args = ap.parse_args()
+    args.out, why = resolve_out(args.out)
+    if why and not args.dry_run:
+        # --dry-run writes nothing, so it needs no directory: the module's own docstring
+        # offers it as the first thing to try on a bare clone, before any settings exist.
+        sys.exit(why)
 
     meta = json.load(open(os.path.join(_gt.REPO_ROOT, "track-metadata.json")))
     tracks = meta.get("tracks", meta)
@@ -149,8 +326,6 @@ def main():
         if pieces is None:
             print("  %3s SKIP  %-42s %s" % (num, title[:42], why)); skipped += 1; continue
 
-        name = "%03d - %s.wav" % (int(num), safe(title))
-        out = os.path.join(args.out, name)
         tag = "" if len(pieces) == 1 else "  [%d pieces: %s]" % (
             len(pieces), " + ".join(p[0] for p in pieces))
         if len(pieces) > 1:
@@ -159,24 +334,30 @@ def main():
               % (num, title[:42], me - mb, pieces[0][0], tag))
         if args.dry_run:
             continue
+        name = "%03d - %s.flac" % (int(num), safe(title))
+        out = os.path.join(args.out, name)
 
+        # One policy gate per track: a direct cut reserves and commits itself; the
+        # reassembly lands its assembled file under the same gate (its parts stay outside
+        # the cache -- see assemble_track).
         if len(pieces) == 1:
             stem, a, b = pieces[0]
-            cut(stem, a, b, starts[stem], out)
+            landed = cut(stem, a, b, starts[stem], out)
         else:
-            parts = []
-            for i, (stem, a, b) in enumerate(pieces):
-                p = out + ".part%d.wav" % i
-                cut(stem, a, b, starts[stem], p)
-                parts.append(p)
-            lst = out + ".txt"
-            with open(lst, "w") as fh:
-                for p in parts:
-                    fh.write("file '%s'\n" % p.replace("'", "'\\''"))
-            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0",
-                            "-i", lst, "-c", "copy", out], check=True)
-            for p in parts + [lst]:
-                os.unlink(p)
+            landed = assemble_track(pieces, starts, out)
+        if not landed:
+            # Two different things end here, and the message names both. `reserve` can
+            # refuse the room; or the cut landed and an eviction took it back before the
+            # policy had recorded it, in which case there is nothing to free and a re-run
+            # is the whole remedy. Naming only the first sends an operator hunting for
+            # disk space they do not need.
+            print("  %3s SKIP  %-42s the cut did not land: the policy refused the room "
+                  "(the disk is past its floor, or the tracks cache is over its cap with "
+                  "nothing evictable), or an eviction took the cut back before the policy "
+                  "recorded it -- that one needs only a re-run"
+                  % (num, title[:42]))
+            skipped += 1
+            continue
         made += 1
 
     print("\n# %d extracted (%d needed reassembly across captures), %d refused"
