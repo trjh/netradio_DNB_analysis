@@ -1054,10 +1054,14 @@ def reconcile_ledger(state=None, accept_rebuild=False):
             whys.append("%d of %d signed rows have lost their sidecar from the listing "
                         "(%.0f%% > the %.0f%% cap) -- NOT demoting them"
                         % (len(lost), len(signed), 100.0 * len(lost) / corpus, cap * 100))
+        # The override named here must work in the state this alert stands in: a start that
+        # got here past the rebuild threshold (a mass signature loss always is) is refused
+        # again without the rebuild's own flag.
         why = ("; ".join(whys) + ": a loss that size means the store broke, not the rows. "
                "Check the bucket endpoint/profile and the listing; if the loss is REAL, the "
                "deliberate override is: NETRADIO_RECONCILE_DROP_CAP=1 "
-               ".venv/bin/python scripts/harvest.py --sign-one <key>")
+               ".venv/bin/python scripts/harvest.py --sign-one <key>"
+               + (" --accept-ledger-rebuild" if pct > limit else ""))
         first = "sig_alert" not in state
         state["sig_alert"] = {"at": _now(), "kind": "store", "missing": len(gone),
                               "sidecars_missing": len(lost), "corpus": len(signed),
