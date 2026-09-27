@@ -1138,6 +1138,26 @@ class TheLedgerRebuild(_SignerCase):
         self._reconcile(self._complete(*keys), state)
         self.assertEqual(state["sig_alert"]["kind"], "canary")
 
+    def test_the_store_alerts_override_works_past_the_rebuild_threshold(self):
+        """A mass signature loss is past both the rebuild threshold and the drop cap. The
+        store alert raised after an accepted rebuild must name a command that is not refused
+        again by the rebuild: the drop cap's override composed with the rebuild's flag."""
+        keys = self._keys(10)
+        harvest._save(harvest.LEDGER, self._signed(keys))
+        objects = self._complete(keys[0])                       # nine of ten signatures gone
+        state = {"issues": []}
+        self.assertTrue(self._reconcile(objects, state)["refused"])
+        res = self._reconcile(objects, state, accept_rebuild=True)
+        self.assertTrue(res["reported"])
+        self.assertEqual(state["sig_alert"]["kind"], "store")
+        self.assertIn("--sign-one <key> --accept-ledger-rebuild", state["sig_alert"]["why"])
+        os.environ["NETRADIO_RECONCILE_DROP_CAP"] = "1"
+        self.assertTrue(self._reconcile(objects, state)["refused"],
+                        "the drop cap's override alone is refused by the rebuild")
+        res = self._reconcile(objects, state, accept_rebuild=True)
+        self.assertEqual(res["dropped"], 9, "composed, the two overrides drop the etags")
+        self.assertNotIn("sig_alert", state)
+
     def test_an_unlistable_bucket_refuses_nothing(self):
         harvest._save(harvest.LEDGER, self._signed(self._keys(2)))
         state = {"issues": []}

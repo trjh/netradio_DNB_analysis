@@ -174,7 +174,8 @@ default 10% of the signed corpus, judged separately for lost signatures and lost
 the reconciliation **reports** — a standing `sig_alert` of kind `store`, one that stands
 down by itself on the first start that finds the loss gone — and touches nothing on that
 side: a mass drop means the store broke, not the rows, and would put the whole pool back on
-the feeder's list over a configuration fault. **One writer, enforced:** both writer
+the feeder's list over a configuration fault. A mass signature loss is also past the rebuild
+threshold, so the override the alert names then carries `--accept-ledger-rebuild` as well. **One writer, enforced:** both writer
 paths (`--run`, `--sign-one`) hold the same flock (`harvest.WRITER_LOCK`, under its historic
 `collector.lock` name) for their lifetime — a second writer, including the hand tool under a
 running daemon, refuses loudly instead of interleaving.
