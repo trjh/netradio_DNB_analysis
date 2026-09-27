@@ -906,31 +906,95 @@ def _row(key, size, mtime, status, reason, signed_at, uploaded_etag, sidecar):
             **_sidecar_row_fields(sidecar)}
 
 
-def reconcile_ledger(state=None):
-    """Seed the ledger at first start, and reconcile it against the bucket's listing on every
-    writer start. This replaces the old lost-signature recovery: the `done` lists are gone,
-    and the listing is the only record of what is signed.
+def _rows_from_listing(objects):
+    """The bucket-derived rows, the seed's rule: one `signed` row per key whose `.npy` and
+    `.json` are both listed, `delayed missing_sidecar` for a signature with no sidecar."""
+    rows = {}
+    # A `signed` row is the contract's promise that both `<key>.npy` and `<key>.json`
+    # landed together (docs/HARVEST_FEED.md). The listing carries both shapes, so a
+    # signature whose companion sidecar is NOT in the bucket -- a legacy object from
+    # before the sidecar was mandatory, or a half-landed sign the bucket held onto --
+    # is NOT marked complete: it is `delayed` with `missing_sidecar`, and the feeder
+    # re-feeds the key (the row's size and mtime are empty, so any local file differs
+    # and the scan proposes it for a fresh sign that re-uploads both).
+    for name, etag in objects.items():
+        if not name.endswith(".npy"):
+            continue                           # the sidecar entries are checked per signature
+        key = name[:-len(".npy")]
+        if (key + ".json") in objects:
+            rows[key] = _row(key, None, None, "signed", None, None, etag or None, {})
+        else:
+            rows[key] = _row(key, None, None, "delayed", "missing_sidecar", None, None, {})
+    return rows
 
-      * the ledger is EMPTY -> seed one `signed` row per bucket key, `size` and `mtime`
-        empty: the ledger is the complete record of the pool from its first day.
+
+def _holds_signature(row):
+    """The ledger says the bucket holds this key's signature: a `signed` row, or a `delayed
+    missing_sidecar` one (the signature without its sidecar)."""
+    return isinstance(row, dict) and (row.get("status") == "signed" or
+                                      (row.get("status") == "delayed"
+                                       and row.get("reason") == "missing_sidecar"))
+
+
+def ledger_rebuild_diff(ledger, rebuilt):
+    """`(differ, keys)`: the keys the ledger and the rebuild disagree on, and every key with a
+    row on either side. A key disagrees when the ledger says the bucket holds its signature
+    and the rebuild has no row for it, or when the rebuild has a row and the ledger has none.
+    A verdict row for a key with no object agrees with the rebuild's silence."""
+    keys = set(ledger) | set(rebuilt)
+    differ = sum(1 for k in keys
+                 if (k not in rebuilt and _holds_signature(ledger.get(k)))
+                 or (k in rebuilt and k not in ledger))
+    return differ, len(keys)
+
+
+def _alert_kind(alert):
+    """The kind of a standing `sig_alert`. An alert written before the field existed carries
+    the store-loss shape (`missing`), so it is read as `store`; any other shape is unknown."""
+    if not isinstance(alert, dict):
+        return None
+    if "kind" in alert:
+        return alert.get("kind")
+    return "store" if "missing" in alert else None
+
+
+def reconcile_ledger(state=None, accept_rebuild=False):
+    """Seed the ledger at first start; at every later writer start, rebuild it from the
+    bucket's listing, compare, and merge the rebuild in. This replaces the old lost-signature
+    recovery: the `done` lists are gone, and the listing is the only record of what is signed.
+
+      * the ledger is EMPTY -> seed one `signed` row per complete bucket key, `size` and
+        `mtime` empty: the ledger is the complete record of the pool from its first day.
+      * otherwise the listing's rows are written to `ledger.rebuild.json` beside the ledger
+        and compared with it (`ledger_rebuild_diff`). A difference past
+        `NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT` (default 10) REFUSES the start: a standing
+        `sig_alert` of kind `ledger` names the counts and the override, and nothing is
+        touched. `accept_rebuild` (the `--accept-ledger-rebuild` argument) merges it anyway,
+        for that one start. At or under the threshold, the alert of kind `ledger` stands down.
+      * the merge adds every rebuild row the ledger has no row for, and never replaces a row
+        the ledger has -- a `delayed` verdict is never dropped. Then, per row:
       * a `signed` row whose object is GONE -> loses its `uploaded_etag`, so the feeder feeds
         that key again.
       * a `signed` row missing its etag whose object is THERE -> gains it: a failed upload that
         a later run landed must stop the feeder re-feeding a key the bucket already holds.
+      * a `signed` row whose SIDECAR is gone -> demoted to `delayed missing_sidecar`.
+      * a `delayed missing_sidecar` row whose two objects are both listed -> promoted back to
+        `signed`, with the listed etag and `signed_at` the time of the promotion.
       * the bucket cannot be LISTED -> nothing at all. "Unknown" is never "gone": with the
         listing dark, a bucket-held signature and a missing one are indistinguishable.
-      * more than the cap of signed rows would lose their etags -> the STORE broke, not the
-        rows. Report (a standing `state["sig_alert"]`) and touch nothing: a mass drop would
-        put every key back on the feeder's list for days over a configuration fault, exactly
-        the loss the old recovery's cap existed to prevent. The alert stands down on the
-        first later reconcile that does not report: an alarm that outlives the healed store
-        it was raised over is a page reporting a break that is gone.
+      * more than the cap of signed rows would lose their etags, or their sidecars -> the
+        STORE broke, not the rows. Each loss is judged on its own, over the signed rows: past
+        the cap that side is left untouched and a standing `sig_alert` of kind `store`
+        reports it. The alert stands down on the first later reconcile that does not report:
+        an alarm that outlives the healed store it was raised over is a page reporting a break
+        that is gone.
 
     Mutates the caller's `state` when it keeps one (run does); loads its own otherwise.
-    Returns {"seeded", "dropped", "restored", "reported", "cleared", "why"}.
+    Returns {"seeded", "merged", "dropped", "restored", "sidecar_lost", "promoted",
+    "reported", "refused", "cleared", "why"}.
     """
-    res = {"seeded": 0, "dropped": 0, "restored": 0, "reported": False,
-           "cleared": False, "sidecar_lost": 0}
+    res = {"seeded": 0, "merged": 0, "dropped": 0, "restored": 0, "sidecar_lost": 0,
+           "promoted": 0, "reported": False, "refused": False, "cleared": False}
     objects = _remote_objects()
     if objects is None:
         return dict(res, why="the bucket cannot be listed -- cannot tell a gone object from "
@@ -938,101 +1002,145 @@ def reconcile_ledger(state=None):
     if state is None:
         state = _load(STATE, blank_state())
     ledger = load_ledger()
+    rebuilt = _rows_from_listing(objects)
 
     if not ledger:
-        rows = {}
-        # A `signed` row is the contract's promise that both `<key>.npy` and `<key>.json`
-        # landed together (docs/HARVEST_FEED.md). The listing carries both shapes, so a
-        # signature whose companion sidecar is NOT in the bucket -- a legacy object from
-        # before the sidecar was mandatory, or a half-landed sign the bucket held onto --
-        # is NOT marked complete: it is seeded `delayed` with `missing_sidecar`, and the
-        # feeder re-feeds the key (the row's size and mtime are empty, so any local file
-        # differs and the scan proposes it for a fresh sign that re-uploads both).
-        for name, etag in objects.items():
-            if not name.endswith(".npy"):
-                continue                       # the sidecar entries are checked per signature
-            key = name[:-len(".npy")]
-            has_sidecar = (key + ".json") in objects
-            if has_sidecar:
-                rows[key] = _row(key, None, None, "signed", None, None, etag or None, {})
-            else:
-                rows[key] = _row(key, None, None, "delayed", "missing_sidecar", None, None, {})
-        _save(LEDGER, rows)
-        seeded = sum(1 for r in rows.values() if r.get("status") == "signed")
+        _save(LEDGER, rebuilt)
+        seeded = sum(1 for r in rebuilt.values() if r.get("status") == "signed")
         return dict(res, seeded=seeded,
                     why="seeded one signed row per complete bucket key (signature plus "
                         "sidecar); legacy signature-only keys are delayed missing_sidecar "
                         "-- the ledger is the pool's complete record from its first day")
 
-    signed = [k for k, r in ledger.items()
-              if isinstance(r, dict) and r.get("status") == "signed"]
-    gone = [k for k in signed if (k + ".npy") not in objects]
-    cap = _reconcile_cap()
-    if len(gone) > cap * max(1, len(signed)):
-        why = ("%d of %d signed rows point at objects the listing does not hold (%.0f%% > the "
-               "%.0f%% cap) -- NOT dropping their etags: a loss that size means the store "
-               "broke, not the rows. Check the bucket endpoint/profile and the listing; if the "
-               "loss is REAL, the deliberate override is: NETRADIO_RECONCILE_DROP_CAP=1 "
-               ".venv/bin/python scripts/harvest.py --sign-one <key>"
-               % (len(gone), len(signed), 100.0 * len(gone) / max(1, len(signed)), cap * 100))
-        first = "sig_alert" not in state
-        state["sig_alert"] = {"at": _now(), "kind": "store", "missing": len(gone),
-                              "corpus": len(signed), "why": why}
+    # THE REBUILD, compared before anything is merged. A ledger lost or restored from an old
+    # copy, or a bucket that lists another pool, reads as a large difference: past the
+    # threshold the start is refused, because a merge would silently rewrite the record.
+    rebuild_path = _rebuild_path()
+    _save(rebuild_path, rebuilt)
+    differ, keys = ledger_rebuild_diff(ledger, rebuilt)
+    pct = 100.0 * differ / max(1, keys)
+    limit = _rebuild_max_diff_pct()
+    if pct > limit and not accept_rebuild:
+        why = ("the ledger and its rebuild from the bucket listing differ on %d of %d keys "
+               "(%.1f%% > the %.1f%% threshold): the ledger has %d rows, the rebuild %d "
+               "(written to %s). Not starting: a merge would rewrite the record over what may "
+               "be a wrong bucket or a lost ledger. Check the bucket endpoint/profile and the "
+               "ledger; if the rebuild is RIGHT, start once with: "
+               ".venv/bin/python scripts/harvest.py --run --accept-ledger-rebuild"
+               % (differ, keys, pct, limit, len(ledger), len(rebuilt),
+                  os.path.basename(rebuild_path)))
+        first = _alert_kind(state.get("sig_alert")) != "ledger"
+        state["sig_alert"] = {"at": _now(), "kind": "ledger", "differ": differ, "keys": keys,
+                              "ledger_rows": len(ledger), "rebuild_rows": len(rebuilt),
+                              "pct": round(pct, 1), "threshold_pct": limit,
+                              "override": "scripts/harvest.py --run --accept-ledger-rebuild",
+                              "why": why}
         if first:
             state["issues"] = ((state.get("issues") or []) +
                                [{"at": _now(), "issue": "ledger: " + why}])[-50:]
-        return dict(res, reported=True, why=why)
+        return dict(res, refused=True, why=why)
+    if _alert_kind(state.get("sig_alert")) == "ledger":
+        state.pop("sig_alert", None)
+        res["cleared"] = True                 # the rebuild agrees (or was accepted)
+    if accept_rebuild and pct > limit:
+        state["issues"] = ((state.get("issues") or []) + [{
+            "at": _now(), "issue": "ledger: the rebuild from the bucket listing differed on %d "
+                                   "of %d keys (%.1f%%) and was merged by "
+                                   "--accept-ledger-rebuild" % (differ, keys, pct)}])[-50:]
+    for key, row in rebuilt.items():
+        if key not in ledger:
+            ledger[key] = row
+            res["merged"] += 1
+    _unlink(rebuild_path)
+
+    signed = [k for k, r in ledger.items()
+              if isinstance(r, dict) and r.get("status") == "signed"]
+    gone = [k for k in signed if (k + ".npy") not in objects]
+    lost = [k for k in signed if (k + ".npy") in objects and (k + ".json") not in objects]
+    cap = _reconcile_cap()
+    corpus = max(1, len(signed))
+    hold_drops = len(gone) > cap * corpus
+    hold_demotions = len(lost) > cap * corpus
+    if hold_drops or hold_demotions:
+        whys = []
+        if hold_drops:
+            whys.append("%d of %d signed rows point at objects the listing does not hold "
+                        "(%.0f%% > the %.0f%% cap) -- NOT dropping their etags"
+                        % (len(gone), len(signed), 100.0 * len(gone) / corpus, cap * 100))
+        if hold_demotions:
+            whys.append("%d of %d signed rows have lost their sidecar from the listing "
+                        "(%.0f%% > the %.0f%% cap) -- NOT demoting them"
+                        % (len(lost), len(signed), 100.0 * len(lost) / corpus, cap * 100))
+        why = ("; ".join(whys) + ": a loss that size means the store broke, not the rows. "
+               "Check the bucket endpoint/profile and the listing; if the loss is REAL, the "
+               "deliberate override is: NETRADIO_RECONCILE_DROP_CAP=1 "
+               ".venv/bin/python scripts/harvest.py --sign-one <key>")
+        first = "sig_alert" not in state
+        state["sig_alert"] = {"at": _now(), "kind": "store", "missing": len(gone),
+                              "sidecars_missing": len(lost), "corpus": len(signed),
+                              "why": why}
+        if first:
+            state["issues"] = ((state.get("issues") or []) +
+                               [{"at": _now(), "issue": "ledger: " + why}])[-50:]
+        res["reported"] = True
 
     for key, row in ledger.items():
-        if not (isinstance(row, dict) and row.get("status") == "signed"):
+        if not isinstance(row, dict):
             continue
-        if (key + ".npy") in objects:
+        npy, js = (key + ".npy") in objects, (key + ".json") in objects
+        if row.get("status") == "delayed" and row.get("reason") == "missing_sidecar":
+            # The sidecar is back beside the signature: the bucket holds the entry whole, and
+            # the feeder must stop re-feeding the key.
+            if npy and js:
+                row["status"] = "signed"
+                row["reason"] = None
+                row["uploaded_etag"] = objects[key + ".npy"] or None
+                row["signed_at"] = _now()
+                res["promoted"] += 1
+            continue
+        if row.get("status") != "signed":
+            continue
+        if npy:
             # The signature is there. The contract's `signed` row promises the companion
             # sidecar is in the bucket beside it; a listing that no longer holds the
             # sidecar means the entry is incomplete -- demote to `delayed` with
             # `missing_sidecar` so the feeder re-feeds the key for a fresh sign that
-            # re-uploads both. (The mass-loss guard above is about the SIGNATURE being
-            # gone; a missing sidecar is a per-row incompleteness, repaired in place.)
-            if (key + ".json") not in objects:
-                row["status"] = "delayed"
-                row["reason"] = "missing_sidecar"
-                row["uploaded_etag"] = None
-                row["signed_at"] = None
-                res["sidecar_lost"] = res.get("sidecar_lost", 0) + 1
+            # re-uploads both.
+            if not js:
+                if not hold_demotions:
+                    row["status"] = "delayed"
+                    row["reason"] = "missing_sidecar"
+                    row["uploaded_etag"] = None
+                    row["signed_at"] = None
+                    res["sidecar_lost"] += 1
                 continue
             if not row.get("uploaded_etag"):
                 etag = objects[key + ".npy"]
                 if etag:
                     row["uploaded_etag"] = etag
                     res["restored"] += 1
-        elif row.get("uploaded_etag"):
+        elif row.get("uploaded_etag") and not hold_drops:
             row["uploaded_etag"] = None
             res["dropped"] += 1
-    if res["dropped"] or res["restored"] or res.get("sidecar_lost"):
+    if (res["merged"] or res["dropped"] or res["restored"] or res["sidecar_lost"]
+            or res["promoted"]):
         _save(LEDGER, ledger)
-    # ANY reconcile that did not report stands the STORE alert down: `gone` can be empty here
+    # ANY reconcile that did not report stands the STORE alert down: the loss can be gone
     # with the alert still standing (a mis-listed bucket, fixed between starts), and a clear
-    # that waits for a later loss would report a healed store as broken forever. Only a
-    # store-kind alert is cleared here; a canary-kind alert (a matcher failure) is a different
-    # break and survives a healthy reconcile -- the canary's own pass is what clears it (see
-    # canary_pass). A legacy alert written before the `kind` field landed has no `kind` but
-    # carries the store-loss shape (`missing`/`corpus`); it is treated as store-owned here so
-    # an upgrade does not leave a pre-existing store alarm standing forever, while the
-    # canary path (which never clears a store alert) leaves it alone either way.
-    if not res["reported"]:
-        alert = state.get("sig_alert")
-        if isinstance(alert, dict) and (alert.get("kind") == "store"
-                                        or ("kind" not in alert
-                                            and "missing" in alert)):
-            state.pop("sig_alert", None)
-            res["cleared"] = True             # the store healed -- stand down
-        # An alert with neither `kind` nor `missing` is a shape this code does not
-        # recognise (an older, malformed, or hand-written alert). It is left alone: clearing
-        # an unknown shape would silently dismiss an alarm a human set on purpose, and the
-        # canary path does not clear it either (it only clears a `kind: "canary"` alert).
-        # Such an alert survives until a human clears it, which is the safe default -- the
-        # alternative is an alarm that disappears on a healthy pass without anyone asking.
+    # that waits for a later loss would report a healed store as broken forever. Each kind is
+    # cleared only by its own path: the ledger kind above, the store kind here, the canary kind
+    # by the canary's own pass (canary_pass). A legacy alert written before the `kind` field
+    # landed carries the store-loss shape (`missing`) and is read as store-owned; an alert of a
+    # shape this code does not recognise is left for a human to clear.
+    if not res["reported"] and _alert_kind(state.get("sig_alert")) == "store":
+        state.pop("sig_alert", None)
+        res["cleared"] = True                 # the store healed -- stand down
     parts = []
+    if res["reported"]:
+        parts.append(state["sig_alert"]["why"])
+    if res["merged"]:
+        parts.append("added %d row(s) from the bucket's rebuild the ledger did not have"
+                     % res["merged"])
     if res["dropped"]:
         parts.append("dropped the etag of %d signed row(s) whose object is gone" % res["dropped"])
     if res["restored"]:
@@ -1040,9 +1148,31 @@ def reconcile_ledger(state=None):
     if res.get("sidecar_lost"):
         parts.append("demoted %d signed row(s) whose companion sidecar is gone to delayed "
                      "missing_sidecar" % res["sidecar_lost"])
+    if res["promoted"]:
+        parts.append("promoted %d missing_sidecar row(s) whose sidecar is back to signed"
+                     % res["promoted"])
     why = ("; ".join(parts)) if parts else \
         "every signed row still points at a complete entry the bucket holds"
     return dict(res, why=why)
+
+
+def _rebuild_path():
+    return os.path.join(os.path.dirname(LEDGER), "ledger.rebuild.json")
+
+
+# Past this share of keys, in percent, the ledger and its rebuild from the bucket disagree too
+# much to merge on their own: the start is refused, and `--accept-ledger-rebuild` is the one
+# override (for that start only).
+LEDGER_REBUILD_MAX_DIFF_PCT = 10.0
+
+
+def _rebuild_max_diff_pct():
+    try:
+        value = float(os.environ.get("NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT", "")
+                      or LEDGER_REBUILD_MAX_DIFF_PCT)
+    except ValueError:
+        return LEDGER_REBUILD_MAX_DIFF_PCT
+    return value if value >= 0 else LEDGER_REBUILD_MAX_DIFF_PCT
 
 
 # Above this fraction of the signed corpus, reconcile_ledger refuses to act on its own.
@@ -1096,7 +1226,10 @@ def scan_directories(ledger, issues=None, said=None):
     sits in more than one configured directory is proposed once, for its oldest copy -- a
     row covers only one file's bytes); `covered` counts the keys whose row already matches
     their file -- the scan skips them, and the caller counts each once per run
-    (`state["skipped_cached"]`).
+    (`state["skipped_cached"]`). Copies that differ in size or mtime are signed once, oldest
+    first; once the key has a row (other than an automatic delay) it is HELD -- covered,
+    whichever copy changes -- until only one copy remains, and an issues row names the
+    copies once.
 
     THE COMPLETENESS RULE: a file with no sidecar beside it is not finished, and is neither
     read nor logged. The sidecar is how the harvester knows the feeder is done with the file;
@@ -1111,7 +1244,7 @@ def scan_directories(ledger, issues=None, said=None):
 
     The TOP LEVEL only: a subdirectory is never read, whatever it holds.
     """
-    todo, covered = [], []
+    todo, covered, copies = [], [], {}
     said = said if said is not None else set()
     for d in _dirs(issues=issues, said=said):
         if not os.path.isdir(d):
@@ -1173,34 +1306,58 @@ def scan_directories(ledger, issues=None, said=None):
                 st = os.stat(path)
             except OSError:
                 continue                     # vanished between listdir and now
-            row = ledger.get(stem)
-            # The two automatic delays are proposed again even when the file is unchanged:
-            # `no_space` because the machine was full, not the file judged, and
-            # `missing_sidecar` because the bucket's entry is incomplete. A demoted row keeps
-            # the size and mtime of the file it signed, so without this a file still on disk
-            # would read as covered and the entry would never be completed.
-            if (row is not None and row.get("size") == st.st_size
-                    and row.get("mtime") == st.st_mtime
-                    and not (row.get("status") == "delayed"
-                             and row.get("reason") in AUTOMATIC_DELAYS)):
+            copies.setdefault(stem, []).append((path, st.st_size, st.st_mtime))
+    # ONE KEY, ONE DECISION, over every copy of it: the same key can sit in more than one
+    # configured directory, and a row covers only one file's bytes.
+    for stem, found in copies.items():
+        row = ledger.get(stem)
+        found.sort(key=lambda c: c[2])       # the oldest copy first
+        differing = len({(size, mtime) for _p, size, mtime in found}) > 1
+        # The two automatic delays are proposed again even when the file is unchanged:
+        # `no_space` because the machine was full, not the file judged, and
+        # `missing_sidecar` because the bucket's entry is incomplete. A demoted row keeps
+        # the size and mtime of the file it signed, so without this a file still on disk
+        # would read as covered and the entry would never be completed.
+        automatic = (row is not None and row.get("status") == "delayed"
+                     and row.get("reason") in AUTOMATIC_DELAYS)
+        if differing:
+            # TWO DIFFERING COPIES OF ONE KEY: whichever copy is signed, the other no longer
+            # matches the row, and the next pass would sign it, and back -- a full decode and
+            # two uploads each time. The oldest is signed once; after that the key is HELD,
+            # whichever copy changes, until the feeder takes all but one away. The hold is
+            # read off the directories every pass, so it keeps no state of its own.
+            _note_copies(stem, found, issues, said)
+            if row is not None and not automatic:
                 if stem not in covered:
-                    covered.append(stem)      # the ledger already covers these exact bytes
+                    covered.append(stem)
                 continue
-            todo.append({"key": stem, "path": path})
+            todo.append({"key": stem, "path": found[0][0]})
+            continue
+        _path, size, mtime = found[0]
+        if (row is not None and row.get("size") == size and row.get("mtime") == mtime
+                and not automatic):
+            if stem not in covered:
+                covered.append(stem)          # the ledger already covers these exact bytes
+            continue
+        todo.append({"key": stem, "path": found[0][0]})
     todo.sort(key=lambda rec: os.path.getmtime(rec["path"]) if os.path.exists(rec["path"])
               else 0)
-    # ONE CANDIDATE PER KEY, the oldest copy of it: the same key can sit in more than one
-    # configured directory, and a row covers only one file's bytes -- two candidates for one
-    # key in a single pass is a ping-pong in the making (whichever copy is signed, the other
-    # is wanted again the next pass, and back). The feeder that leaves two differing copies
-    # under one key must take one of them away; the scan proposes one at a time, oldest first.
-    seen, one_per_key = set(), []
-    for rec in todo:
-        if rec["key"] in seen:
-            continue
-        seen.add(rec["key"])
-        one_per_key.append(rec)
-    return one_per_key, covered
+    return todo, covered
+
+
+def _note_copies(key, found, issues, said):
+    """One issues row naming a key's differing copies -- each path, size and mtime. Written
+    once: not again in this run (`said`), and not while the same row is still in the list."""
+    if issues is None:
+        return
+    text = ("key %s has %d differing copies in the configured directories (%s): the oldest "
+            "is signed once, and the key is not signed again until only one copy remains"
+            % (key, len(found), "; ".join("%s, %d bytes, mtime %s" % (p, size, mtime)
+                                          for p, size, mtime in found)))
+    if text in said or any(isinstance(r, dict) and r.get("issue") == text for r in issues):
+        return
+    said.add(text)
+    issues.append({"at": _now(), "key": key, "issue": text})
 
 
 # --- signing ------------------------------------------------------------------------------------
@@ -2334,12 +2491,19 @@ def run(args):
     # signed today, so at the first start it becomes one `signed` row per key; on every later
     # start the rows are checked against it. Past the cap the reconciliation reports and
     # stands still -- the sig_alert it leaves is what the notices path shows.
-    rec = reconcile_ledger(state)
+    rec = reconcile_ledger(state, accept_rebuild=getattr(args, "accept_ledger_rebuild", False))
     print("# ledger: %s" % rec["why"])
-    if rec["reported"]:
+    if rec["reported"] or rec.get("refused"):
         print("!! " + rec["why"])
-    if rec["seeded"] or rec["dropped"] or rec["restored"] or rec["reported"] or rec["cleared"]:
+    if (rec["seeded"] or rec["dropped"] or rec["restored"] or rec["reported"] or rec["cleared"]
+            or rec.get("refused") or rec.get("merged") or rec.get("promoted")
+            or rec.get("sidecar_lost")):
         _save(STATE, state)
+    if rec.get("refused"):
+        # A REFUSED START signs nothing: the ledger and the bucket disagree past the threshold,
+        # and only the operator's `--accept-ledger-rebuild` merges them. Exit non-zero so the
+        # process that started this one sees a refusal, not a clean stop.
+        return 1
 
     while True:
         if _stop_requested():
@@ -2599,6 +2763,11 @@ def main():
                          "in one go. No network. The running harvester does this by itself, a "
                          "chunk at a time -- this is for when you want it finished NOW (e.g. you "
                          "have just added a Mystery Track clip).")
+    ap.add_argument("--accept-ledger-rebuild", action="store_true",
+                    help="with --run (or --sign-one): merge the ledger's rebuild from the "
+                         "bucket listing for THIS start, however far it differs from the "
+                         "ledger. Without it, a difference past "
+                         "NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT (default 10) refuses the start.")
     args = ap.parse_args()
 
     # THE DECODE CHILD, dispatched before any lock, ledger or state access -- it must never take
@@ -2690,13 +2859,18 @@ def main():
                   ".env (see .env.example) and try again.")
             _save(STATE, state)
             return
-        rec = reconcile_ledger(state)
+        rec = reconcile_ledger(state, accept_rebuild=args.accept_ledger_rebuild)
         print("# ledger: %s" % rec["why"])
         # The same save a run makes after its reconcile, and for the same reason: an alert it
         # raised -- or stood down -- must reach the state file even when this hand sign then
         # finds no file and returns early below.
-        if rec["seeded"] or rec["dropped"] or rec["restored"] or rec["reported"] or rec["cleared"]:
+        if (rec["seeded"] or rec["dropped"] or rec["restored"] or rec["reported"]
+                or rec["cleared"] or rec.get("refused") or rec.get("merged")
+                or rec.get("promoted") or rec.get("sidecar_lost")):
             _save(STATE, state)
+        if rec.get("refused"):
+            print("!! " + rec["why"])
+            return 1                         # the same refusal a run makes: nothing signed
         moved = migrate_matches(state)
         if moved:
             _save(STATE, state)
@@ -2787,7 +2961,7 @@ def main():
                           "paused": os.path.exists(PAUSE)}, indent=2))
         return
     if args.run:
-        run(args)
+        return run(args)
 
 
 if __name__ == "__main__":

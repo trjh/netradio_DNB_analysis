@@ -462,10 +462,14 @@ Need-to-know:
   `missing_sidecar`). It is **seeded from the signature bucket's listing at the first
   start** -- a `signed` row for every key the bucket holds with its companion sidecar
   beside it; a signature whose sidecar is not there is `delayed` with `missing_sidecar`
-  -- so it is the complete record of the pool from its first day, and reconciled against
-  that listing on every start: a `signed` row whose object is gone loses its
-  `uploaded_etag`, and a `signed` row whose companion sidecar leaves is demoted to
-  `delayed` with `missing_sidecar`, so the key is signed again.
+  -- so it is the complete record of the pool from its first day. On every later start the
+  listing is rebuilt into rows and compared with the ledger; past
+  `NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT` (default 10) the start is refused until the
+  operator starts once with `--accept-ledger-rebuild`. Otherwise the ledger is reconciled
+  against that listing: a `signed` row whose object is gone loses its `uploaded_etag`, a
+  `signed` row whose companion sidecar leaves is demoted to `delayed` with
+  `missing_sidecar`, so the key is signed again, and such a row is promoted back when the
+  sidecar returns.
 - The signature, and the sidecar beside it, are uploaded to the bucket as `<key>.npy` and
   `<key>.json` — the index the pool has never had.
 - A file whose size or modification time no longer matches its row is **signed again**: a

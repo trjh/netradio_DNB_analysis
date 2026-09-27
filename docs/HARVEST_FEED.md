@@ -43,6 +43,11 @@ every object already in the signature bucket is this rule, and it never changes.
   pool's own listing.
 * A name ending in `.part` is skipped, whatever its stem, with no row: it is the usual mark
   of a download still in progress — feeder state, not a feeder bug.
+* One key belongs in one directory. When the same key sits in more than one, copies that
+  agree in size and modification time are one file. Copies that differ are signed once,
+  oldest first, and then the key is held: it is not signed again, whichever copy changes,
+  until only one copy remains. An issues row names each copy's path, size and modification
+  time.
 
 ## The sidecar
 
@@ -179,11 +184,24 @@ verified by the listing — with `size`, `mtime`, `signed_at`, `url`, `title`, `
 and `duration_s` all empty (a seeded row has no file to name and no sidecar to carry), so the
 ledger is the complete record of the pool from its first day. A signature whose sidecar is
 NOT in the bucket is seeded `delayed` with `missing_sidecar` instead, so the feeder re-feeds
-the key for a fresh sign that re-uploads both. On every later start the rows are reconciled
-against the bucket's listing: a `signed` row whose object is gone loses its
-`uploaded_etag`, a `signed` row missing its etag whose object is present gains it, and a
-`signed` row whose sidecar has gone from the listing is demoted to `delayed` with
-`missing_sidecar`, its `uploaded_etag` and `signed_at` cleared.
+the key for a fresh sign that re-uploads both. On every later start the listing is rebuilt
+into rows by the same rule, written to `.harvest/ledger.rebuild.json`, and compared with the
+ledger: a key differs when the ledger says the bucket holds its signature (a `signed` or a
+`delayed missing_sidecar` row) and the rebuild has no row for it, or when the rebuild has a
+row and the ledger has none. When the differing keys are more than
+`NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT` percent (default 10) of every key with a row on either
+side, the harvester **refuses to start**: it writes the numbers to the state file's `sig_alert`
+(`kind: "ledger"`) and exits non-zero without signing. Starting it once with
+`scripts/harvest.py --run --accept-ledger-rebuild` merges the rebuild for that start. At or
+under the threshold the rebuild's rows for keys the ledger lacks are added, no row the ledger
+has is replaced, and the rows are reconciled against the listing: a `signed` row whose object
+is gone loses its `uploaded_etag`, a `signed` row missing its etag whose object is present
+gains it, a `signed` row whose sidecar has gone from the listing is demoted to `delayed` with
+`missing_sidecar`, its `uploaded_etag` and `signed_at` cleared, and a `delayed
+missing_sidecar` row whose signature and sidecar are both listed again is promoted back to
+`signed`. A loss of signatures or of sidecars past `NETRADIO_RECONCILE_DROP_CAP` (default
+0.10 of the signed rows) is left untouched on that side and reported as a `sig_alert` of
+kind `store`.
 
 ### What a feed reads
 
