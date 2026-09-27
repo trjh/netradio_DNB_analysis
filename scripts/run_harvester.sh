@@ -9,10 +9,7 @@
 #   scripts/run_harvester.sh start      # harvest.py --run under the venv, MallocLargeCache=0
 #   scripts/run_harvester.sh start --accept-ledger-rebuild
 #                                        # forwarded unchanged to harvest.py --run, for that
-#                                        # start only — see below. harvest.py's own
-#                                        # understanding of the flag ships separately; until
-#                                        # that lands, harvest.py --run refuses it as an
-#                                        # unrecognized argument, same as any unsupported flag
+#                                        # start only — see below
 #   scripts/run_harvester.sh stop       # SIGTERM, then WAIT for the exit
 #   scripts/run_harvester.sh restart [--accept-ledger-rebuild]   # same one argument as start
 #   scripts/run_harvester.sh status     # up or down, the pid, the phase, the ledger
@@ -23,7 +20,7 @@
 # process it was, and .harvest/harvest.log grew without a bound. `make harvest-run` is now
 # an alias for `start`, so there is one way in and one pidfile whoever starts it.
 #
-# ONE HARVESTER AT A TIME. Two would interleave writes to .harvest/queue.json and
+# ONE HARVESTER AT A TIME. Two would interleave writes to .harvest/ledger.json and
 # .harvest/state.json. harvest.py enforces that itself with a flock it holds for its
 # lifetime (harvest.WRITER_LOCK), so a second one refuses rather than corrupting anything;
 # `start` refuses earlier and more cheaply, by looking for the process it launched before.
@@ -64,21 +61,20 @@ LOG="$STATE_DIR/harvest.log"
 # a data set — two generations of it answer "what happened last night".
 LOG_MAX_BYTES="${NETRADIO_HARVEST_LOG_MAX_BYTES:-10485760}"
 # How long `stop` waits for a clean exit before it stops being polite. harvest.py handles
-# SIGTERM itself: it ends the fetch in flight and leaves that URL pending — an interrupted
-# candidate is fetched again later, not finished now — and then writes its state. That last
-# write is what the wait buys: a `kill -9` instead would leave state.json claiming "working"
-# for a process that no longer exists.
+# SIGTERM itself: it stops the decode in flight — that file is signed on a later pass, not
+# finished now — and then writes its state and its ledger. That last write is what the wait
+# buys: a `kill -9` instead would leave state.json claiming "working" for a process that no
+# longer exists.
 STOP_WAIT_S="${NETRADIO_HARVEST_STOP_WAIT_S:-30}"
 PYTHON="${NETRADIO_PYTHON:-$ROOT/.venv/bin/python}"
 # Set by `start --accept-ledger-rebuild` (or `restart --accept-ledger-rebuild`, which takes
 # the same one argument): harvest.py --run refuses to start when its rebuilt ledger differs
 # from the recorded one past a threshold, and this is the operator's override for that one
-# start, forwarded to harvest.py --run unchanged. harvest.py's own support for the flag ships
-# on a separate branch; until that lands here, harvest.py rejects it as an unrecognized
-# argument, same as it would any other unsupported flag — this launcher's job is only to
-# forward it faithfully once both sides carry it. Nothing else is forwarded — an unrecognized
-# argument to start/restart is refused, not passed through, so a typo reaches the operator as
-# a usage error here rather than as harvest.py's own argument-parsing error three layers down.
+# start, forwarded to harvest.py --run unchanged (tests/test_run_harvester.py checks that
+# harvest.py's own parser accepts exactly what is forwarded). Nothing else is forwarded — an
+# unrecognized argument to start/restart is refused, not passed through, so a typo reaches
+# the operator as a usage error here rather than as harvest.py's own argument-parsing error
+# three layers down.
 ACCEPT_LEDGER_REBUILD=0
 
 require_count() {
@@ -186,7 +182,7 @@ start_locked() {
   # candidate, libmalloc holds the pages anyway, and under pressure they are compressed
   # and swapped. It has to be in the environment AT PROCESS START, which is why it is set
   # here on the command rather than anywhere inside the run. Harmless off macOS (an
-  # unknown variable). The fetch child sets it again for itself.
+  # unknown variable). The decode child sets it again for itself.
   local -a run_args=(--run)
   [ "$ACCEPT_LEDGER_REBUILD" = 1 ] && run_args+=(--accept-ledger-rebuild)
   MallocLargeCache=0 nohup "$PYTHON" scripts/harvest.py "${run_args[@]}" >>"$LOG" 2>&1 &

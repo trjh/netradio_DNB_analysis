@@ -156,14 +156,13 @@ like. Same shape as the align server's `scripts/run_align.sh`, deliberately, so 
 alike.
 
 **`start` and `restart` take one optional argument, `--accept-ledger-rebuild`**, forwarded to
-`harvest.py --run` unchanged and only for that one start — the operator's override, once
-`harvest.py` itself carries the flag, for the case where it refuses to start because its
-rebuilt ledger differs from the recorded one past a threshold. `harvest.py`'s own support for
-the flag ships on a separate branch; until that lands here, `harvest.py --run` rejects it as
-an unrecognized argument, the same as any unsupported flag would be — the launcher's job is
-only to forward it faithfully once both sides carry it. Anything else after `start`/`restart`
-is refused with the usage message rather than passed through, so a typo is caught here rather
-than by `harvest.py`'s own argument parsing.
+`harvest.py --run` unchanged and only for that one start — the operator's override for the
+case where the harvester refuses to start because its ledger, rebuilt from the bucket's
+listing, differs from the recorded one past `NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT`.
+`tests/test_run_harvester.py` holds the two halves together: the argv the launcher forwards
+is parsed by `harvest.py`'s own parser, and must come out with the flag set. Anything else
+after `start`/`restart` is refused with the usage message rather than passed through, so a
+typo is caught here rather than by `harvest.py`'s own argument parsing.
 
 **The pidfile is the launcher's own, and so is what `status` can see.** A harvester started
 some other way — by hand as `harvest.py --run`, or by another front-end keeping a pidfile of

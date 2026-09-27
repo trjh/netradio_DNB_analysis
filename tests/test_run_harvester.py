@@ -201,6 +201,60 @@ class StartTests(LauncherTestCase):
         self.assertFalse(os.path.exists(self.pidfile))
 
 
+class HarvestTakesWhatTheLauncherForwards(LauncherTestCase):
+    """The two halves of `--accept-ledger-rebuild` agree: the argv the launcher hands the
+    interpreter is one `harvest.py`'s own parser accepts, with both flags set. The stand-in
+    records the argv; `harvest.main()` then parses exactly that and stops before it does
+    anything else, so no harvester runs and nothing is read or written."""
+
+    def parse_with_harvest(self, argv):
+        import argparse
+        import sys
+        from unittest import mock
+        sys.path.insert(0, os.path.join(os.path.dirname(HERE), "scripts"))
+        self.addCleanup(sys.path.remove, sys.path[0])
+        try:
+            import harvest
+        except Exception as exc:        # librosa/numba absent -> not this test's job
+            self.skipTest("harvest.py does not import here: %s" % exc)
+
+        class Parsed(Exception):
+            pass
+
+        real = argparse.ArgumentParser.parse_args
+
+        def parse_only(parser, args=None, namespace=None):
+            raise Parsed(real(parser, argv, namespace))
+
+        with mock.patch.object(argparse.ArgumentParser, "parse_args", parse_only):
+            try:
+                harvest.main()
+            except Parsed as done:
+                return done.args[0]
+            except SystemExit as exc:   # argparse's own refusal of an unknown argument
+                self.fail("harvest.py refused the launcher's argv %r (exit %s)" % (argv, exc.code))
+        self.fail("harvest.main() returned without parsing its arguments")
+
+    def forwarded_argv(self, *start_args):
+        self.fake_interpreter(body=CMDLINE_PY)
+        out = self.start(*start_args)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        with open(os.path.join(self.root, "cmdline-%d.txt" % self.read_pid())) as fh:
+            argv = fh.read().split("\x00")[:-1]
+        self.assertEqual(argv[0], "scripts/harvest.py")
+        return argv[1:]
+
+    def test_the_forwarded_flag_is_one_harvest_accepts(self):
+        args = self.parse_with_harvest(self.forwarded_argv("--accept-ledger-rebuild"))
+        self.assertTrue(args.run)
+        self.assertTrue(args.accept_ledger_rebuild)
+
+    def test_a_plain_start_leaves_the_flag_off(self):
+        args = self.parse_with_harvest(self.forwarded_argv())
+        self.assertTrue(args.run)
+        self.assertFalse(args.accept_ledger_rebuild)
+
+
 class EnvFileTests(LauncherTestCase):
     """The repo's .env is read, and its absence is not an error."""
 
