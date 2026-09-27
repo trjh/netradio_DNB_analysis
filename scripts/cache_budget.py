@@ -192,9 +192,28 @@ def register(name, dir=None, cap=DEFAULT_CAP, headroom=0, max_age=None, order="o
 
 
 def _nested(a, b):
-    """True when directory `a` is `b` or lies inside it."""
+    """True when directory `a` is `b` or lies inside it. Compared by path, and then by
+    identity for a `b` that exists: on a case-insensitive volume `~/MUSIC` names the same
+    directory as `~/Music`, and only the files' identity says so."""
     a, b = os.path.realpath(a), os.path.realpath(b)
-    return os.path.commonpath([a, b]) == b
+    if os.path.commonpath([a, b]) == b:
+        return True
+    try:
+        target = os.stat(b)
+    except OSError:
+        return False
+    path = a
+    while True:
+        try:
+            st = os.stat(path)
+            if (st.st_dev, st.st_ino) == (target.st_dev, target.st_ino):
+                return True
+        except OSError:
+            pass
+        parent = os.path.dirname(path)
+        if parent == path:
+            return False
+        path = parent
 
 
 def _overlap(name, cache_dir):
