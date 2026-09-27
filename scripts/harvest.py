@@ -157,13 +157,17 @@ def _chroma_pinned(path):
     bucket holds, and for anything that is not a signature (a `.tmp` or `.part` is held by the
     policy's own write-in-progress rule while fresh).
 
-    "The bucket holds it" is one of two facts this process already has, and never a new
+    "The bucket holds it" is one of the facts this process already has, and never a new
     request -- the policy calls this for every entry on every run:
       * sigstore's session record of a HEAD that returned this file's exact size (`put`
         verifies each upload that way, and `evictable` before a cold eviction);
-      * the ledger's row for the key: `signed` with an `uploaded_etag`. `sign_file` writes a
-        signed row only once both objects landed, and `reconcile_ledger` clears the etag of a
-        row whose object has left the bucket.
+      * failing that, the loop's cached listing of the bucket (`_remote_objects`, refreshed
+        at most every fifteen minutes by `stamp_pool` on each pass), when this process has
+        one: the key's `.npy` is in it. The listing wins over the ledger because it is the
+        fresher record -- `reconcile_ledger`, which clears the etag of a row whose object has
+        left the bucket, runs only when a writer starts;
+      * with no listing held, the ledger's row for the key: `signed` with an
+        `uploaded_etag`. `sign_file` writes a signed row only once both objects landed.
     With the bucket unset every signature is pinned: nothing else holds a copy."""
     name = os.path.basename(path)
     if not (name.startswith("u") and name.endswith(".npy")):
@@ -176,6 +180,9 @@ def _chroma_pinned(path):
         return False                            # gone: nothing left to hold
     if sigstore.verified_size(name) == local:
         return False
+    listed = _REMOTE_OBJECTS["objects"]
+    if listed is not None:
+        return name not in listed
     row = _ledger_for_pin().get(file_key(name))
     return not (isinstance(row, dict) and row.get("status") == "signed"
                 and row.get("uploaded_etag"))

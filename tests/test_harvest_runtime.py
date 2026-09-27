@@ -469,10 +469,11 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         os.utime(path, (t, t))
         return path
 
-    def _bucket(self, enabled, signed=(), verified=None, etag="etag"):
+    def _bucket(self, enabled, signed=(), verified=None, etag="etag", listed=None):
         """Register with the bucket on or off, the ledger holding a `signed` row with
-        `uploaded_etag=etag` for each key in `signed`, and the session's HEAD record holding
-        `verified` ({object name: size})."""
+        `uploaded_etag=etag` for each key in `signed`, the session's HEAD record holding
+        `verified` ({object name: size}), and the loop's listing cache holding `listed`
+        ({object name: etag}, or None for no listing held)."""
         patcher = unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: enabled)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -483,6 +484,8 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         self.addCleanup(harvest.sigstore._verified.clear)
         harvest.sigstore._verified.clear()
         harvest.sigstore._verified.update({k: (v, "e") for k, v in (verified or {}).items()})
+        self.addCleanup(harvest._REMOTE_OBJECTS.update, dict(harvest._REMOTE_OBJECTS))
+        harvest._REMOTE_OBJECTS.update(at=time.time(), objects=listed)
         harvest.register_caches()
 
     def _past_the_floor(self):
@@ -536,6 +539,22 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         local file is the only copy again."""
         url = "https://example.invalid/gone-from-bucket"
         self._bucket(True, signed={harvest._sig_key(url)[:-4]}, etag=None)
+        sig = self._signature(url, age_s=40 * 86400)
+        cache_budget.run_eviction("chroma")
+        self.assertTrue(os.path.exists(sig))
+
+    def test_a_listed_signature_is_evicted_by_age(self):
+        url = "https://example.invalid/listed-now"
+        self._bucket(True, listed={harvest._sig_key(url): "e"})
+        sig = self._signature(url, age_s=40 * 86400)
+        cache_budget.run_eviction("chroma")
+        self.assertFalse(os.path.exists(sig))
+
+    def test_a_signed_row_whose_object_left_the_listing_is_pinned(self):
+        """The ledger's etag is as old as the writer's start; the loop's listing is at most
+        fifteen minutes old, and it wins: an object lost mid-session re-pins its local copy."""
+        url = "https://example.invalid/lost-mid-session"
+        self._bucket(True, signed={harvest._sig_key(url)[:-4]}, listed={})
         sig = self._signature(url, age_s=40 * 86400)
         cache_budget.run_eviction("chroma")
         self.assertTrue(os.path.exists(sig))
