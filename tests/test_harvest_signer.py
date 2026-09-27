@@ -715,9 +715,82 @@ class TheScan(_SignerCase):
                          sorted([_key("https://y/a"), key_b]))
 
 
+    def _second_copy(self, key, size, mtime, name="more-audio"):
+        other = os.path.join(self.tmp, name)
+        os.makedirs(other, exist_ok=True)
+        harvest.HARVEST_DIRS = self.audio + os.pathsep + other
+        path = os.path.join(other, key + ".mp3")
+        with open(path, "wb") as fh:
+            fh.write(_pcm(size))
+        os.utime(path, (mtime, mtime))
+        with open(os.path.join(other, key + ".json"), "w") as fh:
+            json.dump({"key": key, "fed_at": "now"}, fh)
+        return path
+
+    def test_two_differing_copies_are_signed_once_then_held_until_one_remains(self):
+        """The ping-pong: with copy A signed, copy B no longer matches the row, and signing B
+        makes A the one that does not match. The oldest is signed once; then the key is held,
+        whichever copy changes, until the feeder takes one away."""
+        key = _key("https://y/twice-differing")
+        old = self._feed(key, mtime=1000)
+        new = self._second_copy(key, SR, 2000)
+        issues = []
+        self._store_on()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        signed = []
+        for _ in range(4):                               # four passes, one fresh `said` each
+            todo, _covered = harvest.scan_directories(harvest.load_ledger(), issues=issues,
+                                                      said=set())
+            for rec in todo:
+                signed.append(rec["path"])
+                harvest.sign_file(rec["path"])
+        self.assertEqual(signed, [old], "the oldest copy, signed once and never again")
+        dup = [r for r in issues if r.get("key") == key]
+        self.assertEqual(len(dup), 1, "the issues row is written once, not every pass")
+        for path in (old, new):
+            self.assertIn(path, dup[0]["issue"])
+        self.assertIn("%d bytes" % os.path.getsize(new), dup[0]["issue"])
+        # a copy changing does not lift the hold
+        os.utime(old, (3000, 3000))
+        todo, covered = harvest.scan_directories(harvest.load_ledger(), issues=issues)
+        self.assertEqual((todo, covered), ([], [key]))
+        # one copy taken away: the ordinary rule resumes, and the remaining copy (which the
+        # row does not describe) is signed
+        os.unlink(old)
+        todo, _ = harvest.scan_directories(harvest.load_ledger(), issues=issues)
+        self.assertEqual([r["path"] for r in todo], [new])
+
+    def test_copies_that_agree_in_size_and_mtime_are_one_file(self):
+        key = _key("https://y/twice-same")
+        old = self._feed(key, mtime=1000)
+        self._second_copy(key, os.path.getsize(old) // 4, 1000)
+        self.assertEqual(os.path.getsize(old),
+                         os.path.getsize(os.path.join(self.tmp, "more-audio", key + ".mp3")))
+        row = harvest._row(key, os.path.getsize(old), 1000.0, "signed", None, "then", "e", {})
+        issues = []
+        todo, covered = harvest.scan_directories({key: row}, issues=issues)
+        self.assertEqual((todo, covered, issues), ([], [key], []))
+
+    def test_held_copies_behind_an_automatic_delay_are_proposed_again(self):
+        """An automatic delay is not a sign: the oldest copy is proposed again."""
+        key = _key("https://y/twice-no-room")
+        old = self._feed(key, mtime=1000)
+        self._second_copy(key, SR, 2000)
+        row = harvest._row(key, os.path.getsize(old), 1000.0, "delayed", "no_space",
+                           None, None, {})
+        todo, _ = harvest.scan_directories({key: row})
+        self.assertEqual([r["path"] for r in todo], [old])
+
+
 @unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
 class TheLedger(_SignerCase):
     """Seeded from the bucket at the first start; reconciled against it on every start."""
+
+    def setUp(self):
+        super().setUp()
+        # The rebuild's threshold is out of the way here, so these tests reach the reconcile's
+        # own rules and its drop cap; TheLedgerRebuild tests the threshold itself.
+        os.environ["NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT"] = "100"
 
     def _objects(self, *names, etag="e-%s"):
         return {name: etag % name[:6] for name in names}
@@ -817,9 +890,10 @@ class TheLedger(_SignerCase):
                 for k in keys}
         harvest._save(harvest.LEDGER, rows)
         state = {"issues": []}
-        # the listing holds only one of the ten: the store broke, not the rows
+        # the listing holds only one of the ten, whole: the store broke, not the rows
         with mock.patch.object(harvest, "_remote_objects",
-                               lambda max_age_s=900: self._objects(keys[0] + ".npy")):
+                               lambda max_age_s=900: self._objects(keys[0] + ".npy",
+                                                                   keys[0] + ".json")):
             res = harvest.reconcile_ledger(state)
         self.assertTrue(res["reported"])
         self.assertEqual((res["seeded"], res["dropped"]), (0, 0))
@@ -875,11 +949,15 @@ class TheLedger(_SignerCase):
         key for a fresh sign that re-uploads both. The signature being still there is
         not a reason to keep the row complete."""
         key = "u" + "a" * 20
-        harvest._save(harvest.LEDGER,
-                      {key: harvest._row(key, 1, 1.0, "signed", None, "then", "e", {})})
-        # The listing holds the signature but not the sidecar.
-        with mock.patch.object(harvest, "_remote_objects",
-                               lambda max_age_s=900: self._objects(key + ".npy")):
+        filler = [("u" + ("%02d" % i) * 10) for i in range(12)]
+        rows = {k: harvest._row(k, 1, 1.0, "signed", None, "then", "e-%s" % k, {})
+                for k in filler}
+        rows[key] = harvest._row(key, 1, 1.0, "signed", None, "then", "e", {})
+        harvest._save(harvest.LEDGER, rows)
+        # The listing holds the signature but not the sidecar (one of thirteen: under the cap).
+        objects = self._objects(key + ".npy",
+                                *[k + ext for k in filler for ext in (".npy", ".json")])
+        with mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: objects):
             res = harvest.reconcile_ledger({"issues": []})
         self.assertEqual(res["sidecar_lost"], 1)
         self.assertEqual((res["dropped"], res["restored"]), (0, 0),
@@ -899,6 +977,206 @@ class TheLedger(_SignerCase):
             res = harvest.reconcile_ledger({"issues": []})
         self.assertEqual((res["dropped"], res["restored"]), (0, 0))
         self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["status"], "delayed")
+
+
+    def test_a_mass_sidecar_loss_demotes_nothing_and_raises_the_store_alert(self):
+        """A listing that returns every signature but no sidecar -- a key-shape filter or a
+        prefix change -- is the store breaking, not ten thousand half-landed signs."""
+        os.environ.pop("NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT")    # the default: the rebuild
+        keys = [("u" + ("%02d" % i) * 10) for i in range(10)]     # holds a row for every key
+        rows = {k: harvest._row(k, 1, 1.0, "signed", None, "then", "e-%s" % k, {})
+                for k in keys}
+        harvest._save(harvest.LEDGER, rows)
+        state = {"issues": []}
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900: self._objects(*[k + ".npy" for k in keys])):
+            res = harvest.reconcile_ledger(state)
+        self.assertTrue(res["reported"])
+        self.assertEqual(res["sidecar_lost"], 0)
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), rows, "nothing was demoted")
+        alert = state["sig_alert"]
+        self.assertEqual((alert["kind"], alert["sidecars_missing"], alert["corpus"]),
+                         ("store", 10, 10))
+
+    def test_a_missing_sidecar_row_is_promoted_when_its_sidecar_returns(self):
+        key = "u" + "a" * 20
+        harvest._save(harvest.LEDGER, {key: harvest._row(key, 7, 9.0, "delayed",
+                                                         "missing_sidecar", None, None, {})})
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900: self._objects(key + ".npy", key + ".json")):
+            res = harvest.reconcile_ledger({"issues": []})
+        self.assertEqual(res["promoted"], 1)
+        row = harvest._load(harvest.LEDGER, {})[key]
+        self.assertEqual((row["status"], row["reason"], row["uploaded_etag"]),
+                         ("signed", None, "e-%s" % key[:6]))
+        self.assertIsNotNone(row["signed_at"], "signed at the time of the promotion")
+        self.assertEqual((row["size"], row["mtime"]), (7, 9.0),
+                         "the file it signed is still described, so it is not signed again")
+
+    def test_a_missing_sidecar_row_stays_delayed_while_the_sidecar_is_absent(self):
+        key = "u" + "a" * 20
+        harvest._save(harvest.LEDGER, {key: harvest._row(key, 7, 9.0, "delayed",
+                                                         "missing_sidecar", None, None, {})})
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900: self._objects(key + ".npy")):
+            res = harvest.reconcile_ledger({"issues": []})
+        self.assertEqual(res["promoted"], 0)
+        self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["status"], "delayed")
+
+
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class TheLedgerRebuild(_SignerCase):
+    """At every start the bucket's rows are rebuilt and compared with the ledger: past the
+    threshold the start is refused, and `--accept-ledger-rebuild` is the one override."""
+
+    def _complete(self, *keys):
+        return {k + ext: "e-%s" % k[:6] for k in keys for ext in (".npy", ".json")}
+
+    def _keys(self, n, offset=0):
+        return [("u%020x" % (i + offset)) for i in range(n)]
+
+    def _signed(self, keys):
+        return {k: harvest._row(k, 1, 1.0, "signed", None, "then", "e-%s" % k[:6], {})
+                for k in keys}
+
+    def _reconcile(self, objects, state, **kw):
+        with mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: objects):
+            return harvest.reconcile_ledger(state, **kw)
+
+    def test_the_difference_counts_only_the_disagreeing_keys(self):
+        a, b, c, d, e, f = self._keys(6)
+        ledger = {a: harvest._row(a, 1, 1.0, "signed", None, "t", "e", {}),
+                  b: harvest._row(b, 1, 1.0, "delayed", "missing_sidecar", None, None, {}),
+                  c: harvest._row(c, 1, 1.0, "delayed", "too_long", None, None, {}),
+                  d: harvest._row(d, 1, 1.0, "signed", None, "t", "e", {})}
+        rebuilt = harvest._rows_from_listing(
+            dict(self._complete(a), **{b + ".npy": "x", f + ".npy": "y"}))
+        # d: the ledger holds a signature the rebuild does not; f: the rebuild holds one the
+        # ledger has no row for. a and b agree; c is a verdict with no object, which agrees.
+        self.assertEqual(harvest.ledger_rebuild_diff(ledger, rebuilt), (2, 5))
+
+    def test_an_empty_ledger_seeds_exactly_as_before(self):
+        keys = self._keys(3)
+        objects = self._complete(*keys)
+        res = self._reconcile(objects, {"issues": []})
+        self.assertEqual(res["seeded"], 3)
+        self.assertFalse(res["refused"])
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), harvest._rows_from_listing(objects))
+        self.assertFalse(os.path.exists(harvest._rebuild_path()), "no comparison to write")
+
+    def test_under_the_threshold_the_rebuild_is_merged(self):
+        keys = self._keys(20)
+        verdict = "u" + "f" * 20
+        ledger = self._signed(keys)
+        ledger[verdict] = harvest._row(verdict, 5, 5.0, "delayed", "too_long", None, None, {})
+        harvest._save(harvest.LEDGER, ledger)
+        extra = self._keys(1, offset=100)[0]
+        state = {"issues": []}
+        res = self._reconcile(self._complete(extra, *keys), state)     # 1 of 22 keys: 4.5%
+        self.assertFalse(res["refused"])
+        self.assertEqual(res["merged"], 1)
+        saved = harvest._load(harvest.LEDGER, {})
+        self.assertEqual((saved[extra]["status"], saved[extra]["uploaded_etag"]),
+                         ("signed", "e-%s" % extra[:6]))
+        self.assertEqual(saved[verdict], ledger[verdict], "a delayed verdict is never dropped")
+        self.assertNotIn("sig_alert", state)
+        self.assertFalse(os.path.exists(harvest._rebuild_path()))
+
+    def _over(self):
+        keys = self._keys(2)
+        harvest._save(harvest.LEDGER, self._signed(keys))
+        return keys, self._complete(*(keys + self._keys(3, offset=100)))  # 3 of 5 keys: 60%
+
+    def test_over_the_threshold_the_start_is_refused_and_the_alert_written(self):
+        keys, objects = self._over()
+        before = harvest._load(harvest.LEDGER, {})
+        state = {"issues": []}
+        res = self._reconcile(objects, state)
+        self.assertTrue(res["refused"])
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), before, "nothing merged")
+        alert = state["sig_alert"]
+        self.assertEqual((alert["kind"], alert["differ"], alert["keys"], alert["ledger_rows"],
+                          alert["rebuild_rows"], alert["pct"], alert["threshold_pct"]),
+                         ("ledger", 3, 5, 2, 5, 60.0, 10.0))
+        self.assertIn("--accept-ledger-rebuild", alert["override"])
+        self.assertIn("--accept-ledger-rebuild", alert["why"])
+        self.assertEqual(len([r for r in state["issues"] if r["issue"].startswith("ledger:")]), 1)
+        self.assertEqual(harvest._load(harvest._rebuild_path(), {}),
+                         harvest._rows_from_listing(objects), "the rebuild is left to inspect")
+        # a second refused start raises no second issues row
+        self._reconcile(objects, state)
+        self.assertEqual(len([r for r in state["issues"] if r["issue"].startswith("ledger:")]), 1)
+
+    def test_the_threshold_is_a_setting(self):
+        _keys, objects = self._over()
+        os.environ["NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT"] = "75"
+        res = self._reconcile(objects, {"issues": []})
+        self.assertFalse(res["refused"])
+        self.assertEqual(res["merged"], 3)
+
+    def test_the_override_merges_and_clears_the_alert(self):
+        _keys, objects = self._over()
+        state = {"issues": []}
+        self.assertTrue(self._reconcile(objects, state)["refused"])
+        res = self._reconcile(objects, state, accept_rebuild=True)
+        self.assertFalse(res["refused"])
+        self.assertTrue(res["cleared"])
+        self.assertEqual(res["merged"], 3)
+        self.assertNotIn("sig_alert", state)
+        self.assertEqual(len(harvest._load(harvest.LEDGER, {})), 5)
+        self.assertIn("merged by --accept-ledger-rebuild", state["issues"][-1]["issue"])
+
+    def test_an_agreeing_start_clears_a_ledger_alert_but_not_another_kind(self):
+        keys = self._keys(3)
+        harvest._save(harvest.LEDGER, self._signed(keys))
+        state = {"issues": [], "sig_alert": {"kind": "ledger", "why": "old"}}
+        self.assertTrue(self._reconcile(self._complete(*keys), state)["cleared"])
+        self.assertNotIn("sig_alert", state)
+        state = {"issues": [], "sig_alert": {"kind": "canary", "why": "matcher"}}
+        self._reconcile(self._complete(*keys), state)
+        self.assertEqual(state["sig_alert"]["kind"], "canary")
+
+    def test_an_unlistable_bucket_refuses_nothing(self):
+        harvest._save(harvest.LEDGER, self._signed(self._keys(2)))
+        state = {"issues": []}
+        res = self._reconcile(None, state)
+        self.assertFalse(res["refused"])
+        self.assertNotIn("sig_alert", state)
+
+    def _run_main(self, *extra, sign=AssertionError("signed on a refused start")):
+        harvest._save(harvest.RULINGS, {})
+        self._feed(_key("https://y/waiting"))
+        _keys, objects = self._over()
+        out = io.StringIO()
+        with mock.patch.object(harvest, "queries", lambda state=None: []), \
+                mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: objects), \
+                mock.patch.object(harvest, "_nap",
+                                  lambda s: harvest._STOP.update(signum=signal.SIGTERM) or True), \
+                mock.patch.object(harvest, "sign_file",
+                                  side_effect=sign) as sf, \
+                mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
+                mock.patch.object(harvest.memwatch, "allocator_canary",
+                                  lambda *a, **k: (0, 0, None)), \
+                mock.patch.object(sys, "argv", ["harvest.py", "--run", *extra]), \
+                contextlib.redirect_stdout(out):
+            code = harvest.main()
+        return code, sf, out.getvalue()
+
+    def test_a_refused_run_exits_non_zero_before_any_signing(self):
+        code, sf, out = self._run_main()
+        self.assertEqual(code, 1)
+        sf.assert_not_called()
+        self.assertEqual(harvest._load(harvest.STATE, {})["sig_alert"]["kind"], "ledger")
+
+    def test_a_run_with_the_override_starts(self):
+        def sign(path, issues=None):
+            harvest._STOP["signum"] = signal.SIGTERM     # one sign attempt, then a clean stop
+            return None, None
+        code, sf, _out = self._run_main("--accept-ledger-rebuild", sign=sign)
+        self.assertNotEqual(code, 1)
+        sf.assert_called_once()
+        self.assertNotIn("sig_alert", harvest._load(harvest.STATE, {}))
+        self.assertEqual(len(harvest.load_ledger()), 5)
 
 
 class TheKeyRule(unittest.TestCase):
@@ -985,7 +1263,7 @@ class SignOneIsTheHandTool(_SignerCase):
         self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
         calls = []
         with mock.patch.object(harvest, "reconcile_ledger",
-                               lambda state=None: calls.append("reconcile") or
+                               lambda state=None, **_kw: calls.append("reconcile") or
                                {"seeded": 0, "dropped": 0, "restored": 0, "reported": False,
                                 "cleared": False, "why": ""}), \
                 mock.patch.object(harvest, "sign_file",
@@ -1011,7 +1289,8 @@ class SignOneIsTheHandTool(_SignerCase):
                 for k in keys}
         harvest._save(harvest.LEDGER, rows)
         objects = {keys[0] + ".npy": "e-1"}        # one of ten: the store broke, not the rows
-        with mock.patch.object(harvest, "_remote_objects",
+        os.environ["NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT"] = "100"   # the store's alert, not
+        with mock.patch.object(harvest, "_remote_objects",           # the rebuild's refusal
                                lambda max_age_s=900: objects), \
                 mock.patch.object(sys, "argv",
                                   ["harvest.py", "--sign-one", _key("https://y/absent")]), \

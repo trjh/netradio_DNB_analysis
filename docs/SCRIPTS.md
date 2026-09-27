@@ -161,13 +161,20 @@ every scoring path does.
 **The ledger replaces the working queue, and the recovery goes with it.** The old
 `queue.json` lists (`pending`, `done`, `retry_later`) are gone; at its first start under this
 contract the harvester seeds one `signed` row per key the bucket already holds (the bucket's
-listing was the only record of what is signed), and on every start it reconciles the rows
-against that listing: a `signed` row whose object is gone loses its `uploaded_etag`, so the
-feeder feeds that key again. Past a safety cap (`NETRADIO_RECONCILE_DROP_CAP`, default 10% of
-the signed corpus) the reconciliation **reports** — a standing `sig_alert` in the state, one
-that stands down by itself on the first start that finds the loss gone — and touches
-nothing: a mass drop means the store broke, not the rows, and would put the whole pool
-back on the feeder's list over a configuration fault. **One writer, enforced:** both writer
+listing was the only record of what is signed). On every later start it rebuilds the rows
+from that listing into `.harvest/ledger.rebuild.json` and compares them with the ledger: past
+`NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT` (default 10% of every key with a row on either side)
+it **refuses to start**, exits non-zero, and leaves a standing `sig_alert` of kind `ledger`
+with the numbers; `harvest.py --run --accept-ledger-rebuild` merges the rebuild for that one
+start. Otherwise it adds the rebuild's rows the ledger lacks and reconciles the rows against
+the listing: a `signed` row whose object is gone loses its `uploaded_etag`, so the feeder
+feeds that key again; a row whose sidecar is gone is demoted to `missing_sidecar`, and
+promoted back when the sidecar returns. Past a safety cap (`NETRADIO_RECONCILE_DROP_CAP`,
+default 10% of the signed corpus, judged separately for lost signatures and lost sidecars)
+the reconciliation **reports** — a standing `sig_alert` of kind `store`, one that stands
+down by itself on the first start that finds the loss gone — and touches nothing on that
+side: a mass drop means the store broke, not the rows, and would put the whole pool back on
+the feeder's list over a configuration fault. **One writer, enforced:** both writer
 paths (`--run`, `--sign-one`) hold the same flock (`harvest.WRITER_LOCK`, under its historic
 `collector.lock` name) for their lifetime — a second writer, including the hand tool under a
 running daemon, refuses loudly instead of interleaving.
