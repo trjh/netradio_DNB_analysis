@@ -15,6 +15,7 @@ added alongside: the excerpt hard cap, and the bot-wall halt.
 """
 
 import os
+import shutil
 import unittest.mock
 import subprocess
 import sys
@@ -114,7 +115,9 @@ class ExcerptsAreExcerpts(unittest.TestCase):
         import numpy as np
         from streamalign import audio as _audio
         import soundfile as sf
-        path = os.path.join(tempfile.mkdtemp(), "x.wav")
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        path = os.path.join(d, "x.wav")
         harvest.write_excerpt(np.zeros(int(samples_s * _audio.SR), dtype="float32"), at_s, path)
         return sf.info(path).duration if os.path.exists(path) else 0.0
 
@@ -229,6 +232,7 @@ class ARulingSpendsTheExcerpt(unittest.TestCase):
 
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
 
     def _wav(self, name):
         path = os.path.join(self.dir, name)

@@ -8,6 +8,7 @@ the _Stub pattern in test_streamalign.py.
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -34,6 +35,7 @@ class DirectionTests(unittest.TestCase):
 class RejectionStoreTests(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
 
     def test_reject_adds_then_idempotent(self):
         self.assertEqual(skip_review.reject_skip("d100-119", 42.0, -1.0, "d099-118",
@@ -62,6 +64,7 @@ class RejectionStoreTests(unittest.TestCase):
 class ConfirmTests(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
 
     def test_confirm_appends_hand_grammar_row(self):
         status = skip_review.confirm_skip("d100-119", 50.0, -1.248, reference="d099-118",
@@ -99,6 +102,7 @@ class ConfirmTests(unittest.TestCase):
 class ApplyDecisionsTests(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
 
     def test_drops_only_rejected_skips(self):
         skip_review.reject_skip("d100-119", 50.0, -1.0, labels_dir=self.dir)
@@ -112,6 +116,7 @@ class ApplyDecisionsTests(unittest.TestCase):
     def test_emit_labels_excludes_rejected_skip(self):
         skip_review.reject_skip("d900-901", 30.0, -1.0, labels_dir=self.dir)
         out = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, out, True)
         emit_labels.emit_labels({"d900-901": 0.0}, out, durations={"d900-901": 120.0},
                                 skip_maps={"d900-901": [{"at_s": 30.0, "delta_s": -1.0},
                                                         {"at_s": 90.0, "delta_s": 0.7}]},
@@ -139,7 +144,9 @@ class OrientationTests(unittest.TestCase):
 class SidecarAndDecideTests(unittest.TestCase):
     def setUp(self):
         self.out = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.out, True)
         self.labels = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.labels, True)
         # off_after - off_before == delta_s (-1.2); offsets chosen so reference-local
         # times stay positive (skipper_t - offset).
         self.cand = {"skipper": "d100-119", "reference": "d099-118", "at_s": 50.0,
@@ -226,6 +233,7 @@ class EnumerateTests(unittest.TestCase):
     """enumerate_candidates with the audio/detection layers stubbed."""
     def setUp(self):
         self.labels = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.labels, True)
         self._a, self._sk, self._so = skip_review._audio, skip_review._skips, skip_review._solve
         skip_review._audio = _AudioStub
         skip_review._solve = type("S", (), {
@@ -260,6 +268,7 @@ class PersistCandidatesTests(unittest.TestCase):
     """persist_candidates writes the sidecar (no audio, no mp3 -- the clip layer is retired)."""
     def test_writes_sidecar_keyed_by_stable_id(self):
         out = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, out, True)
         cand = {"skipper": "d100-119", "reference": "d099-118", "at_s": 50.0,
                 "delta_s": -1.2, "before_s": 49.0, "after_s": 51.0,
                 "seed_offset_s": -600.0, "conf": 0.95}
@@ -275,6 +284,8 @@ class PersistCandidatesTests(unittest.TestCase):
 
     def test_rerun_prunes_a_rejected_skip(self):
         out, labels = tempfile.mkdtemp(), tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, out, True)
+        self.addCleanup(shutil.rmtree, labels, True)
         cid = "d100-119_d099-118_skip1"
         skip_review.save_candidates(out, {cid: {
             "id": cid, "skipper": "d100-119", "reference": "d099-118",
@@ -288,6 +299,7 @@ class ScanForHintsTests(unittest.TestCase):
     """scan_for_hints feeds `streamalign hints`: detect, persist, return this file's skips."""
     def setUp(self):
         self.labels = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.labels, True)
         self._enum, self._gt, self._solve = (
             skip_review.enumerate_candidates, skip_review._gt, skip_review._solve)
         skip_review._solve = type("S", (), {"_dedupe": staticmethod(lambda e: list(e))})

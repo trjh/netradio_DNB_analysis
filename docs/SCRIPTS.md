@@ -35,6 +35,12 @@ absent. One deliberate exception: the undefined-name guard (`tests/test_harvest_
 `pip install pyflakes` (it is in both requirements files) and it runs anywhere; the
 audio-dependent tests need `.venv` (`make venv`).
 
+Every test cleans up the temporary files and directories it makes. `tests/test_temp_hygiene.py`
+enforces it: under `discover` it gives the run a temp root of its own and fails any test that
+leaves an entry behind in it, naming the test and the entry. Register the cleanup on the line
+that creates it: `self.addCleanup(shutil.rmtree, d, True)` for a directory,
+`self.addCleanup(os.unlink, path)` for a `NamedTemporaryFile(delete=False)`.
+
 ---
 
 ## Labelling a capture (the core loop — see [PROCESS](../PROCESS.md))
