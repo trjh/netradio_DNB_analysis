@@ -687,10 +687,9 @@ class TheOtherCacheReadingModesRefuseADarkPolicy(unittest.TestCase):
         argv = ["harvest.py", "--requeue-missing-sigs"]
         with unittest.mock.patch.object(sys, "argv", argv), \
                 unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: False), \
-                unittest.mock.patch.object(harvest, "listen_queue_split",
-                                          lambda: ([], set())), \
+                unittest.mock.patch.object(harvest, "load_rulings", lambda: set()), \
                 contextlib.redirect_stdout(io.StringIO()) as out:
-            harvest.main()
+            harvest.main()                     # the rulings file reads: the cache is the gate
         self.assertIn("the signature cache is dark", out.getvalue())
         self.assertFalse(os.path.exists(harvest.STATE),
                          "nothing was requeued or reported, so no state was written")

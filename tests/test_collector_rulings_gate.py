@@ -95,7 +95,7 @@ class TheTwoGates(unittest.TestCase):
         self._paths = (harvest.STATE_DIR, harvest.WRITER_LOCK, harvest.RULINGS,
                        harvest.STATE, harvest.QUEUE, harvest.CACHE, harvest.KEEP,
                        collector.STATE_DIR, collector.STATE, collector.QUEUE,
-                       collector.JOBS, collector.RESULTS, collector.KEEP,
+                       collector.JOBS, collector.RESULTS,
                        harvester.JOBS, harvester.RESULTS)
         harvest.STATE_DIR = os.path.join(t, "harvest")
         harvest.WRITER_LOCK = os.path.join(t, "writer.lock")
@@ -109,7 +109,6 @@ class TheTwoGates(unittest.TestCase):
         collector.QUEUE = os.path.join(t, "queue.json")
         collector.JOBS = os.path.join(t, "jobs")
         collector.RESULTS = os.path.join(t, "results")
-        collector.KEEP = os.path.join(t, "keep")
         harvester.JOBS = collector.JOBS                      # the spool's two names, one dir
         harvester.RESULTS = collector.RESULTS
 
@@ -117,7 +116,7 @@ class TheTwoGates(unittest.TestCase):
             (harvest.STATE_DIR, harvest.WRITER_LOCK, harvest.RULINGS,
              harvest.STATE, harvest.QUEUE, harvest.CACHE, harvest.KEEP,
              collector.STATE_DIR, collector.STATE, collector.QUEUE,
-             collector.JOBS, collector.RESULTS, collector.KEEP,
+             collector.JOBS, collector.RESULTS,
              harvester.JOBS, harvester.RESULTS) = self._paths
         self.addCleanup(restore_paths)
         # A real record on the spool, written by the spool's own writer: an ok result the
