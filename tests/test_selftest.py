@@ -118,48 +118,9 @@ class LiveCanary(unittest.TestCase):
                      "extract": None, "cap": None, "cstart": 0, "mb": 0, "me": 300}
         self.canary_chroma = "CANARY-CHROMA"
 
-    def test_refuses_to_enshrine_a_stream_that_is_not_the_record(self):
-        """THE WOLF-CRY GUARD. If the upload we found is the wrong record, the canary would fail
-        forever and we would stop believing it. So a candidate canary is validated against the
-        original we already hold, and rejected if it does not match. (Establishment is the one
-        place a fetch still lives; the re-score itself never fetches.)"""
-        with mock.patch.object(selftest, "cases", return_value=[self.case]), \
-             mock.patch.object(selftest, "_search", return_value="https://y/wrong"), \
-             mock.patch.object(selftest._cal, "chroma", return_value="C"), \
-             mock.patch.object(selftest._audio, "load_audio", return_value=[0.0]), \
-             mock.patch.object(selftest._cm, "match", return_value=(0.42, 0, 0.0)):  # nothing like it
-            est = selftest.establish_canary(lambda url: ("C", None, None))
-        self.assertFalse(est["ok"])
-        self.assertIn("not the record", est["why"])
-        self.assertFalse(os.path.exists(selftest.CANARY))   # and it is NOT saved
-
-    def test_establishes_a_canary_that_does_match_our_own_copy(self):
-        with mock.patch.object(selftest, "cases", return_value=[self.case]), \
-             mock.patch.object(selftest, "_search", return_value="https://y/right"), \
-             mock.patch.object(selftest._cal, "chroma", return_value="C"), \
-             mock.patch.object(selftest._audio, "load_audio", return_value=[0.0]), \
-             mock.patch.object(selftest._cm, "match", return_value=(0.006, 0, 0.0)):
-            est = selftest.establish_canary(lambda url: ("C", None, None))
-        self.assertTrue(est["ok"])
-        self.assertEqual(est["url"], "https://y/right")
-        self.assertTrue(os.path.exists(selftest.CANARY))
-
-    def test_a_stopped_fetch_is_a_skip_not_a_failure(self):
-        """A Ctrl-C during the establishment fetch is not a verdict on the upload -- a stop
-        is never a failure. The canary is not saved, and the result is `ok: None` (skip),
-        not `ok: False` (failure), so a by-hand `establish_canary` interrupted by a signal
-        does not look like "the upload is bad"."""
-        with mock.patch.object(selftest, "cases", return_value=[self.case]), \
-             mock.patch.object(selftest, "_search", return_value="https://y/right"):
-            est = selftest.establish_canary(lambda url: (None, None, "stopped"))
-        self.assertIsNone(est["ok"], "a stop is a skip, not a failure")
-        self.assertIn("stopped", est["why"])
-        self.assertFalse(os.path.exists(selftest.CANARY),
-                         "a stopped fetch saves no canary")
-
     def test_no_canary_json_defaults_to_the_first_calibration_case(self):
         """THE FRESH-MACHINE PATH: with no `canary.json` on disk, the re-score defaults to
-        the first calibration case (the same track `establish_canary` would pick), so the
+        the first calibration case (the same track `--offline` uses), so the
         check works end-to-end once `NETRADIO_CANARY_KEY` is set and the canary's signature
         is in the bucket. No manual `canary.json` step is needed."""
         # No canary.json written -- the fresh-machine state.
@@ -384,6 +345,58 @@ class LiveCLI(unittest.TestCase):
                 os.environ.pop(k, None)
             os.environ.update(saved_env)
             shutil.rmtree(tmp, ignore_errors=True)
+
+    def _pull(self, reserve_ok):
+        """Drive `_load_canary_signature` down its bucket-pull path with the policy and the
+        store faked, recording the order of the three calls."""
+        import numpy as np
+        try:
+            import cache_budget
+            import harvest
+            import sigstore
+        except Exception:
+            self.skipTest("harvest.py needs numpy -- not this test's job")
+        calls = []
+        cache = os.path.join(self.tmp, "chroma")
+        key = "u" + "c" * 20
+
+        def fake_fetch(name, dest_dir):
+            calls.append(("fetch", name))
+            os.makedirs(dest_dir, exist_ok=True)
+            dest = os.path.join(dest_dir, name)
+            np.save(dest, np.ones((12, 4), dtype="float16"))
+            return dest
+
+        with mock.patch.dict(os.environ, {"NETRADIO_CANARY_KEY": key}), \
+                mock.patch.object(selftest, "_chroma_cache_dir", lambda: cache), \
+                mock.patch.object(sigstore, "enabled", lambda: True), \
+                mock.patch.object(sigstore, "fetch", fake_fetch), \
+                mock.patch.object(cache_budget, "reserve",
+                                  lambda name, n=None: calls.append(("reserve", name, n))
+                                  or reserve_ok), \
+                mock.patch.object(cache_budget, "commit",
+                                  lambda name, path: calls.append(("commit", name, path))):
+            c, why = selftest._load_canary_signature()
+        return c, why, calls, cache, key, harvest.CHROMA_CACHE
+
+    def test_the_bucket_pull_goes_through_the_cache_policy(self):
+        """`--live` pulls the canary's signature into the chroma cache the way the harvester's
+        own pull does: `reserve` first, the download, then `commit`, so the entry is counted
+        and the cache's cap holds."""
+        c, why, calls, cache, key, chroma = self._pull(reserve_ok=True)
+        self.assertIsNone(why)
+        self.assertEqual(c.shape, (12, 4))
+        self.assertEqual(calls, [("reserve", chroma, None), ("fetch", key + ".npy"),
+                                 ("commit", chroma, os.path.join(cache, key + ".npy"))])
+
+    def test_a_refused_reserve_pulls_nothing(self):
+        """Past the disk floor the policy refuses, and nothing is downloaded: the check reads
+        "not checked" with the reason, rather than filling the disk the rest of the way."""
+        c, why, calls, cache, key, chroma = self._pull(reserve_ok=False)
+        self.assertIsNone(c)
+        self.assertIn("refused room", why)
+        self.assertEqual(calls, [("reserve", chroma, None)])
+        self.assertFalse(os.path.exists(os.path.join(cache, key + ".npy")))
 
     @staticmethod
     def _capture_stdout():

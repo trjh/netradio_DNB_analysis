@@ -362,8 +362,7 @@ def was_stopped(err):
     A guard that reads a different signal from the one the danger travels on is not a guard. A
     stop reaches a caller by either of two routes -- THIS process was signalled, which raises the
     flag, or only the child was, which arrives as its exit code turned into this string -- so
-    every guard checks both. `selftest.was_stopped` is the same predicate, duplicated rather than
-    imported because selftest must never import the harvester.
+    every guard checks both.
     """
     return (err or "").strip().lower() == STOPPED
 

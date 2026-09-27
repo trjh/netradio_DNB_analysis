@@ -46,13 +46,10 @@ canary's mix — and the canary cries wolf, saying "matcher broken" when the mat
 canary that cries wolf gets ignored, and then it is worse than no canary at all.
 
 So the canary's track is the **first calibration case** by default (`cases()[0]`), the same track
-`--offline` uses: feed that track's source URL through the queue as the canary, and the re-score
-has the mix it expects. For naming a DIFFERENT calibration case as the canary, `establish_canary`
-(by hand) searches for a stream of a solved track, fetches it, and scores what it fetched against
-the original held on disk — only if that is a true match is it saved as the canary. This is the
-one place a fetch still lives; the harvester's canary pass never fetches. The canary's key is the
-pool's own rule applied to that URL, and the harvester compares its re-sign with the signature
-filed under it.
+`--offline` uses: when the canary's file is that track, the re-score has the mix it expects. A
+`canary.json` written by hand names a different calibration case
+instead. The canary's key is the pool's own rule applied to that URL, and the harvester compares
+its re-sign with the signature filed under it. Nothing here fetches.
 
 Rank, never a bare cost
 -----------------------
@@ -65,7 +62,6 @@ that a broken matcher could pass is not a self-test.
 import argparse
 import json
 import os
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -124,29 +120,6 @@ def _read(path, default):
 
 def last():
     return _read(RESULT, {})
-
-
-# A STOP IS NEVER A VERDICT.
-#
-# A fetch callable returns exactly this error when a signal interrupted the decode. It says
-# nothing about the matcher, so it must not become a canary result: recorded as a FAILURE it
-# would sit on the harvest page saying the matcher is broken until the next daily
-# run, and recorded at all -- even as "not checked" -- it would satisfy a due-date check and
-# stand the canary down for 24 hours because somebody pressed Ctrl-C. So it is reported and
-# NOT recorded, and the next start asks again.
-STOPPED = "stopped"
-
-
-def was_stopped(err):
-    """True when a fetch came back because it was interrupted, not because anything failed.
-
-    Matched exactly, or as the tail of `establish_canary`'s "could not fetch <url>: <err>", so a
-    real error that happens to contain the word is not mistaken for a stop. `harvest.was_stopped`
-    is the same predicate; it is duplicated rather than imported because this module must never
-    import the harvester -- that is why `fetch` is injected.
-    """
-    e = (err or "").strip().lower()
-    return e == STOPPED or e.endswith(": " + STOPPED)
 
 
 def record(result):
@@ -229,70 +202,6 @@ def offline():
 
 # --- live: does the streaming pipeline still work? -----------------------------------------------
 
-def _search(name):
-    """Find a stream of a record by name. Only ever used to ESTABLISH a canary, and whatever it
-    returns is then validated against the original we already hold -- so a bad search result is
-    rejected, not trusted."""
-    try:
-        out = subprocess.run(
-            ["yt-dlp", "--no-warnings", "--skip-download", "--no-playlist",
-             "--print", "%(webpage_url)s", "ytsearch1:%s" % name],
-            capture_output=True, text=True, timeout=120).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return out.split("\n")[0].strip() or None if out.startswith("http") else None
-
-
-def establish_canary(fetch, subject=None):
-    """Pick a stream of a SOLVED track and prove it really is that record before trusting it.
-
-    This is the step that stops the canary crying wolf. We search, we fetch, and we score what we
-    fetched against the original we already hold on disk. If it is not a true match, the upload is
-    not the record -- so we refuse it rather than enshrine it as the thing we measure against.
-    """
-    cs = cases()
-    if not cs:
-        return {"ok": False, "why": "no calibration cases to build a canary from"}
-    subject = subject or cs[0]
-
-    # A HAND-PICKED URL, when the search keeps finding the wrong upload.
-    #
-    # `_search()` takes YouTube's first hit for the track name, and for the current subject
-    # (track 3, Jamie Myerson - Sky Blue) that hit is not the record: it scores 0.0867 against our
-    # own copy, so the guard below refuses it and no canary is ever established. Correct behaviour
-    # -- a canary that cries wolf is worse than none -- but it leaves the live check permanently
-    # "not checked", and there was no way to break the deadlock by hand.
-    #
-    # Set NETRADIO_CANARY_URL to a stream you know IS the record. It is still validated against our
-    # own copy, exactly like a searched one: a hand-picked URL is a hint, never an override.
-    url = os.environ.get("NETRADIO_CANARY_URL", "").strip() or _search(subject["name"])
-    if not url:
-        return {"ok": False, "why": "found no stream for %r -- set NETRADIO_CANARY_URL to a "
-                                    "stream of it, and it will be validated before use"
-                                    % subject["name"]}
-
-    c_fetched, _samples, err = fetch(url)
-    if was_stopped(err):
-        # A stop is never a verdict: a Ctrl-C during the fetch is not "the upload is bad",
-        # so it is reported as a skip (ok: None), not a failure, and no canary is saved.
-        return {"ok": None, "url": url, "why": "stopped before the fetch finished"}
-    if err or c_fetched is None:
-        return {"ok": False, "why": "could not fetch %s: %s" % (url, err)}
-
-    # THE VALIDATION: what we fetched, against the original we already hold.
-    local = _cal.chroma(_audio.load_audio(subject["orig"]))
-    cost, _shift, _at = _cm.match(local, c_fetched)
-    if cost is None or cost > TRUE_MATCH_MAX:
-        return {"ok": False, "url": url,
-                "why": "the stream we found is not the record (cost %s vs our own copy)"
-                       % ("none" if cost is None else "%.4f" % cost)}
-
-    canary = {"url": url, "track": subject["num"], "name": subject["name"],
-              "control_cost": round(float(cost), 4), "established": _now()}
-    _save(CANARY, canary)
-    return {"ok": True, **canary}
-
-
 def best_rival_cost(mystery_queries, c_fetched):
     """Best (lowest) cost any MYSTERY query scores against the fetched canary.
 
@@ -341,18 +250,15 @@ def live(c_canary, mystery_queries=None):
 
     The canary's track is the first calibration case by default (`cases()[0]`), so the
     re-score works on a fresh machine once `NETRADIO_CANARY_KEY` is set and the canary's
-    signature is in the bucket -- no `canary.json` needed. A `canary.json` written by
-    `establish_canary` (or by hand) overrides the default, naming a different calibration
-    case as the canary. The default matches `establish_canary`'s own default
-    (`subject = subject or cs[0]`), so a canary established under the old fetch-based
-    contract and a fresh canary under the new re-score contract agree on the same track.
+    signature is in the bucket -- no `canary.json` needed. A `canary.json` written by hand
+    overrides the default, naming a different calibration case as the canary.
     """
     cs = cases()
     canary = _read(CANARY, {})
     track = canary.get("track")
     if track is None:
         # No canary.json: default to the first calibration case, the same track
-        # `establish_canary` would pick. This makes the re-score work end-to-end on a
+        # `--offline` uses. This makes the re-score work end-to-end on a
         # fresh machine once the key is set and the canary's signature is in the bucket,
         # with no manual `canary.json` step.
         if not cs:
@@ -438,10 +344,20 @@ def _load_canary_signature():
                      "no bucket configured"
     path = os.path.join(d, key + ".npy")
     if not os.path.exists(path) and sigstore.enabled():
+        # A bucket pull is a write into the chroma cache, so it goes through the cache policy
+        # the way the harvester's own pull does (`harvest._load_sig`): `reserve` before the
+        # download (refused past the disk floor), `commit` after it, so the entry is counted
+        # and the cache's cap is enforced.
+        import cache_budget                             # lazy, like sigstore above
+        import harvest
+        if not cache_budget.reserve(harvest.CHROMA_CACHE, None):
+            return None, ("the cache policy refused room for the canary's signature -- the "
+                          "disk is past its floor, or the chroma cache is full")
         os.makedirs(d, exist_ok=True)
         if not sigstore.fetch(key + ".npy", d):
             return None, ("the canary's signature (%s.npy) is not in the bucket -- has the "
                           "canary been signed and uploaded?" % key)
+        cache_budget.commit(harvest.CHROMA_CACHE, path)
     try:
         return np.load(path).astype("float32"), None
     except (OSError, ValueError) as exc:

@@ -1249,6 +1249,43 @@ class TheCanaryPass(_SignerCase):
         self.assertNotIn("sig_alert", state)
         self.assertEqual(state.get("analyzed", 0), 0, "a canary pass is not a new signing")
 
+    def test_a_canary_re_landed_with_a_fresh_mtime_and_the_same_bytes_takes_the_pass(self):
+        """The row a real signing leaves carries the file's own size and mtime, and the scan
+        skips a file its row covers. So the same bytes, still under their old mtime, are
+        never proposed; landed again with the feed's time as their mtime, they are -- and the
+        canary pass runs on them. (The fixture's usual row, size 1 and mtime 1.0, never
+        covers the file, which is why the other loop tests could not see this.)"""
+        self.addCleanup(lambda: getattr(harvest, "_canary_checked", {}).clear())
+        key, path, _stored = self._canary(store=True)
+        st = os.stat(path)
+        harvest._save(harvest.LEDGER, {key: harvest._row(
+            key, st.st_size, st.st_mtime, "signed", None, "2026-01-01T00:00:00+00:00",
+            "etag-stored", {"url": "https://y/canary"})})
+        popen_calls = []
+        inner = fake_decode(pcm=_pcm(LONG_ENOUGH))
+        self._run_patches(lambda argv, **kw: popen_calls.append(argv) or inner(argv, **kw),
+                          chroma=self.CHROMA)
+        self._live(ok=True)
+        self._match({})
+
+        # the same bytes under the mtime the row records: covered, so never proposed
+        todo, covered = harvest.scan_directories(harvest._load(harvest.LEDGER, {}))
+        self.assertEqual(([r["key"] for r in todo], covered), ([], [key]))
+
+        # landed again: the same bytes, the feed's time as their mtime
+        fresh = st.st_mtime + 3600
+        os.utime(path, (fresh, fresh))
+        self.assertEqual(os.path.getsize(path), st.st_size, "the bytes are unchanged")
+        self._run_loop(self._qs(4), naps_before_stop=2)
+        state = harvest._load(harvest.STATE, {})
+        self.assertEqual(len(popen_calls), 1, "the pass re-signed the re-landed file once")
+        self.assertEqual(state["canary"]["key"], key)
+        self.assertEqual(state["canary"]["signature"], "same")
+        self.assertIs(state["canary"]["ok"], True)
+        self.assertEqual(self.put, [], "nothing uploaded")
+        self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["mtime"], st.st_mtime,
+                         "the pass does not move the row onto the new mtime")
+
     def test_a_canary_whose_row_is_not_signed_is_healed_by_the_ordinary_sign(self):
         """A `delayed` row (the sidecar lost from the bucket, say) is healed the published
         way -- a fresh sign that uploads both objects -- even for the canary's key."""

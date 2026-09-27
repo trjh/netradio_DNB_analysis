@@ -356,14 +356,7 @@ with an issue row instead, so a bucket blip never lets a sign replace the refere
 per process.
 
 **Which track the canary is.** The canary's mix is built from the **first calibration case** (the
-same track `--offline` uses), so the check works end-to-end on a fresh machine once the key is
-set and the canary's signature is in the bucket — no `canary.json` step is needed. Feed the first
-calibration case's source URL through the queue as the canary. (A `canary.json` written by the
-by-hand `establish_canary` step overrides the default, naming a different calibration case as the
-canary.)
-
-**Establishing a canary by hand** (optional, for naming a non-default track as the canary):
-`establish_canary` in `selftest.py` searches for a stream of a solved track, fetches it, and
-scores what it fetched against the original held on disk. If the stream is not the record it is
-rejected, not enshrined — a canary that cries wolf is worse than no canary. This is the one place
-a fetch still lives; the harvester's canary pass never fetches.
+same track `--offline` uses), so the canary's file must be that track. The check works end-to-end
+on a fresh machine once the key is set and the canary's signature is in the bucket — no
+`canary.json` step is needed. A `canary.json` written by hand overrides the default, naming a
+different calibration case as the canary. Nothing in the self-test fetches.
