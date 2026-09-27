@@ -373,6 +373,20 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         os.utime(path, (t, t))
         return path
 
+    def _fake_soundfile(self):
+        """write_excerpt imports soundfile to encode the WAV. These tests are about the cache
+        policy around the write, not the encoding, so a stand-in writes 16-bit PCM bytes: the
+        tests run where the audio libraries are not installed (the CI runner) as well as here."""
+        import types
+        import numpy as np
+
+        def write(fh, clip, _sr, format=None):
+            fh.write(b"RIFF" + np.asarray(clip, dtype="float32").astype("<i2").tobytes())
+        patcher = unittest.mock.patch.dict(sys.modules,
+                                           {"soundfile": types.SimpleNamespace(write=write)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _events(self):
         path = cache_budget.events_path()
         if not os.path.isfile(path):
@@ -421,9 +435,8 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         self.assertIsNone(harvest._keep_dir())
         self.assertIsNone(harvest.sig_path("https://example.invalid/x"))
 
-    @unittest.skipUnless(HAVE_AUDIO,
-                        "write_excerpt writes a real excerpt -- see requirements-streamalign.txt")
     def test_an_excerpt_past_the_cap_evicts_the_worst_of_its_mystery_first(self):
+        self._fake_soundfile()
         # A board of MT4 excerpts whose WORST is the NEWEST file: a plain oldest-added order
         # would keep the worst and drop the best; `by-score` must take the worst first.
         self._excerpt("MT4-0.0500-best.wav", 200 * self.KB, age_s=20 * 86400)
@@ -457,11 +470,10 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
                          [("MT4-0.0600-old.wav", "expired")],
                          "the sweep deletes through the policy, which records the reason")
 
-    @unittest.skipUnless(HAVE_AUDIO,
-                        "write_excerpt writes a real excerpt -- see requirements-streamalign.txt")
     def test_a_refused_excerpt_is_not_kept(self):
         """The write the policy refuses (the disk past its floor) leaves nothing on disk, so
         run() neither counts it as kept nor names it as the lead's audio: the lead survives."""
+        self._fake_soundfile()
         cache_budget._disk_usage = lambda _p: (100 * self.KB, 50 * self.KB, 50 * self.KB)
         os.environ["NETRADIO_DISK_MAX_PCT"] = "0"
         path = os.path.join(self.keep_dir, "MT4-0.0500-refused.wav")
@@ -471,12 +483,11 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         self.assertTrue([e for e in self._events() if e["event"] == "refuse"],
                         "the refusal is recorded like every other policy answer")
 
-    @unittest.skipUnless(HAVE_AUDIO,
-                        "write_excerpt writes a real excerpt -- see requirements-streamalign.txt")
     def test_an_excerpt_evicted_between_its_rename_and_its_commit_is_not_kept(self):
         """The rename and the commit are two calls; another writer's `reserve` that starts
         between them takes an excerpt the policy has not recorded yet. The write must not
         report a kept excerpt that is not on disk."""
+        self._fake_soundfile()
         import numpy as np
         # The cap admits the planned excerpt and nothing else beside it: 300 KB against a
         # ~32 KB excerpt, so another writer asking for 300 KB of room must take the excerpt.
