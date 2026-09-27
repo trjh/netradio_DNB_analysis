@@ -403,8 +403,8 @@ def main():
         # and the one a reader of this file can tell apart from a PASS.
         print(json.dumps({"kind": "live", "ok": None, "when": _now(),
                           "why": "the live check is not wired to a fetch any more -- use "
-                                 "--offline; the canary's stored signature is re-scored by "
-                                 "the harvester's own loop"}, indent=2))
+                                 "--offline; the canary's stored signature is not checked "
+                                 "yet"}, indent=2))
 
 
 if __name__ == "__main__":

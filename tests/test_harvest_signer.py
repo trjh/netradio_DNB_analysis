@@ -663,6 +663,32 @@ class TheScan(_SignerCase):
         self.assertEqual([r["key"] for r in todo], [key])
         self.assertEqual(covered, [])
 
+    def test_a_missing_sidecar_delay_is_wanted_again_unchanged(self):
+        """The second automatic delay: a `signed` row the reconciliation demoted because its
+        sidecar left the bucket keeps the size and mtime of the file it signed. The file is
+        still on disk, unchanged -- and it is proposed again, so the fresh sign re-uploads
+        both objects without the file having to change."""
+        key = _key("https://y/half-landed")
+        path = self._feed(key)
+        st = os.stat(path)
+        row = harvest._row(key, st.st_size, st.st_mtime, "delayed", "missing_sidecar",
+                           None, None, {})
+        todo, covered = harvest.scan_directories({key: row})
+        self.assertEqual([r["key"] for r in todo], [key])
+        self.assertEqual(covered, [])
+
+    def test_a_verdict_delay_on_an_unchanged_file_is_not_proposed(self):
+        """The three verdicts are not retried in place: an unchanged file stays covered."""
+        key = _key("https://y/judged")
+        path = self._feed(key)
+        st = os.stat(path)
+        for reason in ("decode_failed", "length_mismatch", "too_long"):
+            with self.subTest(reason=reason):
+                row = harvest._row(key, st.st_size, st.st_mtime, "delayed", reason,
+                                   None, None, {})
+                todo, covered = harvest.scan_directories({key: row})
+                self.assertEqual((todo, covered), ([], [key]))
+
     def test_only_the_top_level_of_each_directory_is_read(self):
         """`:`-separated directories, each its own top level."""
         other = os.path.join(self.tmp, "more-audio")
@@ -866,6 +892,20 @@ class TheLedger(_SignerCase):
 
 
 @unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class TheKeyRule(unittest.TestCase):
+    """`_sig_key` is this side's one copy of the URL-to-key rule, kept for the one-time move of
+    old match rows onto keys. Whoever feeds the directories applies the same rule to name its
+    files, so the two copies must never drift. One fixed URL and the fixed key it must give,
+    both written out: recomputing the hash here would test the rule against itself. The same
+    pair is pinned on the feeding side."""
+
+    @unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+    def test_the_pinned_vector(self):
+        name = harvest._sig_key("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        self.assertEqual(name, "udf2c6f7afc1a58783e15.npy")
+        self.assertEqual(name[:-len(".npy")], "udf2c6f7afc1a58783e15")   # the key is the stem
+
+
 class MatchRowsCarryTheKey(_SignerCase):
     """A match row joins on the key, and the old rows move onto it at first start."""
 

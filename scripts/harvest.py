@@ -818,6 +818,12 @@ def _sidecar_row_fields(sidecar):
             "artist": sidecar.get("artist"), "duration_s": sidecar.get("duration_s")}
 
 
+# The two `delayed` reasons the harvester retries on its own: neither is a verdict on the file
+# as fed. The other three (`decode_failed`, `length_mismatch`, `too_long`) are verdicts, and a
+# file behind one is signed again only when it changes (docs/HARVEST_FEED.md).
+AUTOMATIC_DELAYS = ("no_space", "missing_sidecar")
+
+
 def _row(key, size, mtime, status, reason, signed_at, uploaded_etag, sidecar):
     return {"key": key, "size": size, "mtime": mtime, "status": status, "reason": reason,
             "signed_at": signed_at, "uploaded_etag": uploaded_etag,
@@ -1075,10 +1081,15 @@ def scan_directories(ledger, issues=None, said=None):
             except OSError:
                 continue                     # vanished between listdir and now
             row = ledger.get(stem)
+            # The two automatic delays are proposed again even when the file is unchanged:
+            # `no_space` because the machine was full, not the file judged, and
+            # `missing_sidecar` because the bucket's entry is incomplete. A demoted row keeps
+            # the size and mtime of the file it signed, so without this a file still on disk
+            # would read as covered and the entry would never be completed.
             if (row is not None and row.get("size") == st.st_size
                     and row.get("mtime") == st.st_mtime
                     and not (row.get("status") == "delayed"
-                             and row.get("reason") == "no_space")):
+                             and row.get("reason") in AUTOMATIC_DELAYS)):
                 if stem not in covered:
                     covered.append(stem)      # the ledger already covers these exact bytes
                 continue
