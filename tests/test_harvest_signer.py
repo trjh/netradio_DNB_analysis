@@ -1161,6 +1161,57 @@ class TheLoopSignsAndScores(_SignerCase):
         self.assertEqual(row["duration_s"], 60.0,
                          "and the row carries the sidecar the sign weighed")
 
+    # --- the rulings file: a ruled key is signed, and scored only if its signature changed ---
+
+    def _one_scoring_pass(self, key, ruled, before_etag, after_etag):
+        """Feed `key`, with a ledger row from an earlier sign whose etag is `before_etag`
+        (None: no row at all) and whose size no longer covers the file, then run one pass in
+        which every signature matches mystery 4 well. Returns the pass's match rows."""
+        self._feed(key)
+        if before_etag is not None:
+            harvest._save(harvest.LEDGER, {key: harvest._row(
+                key, 1, 1.0, "signed", None, "then", before_etag, {})})
+        harvest._save(harvest.RULINGS, {key: "not_a_match"} if ruled else {})
+        qs = [(4, np.zeros((12, 8), dtype="float32"), "4:fp")]
+        self._store_on(etag=after_etag)
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        _exc, _naps, _nap = self._run(stop_after_naps=1)
+        with mock.patch.object(harvest, "queries", lambda state=None: qs), \
+                mock.patch.object(harvest, "_remote_objects",
+                                  lambda max_age_s=900: None), \
+                mock.patch.object(harvest, "_nap", _nap), \
+                mock.patch.object(harvest._cm, "match", return_value=(0.01, 0, 1.0)), \
+                mock.patch.object(harvest, "write_excerpt", lambda *a, **k: False), \
+                mock.patch.object(harvest, "rescan", lambda *a, **k: 0), \
+                mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
+                mock.patch.object(harvest.memwatch, "allocator_canary",
+                                  lambda *a, **k: (0, 0, None)):
+            harvest.run(None)
+        self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["status"], "signed",
+                         "a ruled key is still signed: the pool is ungated")
+        return [m for m in harvest._load(harvest.STATE, {}).get("matches", [])
+                if m.get("key") == key]
+
+    def test_a_ruled_key_with_an_unchanged_signature_is_not_scored(self):
+        key = _key("https://y/ruled-same")
+        self.assertEqual(self._one_scoring_pass(key, True, "etag-same", "etag-same"), [],
+                         "no lead for a key the rulings file retired")
+
+    def test_a_ruled_key_with_no_earlier_signature_on_record_is_not_scored(self):
+        key = _key("https://y/ruled-unknown")
+        self.assertEqual(self._one_scoring_pass(key, True, None, "etag-new"), [],
+                         "a change that cannot be shown leaves the ruling standing")
+
+    def test_a_ruled_key_whose_signature_changed_is_scored(self):
+        key = _key("https://y/ruled-changed")
+        rows = self._one_scoring_pass(key, True, "etag-old", "etag-new")
+        self.assertEqual([(m["mystery"], m["verdict"]) for m in rows], [(4, "MATCH")])
+
+    def test_an_unruled_key_is_scored_as_before(self):
+        key = _key("https://y/unruled")
+        rows = self._one_scoring_pass(key, False, "etag-same", "etag-same")
+        self.assertEqual([(m["mystery"], m["verdict"]) for m in rows], [(4, "MATCH")])
+
     def test_the_second_pass_counts_the_covered_file_once(self):
         key = _key("https://y/counted")
         self._feed(key)

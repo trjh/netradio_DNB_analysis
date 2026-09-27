@@ -202,7 +202,9 @@ it — the keys alone, never the reasons — re-reading it every pass so a rulin
 one loop iteration. **The harvester refuses to run without it** (`--run` and `--rescan` both
 refuse, naming the file), because a search that has forgotten every ruling hands back records
 already rejected. An empty file is fine — that is nothing ruled on yet; only a missing or
-unreadable file is a refusal.
+unreadable file is a refusal. A ruled key whose file is signed again is not scored against the
+mysteries, unless its signature changed: the bucket's ETag for the new `.npy` differs from the
+one its ledger row recorded before.
 
 **What it does.** For each audio file in the configured directories with a complete sidecar and
 no ledger row — or with a row whose size or modification time no longer matches, or a delay

@@ -1750,6 +1750,23 @@ def load_rulings():
     return set(data)
 
 
+def ruled_and_unchanged(key, ruled, before_etag, after_etag):
+    """Should the loop skip scoring the signature it just made for `key`? Yes when the key is
+    in the rulings file and its signature is the one it had before: a ruled key comes back
+    as a lead only if its signature changed.
+
+    The comparison is the signature object's ETag, before this sign (the ledger row's
+    `uploaded_etag`) against after it (the new row's). The ETag is the bucket's hash of the
+    `.npy` bytes, so it changes exactly when the signature does -- unlike the row's size and
+    modification time, which describe the audio file and change on a re-feed of the same
+    bytes. A change is scored only when both ETags are known and differ: with either
+    missing (no earlier row, or the bucket unset) the signature cannot be shown to have
+    changed, and the ruling stands."""
+    if key not in ruled:
+        return False
+    return not (before_etag and after_etag and before_etag != after_etag)
+
+
 def note_no_queries(state, qs):
     """Keep the "nothing to search for" state truthful for the caller that just refreshed
     the query set (run(), at its start).
@@ -2113,6 +2130,8 @@ def run(args):
         rec_file = todo_files[0]
         state["current"] = rec_file["key"]
         _save(STATE, state)
+        # The signature the key had before this sign, for the rulings check below.
+        before_etag = (load_ledger().get(rec_file["key"]) or {}).get("uploaded_etag")
         c, samples = sign_file(rec_file["path"], issues=state["issues"])
         # A stop is never a verdict, and it arrives by either route: this process was signalled
         # (the flag), or only the decode child was (the sentinel error). Checking one and not
@@ -2142,6 +2161,11 @@ def run(args):
             # count as work, and nothing to retire -- the next pass sees the truth.
             state["errors"] += 1
 
+        if c is not None and ruled_and_unchanged(rec_file["key"], ruled, before_etag,
+                                                 row.get("uploaded_etag")):
+            print("  %s is ruled on and its signature is unchanged -- not scored"
+                  % rec_file["key"])
+            c = samples = None
         if c is not None:
             for num, qc, _qkey in qs:
                 cost, shift, at = _cm.match(qc, c)
