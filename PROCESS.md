@@ -446,7 +446,7 @@ Start and stop it with its own launcher — one pidfile, one log, one harvester:
 
 ```bash
 scripts/run_harvester.sh start      # in the background; it runs for weeks
-scripts/run_harvester.sh status     # up or down, the pid, the last state write, the ledger
+scripts/run_harvester.sh status     # up or down, the pid, the updated stamp, the ledger
 scripts/run_harvester.sh stop       # asks for a clean exit, and waits for it
 scripts/run_harvester.sh restart
 ```

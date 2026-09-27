@@ -12,7 +12,7 @@
 #                                        # start only — see below
 #   scripts/run_harvester.sh stop       # SIGTERM, then WAIT for the exit
 #   scripts/run_harvester.sh restart [--accept-ledger-rebuild]   # same one argument as start
-#   scripts/run_harvester.sh status     # up or down, the pid, the last state write, the ledger
+#   scripts/run_harvester.sh status     # up or down, the pid, the state's updated stamp, the ledger
 #   scripts/run_harvester.sh help
 #
 # Why a launcher at all, when `make harvest-run` already ran it: that target ran in the
@@ -63,8 +63,8 @@ LOG_MAX_BYTES="${NETRADIO_HARVEST_LOG_MAX_BYTES:-10485760}"
 # How long `stop` waits for a clean exit before it stops being polite. harvest.py handles
 # SIGTERM itself: it stops the decode in flight — that file is signed on a later pass, not
 # finished now — and then writes its state and its ledger. That last write is what the wait
-# buys: a `kill -9` instead would leave state.json claiming "working" for a process that no
-# longer exists.
+# buys: a `kill -9` instead would leave state.json still naming the file it was signing
+# (`current`) for a process that no longer exists.
 STOP_WAIT_S="${NETRADIO_HARVEST_STOP_WAIT_S:-30}"
 PYTHON="${NETRADIO_PYTHON:-$ROOT/.venv/bin/python}"
 # Set by `start --accept-ledger-rebuild` (or `restart --accept-ledger-rebuild`, which takes
@@ -111,10 +111,12 @@ running_pid() {
 }
 
 state_updated() {
-  # When the harvester last wrote .harvest/state.json: its "updated" stamp (UTC, ISO 8601),
-  # which every state save sets. The harvester keeps no named phase; a stamp that stops
-  # moving while the process is UP is the sign of a stuck run. Read with grep rather than a
-  # JSON parser so `status` answers with no venv and no interpreter of any kind.
+  # The "updated" stamp in .harvest/state.json (UTC, ISO 8601). The harvester keeps no
+  # named phase. It sets this stamp when the state is first made and at the end of each
+  # signing pass, and not on its other saves, so the stamp stands still while it is paused,
+  # idle, or mid-decode of a long file. A still stamp alone is not proof of a stuck run: the
+  # log that `status` names is the next thing to read. Read with grep rather than a JSON
+  # parser so `status` answers with no venv and no interpreter of any kind.
   [ -f "$STATE" ] || { printf 'unknown (no state file yet)'; return 0; }
   local hit
   hit="$(grep -o -m1 '"updated"[[:space:]]*:[[:space:]]*"[^"]*"' "$STATE" 2>/dev/null || true)"
@@ -249,7 +251,7 @@ cmd_status() {
   else
     echo "harvester DOWN"
   fi
-  echo "  state:  last written $(state_updated)"
+  echo "  state:  updated $(state_updated)"
   echo "  ledger: $(ledger_line)"
   echo "  log:    $LOG"
   [ -n "$pid" ]

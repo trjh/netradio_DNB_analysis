@@ -258,7 +258,7 @@ class HarvestTakesWhatTheLauncherForwards(LauncherTestCase):
         os.makedirs(self.state_dir, exist_ok=True)
         harvest._save(os.path.join(self.state_dir, "state.json"), state)
         out = self.run_cmd("status")
-        self.assertIn("state:  last written %s" % state["updated"], out.stdout)
+        self.assertIn("state:  updated %s" % state["updated"], out.stdout)
 
     def test_a_plain_start_leaves_the_flag_off(self):
         args = self.parse_with_harvest(self.forwarded_argv())
@@ -398,7 +398,7 @@ class StatusTests(LauncherTestCase):
         out = self.run_cmd("status")
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("harvester UP (pid %d)" % self.read_pid(), out.stdout)
-        self.assertIn("state:  last written 2026-09-27T12:34:56+00:00", out.stdout)
+        self.assertIn("state:  updated 2026-09-27T12:34:56+00:00", out.stdout)
 
     def test_an_absent_ledger_is_never_an_error(self):
         """Until the signing pass has run once there is no ledger, and that is normal:
