@@ -28,7 +28,9 @@ function-by-function tour of how the pieces compose.
   `master_end = length + start + Σ skips`, and a missed skip propagates to every
   file placed downstream. Skips must be found, not approximated away.
 - **No third-party audio deps in the core.** ffmpeg decodes any container to
-  float32 mono @ 16 kHz; numpy does the FFTs. Decoded arrays are cached on disk.
+  float32 mono @ 16 kHz; numpy does the FFTs. Decoded arrays are cached on disk,
+  bounded by the machine's cache policy (`scripts/cache_budget.py`; every entry
+  re-decodes in seconds).
   (Feature-based original-track↔mix work uses `librosa`, imported lazily; `make venv`
   installs it -- see `requirements-streamalign.txt`.)
 
@@ -40,8 +42,8 @@ Tim's hand-measured alignments — the `file start sync` placements and the
 pairs. This is the data everything else is graded against.
 
 **2. Find (measure from the audio).**
-- `audio.py` — ffmpeg→numpy loader (16 kHz mono), on-disk decode cache, file
-  resolution.
+- `audio.py` — ffmpeg→numpy loader (16 kHz mono), on-disk decode cache bounded by
+  the machine's cache policy, capture-file resolution.
 - `align.py` — pairwise offset between two captures: decimated FFT
   cross-correlation (coarse) → GCC-PHAT (sub-sample).
 - `skips.py` — walk an overlap window-by-window tracking the local offset; steps in
