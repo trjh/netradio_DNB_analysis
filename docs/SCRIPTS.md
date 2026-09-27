@@ -117,7 +117,8 @@ set -a && . ./.env && set +a
 **The harvester's caches live on the machine's cache policy.** The signature working cache and
 the excerpt board (`chroma` and `candidates`) are no longer fixed paths: each lives under
 `NETRADIO_CACHE_ROOT` (`NETRADIO_CHROMA_CACHE_DIR` / `NETRADIO_CANDIDATES_CACHE_DIR` to override),
-bounded by the policy — a 14-day age on signatures (the bucket is their long-term home), a
+bounded by the policy — a 14-day age on signatures while the bucket is configured (the bucket is
+their long-term home; a signature the bucket has not verified is pinned, since it is the only copy), a
 250 MB cap on the board that gives up the worst excerpt of a mystery first, and the policy's
 shared disk floor. With `NETRADIO_CACHE_ROOT` unset there is no cache directory at all and the
 harvester **refuses to start**, naming the setting: a signature it cannot keep is network cost

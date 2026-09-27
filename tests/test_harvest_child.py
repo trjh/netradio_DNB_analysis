@@ -1357,6 +1357,10 @@ class ASignatureEvictedBetweenRenameAndCommit(unittest.TestCase):
         cache_budget._REGISTRY.clear()
         cache_budget._STATS.clear()
         harvest.register_caches()
+        # A re-sign of a key the bucket already holds: the only signature the `chroma` pin
+        # lets an eviction take (an unverified one is pinned as the only copy).
+        self.addCleanup(harvest._REMOTE_KEYS.update, dict(harvest._REMOTE_KEYS))
+        harvest._REMOTE_KEYS.update(keys={harvest._sig_key(self.url)})
 
     def _restore(self):
         cache_budget._REGISTRY.clear()
