@@ -121,9 +121,13 @@ def _score_new(state, url, c, samples, qs):
         print("  %s  MT%d  cost %.4f  %s" % (hit["verdict"], num, cost, url))
 
 
-def collect_once(state, q, qs):
+def collect_once(state, q, qs, ruled=frozenset()):
     """Fold every result currently on the spool. Public so tests can step it.
-    Returns how many results were folded."""
+    Returns how many results were folded.
+
+    `ruled` is the retired set from the rulings file. A result whose URL was ruled on after
+    its fetch was spooled is folded (filed and cleaned up) but never scored, so it cannot
+    become a match."""
     try:
         names = sorted(os.listdir(RESULTS))
     except OSError:
@@ -181,7 +185,8 @@ def collect_once(state, q, qs):
                 # Submitted but the signature is nowhere (upload failed AND cache lost). Leave
                 # the result for a later pass rather than silently declaring the URL done.
                 continue
-            _score_new(state, url, c, _job_audio(sigkey), qs)
+            if not harvest._ruled(url, ruled):
+                _score_new(state, url, c, _job_audio(sigkey), qs)
         elif rec.get("retry_later"):
             # The third outcome (see harvester.submit_result). The fetch stopped at the two-hour
             # mark because the URL is a master, and the audio is still wanted -- the player splits
@@ -401,7 +406,7 @@ def run():
         qs, changed = refresh_dashboard_state(state)
         if changed:
             _save(STATE, state)
-        n = collect_once(state, q, qs)
+        n = collect_once(state, q, qs, ruled)
 
         dropped = harvest.drop_ruled_excerpts(state, ruled)
         todo = len(harvest.unscored_pairs(state, q, ruled, qs))
@@ -452,7 +457,8 @@ def main():
         # ruled". (The readable-file retirement surface is the loop's, applied on the pass
         # after the fold, exactly as at the base; this gate only keeps the one-shot entry
         # point from scoring on amnesia.)
-        if harvest.load_rulings() is None:
+        ruled = harvest.load_rulings()
+        if ruled is None:
             print("the rulings file (%s) is absent or unreadable -- this runtime has no way to "
                   "know which keys it must never propose again, so the one-shot pass is not "
                   "folding. Start it again once the queue's owner has written the file."
@@ -460,7 +466,7 @@ def main():
             return
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})
-        print(collect_once(state, q, queries()))
+        print(collect_once(state, q, queries(), ruled))
         return
     if args.run:
         run()

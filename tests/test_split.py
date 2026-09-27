@@ -441,6 +441,53 @@ class TestCollector(Base):
                          else [], [harvest._sig_key(URL) + ".json"],
                          "the spool keeps its record: nothing crashed, nothing was lost")
 
+    def test_a_result_ruled_on_after_it_was_spooled_is_folded_but_never_scored(self):
+        """The window between a fetch and its fold: the URL is ruled on while its result sits
+        on the spool. The fold files it and drains the spool as for any result, but it is not
+        scored, so it cannot come back as a match."""
+        q = self._harvested()
+        state = harvest.blank_state()
+        qs = [(4, self._chroma(), "MT4:deadbeef")]
+        with unittest.mock.patch.object(collector, "_cm") as cm:
+            cm.match.return_value = (0.031, 2, 12.0)     # would be a MATCH, if scored
+            n = collector.collect_once(state, q, qs, {harvest._sig_key(URL)})
+        self.assertEqual(n, 1)
+        self.assertEqual(state["matches"], [], "a ruled key never becomes a match")
+        cm.match.assert_not_called()
+        self.assertEqual((q["pending"], q["done"]), ([], [URL]))
+        self.assertEqual(os.listdir(collector.RESULTS), [], "the spool is drained as usual")
+
+    def test_both_entry_points_hand_the_rulings_to_the_fold(self):
+        """`run()` and `--once` each read the rulings file and pass the set they read to the
+        fold, so a readable file is applied to the spool, not only checked for."""
+        ruled = {harvest._sig_key(URL)}
+        seen = []
+
+        class Stop(Exception):
+            pass
+
+        def fold(state, q, qs, ruled=frozenset()):
+            seen.append(ruled)
+            raise Stop
+
+        collector.STATE = os.path.join(self.tmp.name, "state-entry.json")
+        with unittest.mock.patch.object(harvest, "load_rulings", lambda: ruled), \
+                unittest.mock.patch.object(collector, "_caches_ready", lambda: (True, "")), \
+                unittest.mock.patch.object(collector, "queries", lambda state=None: []), \
+                unittest.mock.patch.object(collector, "refresh_dashboard_state",
+                                          lambda state: ([], False)), \
+                unittest.mock.patch.object(harvest, "acquire_writer_lock", lambda: object()), \
+                unittest.mock.patch.object(harvest, "recover_missing_sigs_at_start",
+                                          lambda *a, **k: None), \
+                unittest.mock.patch.object(collector, "collect_once", fold), \
+                unittest.mock.patch.dict(os.environ, {"NETRADIO_COLLECTOR": "on"}):
+            with unittest.mock.patch.object(sys, "argv", ["collector.py", "--once"]), \
+                    self.assertRaises(Stop):
+                collector.main()
+            with self.assertRaises(Stop):
+                collector.run()
+        self.assertEqual(seen, [ruled, ruled])
+
     def test_once_refuses_an_unreadable_rulings_file_before_the_fold(self):
         """--once is the cron entry point, and it scores the spool: an unreadable rulings
         file must stop it before the fold, the same gate the loop makes (local review, cycle
