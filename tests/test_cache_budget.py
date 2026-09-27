@@ -1,8 +1,7 @@
 """The cache policy: the registry, reserve/commit/remove, the eviction run and the disk floor.
 
-A copy of this suite travels with the module wherever it is registered (this repo's copy adjusts
-only the import path). Hermetic: one temporary directory per cache under a temporary root, and the volume faked through
-the `_disk_usage` seam so the floor can be put anywhere. The fake volume's "used" figure is a
+Hermetic: one temporary directory per cache under a temporary root, and the volume faked
+through the `_disk_usage` seam so the floor can be put anywhere. The fake volume's "used" figure is a
 fixed base plus every byte under the temporary tree, so an eviction moves it the way a real
 deletion would.
 """
