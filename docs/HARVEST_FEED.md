@@ -82,15 +82,16 @@ the file being done with. When the bucket is configured and either upload fails,
 **no row at all** and is signed again on a later pass, so a bucket that is briefly refusing
 writes costs one re-decode, never a signature with no sidecar beside it.
 
-A file can come back **delayed** instead of signed, with one of five reasons:
+A file can come back **delayed** instead of signed, with one of five reasons: three verdicts
+on the file as fed, and two automatic reasons the harvester retries on its own:
 
 | Reason | Meaning | What the feed does |
 |---|---|---|
 | `length_mismatch` | the decoded length differs from the sidecar's `duration_s` by more than `max(10 s, 2 %)` — a hand-over that disagrees with its own label is not signed | a verdict on the file as fed |
 | `too_long` | the file's length (the sidecar's claim, or the decode's own measure when the sidecar declares none) is over four hours — nothing is ever truncated | a verdict on the file as fed |
 | `decode_failed` | ffmpeg could not decode it, or it is under 45 s (a signature shorter than that is not trusted) | a verdict on the file as fed |
-| `no_space` | the cache policy had no room for the signature | transient: the file is retried on later passes until room is made |
-| `missing_sidecar` | the signature is in the bucket but its companion sidecar is not — a legacy object from before the sidecar was mandatory, or a half-landed sign the bucket held onto | re-feed the key: the row has no size or mtime, so the scan proposes the file for a fresh sign that re-uploads both |
+| `no_space` | the cache policy had no room for the signature | automatic: the file is retried on later passes until room is made, even when it is unchanged |
+| `missing_sidecar` | the signature is in the bucket but its companion sidecar is not — a legacy object from before the sidecar was mandatory, a half-landed sign the bucket held onto, or a sidecar that has since left the bucket | automatic, like `no_space`: the scan proposes any file under the key, changed or not, for a fresh sign that re-uploads both; a key with no file in the directories is fed like a key with no row |
 
 A sidecar with no `duration_s` makes no length claim, and no claim is never a mismatch; only
 the four-hour backstop applies to it.
@@ -127,7 +128,8 @@ absent etag is the mark, and the feed re-feeds the key.
 
 **A file that changes is signed again.** A file whose size or modification time no longer
 matches its row is re-signed, whatever the row said before — so a re-cut part can be offered
-again under the same key, and a `no_space` delay is retried without any action from the feed.
+again under the same key, and a `no_space` or `missing_sidecar` delay is retried without any
+action from the feed.
 
 **A re-offer takes the old sidecar away first.** When you replace a file under a key that
 already has a sidecar, remove the old sidecar before the new audio's final rename, and write
@@ -179,7 +181,9 @@ ledger is the complete record of the pool from its first day. A signature whose 
 NOT in the bucket is seeded `delayed` with `missing_sidecar` instead, so the feeder re-feeds
 the key for a fresh sign that re-uploads both. On every later start the rows are reconciled
 against the bucket's listing: a `signed` row whose object is gone loses its
-`uploaded_etag`, and a `signed` row missing its etag whose object is present gains it.
+`uploaded_etag`, a `signed` row missing its etag whose object is present gains it, and a
+`signed` row whose sidecar has gone from the listing is demoted to `delayed` with
+`missing_sidecar`, its `uploaded_etag` and `signed_at` cleared.
 
 ### What a feed reads
 
@@ -192,11 +196,17 @@ The ledger is the one thing the feed reads back:
   signed locally. With the store configured the harvester never writes this row for a live
   sign — a sign whose upload failed gets no row and is tried again. The key can be fed
   again.
-* **`delayed`, any reason but `no_space`** — a verdict on the file as fed. Feed the key again
-  only when the file would differ: a re-cut part has a new size and modification time, and the
-  harvester signs a changed file again.
-* **`delayed` with `no_space`** — transient; the file stays, and the harvester retries it on
+* **`delayed` with `decode_failed`, `length_mismatch` or `too_long`** — a verdict on the file
+  as fed. Feed the key again only as a changed file: a re-cut part has a new size and
+  modification time, a file landed again with the time of the feed as its modification time
+  counts as changed even when its bytes are the same, and the harvester signs a changed file
+  again.
+* **`delayed` with `no_space`** — automatic; the file stays, and the harvester retries it on
   later passes. Nothing for the feed to do.
+* **`delayed` with `missing_sidecar`** — automatic, like `no_space`: the bucket's entry is
+  incomplete, not the audio judged. A file under the key that is still in the directories is
+  signed again as it is; a key with no file there is fed like a key with no row, and the fresh
+  sign uploads both objects.
 * **no row** — not yet signed; the feed's list wants it.
 
 Nothing is renamed, moved, or written beside the audio: the ledger is the mark.

@@ -13,6 +13,7 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -630,12 +631,18 @@ class FindAudioFileTests(unittest.TestCase):
         self.assertTrue(audio.find_audio_file("b.au", self.dir).endswith("b.au"))
 
     def test_wav_preferred_over_au_then_mp3(self):
-        # the preference order is unchanged: .wav, then .au, then the transcode
+        # the preference order is unchanged: .wav, then .au, then the transcode.
+        # All three steps are pinned: .wav over both, and .au over the transcode --
+        # without the second pair the order could be .wav > .mp3 > .au and still pass.
         self._touch("c.wav")
         self._touch("c.au")
         self._touch("c.mp3")
         self.assertTrue(audio.find_audio_file("c", self.dir).endswith("c.wav"))
         self.assertTrue(audio.find_audio_file("c.mp3", self.dir).endswith("c.wav"))
+        self._touch("f.au")
+        self._touch("f.mp3")
+        self.assertTrue(audio.find_audio_file("f", self.dir).endswith("f.au"))
+        self.assertTrue(audio.find_audio_file("f.mp3", self.dir).endswith("f.au"))
 
     def test_a_directory_holding_only_the_mp3_still_resolves(self):
         # a machine can hold only the transcodes, so a stem with no capture
@@ -719,6 +726,15 @@ class CachePolicyTests(unittest.TestCase):
         return os.path.join(self.cache_dir, audio._cache_key(
             os.path.join(self.audio_dir, name), audio.SR, True) + ".npy")
 
+    @staticmethod
+    def _events():
+        """The policy's event log, as records. Empty when nothing was written."""
+        path = cache_budget.events_path()
+        if not path or not os.path.isfile(path):
+            return []
+        with open(path, encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+
     def test_a_load_writes_through_the_policy(self):
         self._source("a.wav")
         rec = audio.register_cache()
@@ -730,6 +746,16 @@ class CachePolicyTests(unittest.TestCase):
         row = cache_budget.status()["caches"][0]
         self.assertEqual((row["name"], row["entries"], row["refill"]),
                          ("streamalign", 1, "re-decode"))
+        # the `commit` after the write is what tells the policy the entry landed:
+        # it records the admit and runs the eviction when the write pushed the
+        # cache over its cap. Without this the whole call could be deleted and
+        # every other assertion here would still pass -- a file on disk inside
+        # the cache directory is not the same thing as an entry the policy knows.
+        admits = [e for e in self._events()
+                  if e["event"] == "admit" and e["cache"] == "streamalign"]
+        self.assertEqual(len(admits), 1, "load_audio must commit the entry it wrote")
+        self.assertEqual(admits[0]["entry"], os.path.basename(self._entry("a.wav")))
+        self.assertEqual(admits[0]["bytes"], os.path.getsize(self._entry("a.wav")))
 
     def test_a_second_load_reads_the_cache_without_decoding_again(self):
         self._source("a.wav")
@@ -742,18 +768,49 @@ class CachePolicyTests(unittest.TestCase):
     def test_the_registration_reads_the_variable_family(self):
         os.environ["NETRADIO_STREAMALIGN_CACHE_DIR"] = os.path.join(self.tmp, "elsewhere")
         os.environ["NETRADIO_STREAMALIGN_CACHE_GB"] = "2"
-        os.environ["NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS"] = "14"
+        os.environ["NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS"] = "3"
         rec = audio.register_cache()
         self.assertEqual(rec["dir"], os.path.join(self.tmp, "elsewhere"))
         self.assertEqual(rec["cap"], 2 * cache_budget.GB)
-        self.assertEqual(rec["max_age"], 14)
+        self.assertEqual(rec["max_age"], 3)              # the variable overrides the default
         self.assertEqual(rec["rank"], 3)
 
     def test_the_registration_defaults(self):
         rec = audio.register_cache()
         self.assertEqual(rec["cap"], cache_budget.DEFAULT_CAP)
-        self.assertIsNone(rec["max_age"])
+        self.assertEqual(rec["max_age"], 14)             # aged with no line in .env
         self.assertEqual(rec["order"], "oldest-added")
+
+    def test_the_age_default_can_be_turned_off(self):
+        os.environ["NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS"] = "none"
+        self.assertIsNone(audio.register_cache()["max_age"])
+
+    def test_the_reservation_is_the_file_np_save_writes(self):
+        """A cap of exactly the raw array's bytes cannot hold the .npy file (its header is on
+        top), so the entry is refused rather than written past the cap."""
+        self._source("a.wav")
+        os.environ["NETRADIO_STREAMALIGN_CACHE_GB"] = repr(self.SAMPLES * 4 / cache_budget.GB)
+        audio.register_cache()
+        signal = audio.load_audio("a", audio_dir=self.audio_dir)
+        self.assertEqual(len(signal), self.SAMPLES)             # the decode is still returned
+        self.assertFalse(os.path.isfile(self._entry("a.wav")))
+        row = cache_budget.status()["caches"][0]
+        self.assertLessEqual(row["size"], row["cap"])
+        self.assertEqual(audio._npy_bytes(signal), self.SAMPLES * 4 + 128)
+
+    def test_a_load_ages_out_a_stale_entry_under_the_cap(self):
+        """The cache is under its cap, so commit evicts nothing; the write's own eviction run
+        applies the 14-day default and takes the entry older than that."""
+        self._source("a.wav")
+        self._source("b.wav")
+        audio.register_cache()
+        audio.load_audio("a", audio_dir=self.audio_dir)
+        stale = self._entry("a.wav")
+        old = time.time() - 15 * 86400
+        os.utime(stale, (old, old))
+        audio.load_audio("b", audio_dir=self.audio_dir)
+        self.assertFalse(os.path.isfile(stale), "an entry past the age limit goes on the next write")
+        self.assertTrue(os.path.isfile(self._entry("b.wav")))
 
     def test_a_lowered_cap_evicts_on_the_next_load(self):
         self._source("a.wav")

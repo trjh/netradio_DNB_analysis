@@ -32,15 +32,18 @@ Machine-wide settings:
     NETRADIO_DISK_MAX_PCT       the floor, default 82: the volume is never allowed past this full
                                 (used / (used + free)), whatever any cache's cap says.
     NETRADIO_CACHE_EVENTS_DAYS  how long a record stays in the event log, default 30.
+    NETRADIO_CACHE_IN_PROGRESS_MIN
+                                how long a write in progress is held, default 60 (below).
 
 The event log is one JSON record per line in `events.jsonl`, under `NETRADIO_DOWNLOAD_ROOT` when
 that is set and under `NETRADIO_CACHE_ROOT` otherwise. Every admit, eviction, removal and refusal
 writes one record. The lock file `.cache_budget.lock` under the root serialises every change,
 across processes, so two eviction runs never work on one directory at once.
 
-A file whose name ends in `.tmp` or `.part` and was modified within the last hour is a write in
-progress: it counts toward the cache's size and is never evicted or removed. Older than that, it is
-a write that died part-way and is evicted like any other entry.
+A file whose name ends in `.tmp` or `.part` and was modified within the last
+`NETRADIO_CACHE_IN_PROGRESS_MIN` minutes is a write in progress: it counts toward the cache's size
+and is never evicted or removed. Older than that, it is a write that died part-way and is evicted
+like any other entry.
 """
 
 import contextlib
@@ -59,7 +62,7 @@ DEFAULT_DISK_MAX_PCT = 82
 DEFAULT_EVENTS_DAYS = 30
 ORDERS = ("oldest-added", "newest-added", "by-score")
 IN_PROGRESS = (".tmp", ".part")
-IN_PROGRESS_S = 3600    # a write in progress older than this died part-way
+DEFAULT_IN_PROGRESS_MIN = 60    # a write in progress older than this died part-way
 LOCK_NAME = ".cache_budget.lock"
 EVENTS_NAME = "events.jsonl"
 
@@ -103,6 +106,14 @@ def disk_max_pct():
 def events_days():
     text = os.environ.get("NETRADIO_CACHE_EVENTS_DAYS", "").strip()
     return _number(text, DEFAULT_EVENTS_DAYS, "NETRADIO_CACHE_EVENTS_DAYS") if text else DEFAULT_EVENTS_DAYS
+
+
+def in_progress_s():
+    """Seconds a `.tmp`/`.part` file is held as a write in progress."""
+    text = os.environ.get("NETRADIO_CACHE_IN_PROGRESS_MIN", "").strip()
+    minutes = (_number(text, DEFAULT_IN_PROGRESS_MIN, "NETRADIO_CACHE_IN_PROGRESS_MIN")
+               if text else DEFAULT_IN_PROGRESS_MIN)
+    return minutes * 60
 
 
 def _read_cap(name, default):
@@ -333,7 +344,7 @@ def _held(rec, path):
     """Pinned, or a write in progress: never evicted."""
     if path.endswith(IN_PROGRESS):
         try:
-            if _now().timestamp() - os.path.getmtime(path) < IN_PROGRESS_S:
+            if _now().timestamp() - os.path.getmtime(path) < in_progress_s():
                 return True
         except OSError:
             return False                        # gone: nothing left to hold
@@ -391,13 +402,19 @@ def reserve(name, nbytes=None):
     cap - headroom. `None` is a write of unplanned length: admitted while the cache is under its
     cap, and free to run into the headroom and past the cap (it is never stopped part-way; the
     `commit` after it corrects the overflow). Evicts other entries in the cache's order to fit;
-    refuses, evicting nothing, when that cannot fit it (everything left is pinned) or when the
-    volume would pass the floor. A name that is not registered is always admitted.
+    refuses when it cannot — evicting nothing when everything left is held or when the volume
+    would pass the floor, and refusing after the attempt when the evictions did not free enough,
+    because an entry could not be deleted. A size that is not a finite number of zero or more
+    is refused. A name that is not registered is always admitted.
     """
     rec = _REGISTRY.get(name) if enabled() else None
     if rec is None:
         return True
     with _machine_lock():
+        if nbytes is not None and (isinstance(nbytes, bool) or not isinstance(nbytes, (int, float))
+                                   or not math.isfinite(nbytes) or nbytes < 0):
+            _record("refuse", name, reason="size", op="reserve", asked=repr(nbytes))
+            return False
         if _disk_pct(rec["dir"], nbytes or 0) > disk_max_pct():
             _record("refuse", name, nbytes=nbytes, reason="floor", op="reserve")
             return False
@@ -413,7 +430,9 @@ def reserve(name, nbytes=None):
         if target < 0 or size - freeable > target:
             _record("refuse", name, nbytes=nbytes, reason="cap", op="reserve")
             return False
-        _evict_to(rec, entries, target, "cap")
+        if _evict_to(rec, entries, target, "cap") > target:
+            _record("refuse", name, nbytes=nbytes, reason="cap", op="reserve")
+            return False
         return True
 
 
