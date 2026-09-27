@@ -121,7 +121,9 @@ class ExcerptsAreExcerpts(unittest.TestCase):
         import numpy as np
         from streamalign import audio as _audio
         import soundfile as sf
-        path = os.path.join(tempfile.mkdtemp(), "x.wav")
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        path = os.path.join(d, "x.wav")
         harvest.write_excerpt(np.zeros(int(samples_s * _audio.SR), dtype="float32"), at_s, path)
         return sf.info(path).duration if os.path.exists(path) else 0.0
 

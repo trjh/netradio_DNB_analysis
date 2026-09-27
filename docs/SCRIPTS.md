@@ -35,6 +35,12 @@ absent. One deliberate exception: the undefined-name guard (`tests/test_harvest_
 `pip install pyflakes` (it is in both requirements files) and it runs anywhere; the
 audio-dependent tests need `.venv` (`make venv`).
 
+Every test cleans up the temporary files and directories it makes. `tests/test_temp_hygiene.py`
+enforces it: under `discover` it gives the run a temp root of its own and fails any test that
+leaves an entry behind in it, naming the test and the entry. Register the cleanup on the line
+that creates it: `self.addCleanup(shutil.rmtree, d, True)` for a directory,
+`self.addCleanup(os.unlink, path)` for a `NamedTemporaryFile(delete=False)`.
+
 ---
 
 ## Labelling a capture (the core loop — see [PROCESS](../PROCESS.md))
@@ -96,11 +102,19 @@ own original, the change is wrong.
 ## The harvester
 
 ```bash
-make harvest-run                                                      # runs for weeks
+scripts/run_harvester.sh start                                        # runs for weeks
+scripts/run_harvester.sh start --accept-ledger-rebuild                # forwarded to harvest.py
+                                                                      # --run, that one start only
+scripts/run_harvester.sh status                                       # pid, phase, ledger
+scripts/run_harvester.sh stop                                         # / restart [--accept-ledger-rebuild]
+make harvest-run                                                      # alias for `start`
 
 set -a && . ./.env && set +a
 . .venv/bin/activate && python scripts/harvest.py --status
 . .venv/bin/activate && MallocLargeCache=0 python scripts/harvest.py --run
+                                                                      # the foreground form:
+                                                                      # no pidfile, no log,
+                                                                      # dies with the terminal
 . .venv/bin/activate && python scripts/harvest.py --pause        # / --resume
 . .venv/bin/activate && python scripts/harvest.py --purge-audio  # throw every retained excerpt away
 . .venv/bin/activate && python scripts/harvest.py --forget 7     # drop MT7's leads + pairings
@@ -112,6 +126,51 @@ set -a && . ./.env && set +a
                                                                       # signature is LOST (refuses
                                                                       # while a writer runs)
 ```
+
+**`scripts/run_harvester.sh` is the way in.** A run lasts weeks, so it belongs in the
+background under something that remembers it: the launcher reads `.env`, sets
+`MallocLargeCache=0` (the memory bound, which only works if it is in the environment at
+process start), writes one pidfile at `.harvest/harvester.pid` and appends to one log at
+`.harvest/harvest.log`, which it renames to `harvest.log.1` **at a start**, when the log is
+at or over 10 MB by then — one generation back (`NETRADIO_HARVEST_LOG_MAX_BYTES` moves the
+cap). The rename happens between runs and never during one, so a single run's log is bounded
+by when it is next restarted. `start` refuses while a harvester is already up, clears a
+pidfile whose process is gone or is now something else, and takes a lock directory
+(`.harvest/harvester.start.lock`) so two simultaneous starts resolve to one harvester and one
+pidfile. `stop` asks for a clean exit and waits up to 30 seconds for it
+(`NETRADIO_HARVEST_STOP_WAIT_S`) before it resorts to `kill -9`. `status` prints whether it is
+up, its pid, the phase it last wrote to `.harvest/state.json`, and whether the ledger is
+there — and **an absent ledger is a normal answer**, not an error: before the signing pass has
+run once there is nothing signed and no candidates, which is exactly what a fresh clone looks
+like. Same shape as the align server's `scripts/run_align.sh`, deliberately, so the two read
+alike.
+
+**`start` and `restart` take one optional argument, `--accept-ledger-rebuild`**, forwarded to
+`harvest.py --run` unchanged and only for that one start — the operator's override, once
+`harvest.py` itself carries the flag, for the case where it refuses to start because its
+rebuilt ledger differs from the recorded one past a threshold. `harvest.py`'s own support for
+the flag ships on a separate branch; until that lands here, `harvest.py --run` rejects it as
+an unrecognized argument, the same as any unsupported flag would be — the launcher's job is
+only to forward it faithfully once both sides carry it. Anything else after `start`/`restart`
+is refused with the usage message rather than passed through, so a typo is caught here rather
+than by `harvest.py`'s own argument parsing.
+
+**The pidfile is the launcher's own, and so is what `status` can see.** A harvester started
+some other way — by hand as `harvest.py --run`, or by another front-end keeping a pidfile of
+its own — is not in `.harvest/harvester.pid`, so `status` calls it DOWN, and `start` will
+launch beside it only to be turned away by `harvest.py`'s writer flock (`the harvester exited
+immediately`, with the refusal at the end of the log) rather than by the tidy "already
+running". Only one harvester can ever run — that flock is the real guarantee, not this
+pidfile — but the launcher cannot manage a run it did not start. Stop such a run the way it
+was started.
+
+**Exit codes**, for a caller that branches on them: `status` is 0 when the harvester is up
+and **1 when it is down**; `start` is 1 when it refuses (one is already running, another
+start is in flight, no interpreter) and 0 when one is now up; `stop` is 0 either way. A `2`
+is a usage error: an unknown verb, an argument to `start`/`restart` other than
+`--accept-ledger-rebuild`, or a `NETRADIO_HARVEST_*` value that is not a plain number —
+`NETRADIO_HARVEST_LOG_MAX_BYTES=10MB` is refused rather than quietly taken as "never
+rotate". The interpreter is `.venv/bin/python` unless `NETRADIO_PYTHON` names another one.
 
 **The harvester's caches live on the machine's cache policy.** The signature working cache and
 the excerpt board (`chroma` and `candidates`) are no longer fixed paths: each lives under
