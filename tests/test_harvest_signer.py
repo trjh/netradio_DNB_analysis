@@ -902,9 +902,9 @@ class TheKeyRule(unittest.TestCase):
 
     @unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
     def test_the_pinned_vector(self):
-        name = harvest._sig_key("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-        self.assertEqual(name, "udf2c6f7afc1a58783e15.npy")
-        self.assertEqual(name[:-len(".npy")], "udf2c6f7afc1a58783e15")   # the key is the stem
+        name = harvest._sig_key("https://example.com/a-track")
+        self.assertEqual(name, "u571928de5f26668c8f40.npy")
+        self.assertEqual(name[:-len(".npy")], "u571928de5f26668c8f40")   # the key is the stem
 
 
 @unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
