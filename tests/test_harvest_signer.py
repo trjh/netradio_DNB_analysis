@@ -1369,7 +1369,8 @@ class TheHarvesterOwnsNothingButItsOwnFiles(_SignerCase):
         """The sidecar is the only notice the harvester takes: no queue, no download index,
         no other process's store is opened to decide what to work on."""
         src = open(os.path.join(SCRIPTS, "harvest.py"), encoding="utf-8").read()
-        for name in ("NETRADIO_LISTEN_QUEUE", "listen_queue", "index.json",
+        for name in ("NETRADIO_LISTEN_QUEUE", "sync_listen_queue", "listen_queue_split",
+                     "_load_queue_items", "_queue.json", "index.json",
                      "NETRADIO_YTDLP", "NETRADIO_CANARY_URL"):
             self.assertNotIn(name, src, "%s has no business in the signer" % name)
 
