@@ -7,6 +7,9 @@
 # state directory.
 #
 #   scripts/run_harvester.sh start      # harvest.py --run under the venv, MallocLargeCache=0
+#   scripts/run_harvester.sh start --accept-ledger-rebuild
+#                                        # forwards the one override harvest.py --run accepts,
+#                                        # for that start only — see below
 #   scripts/run_harvester.sh stop       # SIGTERM, then WAIT for the exit
 #   scripts/run_harvester.sh restart
 #   scripts/run_harvester.sh status     # up or down, the pid, the phase, the ledger
@@ -64,6 +67,13 @@ LOG_MAX_BYTES="${NETRADIO_HARVEST_LOG_MAX_BYTES:-10485760}"
 # for a process that no longer exists.
 STOP_WAIT_S="${NETRADIO_HARVEST_STOP_WAIT_S:-30}"
 PYTHON="${NETRADIO_PYTHON:-$ROOT/.venv/bin/python}"
+# Set by `start --accept-ledger-rebuild`, the one argument `start` takes: harvest.py --run
+# refuses to start when its rebuilt ledger differs from the recorded one past a threshold,
+# and this is the operator's override for that one start, forwarded to harvest.py --run
+# unchanged. Nothing else is forwarded — an unrecognized argument to `start` is refused, not
+# passed through, so a typo reaches the operator as a usage error here rather than as
+# harvest.py's own argument-parsing error three layers down.
+ACCEPT_LEDGER_REBUILD=0
 
 require_count() {
   # $1 = the variable's name, $2 = its value. Both knobs above are plain counts, and a
@@ -171,7 +181,12 @@ start_locked() {
   # and swapped. It has to be in the environment AT PROCESS START, which is why it is set
   # here on the command rather than anywhere inside the run. Harmless off macOS (an
   # unknown variable). The fetch child sets it again for itself.
-  MallocLargeCache=0 nohup "$PYTHON" scripts/harvest.py --run >>"$LOG" 2>&1 &
+  if [ "$ACCEPT_LEDGER_REBUILD" = 1 ]; then
+    MallocLargeCache=0 nohup "$PYTHON" scripts/harvest.py --run --accept-ledger-rebuild \
+      >>"$LOG" 2>&1 &
+  else
+    MallocLargeCache=0 nohup "$PYTHON" scripts/harvest.py --run >>"$LOG" 2>&1 &
+  fi
   pid=$!
   echo "$pid" >"$PIDFILE"
   sleep 1
@@ -241,11 +256,19 @@ cmd_status() {
 }
 
 usage() {
-  echo "usage: $0 {start|stop|restart|status|help}"
+  echo "usage: $0 {start [--accept-ledger-rebuild]|stop|restart|status|help}"
 }
 
 case "${1:-status}" in
-  start)   cmd_start ;;
+  start)
+    shift
+    case "$#:${1:-}" in
+      0:) ;;
+      1:--accept-ledger-rebuild) ACCEPT_LEDGER_REBUILD=1 ;;
+      *) echo "start: unknown argument(s): $*" >&2; usage >&2; exit 2 ;;
+    esac
+    cmd_start
+    ;;
   stop)    cmd_stop ;;
   restart) cmd_stop; cmd_start ;;
   status)  cmd_status ;;
