@@ -77,7 +77,7 @@ PAUSE = os.path.join(STATE_DIR, "PAUSED")
 # The retired set, from a rulings file another process writes: {key: reason}, the keys this
 # search must never propose again, for any mystery, present or future -- one key per entry
 # the listening queue has ruled on, or that is the queue owner's own upload. The queue's
-# owner (the one writer of the listen queue) writes the file whole, atomically, at its start
+# owner (the one writer of that queue) writes the file whole, atomically, at its start
 # and after every ruling; this side only ever READS it, and the supervisor will not start a
 # harvester while it is absent -- a search that has forgotten every ruling hands back records
 # already rejected.
@@ -1634,7 +1634,7 @@ def drop_ruled_excerpts(state, ruled):
     whole (url, cost, mystery, key, at_s, verdict): the SCORE is the record; the audio was only
     ever the evidence.
 
-    Runs on every pass, right after the rulings file is re-read, so a ruling made at /harvest
+    Runs on every pass, right after the rulings file is re-read, so a ruling the operator makes
     takes effect within one loop iteration. The TTL sweep above remains the backstop for anything
     ruled while the harvester was off.
     """
@@ -1672,7 +1672,7 @@ def drop_ruled_excerpts(state, ruled):
 # We tell them apart by inspecting the path (a dir, or a basename of `index.json`), not a new env
 # var -- the player owns the layout, and the harvester should follow it wherever it goes.
 
-LISTEN_QUEUE = os.environ.get("NETRADIO_LISTEN_QUEUE", "")
+CANDIDATE_QUEUE = os.environ.get("NETRADIO_LISTEN_QUEUE", "")
 
 
 # The retirement read. The queue's ruling flags (`listened`, `discarded`, `ignored`,
@@ -1717,15 +1717,15 @@ def _load_queue_items():
     layout). Raises OSError/ValueError on a missing/torn/mid-write/wrong-shaped file -- the
     caller turns that into "empty, try again next pass".
     """
-    if os.path.isdir(LISTEN_QUEUE):
-        manifest_path = os.path.join(LISTEN_QUEUE, "index.json")
-    elif os.path.basename(LISTEN_QUEUE) == "index.json":
-        manifest_path = LISTEN_QUEUE
+    if os.path.isdir(CANDIDATE_QUEUE):
+        manifest_path = os.path.join(CANDIDATE_QUEUE, "index.json")
+    elif os.path.basename(CANDIDATE_QUEUE) == "index.json":
+        manifest_path = CANDIDATE_QUEUE
     else:
         manifest_path = None             # a plain file -> the legacy single-file layout
 
     if manifest_path is None:
-        with open(LISTEN_QUEUE, "r", encoding="utf-8") as fh:
+        with open(CANDIDATE_QUEUE, "r", encoding="utf-8") as fh:
             items = (json.load(fh) or {}).get("items") or []
     else:
         shard_dir = os.path.dirname(manifest_path)
@@ -1787,7 +1787,7 @@ def _is_cooling(item):
 
 
 def listen_queue_split(issues=None):
-    """The candidate URLs from the player's listen queue. Read-only; never raises.
+    """The candidate URLs from the operator's queue. Read-only; never raises.
 
     Reads whichever layout NETRADIO_LISTEN_QUEUE names (single file, merged view, or sharded
     dir/manifest -- see _load_queue_items). Empty-on-failure: a weird queue is "try again
@@ -1801,7 +1801,7 @@ def listen_queue_split(issues=None):
     `issues`, when a list is passed, collects one `{"url": ..., "reason": ...}` row per entry
     refused here. A refusal is silent otherwise, and a silent refusal is indistinguishable from
     a queue that simply had nothing in it."""
-    if not LISTEN_QUEUE or not os.path.exists(LISTEN_QUEUE):
+    if not CANDIDATE_QUEUE or not os.path.exists(CANDIDATE_QUEUE):
         return []
     try:
         items = _load_queue_items()
@@ -1854,7 +1854,7 @@ def queue_duration(url, max_age_s=300):
     now = time.time()
     if _DURATIONS["by_url"] is None or now - _DURATIONS["at"] > max_age_s:
         by_url = {}
-        if LISTEN_QUEUE and os.path.exists(LISTEN_QUEUE):
+        if CANDIDATE_QUEUE and os.path.exists(CANDIDATE_QUEUE):
             try:
                 for it in _load_queue_items():
                     u, d = it.get("url"), it.get("duration")
