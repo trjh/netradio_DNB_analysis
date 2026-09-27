@@ -178,8 +178,9 @@ def load_audio(name, sr=SR, mono=True, use_cache=True, audio_dir=None):
                     os.makedirs(cache_dir, exist_ok=True)
                     try:
                         # the .tmp suffix is the policy's write-in-progress mark:
-                        # fresh, it is never evicted; an hour old (a decode that
-                        # died), it is evicted like any other entry.
+                        # fresh, it is never evicted; older than
+                        # NETRADIO_CACHE_IN_PROGRESS_MIN (a decode that died), it is
+                        # evicted like any other entry.
                         tmp = "%s.%d.tmp" % (cache_path, os.getpid())
                         with open(tmp, "wb") as handle:  # file handle => np.save won't append .npy
                             np.save(handle, signal)
@@ -188,6 +189,9 @@ def load_audio(name, sr=SR, mono=True, use_cache=True, audio_dir=None):
                         pass            # ENOSPC, a race: never fail the decode
                     else:
                         cache_budget.commit(CACHE, cache_path)
+                        # commit evicts only past the cap or the floor; this run
+                        # applies the age limit too, so every write ages the cache
+                        cache_budget.run_eviction(CACHE)
         except OSError:
             pass    # the lock file, an unwritable root: the cache is optional
     return signal
