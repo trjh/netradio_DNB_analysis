@@ -348,8 +348,8 @@ class TheTooLongBackstop(unittest.TestCase):
         json.dump({"items": items}, fh)
         fh.close()
         self.addCleanup(os.unlink, fh.name)
-        self.addCleanup(setattr, harvest, "LISTEN_QUEUE", harvest.LISTEN_QUEUE)
-        harvest.LISTEN_QUEUE = fh.name
+        self.addCleanup(setattr, harvest, "CANDIDATE_QUEUE", harvest.CANDIDATE_QUEUE)
+        harvest.CANDIDATE_QUEUE = fh.name
 
     def test_an_unsplit_master_is_skipped_with_a_reason(self):
         self._queue([{"url": "https://y/master", "title": "6 HOUR SET", "duration": 21600}])
@@ -497,8 +497,8 @@ class TheTooLongBackstop(unittest.TestCase):
         fh.write("{ this is not json")
         fh.close()
         self.addCleanup(os.unlink, fh.name)
-        self.addCleanup(setattr, harvest, "LISTEN_QUEUE", harvest.LISTEN_QUEUE)
-        harvest.LISTEN_QUEUE = fh.name
+        self.addCleanup(setattr, harvest, "CANDIDATE_QUEUE", harvest.CANDIDATE_QUEUE)
+        harvest.CANDIDATE_QUEUE = fh.name
         harvest._DURATIONS.update({"at": 0.0, "by_url": None})
         self.addCleanup(harvest._DURATIONS.update, {"at": 0.0, "by_url": None})
         self.assertIsNone(harvest.queue_duration("https://y/a"))

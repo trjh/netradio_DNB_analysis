@@ -35,7 +35,7 @@ class ListenQueueSplit(unittest.TestCase):
         fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
         json.dump({"items": items}, fh)
         fh.close()
-        harvest.LISTEN_QUEUE = fh.name
+        harvest.CANDIDATE_QUEUE = fh.name
         self.addCleanup(os.unlink, fh.name)
 
     def test_unheard_entries_are_candidates(self):
@@ -77,12 +77,12 @@ class ListenQueueSplit(unittest.TestCase):
         fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
         fh.write('{"items": [{"url": "https://y/a"')      # truncated
         fh.close()
-        harvest.LISTEN_QUEUE = fh.name
+        harvest.CANDIDATE_QUEUE = fh.name
         self.addCleanup(os.unlink, fh.name)
         self.assertEqual(harvest.listen_queue_split(), [])
 
     def test_inert_when_the_player_is_not_there(self):
-        harvest.LISTEN_QUEUE = ""
+        harvest.CANDIDATE_QUEUE = ""
         self.assertEqual(harvest.listen_queue_split(), [])
 
 
@@ -94,7 +94,7 @@ class ShardedListenQueue(unittest.TestCase):
     or the manifest itself."""
 
     def _shards(self, shards, point_at="dir"):
-        """Build a shard dir from {name: [items]} and aim LISTEN_QUEUE at the dir or the manifest.
+        """Build a shard dir from {name: [items]} and aim CANDIDATE_QUEUE at the dir or the manifest.
         Returns the dir so a test can corrupt it further."""
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, ignore_errors=True)
@@ -105,7 +105,7 @@ class ShardedListenQueue(unittest.TestCase):
             manifest["shards"].append({"name": name, "count": len(items)})
         with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as fh:
             json.dump(manifest, fh)
-        harvest.LISTEN_QUEUE = d if point_at == "dir" else os.path.join(d, "index.json")
+        harvest.CANDIDATE_QUEUE = d if point_at == "dir" else os.path.join(d, "index.json")
         return d
 
     def test_items_concatenate_across_shards_in_manifest_order(self):
@@ -146,7 +146,7 @@ class ShardedListenQueue(unittest.TestCase):
     def test_a_missing_manifest_is_survived(self):
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, ignore_errors=True)
-        harvest.LISTEN_QUEUE = d                       # a dir with no index.json yet
+        harvest.CANDIDATE_QUEUE = d                       # a dir with no index.json yet
         self.assertEqual(harvest.listen_queue_split(), [])
 
     def test_a_manifest_with_string_shard_entries_is_survived(self):
@@ -227,7 +227,7 @@ class ShardedListenQueue(unittest.TestCase):
 @unittest.skipIf(harvest is None, "harvest.py needs the librosa venv (.venv) — skipping")
 class RetryAfterCooling(unittest.TestCase):
     """`retry_after` (ISO YYYY-MM-DD) holds a URL back from the network while its date is in the
-    future -- exactly the player's rule. Cooling gates the OFFER and nothing else: the URL is not
+    future -- exactly the queue owner's rule. Cooling gates the OFFER and nothing else: the URL is not
     a candidate today, and it rejoins on its own once the date passes (the retirement that
     once outranked it here is the rulings file's now -- a cooling entry that is also ruled on
     is simply held back like any other)."""
@@ -236,7 +236,7 @@ class RetryAfterCooling(unittest.TestCase):
         fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
         json.dump({"items": items}, fh)
         fh.close()
-        harvest.LISTEN_QUEUE = fh.name
+        harvest.CANDIDATE_QUEUE = fh.name
         self.addCleanup(os.unlink, fh.name)
 
     def _today(self):
@@ -267,7 +267,7 @@ class SyncIntoOurQueue(unittest.TestCase):
         fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
         json.dump({"items": items}, fh)
         fh.close()
-        harvest.LISTEN_QUEUE = fh.name
+        harvest.CANDIDATE_QUEUE = fh.name
         self.addCleanup(os.unlink, fh.name)
 
     def test_new_entries_flow_in(self):

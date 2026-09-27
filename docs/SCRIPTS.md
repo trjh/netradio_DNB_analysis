@@ -252,7 +252,7 @@ a broken instrument.
 means "not any Mystery Track", including the ones whose clips do not exist yet. So a rescan skips
 it. Without that, the day MT8 lands, every record you have already rejected comes straight back at
 you. (It does **not** mean "heard" — you can rule a record out as a match and still want to listen
-to it. The player keeps those two verdicts apart.) The retired set is a **rulings file**,
+to it. The queue's owner keeps those two verdicts apart.) The retired set is a **rulings file**,
 `.harvest/rulings.json`: one key per entry the queue has ruled on (heard, discarded, ignored,
 duplicate, not-a-match) or that is the queue owner's own upload, each with its reason. The queue's
 owner writes it whole, atomically, at its start and after every ruling; the harvester only reads
@@ -263,11 +263,11 @@ file), because a search that has forgotten every
 ruling hands back records already rejected. An empty file is fine — that is a queue with nothing
 ruled on yet; only a missing or unreadable file is a refusal.
 
-**What it does.** Takes its candidates from the player's **listen queue** (holding back,
+**What it does.** Takes its candidates from the operator's **queue** of URLs (holding back,
 temporarily, anything a recent fetch failed on: a `retry_after` date in the future keeps the URL
 off the network until it passes) and keeps its own working queue in `.harvest/`. The rulings file
 gates both directions of that fold: a ruled key never flows in, and one ruled on while it sat on
-the working queue flows out. It reads the queue in whatever layout the player
+the working queue flows out. It reads the queue in whatever layout its owner
 keeps it — the single `listen_queue.json`, or the sharded `listen_queue/` directory (its
 `index.json` manifest + `shard-NNNN.json` files) — read-only, never writing.
 

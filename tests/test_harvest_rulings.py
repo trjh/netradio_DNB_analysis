@@ -1,7 +1,7 @@
 """The retired set is a file the queue's owner writes -- the search reads only the keys.
 
 The harvester used to derive its never-again set -- every key the search must not propose,
-for any mystery, present or future -- from the listen queue's ruling flags, read directly every
+for any mystery, present or future -- from the queue's ruling flags, read directly every
 pass. The rulings are the queue owner's own, so the file it computes them into is too:
 `.harvest/rulings.json`, `{key: reason}`, written whole and atomically at its start and after
 every ruling. These tests pin the read side: which keys the file retires, that nothing else is
@@ -156,9 +156,9 @@ class RuledKeysNeverFlowIntoTheWorkingQueue(unittest.TestCase):
         fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
         json.dump({"items": items}, fh)
         fh.close()
-        harvest.LISTEN_QUEUE = fh.name
+        self.addCleanup(setattr, harvest, "CANDIDATE_QUEUE", harvest.CANDIDATE_QUEUE)
+        harvest.CANDIDATE_QUEUE = fh.name
         self.addCleanup(os.unlink, fh.name)
-        self.addCleanup(setattr, harvest, "LISTEN_QUEUE", harvest.LISTEN_QUEUE)
 
     def _rule_out(self, *urls):
         harvest._save(harvest.RULINGS, {harvest._sig_key(u)[:-4]: "listened" for u in urls})
