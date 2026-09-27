@@ -261,6 +261,21 @@ class RegistryAndEvictionRun(CacheBudgetBase):
         self.assertTrue(cb.remove("c", stale, "cleanup"))
         self.assertTrue(cb.remove("c", stale, "cleanup"))   # already gone: gone, not pinned
 
+    def test_the_in_progress_age_is_a_setting(self):
+        self.assertEqual(cb.in_progress_s(), 60 * 60)           # default 60 minutes
+        os.environ["NETRADIO_CACHE_IN_PROGRESS_MIN"] = "10"
+        self.assertEqual(cb.in_progress_s(), 10 * 60)
+        rec = self.cache("c", cap=2 * KB)
+        self.file(rec, "slow.tmp", age_s=5 * 60)                # held: younger than 10 minutes
+        self.file(rec, "dead.part", age_s=15 * 60)              # older: a write that died
+        self.file(rec, "b", age_s=100)
+        self.file(rec, "c", age_s=50)
+        cb.run_eviction()
+        self.assertEqual(self.names(rec), ["c", "slow.tmp"])
+        os.environ["NETRADIO_CACHE_IN_PROGRESS_MIN"] = "soon"
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(cb.in_progress_s(), 60 * 60)       # a bad value keeps the default
+
     def test_the_lock_file_and_the_event_log_are_never_entries(self):
         rec = self.cache("c", cap=KB)
         for fname in (cb.LOCK_NAME, cb.EVENTS_NAME):
@@ -299,6 +314,22 @@ class RegistryAndEvictionRun(CacheBudgetBase):
         cb.run_eviction()
         self.assertEqual(self.names(rec), ["a", "b", "c"])
         self.assertTrue(cb.status()["caches"][0]["over_cap"])
+
+    def test_a_reserve_whose_evictions_could_not_be_carried_out_is_refused(self):
+        """Nothing is pinned, so the entries are chosen for eviction — but the unlinks fail (a
+        read-only directory, a permission, an immutable flag) and the cache is still at its cap.
+        The write is refused rather than admitted into room that was never freed."""
+        rec = self.cache("c", cap=3 * KB)
+        for n in "abc":
+            self.file(rec, n)
+        os.chmod(rec["dir"], 0o555)
+        self.addCleanup(os.chmod, rec["dir"], 0o755)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertFalse(cb.reserve("c", KB))
+        self.assertIn("could not evict", out.getvalue())
+        self.assertEqual(self.names(rec), ["a", "b", "c"])
+        self.assertEqual([(e["event"], e["reason"], e["op"]) for e in self.events()],
+                         [("refuse", "cap", "reserve")])
 
     def test_a_lowered_cap_evicts_on_the_next_run(self):
         rec = self.cache("c", cap=10 * KB)
