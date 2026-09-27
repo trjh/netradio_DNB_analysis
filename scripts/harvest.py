@@ -2325,19 +2325,6 @@ def run(args):
                       % (n_ev, freed / 1e6))
 
         # --- the sign step: one file a pass ------------------------------------------------
-        # Room first, decode second. The probe is the policy's own answer to "is there room
-        # for a signature", asked once per pass so a full disk does not put every file through
-        # a multi-hour decode that ends in `no_space`; the child asks again with the real
-        # size, and its refusal is the row's reason.
-        if not cache_budget.reserve(CHROMA_CACHE, None):
-            if "no-room" not in said:
-                said.add("no-room")
-                print("# the cache policy refuses room for a signature (the disk is past its "
-                      "floor, or the chroma cache is over its cap with nothing evictable) -- "
-                      "signing waits for an eviction run to make room")
-            if _nap(PASS_GAP_S):
-                return _stopped(state)
-            continue
         todo_files, covered = scan_directories(ledger, issues=state.setdefault("issues", []),
                                                said=said)
         # A scan can refuse a whole directory's worth of badly-named files in one pass; trim
@@ -2404,6 +2391,23 @@ def run(args):
                 return
             state["updated"] = _now()
             _save(STATE, state)
+            continue
+        # Room first, decode second, for an ordinary sign. The probe is the policy's own answer
+        # to "is there room for a signature", asked once per pass so a full disk does not put
+        # every file through a multi-hour decode that ends in `no_space`; the child asks again
+        # with the real size, and its refusal is the row's reason. It is asked here, after the
+        # canary pass above, because that pass writes nothing into the cache: a full cache must
+        # not stop the canary's re-sign, comparison and alarm.
+        if not cache_budget.reserve(CHROMA_CACHE, None):
+            if "no-room" not in said:
+                said.add("no-room")
+                print("# the cache policy refuses room for a signature (the disk is past its "
+                      "floor, or the chroma cache is over its cap with nothing evictable) -- "
+                      "signing waits for an eviction run to make room")
+            state["current"] = None
+            _save(STATE, state)
+            if _nap(PASS_GAP_S):
+                return _stopped(state)
             continue
         c, samples = sign_file(rec_file["path"], issues=state["issues"])
         # A stop is never a verdict, and it arrives by either route: this process was signalled

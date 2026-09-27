@@ -1286,6 +1286,30 @@ class TheCanaryPass(_SignerCase):
         self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["mtime"], st.st_mtime,
                          "the pass does not move the row onto the new mtime")
 
+    def test_a_full_cache_stops_an_ordinary_sign_but_not_the_canary_pass(self):
+        """The loop's room probe guards a sign that writes into the cache. The canary pass
+        writes nothing there, so a cache the policy refuses must not stop it: the re-fed canary
+        is re-signed, compared and scored, and an ordinary file waiting beside it is not
+        decoded."""
+        self.addCleanup(lambda: getattr(harvest, "_canary_checked", {}).clear())
+        key, _path, _stored = self._canary(store=True)
+        other = self._feed(_key("https://y/ordinary"), url="https://y/ordinary")
+        os.utime(other, (4e9, 4e9))           # newer than the canary: the canary goes first
+        popen_calls = []
+        inner = fake_decode(pcm=_pcm(LONG_ENOUGH))
+        self._run_patches(lambda argv, **kw: popen_calls.append(argv) or inner(argv, **kw),
+                          chroma=self.CHROMA)
+        self._live(ok=True)
+        self._match({})
+        with mock.patch.object(harvest.cache_budget, "reserve", lambda *a, **k: False):
+            self._run_loop(self._qs(4), naps_before_stop=2)
+        state = harvest._load(harvest.STATE, {})
+        self.assertEqual(len(popen_calls), 1, "the canary re-signed; the ordinary file waits")
+        self.assertEqual(state["canary"]["key"], key)
+        self.assertEqual(state["canary"]["signature"], "same")
+        self.assertNotIn(_key("https://y/ordinary"), harvest._load(harvest.LEDGER, {}),
+                         "no row for a file the full cache kept from being signed")
+
     def test_a_canary_whose_row_is_not_signed_is_healed_by_the_ordinary_sign(self):
         """A `delayed` row (the sidecar lost from the bucket, say) is healed the published
         way -- a fresh sign that uploads both objects -- even for the canary's key."""
