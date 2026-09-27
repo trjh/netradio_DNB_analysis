@@ -79,26 +79,24 @@ _original_run = unittest.TestCase.run
 
 def _run_and_check_temp_hygiene(self, result=None):
     before = _entries()
-    outcome = _original_run(self, result)
-    result = outcome if outcome is not None else result
+    result = _original_run(self, result)
     leaked = sorted(_entries() - before)
     if not leaked:
-        return outcome
+        return result
     fixes = set()
     for name in leaked:                  # do not let one leak fill the disk for the rest
         path = os.path.join(SUITE_TEMP_ROOT, name)
         fixes.add(_FIX_DIR if os.path.isdir(path) else _FIX_FILE)
         _remove(path)
-    if result is not None:
-        try:
-            raise AssertionError(
-                "%s left %d temporary entr%s behind in the temp root (%s): register the "
-                "cleanup on the line that creates it, %s"
-                % (self, len(leaked), "y" if len(leaked) == 1 else "ies",
-                   ", ".join(leaked), " or ".join(sorted(fixes))))
-        except AssertionError:
-            result.addFailure(self, sys.exc_info())
-    return outcome
+    try:
+        raise AssertionError(
+            "%s left %d temporary entr%s behind in the temp root (%s): register the "
+            "cleanup on the line that creates it, %s"
+            % (self, len(leaked), "y" if len(leaked) == 1 else "ies",
+               ", ".join(leaked), " or ".join(sorted(fixes))))
+    except AssertionError:
+        result.addFailure(self, sys.exc_info())
+    return result
 
 
 unittest.TestCase.run = _run_and_check_temp_hygiene
