@@ -394,7 +394,7 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
                          (self.keep_dir, "by-score"))
         self.assertEqual(candidates["cap"], 250 * cache_budget.MB)
         self.assertEqual(candidates["max_age_days"], harvest.KEEP_TTL_DAYS)
-        self.assertEqual((candidates["refill"], candidates["rank"]), ("re-cut", 10))
+        self.assertEqual((candidates["refill"], candidates["rank"]), ("on-play", 10))
         # the module's path constants follow the registry
         self.assertEqual((harvest.CACHE, harvest.KEEP), (self.chroma_dir, self.keep_dir))
         self.assertEqual(harvest.sig_path("https://example.invalid/x"),

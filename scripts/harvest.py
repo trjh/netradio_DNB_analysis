@@ -132,8 +132,9 @@ def register_caches():
     registration the policy refuses (a directory that overlaps another cache's)."""
     global CACHE, KEEP, _CACHE_AT_IMPORT, _KEEP_AT_IMPORT
     # rank 4 / rank 10: of the caches sharing the policy's floor, the signatures give up
-    # entries fourth (each refills from the bucket by key) and the excerpt board tenth (each
-    # excerpt is re-cut if its candidate is ever fetched again). The literal names, not the
+    # entries fourth (each refills from the bucket by key) and the excerpt board tenth (refill
+    # `on-play`: nothing refills an excerpt on its own; it comes back when someone asks to hear
+    # it). The literal names, not the
     # constants above, so env_check.py's code scan sees the registrations and counts their
     # variable families as read.
     cache_budget.register("chroma", max_age=CHROMA_CACHE_MAX_AGE_DAYS,
@@ -141,7 +142,7 @@ def register_caches():
     cache_budget.register("candidates", cap=CANDIDATES_CACHE_CAP, order="by-score",
                          score=_excerpt_score, max_age=KEEP_TTL_DAYS,
                          pinned=_excerpt_pinned,
-                         refill="re-cut", rank=10)
+                         refill="on-play", rank=10)
     CACHE = _CACHE_AT_IMPORT = cache_budget.dir_of(CHROMA_CACHE)
     KEEP = _KEEP_AT_IMPORT = cache_budget.dir_of(CANDIDATES_CACHE)
 

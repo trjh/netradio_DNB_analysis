@@ -1012,7 +1012,10 @@ class TheChildEntryPoint(unittest.TestCase):
                    PATH=bindir + os.pathsep + os.environ.get("PATH", ""),
                    PYTHONPATH=SCRIPTS,
                    NETRADIO_SIG_BUCKET="",          # sigstore dark: no upload, no credentials
-                   NETRADIO_CACHE_ROOT=cache_root)
+                   NETRADIO_CACHE_ROOT=cache_root,
+                   # the floor pinned out of the way, or the child measures the volume the
+                   # suite runs on: past the default 82 % every reserve refuses
+                   NETRADIO_DISK_MAX_PCT="100")
         import subprocess
         out = subprocess.run(
             [sys.executable, os.path.join(SCRIPTS, "harvest.py"),
