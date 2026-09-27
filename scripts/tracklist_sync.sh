@@ -361,6 +361,20 @@ TWINS=(
 SELF_P="$PLAYER/scripts/tracklist_sync.sh"
 SELF_A="$ANALYSIS/scripts/tracklist_sync.sh"
 origin_copy() { git -C "$1" rev-parse -q --verify "origin/main:$2" 2>/dev/null || true; }
+# Would a real run's catch-up bring this side's copy to the origin/main one? Yes when the disk
+# copy already is that blob; or when the disk copy is the committed one, unmodified (both absent
+# counts), and the checkout is strictly behind origin/main, so the fast-forward can move it. A
+# copy changed or deleted in a checkout that is current is a local edit no fast-forward repairs.
+catch_up_delivers() {  # <checkout> <path in it> <origin/main blob>
+  local disk="" head="" h o
+  [ -e "$1/$2" ] && disk="$(git -C "$1" hash-object "$1/$2" 2>/dev/null || true)"
+  [ -n "$disk" ] && [ "$disk" = "$3" ] && return 0
+  head="$(git -C "$1" rev-parse -q --verify "HEAD:$2" 2>/dev/null || true)"
+  [ "$disk" = "$head" ] || return 1
+  h="$(git -C "$1" rev-parse -q --verify HEAD 2>/dev/null || true)"
+  o="$(git -C "$1" rev-parse -q --verify origin/main 2>/dev/null || true)"
+  [ -n "$h" ] && [ -n "$o" ] && [ "$h" != "$o" ] && git -C "$1" merge-base --is-ancestor "$h" "$o"
+}
 for twin in "${TWINS[@]}"; do
   prel="${twin%%=*}"; arel="${twin#*=}"
   pfile="$PLAYER/$prel"; afile="$ANALYSIS/$arel"
@@ -373,10 +387,12 @@ for twin in "${TWINS[@]}"; do
     continue
   fi
   op="$(origin_copy "$PLAYER" "$prel")"; oa="$(origin_copy "$ANALYSIS" "$arel")"
-  if $DRY && [ -n "$op" ] && [ "$op" = "$oa" ]; then
+  if $DRY && [ -n "$op" ] && [ "$op" = "$oa" ] \
+      && catch_up_delivers "${pfile%/"$prel"}" "$prel" "$op" \
+      && catch_up_delivers "${afile%/"$arel"}" "$arel" "$oa"; then
     # A dry run skipped the catch-up, so the copies on disk can still differ — or one be
     # missing — where a real run would have fast-forwarded them first. What decides the real
-    # run is the two origin/main copies.
+    # run is the two origin/main copies, and whether the catch-up can deliver them to disk.
     say "[dry-run] self-check: $prel differs or is missing on disk, but both origin/main copies match —"
     say "          a real run fast-forwards first and passes when its catch-up can move the checkout"
     continue
