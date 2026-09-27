@@ -19,7 +19,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 
 LABELS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "labels")
 sys.path.insert(0, LABELS_DIR)
@@ -326,6 +326,39 @@ class BranchPRFlowTests(unittest.TestCase):
         self.assertEqual(rc, 0)  # branch pushed; only the PR wrapper is missing
         self.assertFalse(any(c[:1] == ["gh"] for c in seam.calls))
         self.assertIn("compare/main...labels/publish-20260727-000000", out)
+
+    def test_file_outside_the_repo_is_refused_before_any_git(self):
+        # a second file outside the repo: the root comes from the first, so the second would
+        # relate to it with `..` and be copied outside the publish worktree
+        outside_dir = os.path.join(self.tmp, "elsewhere")
+        os.makedirs(outside_dir)
+        outside = write(outside_dir, "d999-000", COMPLETE_FILE)
+        seam = _SeamRun()
+        publish._run = seam
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = publish.publish([self.label, outside], "msg", refresh=False,
+                                 branch="labels/publish-20260727-000000")
+        self.assertEqual(rc, 1)
+        self.assertIn("outside the repo", err.getvalue())
+        self.assertIn(outside, err.getvalue())
+        # sort ran on both files; nothing git ran at all — no worktree, add, commit or push
+        self.assertFalse([c for c in seam.calls if c[:1] in (["git"], ["gh"])])
+        self.assertEqual(_git(self.repo, "branch", "--list", "labels/*"), "")
+        self.assertFalse(os.path.exists(os.path.join(self.repo, ".worktree")))
+        self.assertEqual(sorted(os.listdir(self.tmp)), ["elsewhere", "origin.git", "work"])
+
+    def test_file_reached_through_a_symlinked_parent_lands_in_the_repo(self):
+        link = os.path.join(self.tmp, "link")
+        os.symlink(self.repo, link)
+        self.label = os.path.join(link, "labels", "d999-000.labels.tsv")
+        rc, seam, _ = self._publish()
+        self.assertEqual(rc, 0)
+        adds = [c for c in seam.calls if c[:2] == ["git", "add"]]
+        self.assertEqual(adds, [["git", "add", os.path.join("labels", "d999-000.labels.tsv")]])
+        self.assertEqual(_git(self.repo, "ls-tree", "-r", "--name-only", seam.branch_arg()),
+                         "labels/d999-000.labels.tsv")
+        self.assertEqual(sorted(os.listdir(self.tmp)), ["link", "origin.git", "work"])
 
     def test_validation_failure_does_no_git_at_all(self):
         bad = write(os.path.join(self.repo, "labels"), "d999-001", COMPLETE_FILE[:2])
