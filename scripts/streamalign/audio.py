@@ -11,6 +11,7 @@ No third-party audio deps: ffmpeg for decode, numpy for everything else.
 """
 
 import hashlib
+import io
 import os
 import subprocess
 import threading
@@ -75,6 +76,14 @@ class _Pinned:
     def __exit__(self, *_exc):
         with _pin_lock:
             _pinned_entries.discard(self.path)
+
+
+def _npy_bytes(signal):
+    """The size of the `.npy` file `np.save` writes for `signal`: its header, then its data."""
+    header = io.BytesIO()
+    np.lib.format.write_array_header_1_0(
+        header, np.lib.format.header_data_from_array_1_0(np.asarray(signal)))
+    return len(header.getvalue()) + signal.nbytes
 
 
 def register_cache():
@@ -174,7 +183,7 @@ def load_audio(name, sr=SR, mono=True, use_cache=True, audio_dir=None):
     if cache_path:
         try:
             with _Pinned(cache_path):
-                if cache_budget.reserve(CACHE, signal.nbytes):
+                if cache_budget.reserve(CACHE, _npy_bytes(signal)):
                     os.makedirs(cache_dir, exist_ok=True)
                     try:
                         # the .tmp suffix is the policy's write-in-progress mark:
