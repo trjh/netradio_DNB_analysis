@@ -6,6 +6,7 @@ wrong guess is a test failure rather than a surprise in the loop.
 """
 
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -25,6 +26,7 @@ def _write(path, rows):
 class HandLinkWins(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
 
     def test_the_file_link_is_the_successor(self):
         _write(os.path.join(self.dir, "d356-375.labels.tsv"), [
@@ -58,6 +60,7 @@ class HandLinkWins(unittest.TestCase):
 class Fallbacks(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
 
     def test_the_notes_place_the_successor_when_there_is_no_link(self):
         # no file_ link -> the 1998/2017 notes. The real notes put d376-395 after dnb356-375,

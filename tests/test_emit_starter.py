@@ -9,6 +9,7 @@ These run anywhere — pure file I/O, no audio/ffmpeg (the captures live on Tim'
 """
 
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -47,6 +48,7 @@ class ExclusionPredicateTests(unittest.TestCase):
 class EmitStarterTests(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
         write_labels(os.path.join(self.dir, OWNER + ".labels.tsv"), OWNER_ROWS)
 
     def _read(self, path):
@@ -108,6 +110,7 @@ class EmitStarterTests(unittest.TestCase):
 class StarterExcludedFromSolveTests(unittest.TestCase):
     def test_resolve_starts_ignores_starter_files(self):
         d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
         write_labels(os.path.join(d, OWNER + ".labels.tsv"), OWNER_ROWS)
         # a stray starter file with a bogus anchor must NOT leak into resolve_starts
         write_labels(os.path.join(d, "zzz.starter.labels.tsv"),

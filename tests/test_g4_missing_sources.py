@@ -5,6 +5,7 @@ Pure filesystem + metadata logic — no audio, no librosa — so these run anywh
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -18,12 +19,14 @@ import g4_missing_sources as g4  # noqa: E402
 class G4MissingSourcesTests(unittest.TestCase):
     def _build(self):
         d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
         src = os.path.join(d, "sources")
         os.mkdir(src)
 
         def touch(name, size):
+            # sparse: the size is what the inventory reads, and nothing needs the bytes
             with open(os.path.join(src, name), "wb") as fh:
-                fh.write(b"\0" * size)
+                fh.truncate(size)
 
         # track 3: a real, name-matching original -> have
         touch("003-Jamie Myerson - Sky Blue.mp3", 8 << 20)
@@ -76,10 +79,11 @@ class G4MissingSourcesTests(unittest.TestCase):
         # A lone, cryptically-named audio file with the right prefix and no competing
         # placeholder is trusted (no ambiguity to resolve).
         d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
         src = os.path.join(d, "sources")
         os.mkdir(src)
         with open(os.path.join(src, "009-xyz.mp3"), "wb") as fh:
-            fh.write(b"\0" * (1 << 20))
+            fh.truncate(1 << 20)
         meta_path = os.path.join(d, "m.json")
         with open(meta_path, "w") as fh:
             json.dump({"tracks": {"9": {"artist": "Net Radio", "title": "Promo3"}}}, fh)
