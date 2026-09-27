@@ -411,6 +411,83 @@ class TheTracksCache(unittest.TestCase):
         self.assertFalse(os.path.exists(out))
         self.assertEqual(os.listdir(tracks_dir), [], "no part or tmp is left in the cache")
 
+    def test_a_cut_that_dies_part_way_leaves_no_tmp_in_the_cache(self):
+        """ffmpeg failing (a capture that will not decode) must not leave its `.tmp` inside
+        the cache: there it counts against the cap and the policy holds it from eviction for
+        an hour. The writer knows the write is over, so it clears it now -- and the final
+        name was never created, so nothing half-cut wears it."""
+        tracks_dir = os.path.join(self.tmp, "stream_tracks")
+        os.makedirs(tracks_dir, exist_ok=True)
+        out = os.path.join(tracks_dir, "001 - A - B.flac")
+
+        def failing_ffmpeg(argv, **kwargs):
+            with open(argv[-1], "wb") as fh:
+                fh.write(b"fLaC" * 100)          # half a cut on disk...
+            raise subprocess.CalledProcessError(1, argv)     # ...and ffmpeg gives up
+
+        with unittest.mock.patch.object(extract_tracks.subprocess, "run", failing_ffmpeg), \
+                unittest.mock.patch.object(extract_tracks._audio, "find_audio_file",
+                                          lambda stem: os.path.join(self.tmp, "capture.wav")):
+            with self.assertRaises(subprocess.CalledProcessError):
+                extract_tracks.cut("d000-018", 0.0, 30.0, 0.0, out)
+        self.assertEqual(os.listdir(tracks_dir), [],
+                         "no half-written cut is left in the cache, under any name")
+
+    def test_an_assembly_that_dies_part_way_leaves_no_tmp_in_the_cache(self):
+        """The same through the reassembly: the concat fails, and neither the scratch parts
+        nor the assembled file's `.tmp` is left behind."""
+        tracks_dir = os.path.join(self.tmp, "stream_tracks")
+        os.makedirs(tracks_dir, exist_ok=True)
+        out = os.path.join(tracks_dir, "002 - A - B.flac")
+        scratch = {}
+
+        def fake_cut(stem, m_from, m_to, cstart, out_path):
+            scratch["dir"] = os.path.dirname(out_path)
+            with open(out_path, "wb") as fh:
+                fh.write(b"fLaC" * 100)
+            return True
+
+        def failing_concat(argv, **kwargs):
+            with open(argv[-1], "wb") as fh:
+                fh.write(b"fLaC" * 100)
+            raise subprocess.CalledProcessError(1, argv)
+
+        pieces = [("d000-018", 0.0, 30.0), ("d001-026b", 30.0, 60.0)]
+        with unittest.mock.patch.object(extract_tracks, "cut", fake_cut), \
+                unittest.mock.patch.object(extract_tracks.subprocess, "run", failing_concat):
+            with self.assertRaises(subprocess.CalledProcessError):
+                extract_tracks.assemble_track(pieces, {"d000-018": 0.0, "d001-026b": 0.0}, out)
+        self.assertEqual(os.listdir(tracks_dir), [],
+                         "no half-assembled track is left in the cache")
+        self.assertFalse(os.path.isdir(scratch["dir"]), "the scratch directory went too")
+
+    def test_the_not_landed_message_names_both_reasons_a_cut_can_fail(self):
+        """A cut that does not land ends here for either of two reasons, and they want
+        different things of the operator: `reserve` refusing the room needs disk freed,
+        while an eviction taking the cut back between its landing and the policy's record
+        of it needs only a re-run. Naming only the first sends them hunting for space they
+        already have."""
+        out_dir = os.path.join(self.tmp, "stream_tracks")
+        argv = ["extract_tracks.py", "--out", out_dir, "--only", "4"]
+        pieces = [("d000-018", 0.0, 120.0)]
+        with unittest.mock.patch.object(sys, "argv", argv), \
+                unittest.mock.patch.object(extract_tracks, "positions",
+                                          lambda: {"d000-018": 0.0}), \
+                unittest.mock.patch.object(extract_tracks, "windows", lambda s, v: []), \
+                unittest.mock.patch.object(extract_tracks, "plan",
+                                          lambda mb, me, places: (pieces, None)), \
+                unittest.mock.patch.object(extract_tracks, "cut",
+                                          lambda *a, **k: False), \
+                contextlib.redirect_stdout(io.StringIO()) as buf:
+            extract_tracks.main()
+        text = buf.getvalue()
+        self.assertIn("SKIP", text)
+        self.assertIn("refused the room", text, "the reserve refusal is still named")
+        self.assertIn("before the policy recorded it", text,
+                      "and so is the landing an eviction took back")
+        self.assertIn("re-run", text, "with what that second case actually needs")
+        self.assertIn("1 refused", text, "and the track is counted as refused, not made")
+
     def test_the_help_names_the_variable_the_code_reads(self):
         """The --out help is the operator-facing spelling of the default's override; a name
         that differs by one letter silently gets the default instead."""

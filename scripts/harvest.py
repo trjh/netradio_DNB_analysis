@@ -138,8 +138,9 @@ def register_caches():
     registration the policy refuses (a directory that overlaps another cache's)."""
     global CACHE, KEEP, _CACHE_AT_IMPORT, _KEEP_AT_IMPORT
     # rank 4 / rank 10: of the caches sharing the policy's floor, the signatures give up
-    # entries fourth (each refills from the bucket by key) and the excerpt board tenth (each
-    # excerpt is re-cut if its candidate is ever fetched again). The literal names, not the
+    # entries fourth (each refills from the bucket by key) and the excerpt board tenth (refill
+    # `on-play`: nothing in this repo refills an evicted excerpt; the value records that one can
+    # come back only when something asks to play it). The literal names, not the
     # constants above, so env_check.py's code scan sees the registrations and counts their
     # variable families as read.
     cache_budget.register("chroma", max_age=CHROMA_CACHE_MAX_AGE_DAYS,
@@ -147,9 +148,19 @@ def register_caches():
     cache_budget.register("candidates", cap=CANDIDATES_CACHE_CAP, order="by-score",
                          score=_excerpt_score, max_age=KEEP_TTL_DAYS,
                          pinned=_excerpt_pinned,
-                         refill="re-cut", rank=10)
+                         refill="on-play", rank=10)
     CACHE = _CACHE_AT_IMPORT = cache_budget.dir_of(CHROMA_CACHE)
     KEEP = _KEEP_AT_IMPORT = cache_budget.dir_of(CANDIDATES_CACHE)
+
+
+def _discard(tmp):
+    """Remove a write-in-progress file whose write is over. Nothing to report if it is
+    already gone, or if the directory will not give it up -- the policy evicts a stale
+    .tmp on its own once it is an hour old."""
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
 
 
 def _chroma_dir():
@@ -907,9 +918,16 @@ def _decode_and_sign(url, job, duration=None):
     # .tmp, so a parent running an eviction while this child writes cannot delete the
     # half-written entry (np.save is handed a file handle so it cannot rename .tmp to .npy).
     tmp = "%s.%d.tmp" % (sig, os.getpid())
-    with open(tmp, "wb") as fh:
-        np.save(fh, c.astype(chroma_recipe.STORE_DTYPE))
-    os.replace(tmp, sig)
+    try:
+        with open(tmp, "wb") as fh:
+            np.save(fh, c.astype(chroma_recipe.STORE_DTYPE))
+        os.replace(tmp, sig)
+    except BaseException:
+        # A write that died part-way leaves its .tmp inside the cache, where it counts
+        # against the cap and is held from eviction for an hour. Clear it here rather than
+        # waiting out that hour: this process knows the write is over.
+        _discard(tmp)
+        raise
     cache_budget.commit(CHROMA_CACHE, sig)
     if not os.path.isfile(sig):
         # THE LANDING CHECK. The rename and the commit are two calls, and a bounded cache may
@@ -1103,9 +1121,13 @@ def write_excerpt(samples, at_s, path):
     # A .tmp name, written whole and renamed into place, so no eviction this process or another
     # runs can delete the half-written entry (the policy holds a fresh .tmp for an hour).
     tmp = "%s.%d.tmp" % (path, os.getpid())
-    with open(tmp, "wb") as fh:
-        sf.write(fh, clip, _audio.SR, format="WAV")
-    os.replace(tmp, path)
+    try:
+        with open(tmp, "wb") as fh:
+            sf.write(fh, clip, _audio.SR, format="WAV")
+        os.replace(tmp, path)
+    except BaseException:
+        _discard(tmp)                        # see the signature write for the reason
+        raise
     cache_budget.commit(CANDIDATES_CACHE, path)
     if not os.path.isfile(path):
         # THE LANDING CHECK (see the signature write for the reason): an eviction run that
@@ -2380,8 +2402,8 @@ def run(args):
                     continue
                 # A refused excerpt (past the disk floor, the board's cap with nothing
                 # evictable) is not on disk, so it is neither counted as kept nor named as
-                # the lead's audio: the lead itself survives and /harvest plays it from the
-                # source embed.
+                # the lead's audio: the lead itself survives with its numbers, and it is
+                # reviewable from its own source URL as any lead without a clip is.
                 kept = write_excerpt(samples, at or 0, excerpt)   # from memory; NO second fetch
                 if kept:
                     state["kept"] += 1
