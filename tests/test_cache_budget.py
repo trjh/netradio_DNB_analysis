@@ -234,6 +234,23 @@ class Environment(CacheBudgetBase):
         os.environ.pop("NETRADIO_DOWNLOAD_ROOT")
         self.assertIsNotNone(self.cache("e", dir=dl))     # the rule reads the variable
 
+    def test_a_case_variant_of_a_guarded_directory_is_refused(self):
+        """On a case-insensitive volume a mistyped case names the same directory."""
+        home = os.path.join(self.tmp, "home")
+        os.makedirs(home)
+        variant = os.path.join(self.tmp, "HOME")
+        if not os.path.isdir(variant):
+            self.skipTest("this volume is case-sensitive: the variant is another directory")
+        saved = os.environ.get("HOME")
+        self.addCleanup(lambda: os.environ.pop("HOME", None) if saved is None
+                        else os.environ.__setitem__("HOME", saved))
+        os.environ["HOME"] = home
+        self.assertIn("home directory", self._refused("a", variant))
+        dl = os.path.join(self.tmp, "dl")
+        os.makedirs(dl)
+        os.environ["NETRADIO_DOWNLOAD_ROOT"] = dl
+        self.assertIn("download root", self._refused("b", os.path.join(self.tmp, "DL")))
+
     def test_a_refused_directory_is_never_evicted_from(self):
         checkout = os.path.join(self.tmp, "checkout")
         os.makedirs(os.path.join(checkout, ".git"))
