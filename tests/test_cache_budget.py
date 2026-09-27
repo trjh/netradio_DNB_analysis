@@ -315,6 +315,19 @@ class RegistryAndEvictionRun(CacheBudgetBase):
         self.assertEqual(self.names(rec), ["a", "b", "c"])
         self.assertTrue(cb.status()["caches"][0]["over_cap"])
 
+    def test_a_size_that_is_not_a_byte_count_is_refused(self):
+        """A negative size would raise the target past the cap and admit a write into room that
+        was never there; NaN, infinity and a non-number are no size at all."""
+        rec = self.cache("c", cap=2 * KB)
+        self.file(rec, "a", age_s=20)
+        self.file(rec, "b", age_s=10)
+        for bad in (-KB, float("nan"), float("inf"), "1000", True):
+            self.assertFalse(cb.reserve("c", bad), bad)
+        self.assertEqual(self.names(rec), ["a", "b"])            # nothing evicted for them
+        self.assertEqual([(e["event"], e["reason"]) for e in self.events()],
+                         [("refuse", "size")] * 5)
+        self.assertTrue(cb.reserve("c", 0))                     # zero is a size
+
     def test_a_reserve_whose_evictions_could_not_be_carried_out_is_refused(self):
         """Nothing is pinned, so the entries are chosen for eviction — but the unlinks fail (a
         read-only directory, a permission, an immutable flag) and the cache is still at its cap.
