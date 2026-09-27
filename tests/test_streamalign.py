@@ -13,6 +13,7 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -783,6 +784,20 @@ class CachePolicyTests(unittest.TestCase):
     def test_the_age_default_can_be_turned_off(self):
         os.environ["NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS"] = "none"
         self.assertIsNone(audio.register_cache()["max_age"])
+
+    def test_a_load_ages_out_a_stale_entry_under_the_cap(self):
+        """The cache is under its cap, so commit evicts nothing; the write's own eviction run
+        applies the 14-day default and takes the entry older than that."""
+        self._source("a.wav")
+        self._source("b.wav")
+        audio.register_cache()
+        audio.load_audio("a", audio_dir=self.audio_dir)
+        stale = self._entry("a.wav")
+        old = time.time() - 15 * 86400
+        os.utime(stale, (old, old))
+        audio.load_audio("b", audio_dir=self.audio_dir)
+        self.assertFalse(os.path.isfile(stale), "an entry past the age limit goes on the next write")
+        self.assertTrue(os.path.isfile(self._entry("b.wav")))
 
     def test_a_lowered_cap_evicts_on_the_next_load(self):
         self._source("a.wav")
