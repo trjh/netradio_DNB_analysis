@@ -121,14 +121,14 @@ test:                 ## run the test suite
 env-check:            ## list NETRADIO_* names set in .env that no code reads, and names the code reads that .env leaves unset (with defaults). ENV=path to check another file
 	$(PYTHON) scripts/env_check.py "$(or $(ENV),.env)"
 
-# MallocLargeCache=0 tells macOS not to keep freed large blocks inside the process. Without it
-# the harvester's footprint only ever goes up: it frees everything after each candidate, libmalloc
-# holds the pages anyway, and under pressure they end up compressed and swapped. It has to be in
-# the environment at process start, which is why it is here and not inside the script. Harmless on
-# other platforms (an unknown variable). The fetch child sets it again for itself.
-harvest-run:          ## run the harvester's loop (signs and scores; runs for weeks), memory bound in place
-	set -a; [ -f .env ] && . ./.env; set +a; \
-	MallocLargeCache=0 .venv/bin/python scripts/harvest.py --run
+# An alias for the launcher, which is where the how lives now: the .env, the interpreter,
+# MallocLargeCache=0 (the memory bound, which has to be in the environment at process start), one
+# pidfile under .harvest/ and a log with a size cap. This target used to run the harvester in the
+# FOREGROUND, so a run of weeks died with the terminal and nothing on disk said which process it
+# was; `start` puts it in the background under that pidfile instead, and `stop`, `status` and
+# `restart` are the same script.
+harvest-run:          ## start the harvester (runs for weeks), under its own pidfile and log
+	scripts/run_harvester.sh start
 
 #########################################
 #####          TRACKLIST            #####
