@@ -251,6 +251,16 @@ class Environment(CacheBudgetBase):
         os.environ["NETRADIO_DOWNLOAD_ROOT"] = dl
         self.assertIn("download root", self._refused("b", os.path.join(self.tmp, "DL")))
 
+    def test_a_case_variant_of_a_directory_not_yet_created_is_refused(self):
+        """The cache root and another cache's directory may not exist yet at registration."""
+        if not os.path.isdir(self.tmp.swapcase()):
+            self.skipTest("this volume is case-sensitive: the variant is another directory")
+        self.assertFalse(os.path.exists(self.root))
+        self.assertIn("cache root", self._refused("a", self.root.swapcase()))
+        first = os.path.join(self.tmp, "later", "c1")
+        self.assertIsNotNone(cb.register("b", dir=first))
+        self.assertIn("overlaps", self._refused("c", os.path.join(self.tmp, "later", "C1")))
+
     def test_a_refused_directory_is_never_evicted_from(self):
         checkout = os.path.join(self.tmp, "checkout")
         os.makedirs(os.path.join(checkout, ".git"))
