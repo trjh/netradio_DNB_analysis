@@ -767,18 +767,22 @@ class CachePolicyTests(unittest.TestCase):
     def test_the_registration_reads_the_variable_family(self):
         os.environ["NETRADIO_STREAMALIGN_CACHE_DIR"] = os.path.join(self.tmp, "elsewhere")
         os.environ["NETRADIO_STREAMALIGN_CACHE_GB"] = "2"
-        os.environ["NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS"] = "14"
+        os.environ["NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS"] = "3"
         rec = audio.register_cache()
         self.assertEqual(rec["dir"], os.path.join(self.tmp, "elsewhere"))
         self.assertEqual(rec["cap"], 2 * cache_budget.GB)
-        self.assertEqual(rec["max_age"], 14)
+        self.assertEqual(rec["max_age"], 3)              # the variable overrides the default
         self.assertEqual(rec["rank"], 3)
 
     def test_the_registration_defaults(self):
         rec = audio.register_cache()
         self.assertEqual(rec["cap"], cache_budget.DEFAULT_CAP)
-        self.assertIsNone(rec["max_age"])
+        self.assertEqual(rec["max_age"], 14)             # aged with no line in .env
         self.assertEqual(rec["order"], "oldest-added")
+
+    def test_the_age_default_can_be_turned_off(self):
+        os.environ["NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS"] = "none"
+        self.assertIsNone(audio.register_cache()["max_age"])
 
     def test_a_lowered_cap_evicts_on_the_next_load(self):
         self._source("a.wav")

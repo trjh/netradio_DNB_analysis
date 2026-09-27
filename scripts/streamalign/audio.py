@@ -42,12 +42,14 @@ _AUDIO_EXTS = (".wav", ".au", ".mp3")
 # seconds with ffmpeg, so the cache registers on the machine's cache policy
 # (cache_budget.py) and is evicted oldest-added first under the policy's settings
 # for `streamalign` — cap NETRADIO_STREAMALIGN_CACHE_GB (default 4 GB), age
-# NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS, directory NETRADIO_STREAMALIGN_CACHE_DIR
+# NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS (default 14 days, `none` for no age
+# limit), directory NETRADIO_STREAMALIGN_CACHE_DIR
 # (default $NETRADIO_CACHE_ROOT/streamalign). The policy is dark until
 # NETRADIO_CACHE_ROOT is set: then there is no cache directory at all and every
 # load decodes again — never an unbounded cache with no eviction.
 
 CACHE = "streamalign"
+CACHE_MAX_AGE_DAYS = 14     # an alignment session lasts days, not months
 
 _pin_lock = threading.Lock()
 _pinned_entries = set()
@@ -82,7 +84,7 @@ def register_cache():
     refused."""
     # rank 3: of the caches sharing the policy's floor, this one gives up
     # entries third — a re-decode is seconds, the refill costs nothing.
-    return cache_budget.register(CACHE, pinned=_pinned_entry,
+    return cache_budget.register(CACHE, max_age=CACHE_MAX_AGE_DAYS, pinned=_pinned_entry,
                                  refill="re-decode", rank=3)
 
 
