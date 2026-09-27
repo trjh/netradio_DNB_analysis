@@ -404,12 +404,17 @@ def reserve(name, nbytes=None):
     `commit` after it corrects the overflow). Evicts other entries in the cache's order to fit;
     refuses when it cannot — evicting nothing when everything left is held or when the volume
     would pass the floor, and refusing after the attempt when the evictions did not free enough,
-    because an entry could not be deleted. A name that is not registered is always admitted.
+    because an entry could not be deleted. A size that is not a finite number of zero or more
+    is refused. A name that is not registered is always admitted.
     """
     rec = _REGISTRY.get(name) if enabled() else None
     if rec is None:
         return True
     with _machine_lock():
+        if nbytes is not None and (isinstance(nbytes, bool) or not isinstance(nbytes, (int, float))
+                                   or not math.isfinite(nbytes) or nbytes < 0):
+            _record("refuse", name, reason="size", op="reserve", asked=repr(nbytes))
+            return False
         if _disk_pct(rec["dir"], nbytes or 0) > disk_max_pct():
             _record("refuse", name, nbytes=nbytes, reason="floor", op="reserve")
             return False
