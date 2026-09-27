@@ -232,6 +232,7 @@ class LiveCLI(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         selftest.RESULT = os.path.join(self.tmp, "selftest.json")
         selftest.CANARY = os.path.join(self.tmp, "canary.json")
         selftest._save(selftest.CANARY, {"track": 1, "name": "known"})
