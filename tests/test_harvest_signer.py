@@ -570,6 +570,16 @@ class TheScan(_SignerCase):
         self._feed(key, sidecar={"fed_at": None})
         self.assertIsNone(harvest.find_file(key))
 
+    def test_find_file_admits_only_what_the_scan_admits(self):
+        """--sign-one's finder refuses what the scan refuses: a stem that is not a key's
+        shape (the pool's listing would never see its signature) and an in-progress
+        `*.part` (feeder state, not a finished file)."""
+        key = _key("https://y/in-progress")
+        self._feed(key, name=key + ".part")
+        self.assertIsNone(harvest.find_file(key))
+        self._feed("not-a-key", name="not-a-key.mp3")
+        self.assertIsNone(harvest.find_file("not-a-key"))
+
     def test_a_relative_directory_is_refused_visibly(self):
         """The contract's paths are absolute. A relative entry would resolve against
         whatever directory the process started from -- a hand-off that signs a different
@@ -1885,6 +1895,17 @@ class TheLoopSignsAndScores(_SignerCase):
         self.assertIn("no absolute directory", out.getvalue())
         state = harvest._load(harvest.STATE, {})
         self.assertTrue(any("not-absolute" in r.get("dir", "") for r in state["issues"]))
+
+    def test_the_hand_tool_refuses_a_key_that_is_not_a_key(self):
+        self._feed("not-a-key", name="not-a-key.mp3")
+        spawned = []
+        self._run_patches(lambda argv, **kw: spawned.append(argv) or _FakeProc(argv))
+        with mock.patch.object(sys, "argv", ["harvest.py", "--sign-one", "not-a-key"]), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            harvest.main()
+        self.assertIn("is not a key", out.getvalue())
+        self.assertEqual(spawned, [])
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
 
     def test_the_run_refuses_to_start_with_no_directories(self):
         harvest.HARVEST_DIRS = ""
