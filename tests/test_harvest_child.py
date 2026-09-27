@@ -939,6 +939,10 @@ class ASignatureEvictedBetweenRenameAndCommit(unittest.TestCase):
         cache_budget._REGISTRY.clear()
         cache_budget._STATS.clear()
         harvest.register_caches()
+        # A re-sign of a key the ledger records as signed and uploaded: the only signature
+        # the `chroma` pin lets an eviction take (an unverified one is pinned as the only copy).
+        harvest._save(harvest.LEDGER, {self.key: harvest._row(
+            self.key, 1, 1.0, "signed", None, "then", "etag", {})})
 
     def _restore(self):
         cache_budget._REGISTRY.clear()

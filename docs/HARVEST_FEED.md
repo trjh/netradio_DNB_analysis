@@ -227,7 +227,8 @@ in the harvester's own checkout.
   must never propose again, for any mystery, present or future. The harvester re-reads it on
   every pass and refuses to run without it — a search that has forgotten every ruling hands
   back records already rejected. The reasons are for the human reading the file; the search
-  reads the keys alone.
+  reads the keys alone. A ruled key whose file is fed again is still signed, but it is scored
+  only when its signature changed (a different ETag for the `.npy` than the row held before).
 
 ## The hand tool
 

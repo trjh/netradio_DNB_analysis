@@ -114,8 +114,9 @@ HARVEST_DIRS = os.environ.get("NETRADIO_HARVEST_DIRS", "")
 # Neither is a fixed path any more. Each registers on the cache policy at import, so its
 # directory comes from the machine's settings: NETRADIO_CHROMA_CACHE_DIR /
 # NETRADIO_CANDIDATES_CACHE_DIR, defaulting to $NETRADIO_CACHE_ROOT/<name>. The policy bounds
-# them: `chroma` by a 14-day age (each entry is used the moment it is computed, and the bucket
-# is its long-term home), `candidates` by a 250 MB cap evicting the worst excerpt of a mystery
+# them: `chroma` by a 14-day age while the bucket is configured (each entry is used the moment
+# it is computed, and the bucket is its long-term home), with every signature the bucket has not
+# verified pinned, `candidates` by a 250 MB cap evicting the worst excerpt of a mystery
 # first -- the same rule KEEP_TOP applies to the board -- and by the same 30-day age. While
 # NETRADIO_CACHE_ROOT is unset there is no cache directory at all: the harvester refuses to
 # run rather than sign audio whose signatures it then cannot keep.
@@ -151,6 +152,53 @@ def _excerpt_pinned(path):
     return os.path.basename(path) == "PROVENANCE.txt"
 
 
+def _chroma_pinned(path):
+    """The signature cache's pin: a signature the bucket has not verified is the only copy, so
+    the policy's age, cap and floor passes must not take it. Returns False for a signature the
+    bucket holds, and for anything that is not a signature (a `.tmp` or `.part` is held by the
+    policy's own write-in-progress rule while fresh).
+
+    "The bucket holds it" is one of two facts this process already has, and never a new
+    request -- the policy calls this for every entry on every run:
+      * sigstore's session record of a HEAD that returned this file's exact size (`put`
+        verifies each upload that way, and `evictable` before a cold eviction);
+      * the ledger's row for the key: `signed` with an `uploaded_etag`. `sign_file` writes a
+        signed row only once both objects landed, and `reconcile_ledger` clears the etag of a
+        row whose object has left the bucket.
+    With the bucket unset every signature is pinned: nothing else holds a copy."""
+    name = os.path.basename(path)
+    if not (name.startswith("u") and name.endswith(".npy")):
+        return False
+    if not sigstore.enabled():
+        return True
+    try:
+        local = os.path.getsize(path)
+    except OSError:
+        return False                            # gone: nothing left to hold
+    if sigstore.verified_size(name) == local:
+        return False
+    row = _ledger_for_pin().get(file_key(name))
+    return not (isinstance(row, dict) and row.get("status") == "signed"
+                and row.get("uploaded_etag"))
+
+
+_PIN_LEDGER = {"stat": None, "rows": {}}       # the ledger as the pin last read it
+
+
+def _ledger_for_pin():
+    """The ledger for `_chroma_pinned`, re-read only when the file changed: the pin runs for
+    every entry on every eviction run, and the ledger holds a row for every key in the pool.
+    An unreadable ledger reads as empty, which pins everything."""
+    try:
+        st = os.stat(LEDGER)
+        stamp = (LEDGER, st.st_mtime_ns, st.st_size)
+    except OSError:
+        return {}
+    if _PIN_LEDGER["stat"] != stamp:
+        _PIN_LEDGER.update(stat=stamp, rows=load_ledger())
+    return _PIN_LEDGER["rows"]
+
+
 def register_caches():
     """(Re-)register the two caches on the cache policy, reading the environment now -- call it
     again to re-read it. While the policy is dark (NETRADIO_CACHE_ROOT unset) both stay
@@ -163,7 +211,11 @@ def register_caches():
     # come back only when something asks to play it). The literal names, not the
     # constants above, so env_check.py's code scan sees the registrations and counts their
     # variable families as read.
-    cache_budget.register("chroma", max_age=CHROMA_CACHE_MAX_AGE_DAYS,
+    # The age limit applies only while the bucket is configured: with no bucket, the local
+    # file is the signature's only home, and `_chroma_pinned` holds every one of them anyway.
+    cache_budget.register("chroma",
+                         max_age=CHROMA_CACHE_MAX_AGE_DAYS if sigstore.enabled() else None,
+                         pinned=_chroma_pinned,
                          refill="bucket:chroma/", rank=4)
     cache_budget.register("candidates", cap=CANDIDATES_CACHE_CAP, order="by-score",
                          score=_excerpt_score, max_age=KEEP_TTL_DAYS,
@@ -717,8 +769,8 @@ def _decode_and_sign(path, job, expect_s=None, publish=True):
                              "took it before the policy recorded it"}
         # The bucket is the signature's long-term home (see sigstore). Upload now, verified; on
         # failure the local file stays and the row carries no etag -- a flaky upload costs disk
-        # space, never data (sigstore's cold eviction refuses any key the bucket has not
-        # verified), and the feeder's rule for a signed row with no etag is to feed the key
+        # space, never data (the `chroma` cache pins, and sigstore's cold eviction refuses, any
+        # key the bucket has not verified), and the feeder's rule for a signed row with no etag is to feed the key
         # again.
         etag = None
         if sigstore.enabled():
@@ -1988,6 +2040,23 @@ def load_rulings():
     return set(data)
 
 
+def ruled_and_unchanged(key, ruled, before_etag, after_etag):
+    """Should the loop skip scoring the signature it just made for `key`? Yes when the key is
+    in the rulings file and its signature is the one it had before: a ruled key comes back
+    as a lead only if its signature changed.
+
+    The comparison is the signature object's ETag, before this sign (the ledger row's
+    `uploaded_etag`) against after it (the new row's). The ETag is the bucket's hash of the
+    `.npy` bytes, so it changes exactly when the signature does -- unlike the row's size and
+    modification time, which describe the audio file and change on a re-feed of the same
+    bytes. A change is scored only when both ETags are known and differ: with either
+    missing (no earlier row, or the bucket unset) the signature cannot be shown to have
+    changed, and the ruling stands."""
+    if key not in ruled:
+        return False
+    return not (before_etag and after_etag and before_etag != after_etag)
+
+
 def note_no_queries(state, qs):
     """Keep the "nothing to search for" state truthful for the caller that just refreshed
     the query set (run(), at its start).
@@ -2413,6 +2482,8 @@ def run(args):
             if _nap(PASS_GAP_S):
                 return _stopped(state)
             continue
+        # The signature the key had before this sign, for the rulings check below.
+        before_etag = (load_ledger().get(rec_file["key"]) or {}).get("uploaded_etag")
         c, samples = sign_file(rec_file["path"], issues=state["issues"])
         # A stop is never a verdict, and it arrives by either route: this process was signalled
         # (the flag), or only the decode child was (the sentinel error). Checking one and not
@@ -2442,6 +2513,11 @@ def run(args):
             # count as work, and nothing to retire -- the next pass sees the truth.
             state["errors"] += 1
 
+        if c is not None and ruled_and_unchanged(rec_file["key"], ruled, before_etag,
+                                                 row.get("uploaded_etag")):
+            print("  %s is ruled on and its signature is unchanged -- not scored"
+                  % rec_file["key"])
+            c = samples = None
         if c is not None:
             for num, qc, _qkey in qs:
                 cost, shift, at = _cm.match(qc, c)

@@ -125,7 +125,8 @@ in the directories is signed; what never arrives is not missed.
 **The harvester's caches live on the machine's cache policy.** The signature working cache and
 the excerpt board (`chroma` and `candidates`) are no longer fixed paths: each lives under
 `NETRADIO_CACHE_ROOT` (`NETRADIO_CHROMA_CACHE_DIR` / `NETRADIO_CANDIDATES_CACHE_DIR` to override),
-bounded by the policy — a 14-day age on signatures (the bucket is their long-term home), a
+bounded by the policy — a 14-day age on signatures while the bucket is configured (the bucket is
+their long-term home; a signature the bucket has not verified is pinned, since it is the only copy), a
 250 MB cap on the board that gives up the worst excerpt of a mystery first, and the policy's
 shared disk floor. With `NETRADIO_CACHE_ROOT` unset there is no cache directory at all and the
 harvester **refuses to start**, naming the setting: a signature it cannot keep is decode cost
@@ -201,7 +202,9 @@ it — the keys alone, never the reasons — re-reading it every pass so a rulin
 one loop iteration. **The harvester refuses to run without it** (`--run` and `--rescan` both
 refuse, naming the file), because a search that has forgotten every ruling hands back records
 already rejected. An empty file is fine — that is nothing ruled on yet; only a missing or
-unreadable file is a refusal.
+unreadable file is a refusal. A ruled key whose file is signed again is not scored against the
+mysteries, unless its signature changed: the bucket's ETag for the new `.npy` differs from the
+one its ledger row recorded before.
 
 **What it does.** For each audio file in the configured directories with a complete sidecar and
 no ledger row — or with a row whose size or modification time no longer matches, or a delay
