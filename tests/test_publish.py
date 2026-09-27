@@ -44,6 +44,7 @@ def write(dir_, stem, lines):
 class GateTests(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
 
     def test_complete_verified_file_passes(self):
         path = write(self.dir, "d999-000", COMPLETE_FILE)
@@ -88,6 +89,7 @@ class GateTests(unittest.TestCase):
 class AllOrNothingTests(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
 
     def test_one_bad_file_blocks_the_whole_publish(self):
         good = write(self.dir, "d999-000", COMPLETE_FILE)
@@ -104,6 +106,7 @@ class AllOrNothingTests(unittest.TestCase):
 class ResolveTests(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
 
     def test_stem_maps_to_labels_tsv_when_no_txt(self):
         p = publish.resolve_target("d336-355", "/x/labels")
@@ -242,6 +245,7 @@ class BranchPRFlowTests(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.origin = os.path.join(self.tmp, "origin.git")
         self.repo = os.path.join(self.tmp, "work")
         subprocess.run(["git", "init", "--bare", "-b", "main", self.origin], check=True,
@@ -337,6 +341,7 @@ class BranchPRFlowTests(unittest.TestCase):
 class RefreshTests(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
         self._orig_refresh = publish.trigger_refresh
         self._orig_run = publish._run
         self.refresh_calls = []
