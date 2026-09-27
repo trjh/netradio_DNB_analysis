@@ -7,8 +7,14 @@
 # state directory.
 #
 #   scripts/run_harvester.sh start      # harvest.py --run under the venv, MallocLargeCache=0
+#   scripts/run_harvester.sh start --accept-ledger-rebuild
+#                                        # forwarded unchanged to harvest.py --run, for that
+#                                        # start only — see below. harvest.py's own
+#                                        # understanding of the flag ships separately; until
+#                                        # that lands, harvest.py --run refuses it as an
+#                                        # unrecognized argument, same as any unsupported flag
 #   scripts/run_harvester.sh stop       # SIGTERM, then WAIT for the exit
-#   scripts/run_harvester.sh restart
+#   scripts/run_harvester.sh restart [--accept-ledger-rebuild]   # same one argument as start
 #   scripts/run_harvester.sh status     # up or down, the pid, the phase, the ledger
 #   scripts/run_harvester.sh help
 #
@@ -64,6 +70,16 @@ LOG_MAX_BYTES="${NETRADIO_HARVEST_LOG_MAX_BYTES:-10485760}"
 # for a process that no longer exists.
 STOP_WAIT_S="${NETRADIO_HARVEST_STOP_WAIT_S:-30}"
 PYTHON="${NETRADIO_PYTHON:-$ROOT/.venv/bin/python}"
+# Set by `start --accept-ledger-rebuild` (or `restart --accept-ledger-rebuild`, which takes
+# the same one argument): harvest.py --run refuses to start when its rebuilt ledger differs
+# from the recorded one past a threshold, and this is the operator's override for that one
+# start, forwarded to harvest.py --run unchanged. harvest.py's own support for the flag ships
+# on a separate branch; until that lands here, harvest.py rejects it as an unrecognized
+# argument, same as it would any other unsupported flag — this launcher's job is only to
+# forward it faithfully once both sides carry it. Nothing else is forwarded — an unrecognized
+# argument to start/restart is refused, not passed through, so a typo reaches the operator as
+# a usage error here rather than as harvest.py's own argument-parsing error three layers down.
+ACCEPT_LEDGER_REBUILD=0
 
 require_count() {
   # $1 = the variable's name, $2 = its value. Both knobs above are plain counts, and a
@@ -171,7 +187,9 @@ start_locked() {
   # and swapped. It has to be in the environment AT PROCESS START, which is why it is set
   # here on the command rather than anywhere inside the run. Harmless off macOS (an
   # unknown variable). The fetch child sets it again for itself.
-  MallocLargeCache=0 nohup "$PYTHON" scripts/harvest.py --run >>"$LOG" 2>&1 &
+  local -a run_args=(--run)
+  [ "$ACCEPT_LEDGER_REBUILD" = 1 ] && run_args+=(--accept-ledger-rebuild)
+  MallocLargeCache=0 nohup "$PYTHON" scripts/harvest.py "${run_args[@]}" >>"$LOG" 2>&1 &
   pid=$!
   echo "$pid" >"$PIDFILE"
   sleep 1
@@ -241,13 +259,22 @@ cmd_status() {
 }
 
 usage() {
-  echo "usage: $0 {start|stop|restart|status|help}"
+  echo "usage: $0 {start [--accept-ledger-rebuild]|stop|restart [--accept-ledger-rebuild]|status|help}"
 }
 
-case "${1:-status}" in
-  start)   cmd_start ;;
+verb="${1:-status}"
+case "$verb" in
+  start|restart)
+    shift
+    case "$#:${1:-}" in
+      0:) ;;
+      1:--accept-ledger-rebuild) ACCEPT_LEDGER_REBUILD=1 ;;
+      *) echo "$verb: unknown argument(s): $*" >&2; usage >&2; exit 2 ;;
+    esac
+    [ "$verb" = restart ] && cmd_stop
+    cmd_start
+    ;;
   stop)    cmd_stop ;;
-  restart) cmd_stop; cmd_start ;;
   status)  cmd_status ;;
   help|-h|--help) usage ;;
   *) usage >&2; exit 2 ;;

@@ -35,6 +35,15 @@ FAKE_PY_SLOW = (
     "while true; do sleep 0.2; done\n"
 )
 
+# A stand-in that records the argv it was invoked with (NUL-separated, keyed by its own pid --
+# the pid the launcher captures) before sleeping, so a test can see exactly what the launcher
+# forwarded to `harvest.py --run`.
+CMDLINE_PY = (
+    "#!/bin/sh\n"
+    "printf '%s\\0' \"$@\" >\"cmdline-$$.txt\"\n"
+    "sleep 30\n"
+)
+
 
 class LauncherTestCase(unittest.TestCase):
     """A temp repo root with the launcher in it, and nothing else."""
@@ -67,8 +76,8 @@ class LauncherTestCase(unittest.TestCase):
         return subprocess.run([self.script, *args], capture_output=True, text=True,
                               env=env, timeout=120, **kw)
 
-    def start(self, **kw):
-        out = self.run_cmd("start", **kw)
+    def start(self, *args, **kw):
+        out = self.run_cmd("start", *args, **kw)
         if os.path.exists(self.pidfile):
             self._started.append(self.read_pid())
         return out
@@ -152,6 +161,43 @@ class StartTests(LauncherTestCase):
         out = self.run_cmd("start")
         self.assertNotEqual(out.returncode, 0)
         self.assertIn("make venv", out.stderr)
+        self.assertFalse(os.path.exists(self.pidfile))
+
+    def test_start_forwards_accept_ledger_rebuild(self):
+        """The one override `start` knows about reaches harvest.py unchanged, and only for
+        that one start -- a plain `start` still runs `harvest.py --run` with nothing else."""
+        self.fake_interpreter(body=CMDLINE_PY)
+        out = self.start("--accept-ledger-rebuild")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        pid = self.read_pid()
+        with open(os.path.join(self.root, "cmdline-%d.txt" % pid)) as fh:
+            args = fh.read().split("\x00")
+        self.assertIn("--run", args)
+        self.assertIn("--accept-ledger-rebuild", args)
+
+    def test_plain_start_does_not_forward_the_flag(self):
+        self.fake_interpreter(body=CMDLINE_PY)
+        out = self.start()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        pid = self.read_pid()
+        with open(os.path.join(self.root, "cmdline-%d.txt" % pid)) as fh:
+            args = fh.read().split("\x00")
+        self.assertIn("--run", args)
+        self.assertNotIn("--accept-ledger-rebuild", args)
+
+    def test_an_unknown_argument_to_start_is_refused(self):
+        self.fake_interpreter()
+        out = self.start("--some-other-flag")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("unknown argument", out.stderr)
+        self.assertIn("usage:", out.stderr)
+        self.assertFalse(os.path.exists(self.pidfile))
+
+    def test_extra_arguments_after_the_known_flag_are_refused(self):
+        self.fake_interpreter()
+        out = self.start("--accept-ledger-rebuild", "extra")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("unknown argument", out.stderr)
         self.assertFalse(os.path.exists(self.pidfile))
 
 
@@ -238,6 +284,33 @@ class StopTests(LauncherTestCase):
         self.assertNotEqual(second, first)
         self.assertFalse(self.alive(first))
         self.assertTrue(self.alive(second))
+
+    def test_restart_forwards_accept_ledger_rebuild(self):
+        """restart takes the same one argument as start, and forwards it the same way --
+        the override must not be silently dropped just because restart also stops something
+        first."""
+        self.fake_interpreter(body=CMDLINE_PY)
+        self.assertEqual(self.start().returncode, 0)
+        out = self.run_cmd("restart", "--accept-ledger-rebuild")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        pid = self.read_pid()
+        self._started.append(pid)
+        with open(os.path.join(self.root, "cmdline-%d.txt" % pid)) as fh:
+            args = fh.read().split("\x00")
+        self.assertIn("--run", args)
+        self.assertIn("--accept-ledger-rebuild", args)
+
+    def test_restart_refuses_an_unknown_argument(self):
+        self.fake_interpreter()
+        self.assertEqual(self.start().returncode, 0)
+        pid = self.read_pid()
+        out = self.run_cmd("restart", "--some-other-flag")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("unknown argument", out.stderr)
+        self.assertIn("usage:", out.stderr)
+        # Refused before anything happened to the running harvester.
+        self.assertTrue(self.alive(pid))
+        self.assertEqual(self.read_pid(), pid)
 
 
 class StatusTests(LauncherTestCase):
@@ -425,7 +498,10 @@ class UsageTests(LauncherTestCase):
     def test_help_prints_the_usage(self):
         out = self.run_cmd("help")
         self.assertEqual(out.returncode, 0)
-        self.assertIn("start|stop|restart|status|help", out.stdout)
+        self.assertIn(
+            "start [--accept-ledger-rebuild]|stop|restart [--accept-ledger-rebuild]|status|help",
+            out.stdout,
+        )
 
 
 if __name__ == "__main__":
