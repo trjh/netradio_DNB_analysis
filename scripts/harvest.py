@@ -1632,10 +1632,10 @@ def purge_audio():
 def _sig_key(url):
     """The signature file name a URL used to be written under: `<key>.npy`.
 
-    The migration of the old `matches` rows is this function's last user. Everything else
-    reads the key a file or a row already carries and computes nothing (see file_key) --
-    the URL-to-key rule itself belongs to whoever feeds the directories, and the one-time
-    move of the old rows onto keys is the one place this side still has to apply it.
+    Two callers: the migration of the old `matches` rows, and `make_canary.py --key`, which
+    prints the canary's key from its URL. Everything else reads the key a file or a row
+    already carries and computes nothing (see file_key) -- the URL-to-key rule itself belongs
+    to whoever feeds the directories, and this is this side's one copy of it.
     """
     return "u" + hashlib.sha1(url.encode()).hexdigest()[:20] + ".npy"
 

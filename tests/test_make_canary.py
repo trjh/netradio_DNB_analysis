@@ -10,7 +10,6 @@ No network, no audio: the key is a pure hash of the URL string.
 """
 
 import contextlib
-import hashlib
 import io
 import os
 import sys
@@ -34,10 +33,18 @@ class SigKeyFor(unittest.TestCase):
     the harvester reads from `.env` -- so the rule is pinned here, against the published
     contract."""
 
-    def test_the_key_is_u_plus_the_first_20_hex_of_the_sha1(self):
-        url = "https://example.invalid/watch?v=abc#t=3600,7200"
-        expected = "u" + hashlib.sha1(url.encode()).hexdigest()[:20]
-        self.assertEqual(make_canary.sig_key_for(url), expected)
+    def test_the_pinned_vector(self):
+        """One fixed URL and the fixed key it must give, both written out: recomputing the
+        hash here would test the rule against itself. The same pair is pinned on the
+        harvester's `_sig_key`."""
+        self.assertEqual(make_canary.sig_key_for("https://example.com/a-track"),
+                         "u571928de5f26668c8f40")
+
+    def test_it_calls_the_harvesters_rule_rather_than_a_copy(self):
+        import harvest
+        with mock.patch.object(harvest, "_sig_key", lambda url: "u" + "0" * 20 + ".npy"):
+            self.assertEqual(make_canary.sig_key_for("https://example.com/a-track"),
+                             "u" + "0" * 20)
 
     def test_the_key_includes_the_fragment_and_query_string(self):
         """The URL is hashed AS GIVEN -- query string and `#t=` media fragment included,

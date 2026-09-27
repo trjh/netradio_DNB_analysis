@@ -133,8 +133,11 @@ def sig_key_for(url):
     """The signature file name a URL is filed under: the pool's one key rule
     (docs/HARVEST_FEED.md) -- `u` + the first 20 hex of the SHA-1 of the URL as given,
     fragment included. The stem of every signature in the bucket is this rule, and it
-    never changes."""
-    return "u" + hashlib.sha1(url.encode()).hexdigest()[:20]
+    never changes. The harvester's `_sig_key` is this side's one copy of it, so this calls
+    that rather than keeping a second; the import is here, not at the top, so the canary
+    build does not load the harvester."""
+    import harvest
+    return harvest._sig_key(url)[:-len(".npy")]
 
 
 def main():
