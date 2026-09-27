@@ -193,27 +193,41 @@ def register(name, dir=None, cap=DEFAULT_CAP, headroom=0, max_age=None, order="o
 
 def _nested(a, b):
     """True when directory `a` is `b` or lies inside it. Compared by path, and then by
-    identity for a `b` that exists: on a case-insensitive volume `~/MUSIC` names the same
-    directory as `~/Music`, and only the files' identity says so."""
+    identity: on a case-insensitive volume `~/MUSIC` names the same directory as `~/Music`,
+    and only the files say so -- even for a directory not created yet (`_identity`)."""
     a, b = os.path.realpath(a), os.path.realpath(b)
     if os.path.commonpath([a, b]) == b:
         return True
-    try:
-        target = os.stat(b)
-    except OSError:
-        return False
+    target = _identity(b)
     path = a
     while True:
-        try:
-            st = os.stat(path)
-            if (st.st_dev, st.st_ino) == (target.st_dev, target.st_ino):
-                return True
-        except OSError:
-            pass
+        if _identity(path) == target:
+            return True
         parent = os.path.dirname(path)
         if parent == path:
             return False
         path = parent
+
+
+def _identity(path):
+    """(device, inode) of the nearest existing ancestor of `path` (itself included), and the
+    names below it -- case-folded when that ancestor's volume ignores case, so two spellings
+    of one directory get one identity whether or not it exists yet."""
+    rest = []
+    while not os.path.exists(path):
+        parent, name = os.path.split(path)
+        if parent == path:
+            break
+        rest.append(name)
+        path = parent
+    try:
+        st = os.stat(path)
+    except OSError:
+        return (None, None, path, tuple(reversed(rest)))
+    swapped = path.swapcase()
+    folds = swapped != path and os.path.exists(swapped) and os.path.samefile(path, swapped)
+    names = tuple(n.casefold() if folds else n for n in reversed(rest))
+    return (st.st_dev, st.st_ino, None, names)
 
 
 def _overlap(name, cache_dir):
