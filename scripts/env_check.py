@@ -55,7 +55,9 @@ CACHE_SUFFIXES = {"GB": "the cap the registration sets (4 GB where it sets none)
 # default the code really falls back to -- the registration's own. Keep it in step with the
 # registrations; the generic text above covers every cache not named.
 CACHE_SETTINGS = {
-    "chroma": {"MAX_AGE_DAYS": "14 days, the registration's age limit"},
+    "chroma": {"MAX_AGE_DAYS": "14 days while the signature bucket is configured; with the "
+                               "bucket unset, no age limit (every signature is pinned as the "
+                               "only copy)"},
     "candidates": {"GB": "0.25 GB / 250 MB, the registration's cap",
                    "MAX_AGE_DAYS": "30 days, the registration's age limit"},
     "stream_tracks": {"GB": "2 GB, the registration's cap",

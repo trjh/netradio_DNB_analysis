@@ -172,14 +172,31 @@ def _unique_branch(name, root):
     return candidate
 
 
+def _repo_relpath(path, root):
+    """`path` relative to `root`, or None when it does not lie inside `root`.
+
+    Both sides are resolved with realpath first. git reports the top level with symlinks
+    resolved (on macOS the temp root /var/... comes back as /private/var/...), so relating
+    an unresolved path to it climbs out of the repo with `..` even when the file is inside."""
+    try:
+        rel = os.path.relpath(os.path.realpath(path), os.path.realpath(root))
+    except ValueError:  # Windows: a different drive has no relative path at all
+        return None
+    if os.path.isabs(rel) or rel == os.pardir or rel.startswith(os.pardir + os.sep):
+        return None
+    return rel
+
+
 def _repo_root_for(staged, dry_run):
     """The git repo the sorted files live in (the invoking checkout). Falls back to this
-    script's own repo, and — only for dry-run display — to the file's own directory."""
-    for cwd in (os.path.dirname(os.path.abspath(staged[0])), HERE):
+    script's own repo when the first file lies inside it, and — only for dry-run display —
+    to the file's own directory."""
+    first = os.path.realpath(staged[0])
+    for cwd in (os.path.dirname(first), HERE):
         root = _capture(["git", "rev-parse", "--show-toplevel"], cwd=cwd)
-        if root:
+        if root and _repo_relpath(first, root) is not None:
             return root
-    return os.path.dirname(os.path.abspath(staged[0])) if dry_run else None
+    return os.path.dirname(first) if dry_run else None
 
 
 def _github_slug(root):
@@ -229,6 +246,18 @@ def _open_pr(staged, branch, message, dry_run):
         sys.stderr.write("publish: the labels are not inside a git repo — cannot open a PR\n")
         return 1
 
+    # Every file must lie inside the repo, checked before anything is created: the copy below
+    # writes to <worktree>/<rel>, so a rel that climbs out with `..` would land OUTSIDE the
+    # publish worktree.
+    rels = []
+    for src in staged:
+        rel = _repo_relpath(src, root)
+        if rel is None:
+            sys.stderr.write("publish: %s is outside the repo at %s — refusing, nothing "
+                             "pushed\n" % (src, root))
+            return 1
+        rels.append(rel)
+
     wtdir = os.path.join(root, ".worktree")
     if not dry_run:
         os.makedirs(wtdir, exist_ok=True)
@@ -249,10 +278,7 @@ def _open_pr(staged, branch, message, dry_run):
         return 1
 
     try:
-        rels = []
-        for src in staged:
-            rel = os.path.relpath(os.path.abspath(src), root)
-            rels.append(rel)
+        for src, rel in zip(staged, rels):
             if not dry_run:
                 dst = os.path.join(wt, rel)
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
