@@ -105,7 +105,7 @@ own original, the change is wrong.
 scripts/run_harvester.sh start                                        # runs for weeks
 scripts/run_harvester.sh start --accept-ledger-rebuild                # forwarded to harvest.py
                                                                       # --run, that one start only
-scripts/run_harvester.sh status                                       # pid, phase, ledger
+scripts/run_harvester.sh status                                       # pid, last state write, ledger
 scripts/run_harvester.sh stop                                         # / restart [--accept-ledger-rebuild]
 make harvest-run                                                      # alias for `start`
 
@@ -149,10 +149,10 @@ pidfile whose process is gone or is now something else, and takes a lock directo
 (`.harvest/harvester.start.lock`) so two simultaneous starts resolve to one harvester and one
 pidfile. `stop` asks for a clean exit and waits up to 30 seconds for it
 (`NETRADIO_HARVEST_STOP_WAIT_S`) before it resorts to `kill -9`. `status` prints whether it is
-up, its pid, the phase it last wrote to `.harvest/state.json`, and whether the ledger is
-there — and **an absent ledger is a normal answer**, not an error: before the signing pass has
-run once there is nothing signed and no candidates, which is exactly what a fresh clone looks
-like. Same shape as the align server's `scripts/run_align.sh`, deliberately, so the two read
+up, its pid, when it last wrote `.harvest/state.json` (its `updated` stamp), and whether the
+ledger is there — and **an absent ledger is a normal answer**, not an error: before the
+signing pass has run once there is nothing signed and no candidates, which is exactly what a
+fresh clone looks like. Same shape as the align server's `scripts/run_align.sh`, deliberately, so the two read
 alike.
 
 **`start` and `restart` take one optional argument, `--accept-ledger-rebuild`**, forwarded to

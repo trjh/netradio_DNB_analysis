@@ -249,6 +249,17 @@ class HarvestTakesWhatTheLauncherForwards(LauncherTestCase):
         self.assertTrue(args.run)
         self.assertTrue(args.accept_ledger_rebuild)
 
+    def test_status_reads_the_stamp_harvest_writes(self):
+        """`status` greps the `updated` stamp out of state.json; the state it reads is the
+        one harvest.py's own blank_state() and _save() write, not a hand-made fixture."""
+        self.parse_with_harvest([])          # imports harvest (or skips), parses nothing
+        import harvest
+        state = harvest.blank_state()
+        os.makedirs(self.state_dir, exist_ok=True)
+        harvest._save(os.path.join(self.state_dir, "state.json"), state)
+        out = self.run_cmd("status")
+        self.assertIn("state:  last written %s" % state["updated"], out.stdout)
+
     def test_a_plain_start_leaves_the_flag_off(self):
         args = self.parse_with_harvest(self.forwarded_argv())
         self.assertTrue(args.run)
@@ -377,17 +388,17 @@ class StatusTests(LauncherTestCase):
         self.assertIn("absent (nothing signed yet)", out.stdout)
         self.assertEqual(out.stderr, "")
 
-    def test_status_prints_the_pid_and_the_phase(self):
+    def test_status_prints_the_pid_and_the_last_state_write(self):
         self.fake_interpreter()
         os.makedirs(self.state_dir, exist_ok=True)
         with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
-            fh.write('{"analyzed": 3, "session": {"phase": "waiting on example.test", '
-                     '"until": 0}, "current": null}')
+            fh.write('{"started": "2026-09-01T00:00:00+00:00", '
+                     '"updated": "2026-09-27T12:34:56+00:00", "analyzed": 3, "current": null}')
         self.assertEqual(self.start().returncode, 0)
         out = self.run_cmd("status")
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("harvester UP (pid %d)" % self.read_pid(), out.stdout)
-        self.assertIn("phase:  waiting on example.test", out.stdout)
+        self.assertIn("state:  last written 2026-09-27T12:34:56+00:00", out.stdout)
 
     def test_an_absent_ledger_is_never_an_error(self):
         """Until the signing pass has run once there is no ledger, and that is normal:
