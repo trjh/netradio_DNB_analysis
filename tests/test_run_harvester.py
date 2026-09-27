@@ -285,6 +285,33 @@ class StopTests(LauncherTestCase):
         self.assertFalse(self.alive(first))
         self.assertTrue(self.alive(second))
 
+    def test_restart_forwards_accept_ledger_rebuild(self):
+        """restart takes the same one argument as start, and forwards it the same way --
+        the override must not be silently dropped just because restart also stops something
+        first."""
+        self.fake_interpreter(body=CMDLINE_PY)
+        self.assertEqual(self.start().returncode, 0)
+        out = self.run_cmd("restart", "--accept-ledger-rebuild")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        pid = self.read_pid()
+        self._started.append(pid)
+        with open(os.path.join(self.root, "cmdline-%d.txt" % pid)) as fh:
+            args = fh.read().split("\x00")
+        self.assertIn("--run", args)
+        self.assertIn("--accept-ledger-rebuild", args)
+
+    def test_restart_refuses_an_unknown_argument(self):
+        self.fake_interpreter()
+        self.assertEqual(self.start().returncode, 0)
+        pid = self.read_pid()
+        out = self.run_cmd("restart", "--some-other-flag")
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("unknown argument", out.stderr)
+        self.assertIn("usage:", out.stderr)
+        # Refused before anything happened to the running harvester.
+        self.assertTrue(self.alive(pid))
+        self.assertEqual(self.read_pid(), pid)
+
 
 class StatusTests(LauncherTestCase):
 
@@ -471,7 +498,10 @@ class UsageTests(LauncherTestCase):
     def test_help_prints_the_usage(self):
         out = self.run_cmd("help")
         self.assertEqual(out.returncode, 0)
-        self.assertIn("start [--accept-ledger-rebuild]|stop|restart|status|help", out.stdout)
+        self.assertIn(
+            "start [--accept-ledger-rebuild]|stop|restart [--accept-ledger-rebuild]|status|help",
+            out.stdout,
+        )
 
 
 if __name__ == "__main__":

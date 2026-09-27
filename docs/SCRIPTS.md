@@ -97,10 +97,10 @@ own original, the change is wrong.
 
 ```bash
 scripts/run_harvester.sh start                                        # runs for weeks
-scripts/run_harvester.sh start --accept-ledger-rebuild                # that one start only —
-                                                                      # the ledger-mismatch override
+scripts/run_harvester.sh start --accept-ledger-rebuild                # forwarded to harvest.py
+                                                                      # --run, that one start only
 scripts/run_harvester.sh status                                       # pid, phase, ledger
-scripts/run_harvester.sh stop                                         # / restart
+scripts/run_harvester.sh stop                                         # / restart [--accept-ledger-rebuild]
 make harvest-run                                                      # alias for `start`
 
 set -a && . ./.env && set +a
@@ -139,12 +139,15 @@ run once there is nothing signed and no candidates, which is exactly what a fres
 like. Same shape as the align server's `scripts/run_align.sh`, deliberately, so the two read
 alike.
 
-**`start` takes one optional argument, `--accept-ledger-rebuild`**, forwarded to
-`harvest.py --run` unchanged and only for that one start — the operator's override for the
-case where `harvest.py` refuses to start because its rebuilt ledger differs from the recorded
-one past a threshold. Anything else after `start` is refused with the usage message rather
-than passed through, so a typo is caught here rather than by `harvest.py`'s own argument
-parsing.
+**`start` and `restart` take one optional argument, `--accept-ledger-rebuild`**, forwarded to
+`harvest.py --run` unchanged and only for that one start — the operator's override, once
+`harvest.py` itself carries the flag, for the case where it refuses to start because its
+rebuilt ledger differs from the recorded one past a threshold. `harvest.py`'s own support for
+the flag ships on a separate branch; until that lands here, `harvest.py --run` rejects it as
+an unrecognized argument, the same as any unsupported flag would be — the launcher's job is
+only to forward it faithfully once both sides carry it. Anything else after `start`/`restart`
+is refused with the usage message rather than passed through, so a typo is caught here rather
+than by `harvest.py`'s own argument parsing.
 
 **The pidfile is the launcher's own, and so is what `status` can see.** A harvester started
 some other way — by hand as `harvest.py --run`, or by another front-end keeping a pidfile of
@@ -158,7 +161,7 @@ was started.
 **Exit codes**, for a caller that branches on them: `status` is 0 when the harvester is up
 and **1 when it is down**; `start` is 1 when it refuses (one is already running, another
 start is in flight, no interpreter) and 0 when one is now up; `stop` is 0 either way. A `2`
-is a usage error: an unknown verb, an argument to `start` other than
+is a usage error: an unknown verb, an argument to `start`/`restart` other than
 `--accept-ledger-rebuild`, or a `NETRADIO_HARVEST_*` value that is not a plain number —
 `NETRADIO_HARVEST_LOG_MAX_BYTES=10MB` is refused rather than quietly taken as "never
 rotate". The interpreter is `.venv/bin/python` unless `NETRADIO_PYTHON` names another one.
