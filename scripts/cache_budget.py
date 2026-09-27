@@ -157,8 +157,9 @@ def register(name, dir=None, cap=DEFAULT_CAP, headroom=0, max_age=None, order="o
     """Record one cache. The environment overrides `dir`, `cap`, `headroom` and `max_age`.
 
     Returns the record, or None when the module is dark or the directory is refused: one that
-    holds the root, or equals, contains or sits inside another cache's directory (a warning is
-    printed). Registering a name again replaces it.
+    holds the root, equals, contains or sits inside another cache's directory, has a `.git`
+    entry at its top level, or is or holds the home directory or the download root (a warning
+    is printed, and only this cache stays unregistered). Registering a name again replaces it.
     """
     if not enabled():
         return None
@@ -198,9 +199,20 @@ def _nested(a, b):
 
 def _overlap(name, cache_dir):
     """Why `cache_dir` may not be a cache's directory, or None. Two caches never share or nest
-    directories, and no cache holds the root, where the lock file lives."""
+    directories, and no cache holds the root, where the lock file lives. A directory that looks
+    like real data is refused too, because the cap would delete its oldest files: one with a
+    `.git` entry at its top level, the home directory or one that holds it, and the download
+    root (`NETRADIO_DOWNLOAD_ROOT`) or one that holds it. A cache inside the download root is
+    allowed; the download root's own caches sit there."""
     if _nested(root(), cache_dir):
         return "holds the cache root"
+    if os.path.lexists(os.path.join(cache_dir, ".git")):
+        return "holds a .git entry (a repository checkout)"
+    if _nested(os.path.expanduser("~"), cache_dir):
+        return "is or holds the home directory"
+    download = os.environ.get("NETRADIO_DOWNLOAD_ROOT", "").strip()
+    if download and _nested(os.path.expanduser(download), cache_dir):
+        return "is or holds the download root"
     for other in _REGISTRY.values():
         if other["name"] != name and (_nested(cache_dir, other["dir"])
                                       or _nested(other["dir"], cache_dir)):

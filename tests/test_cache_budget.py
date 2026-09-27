@@ -192,6 +192,60 @@ class Environment(CacheBudgetBase):
             self.assertFalse(cb.registered(name))
         self.assertIsNotNone(self.cache("a"))                         # re-registering is fine
 
+    def _refused(self, name, d):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertIsNone(cb.register(name, dir=d), name)
+        self.assertIn("not registering", out.getvalue())
+        self.assertFalse(cb.registered(name))
+        return out.getvalue()
+
+    def test_a_directory_with_a_git_entry_at_its_top_level_is_refused(self):
+        checkout = os.path.join(self.tmp, "checkout")
+        os.makedirs(os.path.join(checkout, ".git", "objects"))
+        self.assertIn(".git", self._refused("a", checkout))
+        worktree = os.path.join(self.tmp, "worktree")     # a worktree's .git is a file
+        os.makedirs(worktree)
+        with open(os.path.join(worktree, ".git"), "w") as fh:
+            fh.write("gitdir: elsewhere\n")
+        self._refused("b", worktree)
+        self.assertIsNotNone(self.cache("c", dir=os.path.join(checkout, "sub")))  # below it
+
+    def test_the_home_directory_or_one_that_holds_it_is_refused(self):
+        home = os.path.join(self.tmp, "home")
+        os.makedirs(home)
+        saved = os.environ.get("HOME")
+        self.addCleanup(lambda: os.environ.pop("HOME", None) if saved is None
+                        else os.environ.__setitem__("HOME", saved))
+        os.environ["HOME"] = home
+        self.assertIn("home directory", self._refused("a", home))
+        os.environ["NETRADIO_B_CACHE_DIR"] = "~"          # the mistype arrives by the setting
+        self._refused("b", None)
+        self._refused("c", self.tmp)                      # holds home (and the root)
+        self.assertIsNotNone(self.cache("d", dir=os.path.join(home, "cache-d")))
+
+    def test_the_download_root_or_one_that_holds_it_is_refused_and_one_inside_is_not(self):
+        dl = os.path.join(self.tmp, "media", "dl")
+        os.makedirs(dl)
+        os.environ["NETRADIO_DOWNLOAD_ROOT"] = dl
+        self.assertIn("download root", self._refused("a", dl))
+        self._refused("b", os.path.join(self.tmp, "media"))
+        self.assertIsNotNone(self.cache("c", dir=os.path.join(dl, "unplayed")))
+        cb._REGISTRY.pop("c")
+        os.environ.pop("NETRADIO_DOWNLOAD_ROOT")
+        self.assertIsNotNone(self.cache("e", dir=dl))     # the rule reads the variable
+
+    def test_a_refused_directory_is_never_evicted_from(self):
+        checkout = os.path.join(self.tmp, "checkout")
+        os.makedirs(os.path.join(checkout, ".git"))
+        old = os.path.join(checkout, "precious")
+        with open(old, "wb") as fh:
+            fh.write(b"x" * (5 * KB))
+        os.environ["NETRADIO_CLIPS_CACHE_DIR"] = checkout
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertIsNone(cb.register("clips", cap=KB))
+        cb.run_eviction()
+        self.assertTrue(os.path.isfile(old))
+
     def test_the_event_log_sits_under_the_download_root_when_there_is_one(self):
         self.assertEqual(cb.events_path(), os.path.join(self.root, "events.jsonl"))
         os.environ["NETRADIO_DOWNLOAD_ROOT"] = os.path.join(self.tmp, "dl")
