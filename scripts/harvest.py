@@ -1238,14 +1238,18 @@ def find_file(key):
     """The file for `key` in the configured directories: `<key>.<ext>` with a complete
     sidecar beside it, or None. The hand tool's finder -- the scan answers "what wants a
     sign", while --sign-one answers "where is this key's file", which a row that already
-    covers it must not hide."""
+    covers it must not hide. It admits only what the scan admits: a key of the pool's
+    shape (u + 20 hex) and a finished file, never an in-progress `*.part`."""
+    if not _KEY.fullmatch(key or ""):
+        return None
     for d in _dirs():
         try:
             names = sorted(os.listdir(d))
         except OSError:
             continue
         for name in names:
-            if name.endswith(".json") or name.rsplit(".", 1)[0] != key:
+            if (name.endswith(".json") or name.endswith(".part")
+                    or name.rsplit(".", 1)[0] != key):
                 continue
             path = os.path.join(d, name)
             sidecar = os.path.join(d, key + ".json")
@@ -2229,6 +2233,10 @@ def main():
               % (up, failed, n_ev, freed / 1e6, left))
         if failed:
             print("# NOTHING that failed to upload was deleted. Fix the store config and re-run.")
+        return
+    if args.sign_one and not _KEY.fullmatch(args.sign_one):
+        print("# %r is not a key (u + 20 hex) -- a signature filed under it would be "
+              "invisible to the pool's own listing; not signing" % args.sign_one)
         return
     if args.sign_one:
         # The hand tool, and a writer: it takes the same lock, reconciles the ledger the same
