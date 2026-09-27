@@ -105,6 +105,16 @@ def register_cache():
 register_cache()                  # at import: the wrapper sources .env before any import
 
 
+def _discard(tmp):
+    """Remove a write-in-progress file whose write is over. Nothing to report if it is
+    already gone, or if the directory will not give it up -- the policy evicts a stale
+    .tmp on its own once it is an hour old."""
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+
+
 def _on_policy(out_path):
     """True when a cut landing at `out_path` lands inside the registered tracks cache, so its
     write goes through the policy. A --out outside the cache is the operator's own directory:
@@ -186,10 +196,17 @@ def cut(stem, m_from, m_to, cstart, out_path):
     if policy and not cache_budget.reserve(STREAM_TRACKS_CACHE, None):
         return False
     tmp = "%s.%d.tmp" % (out_path, os.getpid())
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "%.4f" % lo,
-                    "-t", "%.4f" % (m_to - m_from), "-i", src,
-                    "-ac", "2", "-ar", "44100", "-f", "flac", tmp], check=True)
-    os.replace(tmp, out_path)
+    try:
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "%.4f" % lo,
+                        "-t", "%.4f" % (m_to - m_from), "-i", src,
+                        "-ac", "2", "-ar", "44100", "-f", "flac", tmp], check=True)
+        os.replace(tmp, out_path)
+    except BaseException:
+        # ffmpeg failing (a capture that will not decode) leaves its .tmp inside the
+        # cache, where it counts against the cap and is held from eviction for an hour.
+        # Clear it here rather than waiting out that hour: the write is over.
+        _discard(tmp)
+        raise
     if policy:
         cache_budget.commit(STREAM_TRACKS_CACHE, out_path)
     return os.path.isfile(out_path)
@@ -222,9 +239,13 @@ def assemble_track(pieces, starts, out):
         if policy and not cache_budget.reserve(STREAM_TRACKS_CACHE, None):
             return False
         tmp = "%s.%d.tmp" % (out, os.getpid())
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0",
-                        "-i", lst, "-c", "copy", "-f", "flac", tmp], check=True)
-        os.replace(tmp, out)
+        try:
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0",
+                            "-i", lst, "-c", "copy", "-f", "flac", tmp], check=True)
+            os.replace(tmp, out)
+        except BaseException:
+            _discard(tmp)                   # see cut() for the reason
+            raise
         if policy:
             cache_budget.commit(STREAM_TRACKS_CACHE, out)
         # The same landing check a direct cut makes (see there for the reason): never report
@@ -325,8 +346,15 @@ def main():
         else:
             landed = assemble_track(pieces, starts, out)
         if not landed:
-            print("  %3s SKIP  %-42s the cache policy refused the room: the disk is past its "
-                  "floor, or the tracks cache is over its cap with nothing evictable"
+            # Two different things end here, and the message names both. `reserve` can
+            # refuse the room; or the cut landed and an eviction took it back before the
+            # policy had recorded it, in which case there is nothing to free and a re-run
+            # is the whole remedy. Naming only the first sends an operator hunting for
+            # disk space they do not need.
+            print("  %3s SKIP  %-42s the cut did not land: the policy refused the room "
+                  "(the disk is past its floor, or the tracks cache is over its cap with "
+                  "nothing evictable), or an eviction took the cut back before the policy "
+                  "recorded it -- that one needs only a re-run"
                   % (num, title[:42]))
             skipped += 1
             continue

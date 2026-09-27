@@ -11,6 +11,7 @@ No third-party audio deps: ffmpeg for decode, numpy for everything else.
 """
 
 import hashlib
+import io
 import os
 import subprocess
 import threading
@@ -42,12 +43,14 @@ _AUDIO_EXTS = (".wav", ".au", ".mp3")
 # seconds with ffmpeg, so the cache registers on the machine's cache policy
 # (cache_budget.py) and is evicted oldest-added first under the policy's settings
 # for `streamalign` — cap NETRADIO_STREAMALIGN_CACHE_GB (default 4 GB), age
-# NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS, directory NETRADIO_STREAMALIGN_CACHE_DIR
+# NETRADIO_STREAMALIGN_CACHE_MAX_AGE_DAYS (default 14 days, `none` for no age
+# limit), directory NETRADIO_STREAMALIGN_CACHE_DIR
 # (default $NETRADIO_CACHE_ROOT/streamalign). The policy is dark until
 # NETRADIO_CACHE_ROOT is set: then there is no cache directory at all and every
 # load decodes again — never an unbounded cache with no eviction.
 
 CACHE = "streamalign"
+CACHE_MAX_AGE_DAYS = 14     # an alignment session lasts days, not months
 
 _pin_lock = threading.Lock()
 _pinned_entries = set()
@@ -75,6 +78,14 @@ class _Pinned:
             _pinned_entries.discard(self.path)
 
 
+def _npy_bytes(signal):
+    """The size of the `.npy` file `np.save` writes for `signal`: its header, then its data."""
+    header = io.BytesIO()
+    np.lib.format.write_array_header_1_0(
+        header, np.lib.format.header_data_from_array_1_0(np.asarray(signal)))
+    return len(header.getvalue()) + signal.nbytes
+
+
 def register_cache():
     """Put the decoded-array cache on the one cache policy. Reads the environment
     at call time; call it again to re-read it. Returns the cache's record, or
@@ -84,7 +95,8 @@ def register_cache():
     # entries third — a re-decode is seconds, the refill costs nothing.
     # The literal name, not the CACHE constant, so env_check.py's code scan sees
     # the registration and counts its variable family as read.
-    return cache_budget.register("streamalign", pinned=_pinned_entry,
+    return cache_budget.register("streamalign", max_age=CACHE_MAX_AGE_DAYS,
+                                 pinned=_pinned_entry,
                                  refill="re-decode", rank=3)
 
 
@@ -130,7 +142,7 @@ def _ffmpeg_decode(path, sr, mono):
                           check=False)
     if proc.returncode != 0:
         raise RuntimeError("ffmpeg failed on %s: %s"
-                          % (path, proc.stderr.decode("utf-8", "replace")[-400:]))
+                           % (path, proc.stderr.decode("utf-8", "replace")[-400:]))
     data = np.frombuffer(proc.stdout, dtype="<f4")
     if not mono:
         data = data.reshape(-1, 2)
@@ -171,12 +183,13 @@ def load_audio(name, sr=SR, mono=True, use_cache=True, audio_dir=None):
     if cache_path:
         try:
             with _Pinned(cache_path):
-                if cache_budget.reserve(CACHE, signal.nbytes):
+                if cache_budget.reserve(CACHE, _npy_bytes(signal)):
                     os.makedirs(cache_dir, exist_ok=True)
                     try:
                         # the .tmp suffix is the policy's write-in-progress mark:
-                        # fresh, it is never evicted; an hour old (a decode that
-                        # died), it is evicted like any other entry.
+                        # fresh, it is never evicted; older than
+                        # NETRADIO_CACHE_IN_PROGRESS_MIN (a decode that died), it is
+                        # evicted like any other entry.
                         tmp = "%s.%d.tmp" % (cache_path, os.getpid())
                         with open(tmp, "wb") as handle:  # file handle => np.save won't append .npy
                             np.save(handle, signal)
@@ -185,6 +198,9 @@ def load_audio(name, sr=SR, mono=True, use_cache=True, audio_dir=None):
                         pass            # ENOSPC, a race: never fail the decode
                     else:
                         cache_budget.commit(CACHE, cache_path)
+                        # commit evicts only past the cap or the floor; this run
+                        # applies the age limit too, so every write ages the cache
+                        cache_budget.run_eviction(CACHE)
         except OSError:
             pass    # the lock file, an unwritable root: the cache is optional
     return signal

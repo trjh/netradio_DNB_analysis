@@ -289,6 +289,20 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         os.utime(path, (t, t))
         return path
 
+    def _fake_soundfile(self):
+        """write_excerpt imports soundfile to encode the WAV. These tests are about the cache
+        policy around the write, not the encoding, so a stand-in writes 16-bit PCM bytes: the
+        tests run where the audio libraries are not installed (the CI runner) as well as here."""
+        import types
+        import numpy as np
+
+        def write(fh, clip, _sr, format=None):
+            fh.write(b"RIFF" + np.asarray(clip, dtype="float32").astype("<i2").tobytes())
+        patcher = unittest.mock.patch.dict(sys.modules,
+                                           {"soundfile": types.SimpleNamespace(write=write)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def _events(self):
         path = cache_budget.events_path()
         if not os.path.isfile(path):
@@ -310,7 +324,7 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
                          (self.keep_dir, "by-score"))
         self.assertEqual(candidates["cap"], 250 * cache_budget.MB)
         self.assertEqual(candidates["max_age_days"], harvest.KEEP_TTL_DAYS)
-        self.assertEqual((candidates["refill"], candidates["rank"]), ("re-cut", 10))
+        self.assertEqual((candidates["refill"], candidates["rank"]), ("on-play", 10))
         # the module's path constants follow the registry
         self.assertEqual((harvest.CACHE, harvest.KEEP), (self.chroma_dir, self.keep_dir))
         self.assertEqual(harvest.sig_path("https://example.invalid/x"),
@@ -337,9 +351,8 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         self.assertIsNone(harvest._keep_dir())
         self.assertIsNone(harvest.sig_path("https://example.invalid/x"))
 
-    @unittest.skipUnless(HAVE_AUDIO,
-                        "write_excerpt writes a real excerpt -- see requirements-streamalign.txt")
     def test_an_excerpt_past_the_cap_evicts_the_worst_of_its_mystery_first(self):
+        self._fake_soundfile()
         # A board of MT4 excerpts whose WORST is the NEWEST file: a plain oldest-added order
         # would keep the worst and drop the best; `by-score` must take the worst first.
         self._excerpt("MT4-0.0500-best.wav", 200 * self.KB, age_s=20 * 86400)
@@ -373,11 +386,10 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
                          [("MT4-0.0600-old.wav", "expired")],
                          "the sweep deletes through the policy, which records the reason")
 
-    @unittest.skipUnless(HAVE_AUDIO,
-                        "write_excerpt writes a real excerpt -- see requirements-streamalign.txt")
     def test_a_refused_excerpt_is_not_kept(self):
         """The write the policy refuses (the disk past its floor) leaves nothing on disk, so
         run() neither counts it as kept nor names it as the lead's audio: the lead survives."""
+        self._fake_soundfile()
         cache_budget._disk_usage = lambda _p: (100 * self.KB, 50 * self.KB, 50 * self.KB)
         os.environ["NETRADIO_DISK_MAX_PCT"] = "0"
         path = os.path.join(self.keep_dir, "MT4-0.0500-refused.wav")
@@ -387,12 +399,11 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         self.assertTrue([e for e in self._events() if e["event"] == "refuse"],
                         "the refusal is recorded like every other policy answer")
 
-    @unittest.skipUnless(HAVE_AUDIO,
-                        "write_excerpt writes a real excerpt -- see requirements-streamalign.txt")
     def test_an_excerpt_evicted_between_its_rename_and_its_commit_is_not_kept(self):
         """The rename and the commit are two calls; another writer's `reserve` that starts
         between them takes an excerpt the policy has not recorded yet. The write must not
         report a kept excerpt that is not on disk."""
+        self._fake_soundfile()
         import numpy as np
         # The cap admits the planned excerpt and nothing else beside it: 300 KB against a
         # ~32 KB excerpt, so another writer asking for 300 KB of room must take the excerpt.
@@ -413,6 +424,51 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         self.assertFalse(os.path.exists(self.keep_dir) and
                          "PROVENANCE.txt" in os.listdir(self.keep_dir),
                          "a landing that did not survive writes no board note")
+
+    def test_purge_audio_deletes_through_the_policy(self):
+        """Every deletion of a cache entry goes through the policy's one door, so it is
+        checked against the cache's directory and recorded with its reason. A bare
+        `os.unlink` here would empty the board behind the policy's back, leaving its
+        accounting and its event log describing a cache that no longer holds what they say."""
+        state = os.path.join(self.tmp, "state.json")
+        saved = harvest.STATE
+        harvest.STATE = state
+        self.addCleanup(setattr, harvest, "STATE", saved)
+        with open(state, "w") as fh:
+            json.dump({"matches": [{"url": "u1", "audio": "x"}], "kept": 1}, fh)
+        self._excerpt("MT4-0.0600-one.wav", 100)
+        self._excerpt("MT4-0.0700-two.wav", 100)
+        note = os.path.join(self.keep_dir, "PROVENANCE.txt")
+        with open(note, "w") as fh:
+            fh.write("note")
+        harvest.purge_audio()
+        self.assertEqual(sorted(os.listdir(self.keep_dir)), ["PROVENANCE.txt"],
+                         "every excerpt went; the note is not audio and stays")
+        removals = [e for e in self._events() if e["event"] == "remove"]
+        self.assertEqual(sorted((e["entry"], e["reason"]) for e in removals),
+                         [("MT4-0.0600-one.wav", "purge-audio"),
+                          ("MT4-0.0700-two.wav", "purge-audio")],
+                         "the policy recorded each removal, with the caller's reason")
+
+    def test_a_board_trimmed_back_to_keep_top_deletes_through_the_policy(self):
+        """`evict_overfull` trims a mystery's board to the best KEEP_TOP. The row goes from
+        the state whatever happens, but the FILE is the policy's to delete and to record --
+        a bare unlink would leave the cache's accounting describing an entry that is gone."""
+        matches, paths = [], []
+        for i in range(harvest.KEEP_TOP + 1):
+            name = "MT4-%.4f-%02d.wav" % (0.01 * i, i)
+            paths.append(self._excerpt(name, 100))
+            matches.append({"mystery": 4, "cost": 0.01 * i, "url": "u%d" % i,
+                            "audio": paths[-1]})
+        state = {"matches": matches, "kept": len(matches)}
+        harvest.evict_overfull(state, 4)
+        self.assertEqual(len(state["matches"]), harvest.KEEP_TOP)
+        self.assertEqual(state["kept"], harvest.KEEP_TOP)
+        self.assertFalse(os.path.exists(paths[-1]), "the priciest row's excerpt went")
+        removals = [e for e in self._events() if e["event"] == "remove"]
+        self.assertEqual([(e["entry"], e["reason"]) for e in removals],
+                         [(os.path.basename(paths[-1]), "board-overfull")],
+                         "through the policy's door, recorded with its reason")
 
     def test_the_boards_provenance_note_is_pinned(self):
         """PROVENANCE.txt's name parses to no cost, so the by-score order counts it as an
@@ -524,6 +580,124 @@ class TheOnDemandRescanRefusesADarkPolicy(unittest.TestCase):
         self.assertIn(harvest.RULINGS, text)
         self.assertFalse(os.path.exists(harvest.STATE),
                          "a refused rescan writes no state")
+
+
+@unittest.skipIf(harvest is None, "needs the librosa venv")
+class TheOtherCacheReadingModesRefuseADarkPolicy(unittest.TestCase):
+    """`--rescan` is not the only mode that reads the signature cache, and the other two
+    refuse for their own reasons. Both refusals are the branch's, and neither was held by a
+    test: deleting either left the whole suite green.
+
+    `--migrate-sigs` walks the cache directory. With the cache dark there is no directory
+    at all, so without the gate it reaches `os.path.isdir(None)` and dies with a TypeError
+    where it should print the setting to fix.
+
+    `requeue_missing_sigs` asks of every done URL "is its signature still held?". A dark
+    cache has no local half, so every answer is no; with the store dark too, the remote
+    half is empty as well, and the whole corpus reads as lost -- either a false "the store
+    broke" alert or a requeue of everything. It is the same epistemic refusal the
+    unlistable bucket gets: cannot tell, do nothing."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="dark-modes-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self._paths = harvest.STATE_DIR, harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK
+        harvest.STATE_DIR = os.path.join(self.tmp, "harvest")
+        harvest.STATE = os.path.join(self.tmp, "state.json")
+        harvest.QUEUE = os.path.join(self.tmp, "queue.json")
+        harvest.WRITER_LOCK = os.path.join(self.tmp, "writer.lock")
+        self.addCleanup(self._restore_paths)
+        self._saved = {k: os.environ.get(k) for k in list(os.environ)
+                       if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
+        for k in self._saved:
+            os.environ.pop(k, None)
+        self._attrs = (harvest.CACHE, harvest.KEEP, harvest._CACHE_AT_IMPORT,
+                       harvest._KEEP_AT_IMPORT)
+        self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+        self.addCleanup(self._restore_policy)
+        cache_budget._REGISTRY.clear()
+        cache_budget._STATS.clear()
+        harvest.register_caches()             # re-read: the signature cache is dark
+        self.assertIsNone(harvest._chroma_dir())
+
+    def _restore_paths(self):
+        (harvest.STATE_DIR, harvest.STATE, harvest.QUEUE,
+         harvest.WRITER_LOCK) = self._paths
+
+    def _restore_policy(self):
+        cache_budget._REGISTRY.clear()
+        cache_budget._REGISTRY.update(self._registry[0])
+        cache_budget._STATS.clear()
+        cache_budget._STATS.update(self._registry[1])
+        for k in [k for k in list(os.environ)
+                  if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)]:
+            os.environ.pop(k, None)
+        os.environ.update(self._saved)
+        for name, value in zip(("CACHE", "KEEP", "_CACHE_AT_IMPORT", "_KEEP_AT_IMPORT"),
+                               self._attrs):
+            setattr(harvest, name, value)
+
+    def test_migrate_sigs_refuses_instead_of_crashing_on_a_directory_that_is_none(self):
+        """The store is configured -- so the mode is past its own sigstore gate -- and the
+        cache is dark. It must name the setting and stop, not walk a directory that does
+        not exist: `os.path.isdir(None)` is a TypeError, a traceback where an operator
+        needs a sentence."""
+        uploaded = []
+        argv = ["harvest.py", "--migrate-sigs"]
+        with unittest.mock.patch.object(sys, "argv", argv), \
+                unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: True), \
+                unittest.mock.patch.object(harvest.sigstore, "put",
+                                          lambda *a: uploaded.append(a) or True), \
+                unittest.mock.patch.object(harvest.sigstore, "evict_cold",
+                                          lambda *a: (_ for _ in ()).throw(
+                                              AssertionError("refused before any eviction"))), \
+                unittest.mock.patch.object(harvest, "queries",
+                                          lambda state=None: (_ for _ in ()).throw(
+                                              AssertionError("refused before the query set"))), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            harvest.main()                     # no TypeError escapes: that is half the test
+        self.assertIn("the signature cache is dark", out.getvalue())
+        self.assertIn("NETRADIO_CACHE_ROOT", out.getvalue())
+        self.assertEqual(uploaded, [], "nothing was uploaded, and nothing was listed")
+        self.assertFalse(os.path.exists(harvest.STATE), "a refused migrate writes no state")
+
+    def test_requeue_missing_sigs_cannot_tell_lost_from_held_and_does_nothing(self):
+        """A dark cache makes every done signature read as lost. The refusal says so and
+        stops: nothing is requeued, and no "the store broke" alert is stamped over a
+        corpus that is intact."""
+        state = harvest.blank_state()
+        q = {"pending": [], "done": ["https://example.invalid/%d" % i for i in range(10)]}
+        with unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: False):
+            res = harvest.requeue_missing_sigs(state, q, set())
+        self.assertIn("the signature cache is dark", res["why"])
+        self.assertIn("NETRADIO_CACHE_ROOT", res["why"])
+        self.assertEqual((res["requeued"], res["reported"]), (0, False))
+        self.assertEqual(res["missing"], 0, "nothing was even counted as lost")
+        self.assertEqual(q["done"], ["https://example.invalid/%d" % i for i in range(10)],
+                         "the corpus stayed where it was")
+        self.assertEqual(q["pending"], [], "and nothing was requeued behind it")
+        self.assertEqual(state.get("issues") or [], [],
+                         "no false 'the store broke' row was stamped")
+
+    def test_the_on_demand_requeue_mode_prints_that_refusal_and_writes_nothing(self):
+        """...and the CLI mode that calls it reports the refusal rather than a recovery.
+        `--requeue-missing-sigs` has no gate of its own: this refusal is the only one."""
+        with open(harvest.QUEUE, "w") as fh:
+            json.dump({"pending": [], "done": ["https://example.invalid/x"]}, fh)
+        argv = ["harvest.py", "--requeue-missing-sigs"]
+        with unittest.mock.patch.object(sys, "argv", argv), \
+                unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: False), \
+                unittest.mock.patch.object(harvest, "listen_queue_split",
+                                          lambda: ([], set())), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            harvest.main()
+        self.assertIn("the signature cache is dark", out.getvalue())
+        self.assertFalse(os.path.exists(harvest.STATE),
+                         "nothing was requeued or reported, so no state was written")
+        with open(harvest.QUEUE) as fh:
+            self.assertEqual(json.load(fh),
+                             {"pending": [], "done": ["https://example.invalid/x"]},
+                             "the queue is untouched")
 
 
 if __name__ == "__main__":

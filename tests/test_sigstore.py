@@ -185,6 +185,30 @@ class TestEvict(Base):
         self.assertFalse(os.path.exists(p1))
         self.assertTrue(os.path.exists(p2))
         self.assertTrue(os.path.exists(p3))
+        # and the deletion went through the cache policy's one door, which recorded it with
+        # the caller's reason: a bare os.remove would empty the cache behind the policy's
+        # back, leaving its accounting and its event log describing entries that are gone.
+        with open(cache_budget.events_path()) as fh:
+            events = [json.loads(line) for line in fh]
+        self.assertEqual([(e["cache"], e["entry"], e["reason"]) for e in events
+                          if e["event"] == "remove"],
+                         [("chroma", os.path.basename(p1), "cold-verified")])
+
+    def test_a_signature_outside_the_registered_cache_is_never_deleted(self):
+        """`remove` refuses a path outside the cache's directory, so a cache_dir the caller
+        passes that is NOT the registered `chroma` directory deletes nothing at all -- the
+        one door is also a guard."""
+        other = tempfile.TemporaryDirectory()      # outside the registered cache entirely
+        self.addCleanup(other.cleanup)
+        elsewhere = other.name
+        stray = os.path.join(elsewhere, "u" + "5" * 20 + ".npy")
+        with open(stray, "wb") as fh:
+            fh.write(b"x" * 10)
+        key = os.path.basename(stray)
+        self.rec.results = [FakeProc(stdout="10\n")]
+        n, freed = sigstore.evict_cold(elsewhere, {"qA": [key]}, ["qA"])
+        self.assertEqual((n, freed), (0, 0))
+        self.assertTrue(os.path.exists(stray), "nothing outside the cache is deleted")
 
     def test_no_mysteries_means_no_eviction(self):
         path, key = self._sig()
