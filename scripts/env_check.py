@@ -173,20 +173,6 @@ def read_names(root=None):
     return names
 
 
-def env_value(env_file, name):
-    """The raw value the file gives `name`, or ""."""
-    line = EXAMPLE_LINE if env_file.endswith(".example") else SET_LINE
-    try:
-        with open(env_file, encoding="utf-8") as fh:
-            for text in fh:
-                m = line.match(text)
-                if m and m.group(1) == name:
-                    return text[m.end():].split(" #")[0].strip().strip("\"'")
-    except OSError:
-        pass
-    return ""
-
-
 def set_names(env_file):
     """The `NETRADIO_*` names the file sets (a `.example` file: also the commented-out ones)."""
     line = EXAMPLE_LINE if env_file.endswith(".example") else SET_LINE
