@@ -254,13 +254,14 @@ means "not any Mystery Track", including the ones whose clips do not exist yet. 
 it. Without that, the day MT8 lands, every record you have already rejected comes straight back at
 you. (It does **not** mean "heard" — you can rule a record out as a match and still want to listen
 to it. The queue's owner keeps those two verdicts apart.) The retired set is a **rulings file**,
-`.harvest/rulings.json`: one key per entry the queue has ruled on (heard, discarded, ignored,
-duplicate, not-a-match) or that is the queue owner's own upload, each with its reason. The harvester only reads
-it — the keys alone, never the reasons — re-reading it every pass so a ruling takes effect within
-one loop iteration. **The harvester refuses to run without it** (`--run`, `--rescan` and the
-lost-signature recovery all refuse, naming the file), because a search that has forgotten
-every ruling hands back records already rejected. An empty file (`{}`) is fine — nothing is
-ruled out yet; only a missing or unreadable file is a refusal.
+`data/rulings.json`, committed in this repo: `{key: reason}`, one key per record that is ruled
+out, each with its reason. The harvester only reads it — the keys alone, never the reasons —
+re-reading it every pass so a change takes effect within one loop iteration. To rule a record
+out by hand, add its key to `data/rulings.json`. **The harvester refuses to run without it**
+(`--run`, `--rescan` and the lost-signature recovery all refuse, naming the file), because a
+search that has forgotten every ruling hands back records already rejected. The committed file
+holds `{}`, which is fine — nothing is ruled out; only a missing or unreadable file is a
+refusal.
 
 **What it does.** Takes its candidates from the operator's **queue** of URLs (holding back,
 temporarily, anything a recent fetch failed on: a `retry_after` date in the future keeps the URL

@@ -74,14 +74,13 @@ STATE = os.path.join(STATE_DIR, "state.json")
 QUEUE = os.path.join(STATE_DIR, "queue.json")
 PAUSE = os.path.join(STATE_DIR, "PAUSED")
 
-# The retired set, from a rulings file another process writes: {key: reason}, the keys this
-# search must never propose again, for any mystery, present or future -- one key per entry
-# the listening queue has ruled on, or that is the queue owner's own upload. This side only
-# ever READS it -- the keys alone -- and re-reads it every pass. An empty `{}` is valid:
-# nothing is ruled out yet. The supervisor will not start a harvester while the file is
-# absent or unreadable -- a search that has forgotten every ruling hands back records
-# already rejected.
-RULINGS = os.path.join(STATE_DIR, "rulings.json")
+# The retired set, from the rulings file: {key: reason}, the keys this search must never
+# propose again, for any mystery, present or future. The file is committed at
+# data/rulings.json. This side only ever READS it -- the keys alone -- and re-reads it every
+# pass. An empty `{}` is valid: nothing is ruled out. To rule a key out by hand, add it to the
+# file. A run refuses while the file is absent or unreadable -- a search that has forgotten
+# every ruling hands back records already rejected.
+RULINGS = os.path.join(HOME, "data", "rulings.json")
 
 # --- the harvester's two caches, on the machine's one cache policy (cache_budget.py) ----------
 #
