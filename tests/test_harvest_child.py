@@ -809,11 +809,15 @@ class RetryLaterIsNotDone(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.url = "https://example.invalid/watch?v=master"
-        self._paths = harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK, harvest.JOBS
+        self._paths = harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK, harvest.JOBS, harvest.RULINGS
         harvest.STATE = os.path.join(self.tmp, "state.json")
         harvest.QUEUE = os.path.join(self.tmp, "queue.json")
         harvest.WRITER_LOCK = os.path.join(self.tmp, "writer.lock")
         harvest.JOBS = os.path.join(self.tmp, "jobs")
+        # run() refuses to start while the rulings file is absent (the same refusal the process
+        # that starts the harvester makes), so this class's run() tests need one in place.
+        harvest.RULINGS = os.path.join(self.tmp, "rulings.json")
+        harvest._save(harvest.RULINGS, {})
         # run() refuses to start while its caches are dark, so this test's run needs the
         # policy on -- a throwaway root, with the harvester's registrations re-read onto it.
         self._saved_env = {k: os.environ.get(k) for k in list(os.environ)
@@ -827,7 +831,8 @@ class RetryLaterIsNotDone(unittest.TestCase):
         harvest.register_caches()
 
     def _restore(self):
-        (harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK, harvest.JOBS) = self._paths
+        (harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK, harvest.JOBS,
+         harvest.RULINGS) = self._paths
         harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
         # The real `stream_chroma` clears this the moment it is called; the stub below does not
         # clear it on the way OUT, so leaving it set would hand the next test's fetch this
@@ -861,7 +866,7 @@ class RetryLaterIsNotDone(unittest.TestCase):
                 mock.patch.object(harvest, "sweep_job_dirs", lambda *a, **k: 0), \
                 mock.patch.object(harvest, "recover_missing_sigs_at_start", lambda *a: None), \
                 mock.patch.object(harvest, "stamp_pool", lambda state: False), \
-                mock.patch.object(harvest, "listen_queue_split", lambda issues=None: ([], [])), \
+                mock.patch.object(harvest, "listen_queue_split", lambda issues=None: []), \
                 mock.patch.object(harvest, "check_memory", lambda *a, **k: False), \
                 mock.patch.object(harvest, "_load_sig", lambda url: None), \
                 mock.patch.object(harvest, "stream_chroma", self._refused_fetch), \
@@ -920,25 +925,40 @@ class RetryLaterIsNotDone(unittest.TestCase):
         minutes, for as long as the entry exists."""
         q = {"pending": [], "done": [], "retry_later": [self.url]}
         with mock.patch.object(harvest, "listen_queue_split",
-                               lambda issues=None: ([self.url], [])):
-            added, dropped = harvest.sync_listen_queue(q)
+                               lambda issues=None: [self.url]):
+            added, dropped = harvest.sync_listen_queue(q, set())
         self.assertEqual((added, dropped), (0, 0))
         self.assertEqual(q["pending"], [])
         self.assertEqual(q["retry_later"], [self.url])
 
-    def test_a_ruling_takes_it_off_the_set_aside_list_too(self):
-        """A URL waits on `retry_later` for parts, and the parts only come while the player
-        still offers the entry. Once a human has ruled on it there are none coming, so it leaves
-        by the same door `pending` uses. `done` is the list that does NOT work this way: that is
-        a record of work completed, and forgetting it would re-analyse the URL on a re-add."""
-        q = {"pending": [], "done": [], "retry_later": [self.url]}
-        with mock.patch.object(harvest, "listen_queue_split",
-                               lambda issues=None: ([], [self.url])):
-            added, dropped = harvest.sync_listen_queue(q)
-        self.assertEqual((added, dropped), (0, 1))
-        self.assertEqual(q["retry_later"], [],
-                         "a retired URL left on the list is one for whatever drains it to trip "
-                         "over -- it is not coming back as a candidate")
+    def test_a_run_stands_down_when_the_rulings_file_goes_unreadable(self):
+        """The file was there at start and then could not be read mid-run: the run must NOT
+        carry on -- "unreadable" is never "nothing ruled", and a pass on an empty retired set
+        would score records already rejected. It stands down instead, with a phase that names
+        the file, so the supervisor's restart gate (which refuses the same thing) holds the
+        run down until the file is back."""
+        harvest._save(harvest.QUEUE, {"pending": [self.url], "done": []})
+        qs = [(4, np.zeros((12, 8), dtype="float32"), "4:f00")]
+        reads = mock.MagicMock(side_effect=[set(), None])
+        with mock.patch.object(harvest, "queries", lambda state=None: qs), \
+                mock.patch.object(harvest, "sweep_excerpts", lambda: None), \
+                mock.patch.object(harvest, "sweep_job_dirs", lambda *a, **k: 0), \
+                mock.patch.object(harvest, "recover_missing_sigs_at_start", lambda *a: None), \
+                mock.patch.object(harvest, "stamp_pool", lambda state: False), \
+                mock.patch.object(harvest, "check_memory", lambda *a, **k: False), \
+                mock.patch.object(harvest, "load_rulings", reads), \
+                mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
+                mock.patch.object(harvest.selftest, "due_for_live", lambda: False), \
+                mock.patch.object(harvest.memwatch, "allocator_canary",
+                                  lambda *a, **k: (0, 0, None)), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            harvest.run(None)
+        state = harvest._load(harvest.STATE, {})
+        self.assertIn("rulings file", state["session"]["phase"])
+        self.assertIn("could not be read", out.getvalue())
+        self.assertEqual(harvest._load(harvest.QUEUE, {})["pending"], [self.url],
+                         "the interrupted URL stays pending, exactly as a stop leaves it")
+        self.assertEqual(reads.call_count, 2, "once at the start gate, once on the first pass")
 
 
 @unittest.skipUnless(harvest is not None, "harvest.py needs librosa/numpy -- not this test's job")

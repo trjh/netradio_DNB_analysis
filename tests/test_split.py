@@ -441,6 +441,108 @@ class TestCollector(Base):
                          else [], [harvest._sig_key(URL) + ".json"],
                          "the spool keeps its record: nothing crashed, nothing was lost")
 
+    def test_a_result_ruled_on_after_it_was_spooled_is_folded_but_never_scored(self):
+        """The window between a fetch and its fold: the URL is ruled on while its result sits
+        on the spool. The fold files it and drains the spool as for any result, but it is not
+        scored, so it cannot come back as a match."""
+        q = self._harvested()
+        state = harvest.blank_state()
+        qs = [(4, self._chroma(), "MT4:deadbeef")]
+        with unittest.mock.patch.object(collector, "_cm") as cm:
+            cm.match.return_value = (0.031, 2, 12.0)     # would be a MATCH, if scored
+            n = collector.collect_once(state, q, qs, {harvest._sig_key(URL)})
+        self.assertEqual(n, 1)
+        self.assertEqual(state["matches"], [], "a ruled key never becomes a match")
+        cm.match.assert_not_called()
+        self.assertEqual((q["pending"], q["done"]), ([], [URL]))
+        self.assertEqual(os.listdir(collector.RESULTS), [], "the spool is drained as usual")
+
+    def test_both_entry_points_hand_the_rulings_to_the_fold(self):
+        """`run()` and `--once` each read the rulings file and pass the set they read to the
+        fold, so a readable file is applied to the spool, not only checked for."""
+        ruled = {harvest._sig_key(URL)}
+        seen = []
+
+        class Stop(Exception):
+            pass
+
+        def fold(state, q, qs, ruled=frozenset()):
+            seen.append(ruled)
+            raise Stop
+
+        collector.STATE = os.path.join(self.tmp.name, "state-entry.json")
+        with unittest.mock.patch.object(harvest, "load_rulings", lambda: ruled), \
+                unittest.mock.patch.object(collector, "_caches_ready", lambda: (True, "")), \
+                unittest.mock.patch.object(collector, "queries", lambda state=None: []), \
+                unittest.mock.patch.object(collector, "refresh_dashboard_state",
+                                          lambda state: ([], False)), \
+                unittest.mock.patch.object(harvest, "acquire_writer_lock", lambda: object()), \
+                unittest.mock.patch.object(harvest, "recover_missing_sigs_at_start",
+                                          lambda *a, **k: None), \
+                unittest.mock.patch.object(collector, "collect_once", fold), \
+                unittest.mock.patch.dict(os.environ, {"NETRADIO_COLLECTOR": "on"}):
+            with unittest.mock.patch.object(sys, "argv", ["collector.py", "--once"]), \
+                    self.assertRaises(Stop):
+                collector.main()
+            with self.assertRaises(Stop):
+                collector.run()
+        self.assertEqual(seen, [ruled, ruled])
+
+    def test_once_refuses_an_unreadable_rulings_file_before_the_fold(self):
+        """--once is the cron entry point, and it scores the spool: an unreadable rulings
+        file must stop it before the fold, the same gate the loop makes (local review, cycle
+        netradio-build-2-2-20260919, iteration 3). A spooled ok result and a gate, and the
+        one-shot pass folds nothing."""
+        self._harvested()                 # a real job dir + a spooled ok result
+        saved = {k: os.environ.get(k) for k in list(os.environ)
+                 if k.startswith("NETRADIO_") and ("CACHE" in k or
+                                                   k in ("NETRADIO_CACHE_ROOT",
+                                                         "NETRADIO_DOWNLOAD_ROOT",
+                                                         "NETRADIO_DISK_MAX_PCT",
+                                                         "NETRADIO_CACHE_EVENTS_DAYS"))}
+        for k in saved:
+            os.environ.pop(k, None)
+        os.environ["NETRADIO_CACHE_ROOT"] = os.path.join(self.tmp.name, "policy-root")
+        import cache_budget
+        registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+
+        def restore():
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(registry[1])
+            for k, v in saved.items():
+                os.environ[k] = v
+        self.addCleanup(restore)
+        harvest.register_caches()             # re-read: the caches are lit for this pass
+        self.assertIsNotNone(harvest._keep_dir())
+        self._rulings = harvest.RULINGS
+        harvest.RULINGS = os.path.join(self.tmp.name, "rulings.json")    # never written
+        self.addCleanup(setattr, harvest, "RULINGS", self._rulings)
+        collector.STATE = os.path.join(self.tmp.name, "state3.json")
+        with unittest.mock.patch.object(
+                    collector, "queries",
+                    lambda state=None: (_ for _ in ()).throw(
+                        AssertionError("the gate must come before the query set is read"))), \
+                unittest.mock.patch.object(
+                    collector, "collect_once",
+                    lambda *a, **k: (_ for _ in ()).throw(
+                        AssertionError("the fold must not run on an unreadable rulings "
+                                       "file"))), \
+                unittest.mock.patch.dict(os.environ, {"NETRADIO_COLLECTOR": "on"}), \
+                unittest.mock.patch.object(sys, "argv", ["collector.py", "--once"]), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            collector.main()
+        text = out.getvalue()
+        self.assertIn("the rulings file", text)
+        self.assertIn(harvest.RULINGS, text, "the refusal names the file, so a hand-run can "
+                                             "tell WHICH file is missing")
+        self.assertIn("not folding", text)
+        self.assertEqual(os.listdir(collector.RESULTS), [harvest._sig_key(URL) + ".json"],
+                         "the spool keeps its record: nothing was folded, nothing was lost")
+        self.assertFalse(os.path.exists(collector.STATE),
+                         "the gate wrote no state of its own -- the stand-down is the print")
+
     def test_run_refuses_a_dark_cache_before_it_takes_the_writer_lock(self):
         """The fold loop's own gate, beside --once's: `run()` must refuse before it makes
         its state directory or takes the ONE queue/state writer lock, naming the setting.
@@ -550,6 +652,63 @@ class TestCollector(Base):
         self.assertIn(key, state["scored"]["MT4:deadbeef"])          # scored regardless
         self.assertEqual(state["matches"], [])                       # but no clip-less hit row
         self.assertEqual(state["kept"], 0)
+
+    def test_run_stands_down_before_folding_when_the_rulings_file_is_unreadable(self):
+        """The retired set is the rulings file's, and a pass that cannot read it must
+        propose NOTHING -- not even a result already sitting on the spool, waiting to be
+        folded into a match. The gate comes before the fold, and the runtime stands down
+        with collect_once never called and the spool untouched (local review, cycle
+        netradio-build-2-2-20260919, iteration 1)."""
+        self._harvested()                       # a real job dir + a spooled ok result
+        saved = {k: os.environ.get(k) for k in list(os.environ)
+                 if k.startswith("NETRADIO_") and ("CACHE" in k or
+                                                   k in ("NETRADIO_CACHE_ROOT",
+                                                         "NETRADIO_DOWNLOAD_ROOT",
+                                                         "NETRADIO_DISK_MAX_PCT",
+                                                         "NETRADIO_CACHE_EVENTS_DAYS"))}
+        for k in saved:
+            os.environ.pop(k, None)
+        os.environ["NETRADIO_CACHE_ROOT"] = os.path.join(self.tmp.name, "policy-root")
+        import cache_budget
+        registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+
+        def restore():
+            cache_budget._REGISTRY.clear()
+            cache_budget._REGISTRY.update(registry[0])
+            cache_budget._STATS.clear()
+            cache_budget._STATS.update(registry[1])
+            for k, v in saved.items():
+                os.environ[k] = v
+        self.addCleanup(restore)
+        harvest.register_caches()             # re-read: the caches are lit for this run
+        self.assertIsNotNone(harvest._keep_dir())
+        paths = (harvest.STATE_DIR, harvest.WRITER_LOCK, harvest.RULINGS, collector.STATE_DIR)
+        harvest.STATE_DIR = os.path.join(self.tmp.name, "harvest")
+        harvest.WRITER_LOCK = os.path.join(self.tmp.name, "writer.lock")
+        harvest.RULINGS = os.path.join(self.tmp.name, "rulings.json")    # never written
+        collector.STATE_DIR = os.path.join(self.tmp.name, "harvest")
+        self.addCleanup(lambda: (setattr(harvest, "STATE_DIR", paths[0]),
+                                 setattr(harvest, "WRITER_LOCK", paths[1]),
+                                 setattr(harvest, "RULINGS", paths[2]),
+                                 setattr(collector, "STATE_DIR", paths[3])))
+        with unittest.mock.patch.object(
+                    collector, "queries",
+                    lambda state=None: (_ for _ in ()).throw(
+                        AssertionError("the gate must come before the query set is read"))), \
+                unittest.mock.patch.object(
+                    collector, "collect_once",
+                    lambda *a, **k: (_ for _ in ()).throw(
+                        AssertionError("the fold must not run on an unreadable rulings "
+                                       "file"))), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            collector.run()
+        text = out.getvalue()
+        self.assertIn("the rulings file", text)
+        self.assertIn("standing down without folding", text)
+        self.assertEqual(os.listdir(collector.RESULTS), [harvest._sig_key(URL) + ".json"],
+                         "the spool keeps its record: nothing was folded, nothing was lost")
+        self.assertFalse(os.path.exists(collector.STATE),
+                         "the gate wrote no state of its own -- the stand-down is the print")
 
 
 class TestWatcherHold(TestCollector):

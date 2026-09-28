@@ -106,7 +106,7 @@ own original, the change is wrong.
 scripts/run_harvester.sh start                                        # runs for weeks
 scripts/run_harvester.sh start --accept-ledger-rebuild                # forwarded to harvest.py
                                                                       # --run, that one start only
-scripts/run_harvester.sh status                                       # pid, phase, ledger
+scripts/run_harvester.sh status                                       # pid, phase, ledger, alert
 scripts/run_harvester.sh stop                                         # / restart [--accept-ledger-rebuild]
 make harvest-run                                                      # alias for `start`
 
@@ -143,8 +143,10 @@ pidfile. `stop` asks for a clean exit and waits up to 30 seconds for it
 up, its pid, the phase it last wrote to `.harvest/state.json`, and whether the ledger is
 there — and **an absent ledger is a normal answer**, not an error: before the signing pass has
 run once there is nothing signed and no candidates, which is exactly what a fresh clone looks
-like. Same shape as the align server's `scripts/run_align.sh`, deliberately, so the two read
-alike.
+like. While the state carries a standing signature alert (see **Lost signatures regenerate**
+below), `status` adds one `alert:` line: how many signatures are missing, out of how many, and
+since when. With no alert there is no such line. Same shape as the align server's
+`scripts/run_align.sh`, deliberately, so the two read alike.
 
 **`start` and `restart` take one optional argument, `--accept-ledger-rebuild`**, forwarded to
 `harvest.py --run` unchanged and only for that one start — the operator's override, once
@@ -219,11 +221,14 @@ at startup — Mode A's `harvest.py --run` *and* the split collector — putting
 form). Two deliberate refusals: if the bucket can't be *listed*, "lost" and
 "evicted-to-the-bucket" are indistinguishable, so it does nothing; and past the safety cap —
 more than 10% of the corpus missing (`NETRADIO_REQUEUE_MISSING_CAP`) — a loss that size means the
-*store* broke, so it **reports** (a standing `sig_alert` in the state, shown by the player's
-notices) and stands still rather than hammering hosts for days re-fetching hundreds of tracks.
+*store* broke, so it **reports** (a standing `sig_alert` in the state, which
+`scripts/run_harvester.sh status` shows as an `alert:` line) and stands still rather than hammering hosts for days re-fetching hundreds of tracks.
 Raise the cap deliberately (e.g. `NETRADIO_REQUEUE_MISSING_CAP=1`) if the loss turns out to be
 real. Either way you can SEE it: every requeue leaves a row in `/harvest`'s issues list, and the
-past-the-cap alert additionally reddens the queue page's notice light. **One writer, enforced:** all three paths hold the same flock (`harvest.WRITER_LOCK`, the
+past-the-cap alert also shows as the `alert:` line of `scripts/run_harvester.sh status`. A third refusal, like
+every scoring path: an absent or unreadable rulings file stops the recovery entirely, because
+without it a ruled-out candidate cannot be told from an active one (see
+[the harvester](#the-harvester)). **One writer, enforced:** all three paths hold the same flock (`harvest.WRITER_LOCK`, the
 historic `collector.lock`) for their lifetime — a second writer, including this flag under a
 running daemon, refuses loudly instead of interleaving.
 
@@ -249,12 +254,21 @@ a broken instrument.
 means "not any Mystery Track", including the ones whose clips do not exist yet. So a rescan skips
 it. Without that, the day MT8 lands, every record you have already rejected comes straight back at
 you. (It does **not** mean "heard" — you can rule a record out as a match and still want to listen
-to it. The player keeps those two verdicts apart.)
+to it. The queue's owner keeps those two verdicts apart.) The retired set is a **rulings file**,
+`data/rulings.json`, committed in this repo: `{key: reason}`, one key per record that is ruled
+out, each with its reason. The harvester only reads it — the keys alone, never the reasons —
+re-reading it every pass so a change takes effect within one loop iteration. To rule a record
+out by hand, add its key to `data/rulings.json`. **The harvester refuses to run without it** (`--run`, `--rescan`, the
+lost-signature recovery, and the split runtime's loop and one-shot pass all refuse, naming the
+file), because a search that has forgotten every
+ruling hands back records already rejected. The committed file holds `{}`, which is fine — nothing is ruled
+out; only a missing or unreadable file is a refusal.
 
-**What it does.** Takes its candidates from the player's **listen queue** (skipping anything
-already heard, discarded, ignored or duplicate — and holding back, temporarily, anything a recent
-fetch failed on: a `retry_after` date in the future keeps the URL off the network until it passes)
-and keeps its own working queue in `.harvest/`. It reads the queue in whatever layout the player
+**What it does.** Takes its candidates from the operator's **queue** of URLs (holding back,
+temporarily, anything a recent fetch failed on: a `retry_after` date in the future keeps the URL
+off the network until it passes) and keeps its own working queue in `.harvest/`. The rulings file
+gates both directions of that fold: a ruled key never flows in, and one ruled on while it sat on
+the working queue flows out. It reads the queue in whatever layout its owner
 keeps it — the single `listen_queue.json`, or the sharded `listen_queue/` directory (its
 `index.json` manifest + `shard-NNNN.json` files) — read-only, never writing.
 

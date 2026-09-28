@@ -15,7 +15,7 @@
 #                                        # unrecognized argument, same as any unsupported flag
 #   scripts/run_harvester.sh stop       # SIGTERM, then WAIT for the exit
 #   scripts/run_harvester.sh restart [--accept-ledger-rebuild]   # same one argument as start
-#   scripts/run_harvester.sh status     # up or down, the pid, the phase, the ledger
+#   scripts/run_harvester.sh status     # up or down, the pid, the phase, the ledger, any alert
 #   scripts/run_harvester.sh help
 #
 # Why a launcher at all, when `make harvest-run` already ran it: that target ran in the
@@ -123,6 +123,24 @@ state_phase() {
   hit="$(grep -o -m1 '"phase"[[:space:]]*:[[:space:]]*"[^"]*"' "$STATE" 2>/dev/null || true)"
   [ -n "$hit" ] || { printf 'unknown'; return 0; }
   printf '%s' "$hit" | sed 's/.*"\([^"]*\)"$/\1/'
+}
+
+alert_line() {
+  # The standing signature alert: the harvester writes a `sig_alert` block into
+  # .harvest/state.json when more of its signatures are missing than the cap allows, and
+  # stands still until that is dealt with. Prints one status line while the block is
+  # there and nothing at all otherwise. Read with grep and sed, like state_phase: the
+  # file is flattened to one line, and the block holds no nested braces.
+  [ -f "$STATE" ] || return 0
+  local block missing corpus at
+  block="$(tr '\n' ' ' <"$STATE" 2>/dev/null \
+    | grep -o '"sig_alert"[[:space:]]*:[[:space:]]*{[^}]*}' || true)"
+  [ -n "$block" ] || return 0
+  missing="$(printf '%s' "$block" | sed -n 's/.*"missing"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p')"
+  corpus="$(printf '%s' "$block" | sed -n 's/.*"corpus"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p')"
+  at="$(printf '%s' "$block" | sed -n 's/.*"at"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+  printf '  alert:  %s of %s signatures missing, stood still past the cap (since %s)\n' \
+    "${missing:-?}" "${corpus:-?}" "${at:-?}"
 }
 
 ledger_line() {
@@ -254,6 +272,7 @@ cmd_status() {
   fi
   echo "  phase:  $(state_phase)"
   echo "  ledger: $(ledger_line)"
+  alert_line
   echo "  log:    $LOG"
   [ -n "$pid" ]
 }
