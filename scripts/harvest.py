@@ -17,10 +17,10 @@ The full contract, written for whatever fills the directories, is
 Two files another process writes tell the harvester what not to do:
 
 * `.harvest/rulings.json` — the retired set, `{key: reason}`: every key the search must never
-  propose again, for any mystery, present or future. The process that owns the rulings writes
-  the file whole, atomically, at its start and after every ruling; this side only ever READS
-  it, and the supervisor will not start a harvester while it is absent — a search that has
-  forgotten every ruling hands back records already rejected.
+  propose again, for any mystery, present or future. This side only ever READS it — the keys
+  alone — and re-reads it every pass. An empty `{}` is valid: nothing is ruled out yet. The
+  supervisor will not start a harvester while the file is absent or unreadable — a search that
+  has forgotten every ruling hands back records already rejected.
 * `.harvest/PAUSED` — the pause flag, noticed within one pass.
 
 The idea
@@ -90,10 +90,10 @@ PAUSE = os.path.join(STATE_DIR, "PAUSED")
 
 # The retired set, from a rulings file another process writes: {key: reason}, the keys this
 # search must never propose again, for any mystery, present or future -- one key per entry
-# that entry's owner has ruled on, or that is the owner's own upload. The writer of the
-# rulings owns the file (whole, atomically, at its start and after every ruling); this side
-# only ever READS it, and the supervisor will not start a harvester while it is absent -- a
-# search that has forgotten every ruling hands back records already rejected.
+# that entry's owner has ruled on, or that is the owner's own upload. This side only ever
+# READS it -- the keys alone -- and re-reads it every pass. An empty `{}` is valid: nothing is
+# ruled out yet. The supervisor will not start a harvester while the file is absent or
+# unreadable -- a search that has forgotten every ruling hands back records already rejected.
 RULINGS = os.path.join(STATE_DIR, "rulings.json")
 
 # The directories of audio to sign: one or more absolute paths, `:`-separated, read at import
@@ -2406,8 +2406,8 @@ def run(args):
     ruled = load_rulings()
     if ruled is None:
         print("the rulings file (%s) is absent or unreadable: the search has no way to know which "
-              "keys it must never propose again. Its writer writes the file at its start and "
-              "after every ruling -- with the file back in place, start again." % RULINGS)
+              "keys it must never propose again. Put the file back in place and start again."
+              % RULINGS)
         return
     # THE OLD ROWS MOVE ONTO KEYS before anything reads them: every reader joins on the key,
     # and a row still carrying its url is invisible to that join.
@@ -2520,11 +2520,11 @@ def run(args):
             continue
 
         ledger = load_ledger()
-        # Re-read the rulings file every pass, before anything consumes it: a ruling reaches the
-        # file within seconds, and must reach this search within one loop iteration. Unreadable
-        # is NOT "nothing ruled" -- a run that carried on would score against an empty retired
-        # set and hand back records already rejected, so stand down and let the supervisor
-        # restart the run once the file is back (its writer rewrites it at its start).
+        # Re-read the rulings file every pass, before anything consumes it: a ruling in the file
+        # must reach this search within one loop iteration. Unreadable is NOT "nothing ruled" --
+        # a run that carried on would score against an empty retired set and hand back records
+        # already rejected, so stand down and let the supervisor restart the run once the file
+        # is back.
         ruled = load_rulings()
         if ruled is None:
             state["current"] = None
@@ -2534,8 +2534,8 @@ def run(args):
                          "has forgotten every ruling hands back records already rejected"
                          % RULINGS}])[-50:]
             _save(STATE, state)
-            print("!! the rulings file (%s) could not be read -- stopping this run; start it "
-                  "again once the file is back." % RULINGS)
+            print("!! the rulings file (%s) could not be read -- stopping this run. Put the file "
+                  "back in place and start again." % RULINGS)
             return
 
         # A ruling spends the excerpt: the audio existed to let the human make the call, and the
@@ -2912,8 +2912,8 @@ def main():
         ruled = load_rulings()
         if ruled is None:
             print("# the rulings file (%s) is absent or unreadable -- not rescanning: without it the "
-                  "rescan cannot tell a ruled-out candidate from an active one. The file's writer "
-                  "writes it at its start and after every ruling." % RULINGS)
+                  "rescan cannot tell a ruled-out candidate from an active one. Put the file back "
+                  "in place and start again." % RULINGS)
             return
         # The corpus the rescan walks is the LEDGER, so a ledger that does not exist yet means
         # the harvester has never run under this contract -- and a rescan over nothing would
