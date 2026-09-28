@@ -14,13 +14,14 @@ what to work on, and it is not responsible for moving audio into or out of the d
 The full contract, written for whatever fills the directories, is
 [docs/HARVEST_FEED.md](docs/HARVEST_FEED.md).
 
-Two files another process writes tell the harvester what not to do:
+Two files tell the harvester what not to do:
 
-* `.harvest/rulings.json` — the retired set, `{key: reason}`: every key the search must never
-  propose again, for any mystery, present or future. This side only ever READS it — the keys
-  alone — and re-reads it every pass. An empty `{}` is valid: nothing is ruled out yet. The
-  supervisor will not start a harvester while the file is absent or unreadable — a search that
-  has forgotten every ruling hands back records already rejected.
+* `data/rulings.json` — the retired set, `{key: reason}`, committed in this repo: every key the
+  search must never propose again, for any mystery, present or future. This side only ever
+  READS it — the keys alone — and re-reads it every pass. An empty `{}` is valid: nothing is
+  ruled out. To rule a key out by hand, add it to the file. A run refuses while the file is
+  absent or unreadable — a search that has forgotten every ruling hands back records already
+  rejected.
 * `.harvest/PAUSED` — the pause flag, noticed within one pass.
 
 The idea
@@ -87,13 +88,13 @@ STATE = os.path.join(STATE_DIR, "state.json")
 LEDGER = os.path.join(STATE_DIR, "ledger.json")
 PAUSE = os.path.join(STATE_DIR, "PAUSED")
 
-# The retired set, from a rulings file another process writes: {key: reason}, the keys this
-# search must never propose again, for any mystery, present or future -- one key per entry
-# that entry's owner has ruled on, or that is the owner's own upload. This side only ever
-# READS it -- the keys alone -- and re-reads it every pass. An empty `{}` is valid: nothing is
-# ruled out yet. The supervisor will not start a harvester while the file is absent or
-# unreadable -- a search that has forgotten every ruling hands back records already rejected.
-RULINGS = os.path.join(STATE_DIR, "rulings.json")
+# The retired set, from the rulings file: {key: reason}, the keys this search must never
+# propose again, for any mystery, present or future. The file is committed at
+# data/rulings.json. This side only ever READS it -- the keys alone -- and re-reads it every
+# pass. An empty `{}` is valid: nothing is ruled out. To rule a key out by hand, add it to the
+# file. A run refuses while the file is absent or unreadable -- a search that has forgotten
+# every ruling hands back records already rejected.
+RULINGS = os.path.join(HOME, "data", "rulings.json")
 
 # The directories of audio to sign: one or more absolute paths, `:`-separated, read at import
 # (the wrapper sources `.env` before any import). The loop reads the TOP LEVEL of each and

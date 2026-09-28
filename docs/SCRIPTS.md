@@ -266,15 +266,15 @@ means "not any Mystery Track", including the ones whose clips do not exist yet. 
 it. Without that, the day MT8 lands, every record you have already rejected comes straight back at
 you. (It does **not** mean "heard" — you can rule a record out as a match and still want to listen
 to it. The two verdicts are kept apart.) The retired set is a **rulings file**,
-`.harvest/rulings.json`: one key per entry that has been ruled on (heard, discarded, ignored,
-duplicate, not-a-match) or that is the owner's own upload, each with its reason. The harvester only reads
-it — the keys alone, never the reasons — re-reading it every pass so a ruling takes effect within
-one loop iteration. **The harvester refuses to run without it** (`--run` and `--rescan` both
-refuse, naming the file), because a search that has forgotten every ruling hands back records
-already rejected. An empty file (`{}`) is fine — nothing is ruled out yet; only a missing
-or unreadable file is a refusal. A ruled key whose file is signed again is not scored against the
-mysteries, unless its signature changed: the bucket's ETag for the new `.npy` differs from the
-one its ledger row recorded before.
+`data/rulings.json`, committed in this repo: `{key: reason}`, one key per record that is ruled
+out, each with its reason. The harvester only reads it — the keys alone, never the reasons —
+re-reading it every pass so a change takes effect within one loop iteration. To rule a record
+out by hand, add its key to `data/rulings.json`. **The harvester refuses to run without it**
+(`--run` and `--rescan` both refuse, naming the file), because a search that has forgotten
+every ruling hands back records already rejected. The committed file holds `{}`, which is fine
+— nothing is ruled out; only a missing or unreadable file is a refusal. A ruled key whose file
+is signed again is not scored against the mysteries, unless its signature changed: the
+bucket's ETag for the new `.npy` differs from the one its ledger row recorded before.
 
 **What it does.** For each audio file in the configured directories with a complete sidecar and
 no ledger row — or with a row whose size or modification time no longer matches, or a delay

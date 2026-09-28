@@ -499,8 +499,8 @@ Need-to-know:
   re-cut part can be offered under the same key (the old sidecar goes before the new audio —
   [docs/HARVEST_FEED.md](./docs/HARVEST_FEED.md)), and a `no_space` or `missing_sidecar`
   delay is retried in place.
-- Two files another process writes tell the harvester what not to do:
-  `.harvest/rulings.json` (the retired set — the harvester **refuses to run without it**) and
+- Two files tell the harvester what not to do: `data/rulings.json` (the retired set,
+  committed in this repo — the harvester **refuses to run without it**) and
   `.harvest/PAUSED` (the pause flag, noticed within ~20 s).
 - Long audio is the feeder's to split: a file over **four hours** is `delayed` with
   `too_long`, refused and never truncated. A file whose decoded length disagrees with its
