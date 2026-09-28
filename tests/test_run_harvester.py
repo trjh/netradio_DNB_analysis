@@ -12,6 +12,7 @@ and a pidfile outlives a reboot). A stand-in invoked as `<fake> scripts/harvest.
 carries exactly that command line, so the real check runs, unmodified.
 """
 
+import json
 import os
 import shutil
 import signal
@@ -399,6 +400,51 @@ class StatusTests(LauncherTestCase):
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("harvester UP (pid %d)" % self.read_pid(), out.stdout)
         self.assertIn("state:  updated 2026-09-27T12:34:56+00:00", out.stdout)
+
+    def test_a_standing_signature_alert_is_shown(self):
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
+            json.dump({"session": {"phase": "idle"},
+                       "sig_alert": {"at": "2026-09-01T10:00:00Z", "missing": 8,
+                                     "corpus": 40, "why": "8 of 40 lost (20% > the 10% cap)"}},
+                      fh, indent=2)
+        out = self.run_cmd("status")
+        self.assertEqual(out.returncode, 1)          # the exit code still means up or down
+        self.assertIn("  alert:  8 of 40 signatures missing, stood still past the cap "
+                      "(since 2026-09-01T10:00:00Z)", out.stdout)
+        self.assertEqual(out.stderr, "")
+
+    def test_a_store_alert_with_its_kind_is_shown_the_same_way(self):
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
+            json.dump({"sig_alert": {"at": "2026-09-02T08:00:00Z", "kind": "store",
+                                     "missing": 12, "sidecars_missing": 0, "corpus": 90,
+                                     "why": "12 of 90 signed rows point at objects the "
+                                            "listing does not hold"}}, fh, indent=2)
+        out = self.run_cmd("status")
+        self.assertIn("  alert:  12 of 90 signatures missing, stood still past the cap "
+                      "(since 2026-09-02T08:00:00Z)", out.stdout)
+
+    def test_a_ledger_alert_names_the_difference_and_the_refused_start(self):
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
+            json.dump({"sig_alert": {"at": "2026-09-03T09:00:00Z", "kind": "ledger",
+                                     "differ": 30, "keys": 120, "ledger_rows": 100,
+                                     "rebuild_rows": 110, "pct": 25.0, "threshold_pct": 10.0,
+                                     "override": "scripts/harvest.py --run "
+                                                 "--accept-ledger-rebuild",
+                                     "why": "differ on 30 of 120 keys"}}, fh, indent=2)
+        out = self.run_cmd("status")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("  alert:  the ledger and its rebuild differ on 30 of 120 keys, start "
+                      "refused (since 2026-09-03T09:00:00Z)", out.stdout)
+
+    def test_no_alert_line_without_a_standing_alert(self):
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
+            json.dump({"session": {"phase": "idle"}, "missing": 3}, fh, indent=2)
+        out = self.run_cmd("status")
+        self.assertNotIn("alert:", out.stdout)
 
     def test_an_absent_ledger_is_never_an_error(self):
         """Until the signing pass has run once there is no ledger, and that is normal:

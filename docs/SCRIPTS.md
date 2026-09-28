@@ -105,7 +105,7 @@ own original, the change is wrong.
 scripts/run_harvester.sh start                                        # runs for weeks
 scripts/run_harvester.sh start --accept-ledger-rebuild                # forwarded to harvest.py
                                                                       # --run, that one start only
-scripts/run_harvester.sh status                                       # pid, updated stamp, ledger
+scripts/run_harvester.sh status                                       # pid, updated stamp, ledger, alert
 scripts/run_harvester.sh stop                                         # / restart [--accept-ledger-rebuild]
 make harvest-run                                                      # alias for `start`
 
@@ -153,8 +153,10 @@ up, its pid, the `updated` stamp in `.harvest/state.json` (set at the end of eac
 pass, so it stands still while the harvester is paused, idle, or mid-decode of a long file),
 and whether the ledger is there — and **an absent ledger is a normal answer**, not an error:
 before the signing pass has run once there is nothing signed and no candidates, which is
-exactly what a fresh clone looks like. Same shape as the align server's `scripts/run_align.sh`,
-deliberately, so the two read alike.
+exactly what a fresh clone looks like. While the state carries a standing `sig_alert` (see
+**The ledger replaces the working queue** below), `status` adds one `alert:` line with its
+numbers and since when; with no alert there is no such line. Same shape as the align server's
+`scripts/run_align.sh`, deliberately, so the two read alike.
 
 **`start` and `restart` take one optional argument, `--accept-ledger-rebuild`**, forwarded to
 `harvest.py --run` unchanged and only for that one start — the operator's override for the
@@ -225,7 +227,8 @@ listing was the only record of what is signed). On every later start it rebuilds
 from that listing into `.harvest/ledger.rebuild.json` and compares them with the ledger: past
 `NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT` (default 10% of every key with a row on either side)
 it **refuses to start**, exits non-zero, and leaves a standing `sig_alert` of kind `ledger`
-with the numbers; `harvest.py --run --accept-ledger-rebuild` merges the rebuild for that one
+with the numbers (`scripts/run_harvester.sh status` shows either kind of alert as an `alert:`
+line); `harvest.py --run --accept-ledger-rebuild` merges the rebuild for that one
 start. Otherwise it adds the rebuild's rows the ledger lacks and reconciles the rows against
 the listing: a `signed` row whose object is gone loses its `uploaded_etag`, so the feeder
 feeds that key again; a row whose sidecar is gone is demoted to `missing_sidecar`, and
@@ -264,13 +267,12 @@ it. Without that, the day MT8 lands, every record you have already rejected come
 you. (It does **not** mean "heard" — you can rule a record out as a match and still want to listen
 to it. The two verdicts are kept apart.) The retired set is a **rulings file**,
 `.harvest/rulings.json`: one key per entry that has been ruled on (heard, discarded, ignored,
-duplicate, not-a-match) or that is the owner's own upload, each with its reason. The rulings'
-writer writes it whole, atomically, at its start and after every ruling; the harvester only reads
+duplicate, not-a-match) or that is the owner's own upload, each with its reason. The harvester only reads
 it — the keys alone, never the reasons — re-reading it every pass so a ruling takes effect within
 one loop iteration. **The harvester refuses to run without it** (`--run` and `--rescan` both
 refuse, naming the file), because a search that has forgotten every ruling hands back records
-already rejected. An empty file is fine — that is nothing ruled on yet; only a missing or
-unreadable file is a refusal. A ruled key whose file is signed again is not scored against the
+already rejected. An empty file (`{}`) is fine — nothing is ruled out yet; only a missing
+or unreadable file is a refusal. A ruled key whose file is signed again is not scored against the
 mysteries, unless its signature changed: the bucket's ETag for the new `.npy` differs from the
 one its ledger row recorded before.
 

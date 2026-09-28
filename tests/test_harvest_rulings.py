@@ -3,8 +3,8 @@
 The harvester used to derive its never-again set -- every key the search must not propose,
 for any mystery, present or future -- from the queue's ruling flags, read directly every
 pass. The rulings are the writer's own, so the file it computes them into is too:
-`.harvest/rulings.json`, `{key: reason}`, written whole and atomically at its start and after
-every ruling. These tests pin the read side: which keys the file retires, that nothing else is
+`.harvest/rulings.json`, `{key: reason}`, which the harvester only reads and re-reads every
+pass. These tests pin the read side: which keys the file retires, that nothing else is
 retired, that an absent or torn file refuses the run rather than emptying the set, and -- the
 one that actually costs something if it breaks -- that a ruled-out record never comes back, not
 even for a mystery that did not exist when the ruling was made.

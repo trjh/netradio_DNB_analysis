@@ -12,7 +12,8 @@
 #                                        # start only — see below
 #   scripts/run_harvester.sh stop       # SIGTERM, then WAIT for the exit
 #   scripts/run_harvester.sh restart [--accept-ledger-rebuild]   # same one argument as start
-#   scripts/run_harvester.sh status     # up or down, the pid, the state's updated stamp, the ledger
+#   scripts/run_harvester.sh status     # up or down, the pid, the state's updated stamp, the ledger,
+#                                        # any alert
 #   scripts/run_harvester.sh help
 #
 # Why a launcher at all, when `make harvest-run` already ran it: that target ran in the
@@ -122,6 +123,40 @@ state_updated() {
   hit="$(grep -o -m1 '"updated"[[:space:]]*:[[:space:]]*"[^"]*"' "$STATE" 2>/dev/null || true)"
   [ -n "$hit" ] || { printf 'unknown'; return 0; }
   printf '%s' "$hit" | sed 's/.*"\([^"]*\)"$/\1/'
+}
+
+alert_line() {
+  # The standing signature alert: the harvester writes a `sig_alert` block into
+  # .harvest/state.json, and prints one status line while the block is there and nothing
+  # at all otherwise. Two kinds: `ledger` (the ledger and its rebuild from the bucket
+  # listing differ past the threshold, so the start was refused) and `store` (more signed
+  # rows lost their objects than the cap allows, so nothing was changed on that side). A
+  # block with no `kind` is the store shape. Read with grep and sed, like the other lines:
+  # the file is flattened to one line, and the block holds no nested braces.
+  [ -f "$STATE" ] || return 0
+  local block kind at
+  block="$(tr '\n' ' ' <"$STATE" 2>/dev/null \
+    | grep -o '"sig_alert"[[:space:]]*:[[:space:]]*{[^}]*}' || true)"
+  [ -n "$block" ] || return 0
+  kind="$(alert_field "$block" kind '"\([^"]*\)"')"
+  at="$(alert_field "$block" at '"\([^"]*\)"')"
+  if [ "$kind" = "ledger" ]; then
+    printf '  alert:  the ledger and its rebuild differ on %s of %s keys, start refused (since %s)\n' \
+      "$(alert_field "$block" differ '\([0-9]*\)')" \
+      "$(alert_field "$block" keys '\([0-9]*\)')" "${at:-?}"
+  else
+    printf '  alert:  %s of %s signatures missing, stood still past the cap (since %s)\n' \
+      "$(alert_field "$block" missing '\([0-9]*\)')" \
+      "$(alert_field "$block" corpus '\([0-9]*\)')" "${at:-?}"
+  fi
+}
+
+alert_field() {
+  # $1 = the flattened block, $2 = a field name, $3 = the value's pattern with one group.
+  # Prints the value, or `?` when the field is not there.
+  local v
+  v="$(printf '%s' "$1" | sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*$3.*/\\1/p")"
+  printf '%s' "${v:-?}"
 }
 
 ledger_line() {
@@ -253,6 +288,7 @@ cmd_status() {
   fi
   echo "  state:  updated $(state_updated)"
   echo "  ledger: $(ledger_line)"
+  alert_line
   echo "  log:    $LOG"
   [ -n "$pid" ]
 }
