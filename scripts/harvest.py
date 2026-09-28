@@ -77,9 +77,10 @@ PAUSE = os.path.join(STATE_DIR, "PAUSED")
 # The retired set, from the rulings file: {key: reason}, the keys this search must never
 # propose again, for any mystery, present or future. The file is committed at
 # data/rulings.json. This side only ever READS it -- the keys alone -- and re-reads it every
-# pass. An empty `{}` is valid: nothing is ruled out. To rule a key out by hand, add it to the
-# file. A run refuses while the file is absent or unreadable -- a search that has forgotten
-# every ruling hands back records already rejected.
+# pass. An empty `{}` is valid: nothing is ruled out. The file is replaced whole when it is
+# written, so do not edit it by hand -- a key added that way is lost at the next write. A run
+# refuses while the file is absent or unreadable -- a search that has forgotten every ruling
+# hands back records already rejected.
 RULINGS = os.path.join(HOME, "data", "rulings.json")
 
 # --- the harvester's two caches, on the machine's one cache policy (cache_budget.py) ----------
