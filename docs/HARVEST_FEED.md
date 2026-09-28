@@ -236,17 +236,18 @@ The signature `<key>.npy`, exactly as the pool has always held it, and beside it
 
 ## The two files the harvester reads back
 
-Two files another process writes tell the harvester what not to do. Both live in `.harvest/`
-in the harvester's own checkout.
+Two files in the harvester's checkout tell the harvester what not to do.
 
 * **`.harvest/PAUSED`** — the pause flag. While the file exists the harvester signs nothing
   and scores nothing, and it notices within about twenty seconds.
-* **`.harvest/rulings.json`** — the retired set: `{key: reason}`, one entry per key the search
-  must never propose again, for any mystery, present or future. The harvester re-reads it on
-  every pass and refuses to run without it — a search that has forgotten every ruling hands
-  back records already rejected. The reasons are for the human reading the file; the search
-  reads the keys alone. A ruled key whose file is fed again is still signed, but it is scored
-  only when its signature changed (a different ETag for the `.npy` than the row held before).
+* **`data/rulings.json`** — the retired set, committed in the harvester's repo: `{key: reason}`,
+  one entry per key the search must never propose again, for any mystery, present or future.
+  An empty `{}` means nothing is ruled out; to rule a key out by hand, add it to the file. The
+  harvester re-reads it on every pass and refuses to run without it — a search that has
+  forgotten every ruling hands back records already rejected. The reasons are for the human
+  reading the file; the search reads the keys alone. A ruled key whose file is fed again is
+  still signed, but it is scored only when its signature changed (a different ETag for the
+  `.npy` than the row held before).
 
 ## The hand tool
 

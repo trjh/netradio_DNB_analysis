@@ -93,3 +93,5 @@ clips_out/
 # Harvester runtime state (progress, matches, pause flag). Machine-local.
 .harvest/
 .venv
+# An in-progress atomic write of data/rulings.json (`rulings.json.<pid>.tmp`), renamed into place when done.
+data/rulings.json.*.tmp

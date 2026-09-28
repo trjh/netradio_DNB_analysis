@@ -157,7 +157,7 @@ class _SignerCase(unittest.TestCase):
         harvest.STATE = os.path.join(self.tmp, ".harvest", "state.json")
         harvest.JOBS = os.path.join(self.tmp, ".harvest", "tmp")
         harvest.WRITER_LOCK = os.path.join(self.tmp, ".harvest", "writer.lock")
-        harvest.RULINGS = os.path.join(self.tmp, ".harvest", "rulings.json")
+        harvest.RULINGS = os.path.join(self.tmp, "data", "rulings.json")
         harvest.HARVEST_DIRS = self.audio
         self._env = {k: os.environ.get(k) for k in list(os.environ) if k.startswith("NETRADIO_")}
         for k in self._env:

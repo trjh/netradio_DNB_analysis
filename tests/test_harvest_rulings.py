@@ -1,10 +1,11 @@
-"""The retired set is a file another process writes -- the search reads only the keys.
+"""The retired set is a file -- the search reads only the keys.
 
 The harvester used to derive its never-again set -- every key the search must not propose,
 for any mystery, present or future -- from the queue's ruling flags, read directly every
-pass. The rulings are the writer's own, so the file it computes them into is too:
-`.harvest/rulings.json`, `{key: reason}`, which the harvester only reads and re-reads every
-pass. These tests pin the read side: which keys the file retires, that nothing else is
+pass. It now reads a rulings file committed in this repo: `data/rulings.json`,
+`{key: reason}`, which the harvester only reads and re-reads every pass. The tests below point
+`harvest.RULINGS` at a temporary file, so they never read or write the committed one.
+These tests pin the read side: which keys the file retires, that nothing else is
 retired, that an absent or torn file refuses the run rather than emptying the set, and -- the
 one that actually costs something if it breaks -- that a ruled-out record never comes back, not
 even for a mystery that did not exist when the ruling was made.
@@ -29,6 +30,17 @@ try:
 except Exception as exc:                    # librosa/numba not installed -> not this test's job
     harvest = None
     _why = str(exc)
+
+
+class TheCommittedRulingsFile(unittest.TestCase):
+    """`data/rulings.json` is committed, and it reads as a rulings file: a JSON object."""
+
+    def test_it_parses_and_is_an_object(self):
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "data", "rulings.json")
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        self.assertIsInstance(data, dict)
 
 
 @unittest.skipIf(harvest is None, "harvest.py needs the librosa venv (.venv) — skipping")
