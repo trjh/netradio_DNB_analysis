@@ -1424,7 +1424,7 @@ def requeue_missing_sigs(state, q, ruled):
         res["cleared"] = True
     # Leave a visible record on /harvest (its issues list): routine self-healing should
     # still be SEEN -- losing signatures at all is worth a raised eyebrow, even when the
-    # recovery needs no human. Not a notice: only the past-the-cap alert reddens a button.
+    # recovery needs no human. Not an alert: only a loss past the cap raises `sig_alert`.
     state.setdefault("issues", [])
     state["issues"] = (state["issues"] + [{"at": _now(),
                                            "issue": "missing-sigs: requeued %d lost "
