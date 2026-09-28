@@ -79,10 +79,10 @@ PAUSE = os.path.join(STATE_DIR, "PAUSED")
 
 # The retired set, from a rulings file another process writes: {key: reason}, the keys this
 # search must never propose again, for any mystery, present or future -- one key per entry
-# the listening queue has ruled on, or that is the queue owner's own upload. The queue's
-# owner (the one writer of that queue) writes the file whole, atomically, at its start
-# and after every ruling; this side only ever READS it, and the supervisor will not start a
-# harvester while it is absent -- a search that has forgotten every ruling hands back records
+# the listening queue has ruled on, or that is the queue owner's own upload. This side only
+# ever READS it -- the keys alone -- and re-reads it every pass. An empty `{}` is valid:
+# nothing is ruled out yet. The supervisor will not start a harvester while the file is
+# absent or unreadable -- a search that has forgotten every ruling hands back records
 # already rejected.
 RULINGS = os.path.join(STATE_DIR, "rulings.json")
 
@@ -1478,7 +1478,8 @@ def recover_missing_sigs_at_start(state=None):
     if ruled is None:
         why = ("the rulings file (%s) is absent or unreadable -- nothing was requeued: without it "
                "a ruled-out candidate cannot be told from an active one, and requeueing a ruled-out "
-               "URL re-fetches a record the queue has already rejected" % RULINGS)
+               "URL re-fetches a record the queue has already rejected. Put the file back in "
+               "place and start again." % RULINGS)
         print("# %s" % why)
         return {"checked": 0, "missing": 0, "requeued": 0, "reported": False, "cleared": False,
                 "why": why}
@@ -2168,8 +2169,8 @@ def run(args):
     ruled = load_rulings()
     if ruled is None:
         print("the rulings file (%s) is absent or unreadable: the search has no way to know which "
-              "keys it must never propose again. The queue's owner writes the file at its start "
-              "and after every ruling -- with the file back in place, start again." % RULINGS)
+              "keys it must never propose again. Put the file back in place and start again."
+              % RULINGS)
         return
     qs = queries(state)
     if not qs:
@@ -2275,19 +2276,19 @@ def run(args):
             continue
 
         q = _load(QUEUE, {"pending": [], "done": []})
-        # Re-read the rulings file every pass, before anything consumes it: a ruling reaches the
-        # file within seconds, and must reach this search within one loop iteration. Unreadable
-        # is NOT "nothing ruled" -- a run that carried on would score against an empty retired
-        # set and hand back records already rejected, so stand down and let the supervisor
-        # restart the run once the file is back (the queue's owner rewrites it at its start).
+        # Re-read the rulings file every pass, before anything consumes it: a ruling in the file
+        # must reach this search within one loop iteration. Unreadable is NOT "nothing ruled" --
+        # a run that carried on would score against an empty retired set and hand back records
+        # already rejected, so stand down and let the supervisor restart the run once the file
+        # is back.
         ruled = load_rulings()
         if ruled is None:
             state["session"] = {"phase": "stopped (the rulings file is unreadable)", "until": 0}
             state["current"] = None
             _save(STATE, state)
             print("!! the rulings file (%s) could not be read -- stopping this run. A search "
-                  "that has forgotten every ruling hands back records already rejected; start it "
-                  "again once the file is back." % RULINGS)
+                  "that has forgotten every ruling hands back records already rejected. Put the "
+                  "file back in place and start again." % RULINGS)
             return
         # Re-read the player's queue every pass: a subscription that fired an hour ago should feed
         # this search without a restart, and a candidate ruled on at /harvest should leave it.
@@ -2681,8 +2682,8 @@ def main():
         ruled = load_rulings()
         if ruled is None:
             print("# the rulings file (%s) is absent or unreadable -- not rescanning: without it the "
-                  "rescan cannot tell a ruled-out candidate from an active one. The queue's owner "
-                  "writes the file at its start and after every ruling." % RULINGS)
+                  "rescan cannot tell a ruled-out candidate from an active one. Put the file back "
+                  "in place and start again." % RULINGS)
             return
         state = _load(STATE, blank_state())
         q = _load(QUEUE, {"pending": [], "done": []})

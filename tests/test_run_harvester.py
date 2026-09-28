@@ -12,6 +12,7 @@ and a pidfile outlives a reboot). A stand-in invoked as `<fake> scripts/harvest.
 carries exactly that command line, so the real check runs, unmodified.
 """
 
+import json
 import os
 import shutil
 import signal
@@ -334,6 +335,26 @@ class StatusTests(LauncherTestCase):
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("harvester UP (pid %d)" % self.read_pid(), out.stdout)
         self.assertIn("phase:  waiting on example.test", out.stdout)
+
+    def test_a_standing_signature_alert_is_shown(self):
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
+            json.dump({"session": {"phase": "idle"},
+                       "sig_alert": {"at": "2026-09-01T10:00:00Z", "missing": 8,
+                                     "corpus": 40, "why": "8 of 40 lost (20% > the 10% cap)"}},
+                      fh, indent=2)
+        out = self.run_cmd("status")
+        self.assertEqual(out.returncode, 1)          # the exit code still means up or down
+        self.assertIn("  alert:  8 of 40 signatures missing, stood still past the cap "
+                      "(since 2026-09-01T10:00:00Z)", out.stdout)
+        self.assertEqual(out.stderr, "")
+
+    def test_no_alert_line_without_a_standing_alert(self):
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
+            json.dump({"session": {"phase": "idle"}, "missing": 3}, fh, indent=2)
+        out = self.run_cmd("status")
+        self.assertNotIn("alert:", out.stdout)
 
     def test_an_absent_ledger_is_never_an_error(self):
         """Until the signing pass has run once there is no ledger, and that is normal:

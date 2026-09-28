@@ -398,7 +398,7 @@ def run():
         if ruled is None:
             print("the rulings file (%s) is absent or unreadable -- this runtime has no way to "
                   "know which keys it must never propose again, so it is standing down without "
-                  "folding. Start it again once the queue's owner has written the file."
+                  "folding. Put the file back in place and start again."
                   % harvest.RULINGS)
             return
         state = _load(STATE, blank_state())
@@ -461,7 +461,7 @@ def main():
         if ruled is None:
             print("the rulings file (%s) is absent or unreadable -- this runtime has no way to "
                   "know which keys it must never propose again, so the one-shot pass is not "
-                  "folding. Start it again once the queue's owner has written the file."
+                  "folding. Put the file back in place and start again."
                   % harvest.RULINGS)
             return
         state = _load(STATE, blank_state())
