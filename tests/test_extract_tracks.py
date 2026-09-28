@@ -87,8 +87,8 @@ class TheTracksCache(unittest.TestCase):
         register; only an explicit --out may go outside the policy."""
         os.environ["NETRADIO_STREAM_TRACKS_CACHE_DIR"] = self.tmp      # == the cache root
         extract_tracks.register_cache()                                # refused, by design
-        # the refusal leaves the process's earlier registration standing (the twin replaces
-        # a record only on success), so it is the mismatch that must trip the refusal
+        # the refusal leaves the process's earlier registration standing (the cache module
+        # replaces a record only on success), so it is the mismatch that must trip the refusal
         self.assertNotEqual(cache_budget.dir_of("stream_tracks"), self.tmp)
         out, why = extract_tracks.resolve_out()
         self.assertIsNone(out)
