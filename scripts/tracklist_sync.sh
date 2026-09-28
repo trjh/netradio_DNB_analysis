@@ -248,26 +248,43 @@ reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to 
   local f aside=()
   for f in "$@"; do
     # P2: a pathspec may be the shard DIRECTORY (metadata/listen_queue), not just a file — so guard
-    # with -e and back up with `cp -a` (recursive). `git diff/checkout -- <dir>` already handle a
-    # dir pathspec and only touch TRACKED files (the gitignored journal/derived views are left be).
+    # with -e and back up with `cp -a` (recursive, ignored files included). An untracked file
+    # under a listed path is set aside as well as a dirty tracked one (see below).
     # The -e guard also stops the deleted single listen_queue.json from RESURRECTING at migration
     # time: once the split removes it, it is not -e, so its `git checkout HEAD -- $f` never runs (the
     # ensure_tree_on_main sync commit is what carries its deletion onto main).
-    if [ -e "$repo/$f" ] && ! git -C "$repo" diff --quiet HEAD -- "$f"; then
+    # Git refuses a fast-forward in TWO states, and a listed path can be in either: (a) a tracked
+    # file modified locally that the merge changes, even when the bytes match; (b) an untracked
+    # file where the merge adds one. `git status` names both (`git diff HEAD` sees only (a)), so any
+    # status line under the path sets it aside: tracked files back to HEAD, untracked ones cleared
+    # (`git clean` without -x, so ignored files stay — the merge never refuses on those).
+    if [ -e "$repo/$f" ] && [ -n "$(git -C "$repo" status --porcelain --untracked-files=all -- "$f")" ]; then
       rm -rf "${repo:?}/${f:?}.reconcile-bak"
       cp -a "$repo/$f" "$repo/$f.reconcile-bak"   # the live bytes, restored below (gitignored)
-      git -C "$repo" checkout HEAD -- "$f"        # clean worktree AND index for this file/dir
+      if git -C "$repo" cat-file -e "HEAD:$f" 2>/dev/null; then   # a path HEAD has at all
+        git -C "$repo" checkout HEAD -- "$f"      # clean worktree AND index for this file/dir
+      fi
+      git -C "$repo" clean -fq -- "$f"            # untracked files under it (a path: -d implied)
       aside+=("$f")
     fi
   done
-  local ok=true
+  local ok=true before
+  before="$(git -C "$repo" rev-parse HEAD)"
   git -C "$repo" merge --ff-only origin/main || ok=false
   # `${f:?}` is not decoration: an empty $f turns this into `rm -rf "$repo/"`, which is the whole
   # live checkout. Not reachable today ($repo is `:?`-guarded above, $f comes from this file's own
   # literal call sites) — but it is one careless caller away, against a repo holding live data.
+  # The live copy comes back WHOLE: its bytes are the newest. The one thing it cannot know about
+  # is a file the fast-forward ADDED that the live copy never had; left missing, it would read as
+  # a deletion to anything committing the path, so each such file is checked out from the new HEAD.
+  # A failed fast-forward leaves HEAD where it was, so that list is empty and the restore is exact.
+  local added
   for f in ${aside[@]+"${aside[@]}"}; do
     rm -rf "${repo:?}/${f:?}"
     mv "${repo:?}/${f:?}.reconcile-bak" "${repo:?}/${f:?}"
+    while IFS= read -r added; do
+      if [ -n "$added" ] && [ ! -e "$repo/$added" ]; then git -C "$repo" checkout HEAD -- "$added"; fi
+    done < <(git -C "$repo" diff --name-only --diff-filter=A "$before" HEAD -- "$f")
   done
   if $ok; then say "  $label: main fast-forwarded $n commit(s) (live data kept: ${aside[*]:-none})"
   else
@@ -277,7 +294,13 @@ reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to 
 }
 
 # The live data files each checkout's running process rewrites, set aside around every fast-forward.
-reconcile_analysis() { reconcile_main "$ANALYSIS" "$LBL_A" "track-metadata.json" "TRACKLIST.md"; }
+# The analysis checkout's live processes rewrite data/rulings.json whole and write the review and
+# summary label files; once a commit of them merges upstream, the local copies are dirty or
+# untracked against it, and every one must be set aside or the fast-forward refuses.
+reconcile_analysis() {
+  reconcile_main "$ANALYSIS" "$LBL_A" "track-metadata.json" "TRACKLIST.md" \
+    "data/rulings.json" "labels/review" "labels/summary"
+}
 # EVERY path queue_sync commits must be listed here, or the ff-merge aborts on it and the player
 # repo is left un-reconciled. `metadata/queue_chapters` and `metadata/queue_info` were missing
 # until 2026-09-11 — a live `make sync` failed with "Your local changes to the following files
