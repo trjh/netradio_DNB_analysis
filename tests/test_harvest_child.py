@@ -614,10 +614,22 @@ class TheChildEntryPoint(unittest.TestCase):
             rc = harvest.main()
         self.assertEqual(rc, 0)
         # The job file describes the job: the path and, when the sidecar made one, its length.
-        dec.assert_called_once_with(self.path, self.job, 60)
+        # A job file that does not say otherwise publishes (an ordinary sign).
+        dec.assert_called_once_with(self.path, self.job, 60, True)
         lock.assert_not_called()
         with open(os.path.join(self.job, "result.json")) as fh:
             self.assertTrue(json.load(fh)["ok"])
+
+    def test_the_canary_re_sign_crosses_the_fork_unpublished(self):
+        """`publish: false` in the job file reaches the decode: the canary's re-sign must not
+        land in the cache or the bucket whichever process runs it."""
+        with open(os.path.join(self.job, "sign.json"), "w") as fh:
+            json.dump({"path": self.path, "expect_s": 60, "publish": False}, fh)
+        with mock.patch.object(sys, "argv", ["harvest.py", "--sign-job", self.job]), \
+                mock.patch.object(harvest, "_decode_and_sign",
+                                  return_value={"ok": True, "error": None}) as dec:
+            self.assertEqual(harvest.main(), 0)
+        dec.assert_called_once_with(self.path, self.job, 60, False)
 
     def test_a_job_without_a_path_is_refused(self):
         with mock.patch.object(sys, "argv", ["harvest.py", "--sign-job", self.job]):
