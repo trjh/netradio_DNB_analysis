@@ -84,7 +84,8 @@ clips_out/
 
 # pre-sync safety backups written by scripts/tracklist_sync.sh before overwriting a working copy
 *.presync-bak
-# live files set aside by scripts/tracklist_sync.sh around a fast-forward, restored in the same run
+# live files set aside by scripts/tracklist_sync.sh around a fast-forward, restored in the same run;
+# one left by an interrupted run blocks the next until its files are moved back by hand
 *.reconcile-bak
 .worktree
 
