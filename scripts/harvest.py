@@ -19,7 +19,7 @@ Two files tell the harvester what not to do:
 * `data/rulings.json` — the retired set, `{key: reason}`, committed in this repo: every key the
   search must never propose again, for any mystery, present or future. This side only ever
   READS it — the keys alone — and re-reads it every pass. An empty `{}` is valid: nothing is
-  ruled out. To rule a key out by hand, add it to the file. A run refuses while the file is
+  ruled out. A run refuses while the file is
   absent or unreadable — a search that has forgotten every ruling hands back records already
   rejected.
 * `.harvest/PAUSED` — the pause flag, noticed within one pass.
@@ -92,9 +92,8 @@ PAUSE = os.path.join(STATE_DIR, "PAUSED")
 # The retired set, from the rulings file: {key: reason}, the keys this search must never
 # propose again, for any mystery, present or future. The file is committed at
 # data/rulings.json. This side only ever READS it -- the keys alone -- and re-reads it every
-# pass. An empty `{}` is valid: nothing is ruled out. To rule a key out by hand, add it to the
-# file. A run refuses while the file is absent or unreadable -- a search that has forgotten
-# every ruling hands back records already rejected.
+# pass. An empty `{}` is valid: nothing is ruled out. A run refuses while the file is absent or unreadable -- a search that has forgotten every ruling
+# hands back records already rejected.
 RULINGS = os.path.join(HOME, "data", "rulings.json")
 
 # The directories of audio to sign: one or more absolute paths, `:`-separated, read at import
