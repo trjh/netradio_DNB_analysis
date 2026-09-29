@@ -256,9 +256,8 @@ you. (It does **not** mean "heard" — you can rule a record out as a match and 
 to it. The queue's owner keeps those two verdicts apart.) The retired set is a **rulings file**,
 `data/rulings.json`, committed in this repo: `{key: reason}`, one key per record that is ruled
 out, each with its reason. The harvester only reads it — the keys alone, never the reasons —
-re-reading it every pass so a change takes effect within one loop iteration. Do not edit the file
-by hand: each time it is written it is rebuilt whole from its writer's own record of rulings, and
-a key added by hand is not in that record, so the next write drops it. **The harvester refuses to run without it**
+re-reading it every pass so a change takes effect within one loop iteration. **The harvester
+refuses to run without it**
 (`--run`, `--rescan` and the lost-signature recovery all refuse, naming the file), because a
 search that has forgotten every ruling hands back records already rejected. The committed file
 holds `{}`, which is fine — nothing is ruled out; only a missing or unreadable file is a
