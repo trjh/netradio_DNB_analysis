@@ -11,7 +11,7 @@ importing `selftest`. That is a NameError at *runtime*, not a SyntaxError, so:
 
 A missing name is exactly what a linter catches and a unit test does not, so the first test here is
 a pyflakes pass over the scripts — cheap, and it would have caught it. The rest pin the two guards
-added alongside: the excerpt hard cap, and the bot-wall halt.
+that travel with the harvester: the excerpt hard cap, and the purge-audio eviction path.
 """
 
 import contextlib
@@ -138,45 +138,6 @@ class ExcerptsAreExcerpts(unittest.TestCase):
 
     def test_a_short_candidate_is_not_padded(self):
         self.assertLessEqual(self._write(10, 5.0), 10.5)
-
-
-@unittest.skipIf(harvest is None, "needs the librosa venv")
-class TheBotWall(unittest.TestCase):
-    """"Sign in to confirm you're not a bot" carries no 403 and no 429, so it slipped straight past
-    the host-backoff logic. The harvester ground through the queue failing identically on every
-    item, analysing nothing, and the dashboard cheerfully said "waiting on youtube.com" in yellow."""
-
-    def test_the_real_error_youtube_actually_sends_is_recognised(self):
-        real = ("ERROR: [youtube] T6BZ5BYdp_I: Sign in to confirm you're not a bot. "
-                "Use --cookies-from-browser or --cookies for the authentication.")
-        self.assertTrue(harvest.is_bot_wall(real))
-
-    def test_it_is_not_confused_with_an_ordinary_failure(self):
-        for benign in ("HTTP Error 404: Not Found", "Video unavailable", "", None,
-                       "HTTP Error 429: Too Many Requests"):   # 429 IS handled -- by backoff
-            with self.subTest(err=benign):
-                self.assertFalse(harvest.is_bot_wall(benign))
-
-    def test_cookies_are_off_unless_asked_for(self):
-        for k in ("NETRADIO_YTDLP_COOKIES", "NETRADIO_YTDLP_COOKIES_FROM_BROWSER"):
-            os.environ.pop(k, None)
-        self.assertEqual(harvest.cookie_args(), [])
-
-    def test_a_browser_can_be_named(self):
-        os.environ["NETRADIO_YTDLP_COOKIES_FROM_BROWSER"] = "chrome"
-        self.addCleanup(os.environ.pop, "NETRADIO_YTDLP_COOKIES_FROM_BROWSER", None)
-        self.assertEqual(harvest.cookie_args(), ["--cookies-from-browser", "chrome"])
-
-    def test_a_cookie_file_wins_and_must_actually_exist(self):
-        os.environ["NETRADIO_YTDLP_COOKIES"] = "/nope/missing.txt"
-        self.addCleanup(os.environ.pop, "NETRADIO_YTDLP_COOKIES", None)
-        self.assertEqual(harvest.cookie_args(), [])          # a path that isn't there is not a cookie
-
-        fh = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
-        fh.close()
-        self.addCleanup(os.unlink, fh.name)
-        os.environ["NETRADIO_YTDLP_COOKIES"] = fh.name
-        self.assertEqual(harvest.cookie_args(), ["--cookies", fh.name])
 
 
 @unittest.skipIf(harvest is None, "needs the librosa venv")
@@ -331,8 +292,6 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         self.assertEqual((candidates["refill"], candidates["rank"]), ("on-play", 10))
         # the module's path constants follow the registry
         self.assertEqual((harvest.CACHE, harvest.KEEP), (self.chroma_dir, self.keep_dir))
-        self.assertEqual(harvest.sig_path("https://example.invalid/x"),
-                         os.path.join(self.chroma_dir, harvest._sig_key("https://example.invalid/x")))
 
     def test_with_no_bucket_the_signature_cache_has_no_age_limit(self):
         """The local file is a signature's only home while the bucket is unset."""
@@ -360,7 +319,6 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         self.assertFalse(cache_budget.registered("candidates"))
         self.assertIsNone(harvest._chroma_dir())
         self.assertIsNone(harvest._keep_dir())
-        self.assertIsNone(harvest.sig_path("https://example.invalid/x"))
 
     def test_an_excerpt_past_the_cap_evicts_the_worst_of_its_mystery_first(self):
         self._fake_soundfile()
@@ -513,17 +471,23 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         os.utime(path, (t, t))
         return path
 
-    def _bucket(self, enabled, listed=None, verified=None):
-        """Register with the bucket on or off, the listing cache holding `listed`, and the
-        session's HEAD record holding `verified` ({key: size})."""
+    def _bucket(self, enabled, signed=(), verified=None, etag="etag", listed=None):
+        """Register with the bucket on or off, the ledger holding a `signed` row with
+        `uploaded_etag=etag` for each key in `signed`, the session's HEAD record holding
+        `verified` ({object name: size}), and the loop's listing cache holding `listed`
+        ({object name: etag}, or None for no listing held)."""
         patcher = unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: enabled)
         patcher.start()
         self.addCleanup(patcher.stop)
-        self.addCleanup(harvest._REMOTE_KEYS.update, dict(harvest._REMOTE_KEYS))
-        harvest._REMOTE_KEYS.update(at=time.time(), keys=listed)
+        self.addCleanup(setattr, harvest, "LEDGER", harvest.LEDGER)
+        harvest.LEDGER = os.path.join(self.tmp, "ledger.json")
+        harvest._save(harvest.LEDGER, {k: harvest._row(k, 1, 1.0, "signed", None, "then",
+                                                       etag, {}) for k in signed})
         self.addCleanup(harvest.sigstore._verified.clear)
         harvest.sigstore._verified.clear()
-        harvest.sigstore._verified.update(verified or {})
+        harvest.sigstore._verified.update({k: (v, "e") for k, v in (verified or {}).items()})
+        self.addCleanup(harvest._REMOTE_OBJECTS.update, dict(harvest._REMOTE_OBJECTS))
+        harvest._REMOTE_OBJECTS.update(at=time.time(), objects=listed)
         harvest.register_caches()
 
     def _past_the_floor(self):
@@ -538,28 +502,28 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         cache_budget._disk_usage = volume
 
     def test_an_unverified_signature_survives_the_age_limit(self):
-        self._bucket(True, listed=set())
+        self._bucket(True)                              # no ledger row for it
         sig = self._signature("https://example.invalid/unverified", age_s=40 * 86400)
         cache_budget.run_eviction("chroma")
         self.assertTrue(os.path.exists(sig), "the bucket never verified it: the only copy")
 
     def test_an_unverified_signature_survives_the_floor(self):
-        self._bucket(True, listed=None)                 # the listing never succeeded
+        self._bucket(True)
         sig = self._signature("https://example.invalid/unverified")
         self._past_the_floor()
         cache_budget.run_eviction()
         self.assertTrue(os.path.exists(sig), "the floor may not take the only copy either")
 
-    def test_a_signature_the_bucket_listed_is_evicted_by_age(self):
+    def test_a_signature_the_ledger_records_as_uploaded_is_evicted_by_age(self):
         url = "https://example.invalid/listed"
-        self._bucket(True, listed={harvest._sig_key(url)})
+        self._bucket(True, signed={harvest._sig_key(url)[:-4]})
         sig = self._signature(url, age_s=40 * 86400)
         cache_budget.run_eviction("chroma")
         self.assertFalse(os.path.exists(sig), "the bucket holds it: the local copy may go")
 
     def test_a_signature_a_head_verified_is_evicted_by_the_floor(self):
         url = "https://example.invalid/headed"
-        self._bucket(True, listed=None, verified={harvest._sig_key(url): 100})
+        self._bucket(True, verified={harvest._sig_key(url): 100})
         sig = self._signature(url, size=100)
         self._past_the_floor()
         cache_budget.run_eviction()
@@ -567,8 +531,33 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
 
     def test_a_head_of_a_different_size_does_not_count_as_verified(self):
         url = "https://example.invalid/short"
-        self._bucket(True, listed=None, verified={harvest._sig_key(url): 99})
+        self._bucket(True, verified={harvest._sig_key(url): 99})
         sig = self._signature(url, size=100, age_s=40 * 86400)
+        cache_budget.run_eviction("chroma")
+        self.assertTrue(os.path.exists(sig))
+
+    def test_a_signed_row_whose_etag_was_cleared_is_pinned(self):
+        """`reconcile_ledger` clears the etag of a row whose object left the bucket: the
+        local file is the only copy again."""
+        url = "https://example.invalid/gone-from-bucket"
+        self._bucket(True, signed={harvest._sig_key(url)[:-4]}, etag=None)
+        sig = self._signature(url, age_s=40 * 86400)
+        cache_budget.run_eviction("chroma")
+        self.assertTrue(os.path.exists(sig))
+
+    def test_a_listed_signature_is_evicted_by_age(self):
+        url = "https://example.invalid/listed-now"
+        self._bucket(True, listed={harvest._sig_key(url): "e"})
+        sig = self._signature(url, age_s=40 * 86400)
+        cache_budget.run_eviction("chroma")
+        self.assertFalse(os.path.exists(sig))
+
+    def test_a_signed_row_whose_object_left_the_listing_is_pinned(self):
+        """The ledger's etag is as old as the writer's start; the loop's listing is at most
+        fifteen minutes old, and it wins: an object lost mid-session re-pins its local copy."""
+        url = "https://example.invalid/lost-mid-session"
+        self._bucket(True, signed={harvest._sig_key(url)[:-4]}, listed={})
+        sig = self._signature(url, age_s=40 * 86400)
         cache_budget.run_eviction("chroma")
         self.assertTrue(os.path.exists(sig))
 
@@ -592,19 +581,19 @@ class TheOnDemandRescanRefusesADarkPolicy(unittest.TestCase):
     counted the pairs (a bucket-held signature reads as held), `_load_sig` answered None for
     every one, and the run stamped `rescan_pending` to 0 over "Every cached signature has now
     met every mystery" -- a completion claim about work that never ran, where every sibling
-    mode refuses (run(), --migrate-sigs, --requeue-missing-sigs).
+    mode refuses (run(), --migrate-sigs).
     It refuses now, before the query set is even read, with the message --migrate-sigs uses."""
 
     def test_rescan_refuses_before_the_query_set_is_read(self):
         tmp = tempfile.mkdtemp(prefix="rescan-dark-")
         self.addCleanup(shutil.rmtree, tmp, True)
-        paths = harvest.STATE_DIR, harvest.STATE, harvest.QUEUE
+        paths = harvest.STATE_DIR, harvest.STATE, harvest.LEDGER
         harvest.STATE_DIR = os.path.join(tmp, "harvest")
         harvest.STATE = os.path.join(tmp, "state.json")
-        harvest.QUEUE = os.path.join(tmp, "queue.json")
+        harvest.LEDGER = os.path.join(tmp, "ledger.json")
         self.addCleanup(lambda: (setattr(harvest, "STATE_DIR", paths[0]),
                                   setattr(harvest, "STATE", paths[1]),
-                                  setattr(harvest, "QUEUE", paths[2])))
+                                  setattr(harvest, "LEDGER", paths[2])))
         saved = {k: os.environ.get(k) for k in list(os.environ)
                  if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
         for k in saved:
@@ -654,13 +643,15 @@ class TheOnDemandRescanRefusesADarkPolicy(unittest.TestCase):
         the query set must never be read past it."""
         tmp = tempfile.mkdtemp(prefix="rescan-norulings-")
         self.addCleanup(shutil.rmtree, tmp, True)
-        paths = harvest.STATE, harvest.QUEUE, harvest.RULINGS
+        paths = harvest.STATE, harvest.LEDGER, harvest.RULINGS, harvest.STATE_DIR
         harvest.STATE = os.path.join(tmp, "state.json")
-        harvest.QUEUE = os.path.join(tmp, "queue.json")
+        harvest.LEDGER = os.path.join(tmp, "ledger.json")
         harvest.RULINGS = os.path.join(tmp, "rulings.json")       # never written
+        harvest.STATE_DIR = tmp        # main()'s own makedirs lands on the throwaway
         self.addCleanup(lambda: (setattr(harvest, "STATE", paths[0]),
-                                 setattr(harvest, "QUEUE", paths[1]),
-                                 setattr(harvest, "RULINGS", paths[2])))
+                                 setattr(harvest, "LEDGER", paths[1]),
+                                 setattr(harvest, "RULINGS", paths[2]),
+                                 setattr(harvest, "STATE_DIR", paths[3])))
         with unittest.mock.patch.object(harvest, "_chroma_dir",
                                         lambda: os.path.join(tmp, "chroma")), \
                 unittest.mock.patch.object(sys, "argv", ["harvest.py", "--rescan"]), \
@@ -678,28 +669,113 @@ class TheOnDemandRescanRefusesADarkPolicy(unittest.TestCase):
 
 
 @unittest.skipIf(harvest is None, "needs the librosa venv")
+class AFailedLoadIsNotACompletedScore(unittest.TestCase):
+    """`rescan` used to return `len(pairs)` whether or not each signature loaded: a held
+    signature whose fetch or load failed was not recorded in `state["scored"]`, but the
+    count said it was, so `rescan_pending` went to 0 and the harvester printed "Every
+    held signature has now met every mystery" over work that never ran. A pair whose
+    `_load_sig` returns None is not scored: it stays in the pending count and is tried
+    again on the next pass, and the count never claims a completion the cache did not
+    let happen.
+    """
+
+    def setUp(self):
+        import numpy as np
+        self.tmp = tempfile.mkdtemp(prefix="rescan-load-")
+        self.cache = os.path.join(self.tmp, "chroma")
+        os.makedirs(self.cache)
+        self._chroma_dir = harvest._chroma_dir
+        harvest._chroma_dir = lambda: self.cache
+        self._paths = harvest.LEDGER, harvest.STATE
+        harvest.LEDGER = os.path.join(self.tmp, "ledger.json")
+        harvest.STATE = os.path.join(self.tmp, "state.json")
+        self.np = np
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        harvest._chroma_dir = self._chroma_dir
+        harvest.LEDGER, harvest.STATE = self._paths
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _ledger(self, *keys):
+        return {k: harvest._row(k, 1, 1.0, "signed", None, "then", "e", {}) for k in keys}
+
+    def _sig_file(self, key, chroma):
+        """Write a real signature file the held check finds and _load_sig reads."""
+        self.np.save(os.path.join(self.cache, key + ".npy"), chroma)
+
+    def test_a_failed_load_is_not_counted_and_stays_pending(self):
+        state = {"matches": [], "kept": 0, "scored": {}}
+        good, bad = "u" + "a" * 20, "u" + "b" * 20
+        ledger = self._ledger(good, bad)
+        qs = [(4, None, "4:fp")]
+        chroma = self.np.zeros((12, 8), dtype="float32")
+        # Only the good key has a signature file on disk; the bad key is held only by the
+        # bucket's listing, so unscored_pairs proposes both -- but _load_sig returns None
+        # for the bad key (a bucket fetch that failed, or a corrupt load).
+        self._sig_file(good, chroma)
+        held = {bad + ".npy": "e", good + ".npy": "e"}
+
+        def _load(key):
+            path = os.path.join(self.cache, key + ".npy")
+            try:
+                return self.np.load(path).astype("float32")
+            except (OSError, ValueError):
+                return None
+
+        # A no-match cost: the good key loads and is scored (recorded), but no hit is added.
+        with unittest.mock.patch.object(harvest, "_load_sig", _load), \
+                unittest.mock.patch.object(harvest._cm, "match",
+                                          return_value=(1.0, 0, 0.0)), \
+                unittest.mock.patch.object(harvest, "_remote_objects",
+                                           lambda max_age_s=900: held):
+            n = harvest.rescan(state, ledger, set(), qs)
+        # Only the loadable pair was scored; the failed load is not counted.
+        self.assertEqual(n, 1)
+        # The loadable pair is recorded as scored; the failed one is not.
+        self.assertEqual(state["scored"]["4:fp"], [good + ".npy"])
+        # The failed pair is still pending: a fresh rescan still proposes it.
+        with unittest.mock.patch.object(harvest, "_load_sig", _load), \
+                unittest.mock.patch.object(harvest._cm, "match",
+                                          return_value=(1.0, 0, 0.0)), \
+                unittest.mock.patch.object(harvest, "_remote_objects",
+                                           lambda max_age_s=900: held):
+            still = harvest.unscored_pairs(state, ledger, set(), qs)
+        self.assertEqual([p[3] for p in still], [bad],
+                         "the failed-load pair stays pending, not stamped complete")
+
+    def test_a_successful_no_match_score_is_counted(self):
+        """A pair that loaded but did not match is still a completed score -- `rescan` must
+        not over-correct and leave no-match pairs pending too. `score_cached` records the
+        pair in `state["scored"]` once the signature loaded, whether it matched or not."""
+        state = {"matches": [], "kept": 0, "scored": {}}
+        key = "u" + "c" * 20
+        ledger = self._ledger(key)
+        qs = [(4, None, "4:fp")]
+        chroma = self.np.zeros((12, 8), dtype="float32")
+        self._sig_file(key, chroma)
+        # A match cost above KEEP_CEILING -> score_cached returns None, but the pair IS
+        # recorded as scored (the signature loaded and was considered).
+        with unittest.mock.patch.object(harvest._cm, "match",
+                                       return_value=(1.0, 0, 0.0)):
+            n = harvest.rescan(state, ledger, set(), qs)
+        self.assertEqual(n, 1, "a loaded-but-no-match pair is a completed score")
+        self.assertEqual(state["scored"]["4:fp"], [key + ".npy"])
+
+
+@unittest.skipIf(harvest is None, "needs the librosa venv")
 class TheOtherCacheReadingModesRefuseADarkPolicy(unittest.TestCase):
-    """`--rescan` is not the only mode that reads the signature cache, and the other two
-    refuse for their own reasons. Both refusals are the branch's, and neither was held by a
-    test: deleting either left the whole suite green.
-
-    `--migrate-sigs` walks the cache directory. With the cache dark there is no directory
-    at all, so without the gate it reaches `os.path.isdir(None)` and dies with a TypeError
-    where it should print the setting to fix.
-
-    `requeue_missing_sigs` asks of every done URL "is its signature still held?". A dark
-    cache has no local half, so every answer is no; with the store dark too, the remote
-    half is empty as well, and the whole corpus reads as lost -- either a false "the store
-    broke" alert or a requeue of everything. It is the same epistemic refusal the
-    unlistable bucket gets: cannot tell, do nothing."""
+    """`--rescan` is not the only mode that reads the signature cache. `--migrate-sigs`
+    walks the cache directory, and with the cache dark there is no directory at all, so
+    without its gate it reaches `os.path.isdir(None)` and dies with a TypeError where it
+    should print the setting to fix."""
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="dark-modes-")
         self.addCleanup(shutil.rmtree, self.tmp, True)
-        self._paths = harvest.STATE_DIR, harvest.STATE, harvest.QUEUE, harvest.WRITER_LOCK
+        self._paths = harvest.STATE_DIR, harvest.STATE, harvest.WRITER_LOCK
         harvest.STATE_DIR = os.path.join(self.tmp, "harvest")
         harvest.STATE = os.path.join(self.tmp, "state.json")
-        harvest.QUEUE = os.path.join(self.tmp, "queue.json")
         harvest.WRITER_LOCK = os.path.join(self.tmp, "writer.lock")
         self.addCleanup(self._restore_paths)
         self._saved = {k: os.environ.get(k) for k in list(os.environ)
@@ -716,8 +792,7 @@ class TheOtherCacheReadingModesRefuseADarkPolicy(unittest.TestCase):
         self.assertIsNone(harvest._chroma_dir())
 
     def _restore_paths(self):
-        (harvest.STATE_DIR, harvest.STATE, harvest.QUEUE,
-         harvest.WRITER_LOCK) = self._paths
+        (harvest.STATE_DIR, harvest.STATE, harvest.WRITER_LOCK) = self._paths
 
     def _restore_policy(self):
         cache_budget._REGISTRY.clear()
@@ -756,43 +831,6 @@ class TheOtherCacheReadingModesRefuseADarkPolicy(unittest.TestCase):
         self.assertEqual(uploaded, [], "nothing was uploaded, and nothing was listed")
         self.assertFalse(os.path.exists(harvest.STATE), "a refused migrate writes no state")
 
-    def test_requeue_missing_sigs_cannot_tell_lost_from_held_and_does_nothing(self):
-        """A dark cache makes every done signature read as lost. The refusal says so and
-        stops: nothing is requeued, and no "the store broke" alert is stamped over a
-        corpus that is intact."""
-        state = harvest.blank_state()
-        q = {"pending": [], "done": ["https://example.invalid/%d" % i for i in range(10)]}
-        with unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: False):
-            res = harvest.requeue_missing_sigs(state, q, set())
-        self.assertIn("the signature cache is dark", res["why"])
-        self.assertIn("NETRADIO_CACHE_ROOT", res["why"])
-        self.assertEqual((res["requeued"], res["reported"]), (0, False))
-        self.assertEqual(res["missing"], 0, "nothing was even counted as lost")
-        self.assertEqual(q["done"], ["https://example.invalid/%d" % i for i in range(10)],
-                         "the corpus stayed where it was")
-        self.assertEqual(q["pending"], [], "and nothing was requeued behind it")
-        self.assertEqual(state.get("issues") or [], [],
-                         "no false 'the store broke' row was stamped")
-
-    def test_the_on_demand_requeue_mode_prints_that_refusal_and_writes_nothing(self):
-        """...and the CLI mode that calls it reports the refusal rather than a recovery.
-        `--requeue-missing-sigs` has no gate of its own: this refusal is the only one."""
-        with open(harvest.QUEUE, "w") as fh:
-            json.dump({"pending": [], "done": ["https://example.invalid/x"]}, fh)
-        argv = ["harvest.py", "--requeue-missing-sigs"]
-        with unittest.mock.patch.object(sys, "argv", argv), \
-                unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: False), \
-                unittest.mock.patch.object(harvest, "load_rulings", lambda: set()), \
-                contextlib.redirect_stdout(io.StringIO()) as out:
-            harvest.main()                     # the rulings file reads: the cache is the gate
-        self.assertIn("the signature cache is dark", out.getvalue())
-        self.assertFalse(os.path.exists(harvest.STATE),
-                         "nothing was requeued or reported, so no state was written")
-        with open(harvest.QUEUE) as fh:
-            self.assertEqual(json.load(fh),
-                             {"pending": [], "done": ["https://example.invalid/x"]},
-                             "the queue is untouched")
-
 
 if __name__ == "__main__":
     unittest.main()
@@ -813,26 +851,42 @@ class ANewMysteryMustSeeTheWholeCorpus(unittest.TestCase):
     def _state(self):
         return {"matches": [], "kept": 0, "scored": {}}
 
-    def test_it_knows_what_it_has_already_scored(self):
-        state, q = self._state(), {"done": ["u1", "u2"], "pending": []}
-        state["scored"]["4:fp"] = [harvest._sig_key("u1")]
-        # The signature cache has no directory while the policy is dark, so sig_path would be
-        # None and every candidate would read as unheld; CACHE is patched to a stand-in
-        # directory and os.path.exists is made to say the signature is there.
-        with unittest.mock.patch("os.path.exists", return_value=True), \
-             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"):
-            pairs = harvest.unscored_pairs(state, q, set(), [(4, None, "4:fp")])
-        self.assertEqual([p[3] for p in pairs], ["u2"])      # u1 already met MT4; only u2 is left
+    def _ledger(self, *urls):
+        """One signed row per URL: since the first-start seed, the ledger's signed rows ARE
+        the corpus -- every key the pool has ever held, not only this machine's decodes."""
+        return {harvest._sig_key(u)[:-4]:
+                harvest._row(harvest._sig_key(u)[:-4], 1, 1.0, "signed", None, "then",
+                             "e", {}) for u in urls}
 
-    def test_a_brand_new_mystery_re_scores_the_ENTIRE_cache(self):
-        """The MT8 case: its clip lands, and every signature we already hold must meet it."""
-        state, q = self._state(), {"done": ["u1", "u2", "u3"], "pending": []}
+    def _held(self, *urls):
+        """The bucket's listing as the held check reads it: one object per key."""
+        return {harvest._sig_key(u): "e" for u in urls}
+
+    def test_it_knows_what_it_has_already_scored(self):
+        state, ledger = self._state(), self._ledger("u1", "u2")
+        state["scored"]["4:fp"] = [harvest._sig_key("u1")]
+        # The signature cache has no directory while the policy is dark, so the held check
+        # falls to the bucket listing; a bucket holding both keys is enough.
+        with unittest.mock.patch("os.path.exists", return_value=False), \
+             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"), \
+             unittest.mock.patch.object(harvest, "_remote_objects",
+                                        lambda max_age_s=900: self._held("u1", "u2")):
+            pairs = harvest.unscored_pairs(state, ledger, set(), [(4, None, "4:fp")])
+        self.assertEqual([p[3] for p in pairs],
+                         [harvest._sig_key("u2")[:-4]])   # u1 already met MT4; u2 is left
+
+    def test_a_brand_new_mystery_re_scores_the_ENTIRE_pool(self):
+        """The MT8 case: its clip lands, and every signature the pool holds must meet it."""
+        state, ledger = self._state(), self._ledger("u1", "u2", "u3")
         state["scored"]["4:fp"] = [harvest._sig_key(u) for u in ("u1", "u2", "u3")]   # MT4 is done
-        with unittest.mock.patch("os.path.exists", return_value=True), \
-             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"):
-            pairs = harvest.unscored_pairs(state, q, set(),
+        with unittest.mock.patch("os.path.exists", return_value=False), \
+             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"), \
+             unittest.mock.patch.object(harvest, "_remote_objects",
+                                        lambda max_age_s=900: self._held("u1", "u2", "u3")):
+            pairs = harvest.unscored_pairs(state, ledger, set(),
                                            [(4, None, "4:fp"), (8, None, "8:fp")])
-        self.assertEqual(sorted(p[3] for p in pairs), ["u1", "u2", "u3"])          # all, for MT8
+        self.assertEqual(sorted(p[3] for p in pairs),
+                         sorted(harvest._sig_key(u)[:-4] for u in ("u1", "u2", "u3")))  # all
         self.assertTrue(all(p[0] == 8 for p in pairs))                             # and only MT8
         # A ruled-out record is never offered again, not even for that new mystery --
         # that case moved to tests/test_harvest_rulings.py with the rest of the retirement.
@@ -855,22 +909,36 @@ class ABetterClipMustNotInheritTheOldOnesVerdicts(unittest.TestCase):
     def _q(self, num, fp):
         return [(num, None, "%d:%s" % (num, fp))]
 
+    def _ledger(self, *urls):
+        return {harvest._sig_key(u)[:-4]:
+                harvest._row(harvest._sig_key(u)[:-4], 1, 1.0, "signed", None, "then",
+                             "e", {}) for u in urls}
+
+    def _held(self, *urls):
+        return {harvest._sig_key(u): "e" for u in urls}
+
     def test_re_cutting_the_clip_voids_every_old_pairing(self):
         state = {"matches": [], "scored": {"7:oldclip123": [harvest._sig_key(u)
                                                             for u in ("u1", "u2", "u3")]}}
-        q = {"done": ["u1", "u2", "u3"], "pending": []}
-        with unittest.mock.patch("os.path.exists", return_value=True), \
-             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"):
-            pairs = harvest.unscored_pairs(state, q, set(), self._q(7, "NEWclip456"))
-        self.assertEqual(sorted(p[3] for p in pairs), ["u1", "u2", "u3"],
-                         "a new clip must ask the WHOLE corpus again")
+        ledger = self._ledger("u1", "u2", "u3")
+        with unittest.mock.patch("os.path.exists", return_value=False), \
+             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"), \
+             unittest.mock.patch.object(harvest, "_remote_objects",
+                                        lambda max_age_s=900: self._held("u1", "u2", "u3")):
+            pairs = harvest.unscored_pairs(state, ledger, set(), self._q(7, "NEWclip456"))
+        self.assertEqual(sorted(p[3] for p in pairs),
+                         sorted(harvest._sig_key(u)[:-4] for u in ("u1", "u2", "u3")),
+                         "a new clip must ask the WHOLE pool again")
 
     def test_the_same_clip_is_not_re_scored(self):
         state = {"matches": [], "scored": {"7:same": [harvest._sig_key("u1")]}}
-        q = {"done": ["u1"], "pending": []}
-        with unittest.mock.patch("os.path.exists", return_value=True), \
-             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"):
-            self.assertEqual(harvest.unscored_pairs(state, q, set(), self._q(7, "same")), [])
+        ledger = self._ledger("u1")
+        with unittest.mock.patch("os.path.exists", return_value=False), \
+             unittest.mock.patch.object(harvest, "CACHE", "sig-cache-for-tests"), \
+             unittest.mock.patch.object(harvest, "_remote_objects",
+                                        lambda max_age_s=900: self._held("u1")):
+            self.assertEqual(harvest.unscored_pairs(state, ledger, set(), self._q(7, "same")),
+                             [])
 
     def test_forget_drops_the_leads_and_the_pairings(self):
         state = {"matches": [{"mystery": 7, "url": "a"}, {"mystery": 7, "url": "b"},
@@ -937,27 +1005,27 @@ class TheLiveCanaryMustNotCrashTheHarvester(unittest.TestCase):
 
 @unittest.skipIf(harvest is None, "needs the librosa venv")
 class TheRunTakesTheWriterLock(unittest.TestCase):
-    """The writer lock is harvest.py's own: with the split runtime deleted, the two writers
-    left are run() and the on-demand --requeue-missing-sigs, and each must keep taking the
-    lock, one at a time, or two processes interleave their writes of the same state.json and
-    queue.json. Pinned here because the lock outlived the runtime it was shared with: a run
-    that quietly stopped taking it would bring the two-writers-one-file loss back."""
+    """The writer lock is harvest.py's own: the two writers are run() and the hand tool
+    --sign-one, and each must keep taking the lock, one at a time, or two processes interleave
+    their writes of the same state.json and ledger.json. Pinned here because the lock outlived
+    the runtime it was shared with: a run that quietly stopped taking it would bring the
+    two-writers-one-file loss back."""
 
     def test_run_refuses_to_start_while_another_writer_holds_the_lock(self):
         tmp = tempfile.mkdtemp(prefix="writer-lock-")
         self.addCleanup(shutil.rmtree, tmp, True)
-        paths = (harvest.STATE_DIR, harvest.STATE, harvest.QUEUE,
+        paths = (harvest.STATE_DIR, harvest.STATE, harvest.LEDGER,
                  harvest.WRITER_LOCK, harvest.RULINGS)
-        harvest.STATE_DIR = os.path.join(tmp, "harvest")
+        harvest.STATE_DIR = os.path.join(tmp, "harvest")   # the lock's makedirs, on the throwaway
         harvest.STATE = os.path.join(tmp, "state.json")
-        harvest.QUEUE = os.path.join(tmp, "queue.json")
+        harvest.LEDGER = os.path.join(tmp, "ledger.json")
         harvest.WRITER_LOCK = os.path.join(tmp, "writer.lock")
         # a throwaway rulings file, so the refusal under test is the lock's and not the file's
         harvest.RULINGS = os.path.join(tmp, "rulings.json")
         harvest._save(harvest.RULINGS, {})
         self.addCleanup(lambda: (setattr(harvest, "STATE_DIR", paths[0]),
                                  setattr(harvest, "STATE", paths[1]),
-                                 setattr(harvest, "QUEUE", paths[2]),
+                                 setattr(harvest, "LEDGER", paths[2]),
                                  setattr(harvest, "WRITER_LOCK", paths[3]),
                                  setattr(harvest, "RULINGS", paths[4])))
         first = harvest.acquire_writer_lock()

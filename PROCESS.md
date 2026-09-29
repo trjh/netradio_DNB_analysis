@@ -436,16 +436,17 @@ the rate difference, solved downstream by `speed = (trackB − trackA) / (origB 
 
 ---
 
-## The harvester, and the bot wall
+## The harvester
 
-`harvest.py` streams candidates, reduces each to a chroma signature, discards the audio,
-scores against every unsolved mystery, for weeks. Watch it — and rule — at **`/harvest`**.
+`harvest.py` signs the audio that lands in the harvest directories, reduces each file to a
+chroma signature, discards the audio, and scores the signature against every unsolved mystery,
+for weeks. Watch it — and rule — on the harvest page.
 
 Start and stop it with its own launcher — one pidfile, one log, one harvester:
 
 ```bash
 scripts/run_harvester.sh start      # in the background; it runs for weeks
-scripts/run_harvester.sh status     # up or down, the pid, the phase, the ledger
+scripts/run_harvester.sh status     # up or down, the pid, the updated stamp, the ledger
 scripts/run_harvester.sh stop       # asks for a clean exit, and waits for it
 scripts/run_harvester.sh restart
 ```
@@ -464,48 +465,53 @@ so a run of weeks is bounded by when it is next restarted. Before the signing pa
 run there is no ledger, and `status` says so plainly (`ledger: absent`): nothing signed yet
 is a state, not a fault.
 
-Give it a YouTube session — set **one** of these in `.env` (gitignored), then restart:
-
-```
-NETRADIO_YTDLP_COOKIES=/path/to/cookies.txt        # PREFERRED: Netscape-format export
-NETRADIO_YTDLP_COOKIES_FROM_BROWSER=firefox        # 2nd choice; chromium browsers last resort
-```
-
-Warnings:
-- **Do not use `chrome` on macOS.** yt-dlp decrypts Chrome's cookie DB via the login
-  Keychain **once per process** — a restarting (e.g. crash-looping) harvester prompts
-  forever, and no number of correct passwords stops it (2026-07-13: four prompts; the real
-  fault was a `KeyError` restart loop). Firefox's `cookies.sqlite` is unencrypted — no
-  prompt; a `cookies.txt` file has no Keychain involvement at all and works headless.
-- **The cookie is your logged-in session — a credential.** It lives in `.env`, outside
-  the repo (which is public). Close the browser before profile reads (locked DB).
-- The bot-wall error (`Sign in to confirm you're not a bot`) carries **no 403/429**, so it
-  bypasses host-backoff — the harvester **halts** on it by design. Waiting never fixes it;
-  only a session does.
+It knows directories, and nothing else. `NETRADIO_HARVEST_DIRS` (in `.env`) names one or more
+absolute directories, `:`-separated; the loop reads the **top level** of each and writes
+nothing into any of them — it never deletes, renames, or moves audio, and it is not
+responsible for what arrives. The full contract for whatever fills the directories — the key
+encoding, the sidecar schema, the completeness rule, the ledger and its `delayed` reasons —
+is [docs/HARVEST_FEED.md](./docs/HARVEST_FEED.md), written so a third party with audio to
+offer can feed the harvester from that page alone.
 
 Need-to-know:
-- Values pass straight to yt-dlp (`--cookies-from-browser <value>` / `--cookies <path>`), so
-  anything yt-dlp accepts works, incl. `chrome:Profile 2`.
-- Both are off by default — the harvester never reads a browser profile unbidden.
 
-### Exporting a `cookies.txt`
+- An audio file is `<key>.<ext>`, and beside it sits `<key>.json`, the sidecar the feeder
+  writes after the audio's final rename. **No sidecar, no signature**: a file without one is
+  not finished, and is neither read nor signed. A sidecar whose `key` differs from the file's
+  stem is refused, with a row in the issues list.
+- `.harvest/ledger.json` is the harvester's own record: one row per key, `signed` or `delayed`
+  with a reason: three verdicts on the file as fed (`length_mismatch`, `too_long`,
+  `decode_failed`), and two automatic reasons the harvester retries on its own (`no_space`,
+  `missing_sidecar`). It is **seeded from the signature bucket's listing at the first
+  start** -- a `signed` row for every key the bucket holds with its companion sidecar
+  beside it; a signature whose sidecar is not there is `delayed` with `missing_sidecar`
+  -- so it is the complete record of the pool from its first day. On every later start the
+  listing is rebuilt into rows and compared with the ledger; past
+  `NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT` (default 10) the start is refused until the
+  operator starts once with `--accept-ledger-rebuild`. Otherwise the ledger is reconciled
+  against that listing: a `signed` row whose object is gone loses its `uploaded_etag`, a
+  `signed` row whose companion sidecar leaves is demoted to `delayed` with
+  `missing_sidecar`, so the key is signed again, and such a row is promoted back when the
+  sidecar returns.
+- The signature, and the sidecar beside it, are uploaded to the bucket as `<key>.npy` and
+  `<key>.json` — the index the pool has never had.
+- A file whose size or modification time no longer matches its row is **signed again**: a
+  re-cut part can be offered under the same key (the old sidecar goes before the new audio —
+  [docs/HARVEST_FEED.md](./docs/HARVEST_FEED.md)), and a `no_space` or `missing_sidecar`
+  delay is retried in place.
+- Two files tell the harvester what not to do: `data/rulings.json` (the retired set,
+  committed in this repo — the harvester **refuses to run without it**) and
+  `.harvest/PAUSED` (the pause flag, noticed within ~20 s).
+- Long audio is the feeder's to split: a file over **four hours** is `delayed` with
+  `too_long`, refused and never truncated. A file whose decoded length disagrees with its
+  sidecar's `duration_s` by more than `max(10 s, 2 %)` is `delayed` with `length_mismatch` —
+  a hand-over that disagrees with its own label is not signed.
+- The harvester's own fetch leg is gone, with the queue read, the cookie handling and the
+  host pacing that went with it: nothing that runs in this repo fetches from the web. What
+  arrives in the directories is signed; what never arrives is not missed.
 
-1. **Private/incognito window** → log in to YouTube.
-2. Export with a Netscape-format extension (*Get cookies.txt LOCALLY* — Chrome/Brave/Edge;
-   *cookies.txt* — Firefox).
-3. Store **outside the repo**, locked down:
-
-       mkdir -p ~/.config/netradio && chmod 700 ~/.config/netradio
-       mv ~/Downloads/youtube.com_cookies.txt ~/.config/netradio/youtube-cookies.txt
-       chmod 600 ~/.config/netradio/youtube-cookies.txt
-
-4. `.env`: `NETRADIO_YTDLP_COOKIES=/Users/<you>/.config/netradio/youtube-cookies.txt`,
-   then restart the harvester from `/harvest`.
-5. **Close the private window without logging out** — logout rotates the session and kills
-   the cookie you just exported.
-
-If it halts again with cookies configured, the session **expired** — re-export. `/harvest`
-(and the player's `run_player.sh status`) says which situation you're in.
+The harvester runs on one machine, supervised by the peer repo's watchdog; it adopts a
+hand-started run rather than spawning a second. `make harvest-run` starts one by hand.
 
 ## Ruling on what the harvester finds (`/harvest`)
 
