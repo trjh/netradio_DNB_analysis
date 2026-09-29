@@ -208,7 +208,7 @@ def main(argv=None):
     parser.add_argument("--meta", default=META)
     parser.add_argument("--out", default=OUT)
     # the renderer is now always pure (covers/links come from the enrichment scripts); these
-    # are accepted-and-ignored so existing callers (the metadata sync, the Makefile) don't break.
+    # are accepted-and-ignored so an older caller that still passes them does not break.
     parser.add_argument("--no-resolve", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--refresh", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
