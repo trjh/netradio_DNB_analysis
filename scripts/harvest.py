@@ -19,7 +19,7 @@ Two files tell the harvester what not to do:
 * `data/rulings.json` — the retired set, `{key: reason}`, committed in this repo: every key the
   search must never propose again, for any mystery, present or future. This side only ever
   READS it — the keys alone — and re-reads it every pass. An empty `{}` is valid: nothing is
-  ruled out. To rule a key out by hand, add it to the file. A run refuses while the file is
+  ruled out. A run refuses while the file is
   absent or unreadable — a search that has forgotten every ruling hands back records already
   rejected.
 * `.harvest/PAUSED` — the pause flag, noticed within one pass.
