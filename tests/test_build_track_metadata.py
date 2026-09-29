@@ -112,7 +112,7 @@ class ComputeTrackEndsTests(unittest.TestCase):
 @unittest.skipUnless((REPO / "labels").is_dir(), "labels/ unavailable")
 class LiveEndTests(unittest.TestCase):
     def test_every_track_except_the_last_has_a_segment_end(self):
-        # Definitive segments for the player: every track (incl. the 30 s promos,
+        # Definitive segments for a reader: every track (incl. the 30 s promos,
         # which have no label end-marker) gets a master_end_seconds. Only the very
         # last track by master order, which has no next track, may lack one.
         ids, _ = b.parse_label_track_ids()
@@ -366,7 +366,7 @@ class LiveTailTests(unittest.TestCase):
 
 class SavePreservesAlbumsTests(unittest.TestCase):
     """save() must round-trip the schema-v2 `albums` map (and any other top-level
-    keys), so a --seed regenerate never drops the player's album curation."""
+    keys), so a --seed regenerate never drops the mirror's album curation."""
 
     def test_albums_and_extra_top_level_keys_survive(self):
         import json

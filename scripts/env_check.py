@@ -41,9 +41,9 @@ SOURCE_EXT = (".py", ".sh", ".swift")
 # Names the code reads that are no `.env` setting -- hand-offs a wrapper or a test sets for
 # itself -- so they never belong in the informational list. They still count as read: a `.env`
 # that sets one is not flagged, because the code really does read it.
-#   NETRADIO_TRACKLIST_SYNC_REEXEC   the sync script's re-exec guard, set by itself
-#   NETRADIO_ANALYSIS_REPO           set by the Makefile's sync recipes (always this checkout)
-INTERNAL = ("NETRADIO_TRACKLIST_SYNC_REEXEC", "NETRADIO_ANALYSIS_REPO")
+#   NETRADIO_ANALYSIS_REPO           set by the Makefile's tracklist-check recipe (always this
+#                                    checkout)
+INTERNAL = ("NETRADIO_ANALYSIS_REPO",)
 CACHE_SUFFIXES = {"GB": "the cap the registration sets (4 GB where it sets none)",
                   "HEADROOM_MB": "the headroom the registration sets (0 unless it sets one)",
                   "MAX_AGE_DAYS": "the age limit the registration sets (none unless it sets one)",

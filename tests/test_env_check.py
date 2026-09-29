@@ -26,7 +26,7 @@ import cache_budget
 ROOT = os.environ.get("NETRADIO_THING_ROOT", "/srv/thing")
 PORT = int(os.environ.get("NETRADIO_THING_PORT", 8000))
 TOKEN = os.environ.get("NETRADIO_THING_TOKEN")
-REEXEC = os.environ.get("NETRADIO_TRACKLIST_SYNC_REEXEC")
+REPO = os.environ.get("NETRADIO_ANALYSIS_REPO")
 SHEET = os.environ.get("NETRADIO_SHEET_WEBHOOK")
 
 
@@ -136,13 +136,13 @@ class Scratch(unittest.TestCase):
         self.assertIn("NETRADIO_THING_PORT", dict(unset))
 
     def test_hand_off_names_are_left_out_of_the_list_but_still_count_as_read(self):
-        # NETRADIO_TRACKLIST_SYNC_REEXEC is the sync script's own re-exec guard: not a
+        # NETRADIO_ANALYSIS_REPO is set by the Makefile's own recipe: not a
         # setting of the file being checked, so it never belongs in the informational list;
         # a `.env` that sets one is still not flagged.
         unread, unset = env_check.check(self.env(""), self.repo)
-        self.assertNotIn("NETRADIO_TRACKLIST_SYNC_REEXEC", dict(unset))
+        self.assertNotIn("NETRADIO_ANALYSIS_REPO", dict(unset))
         self.assertIn("NETRADIO_SHEET_WEBHOOK", dict(unset), "a real setting still shows")
-        unread, _ = env_check.check(self.env("NETRADIO_TRACKLIST_SYNC_REEXEC=x\n"), self.repo)
+        unread, _ = env_check.check(self.env("NETRADIO_ANALYSIS_REPO=x\n"), self.repo)
         self.assertEqual(unread, [], "a name the code reads is never flagged")
 
     def test_values_are_never_printed(self):
@@ -165,7 +165,7 @@ class Scratch(unittest.TestCase):
         with contextlib.redirect_stdout(buf):
             rc = env_check.main([self.env("")])
         self.assertEqual(rc, 0)
-        self.assertIn("NETRADIO_TRACKLIST_SYNC_REEXEC", buf.getvalue(),
+        self.assertIn("NETRADIO_ANALYSIS_REPO", buf.getvalue(),
                       "the left-out names are named, so the list explains itself")
 
 
