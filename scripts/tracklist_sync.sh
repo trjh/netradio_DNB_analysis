@@ -245,31 +245,78 @@ reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to 
   fi
   local n; n="$(git -C "$repo" rev-list --count "$head..$origin")"
   if $DRY; then say "  [dry-run] $label: would fast-forward main $n commit(s) to origin/main"; return 0; fi
-  local f aside=()
+  # Git refuses a fast-forward in TWO states, and a listed path can be in either: (a) a tracked
+  # file modified locally that the merge changes, even when the bytes match; (b) an untracked file
+  # where the merge adds one. `git status` names both (`git diff HEAD` sees only (a)).
+  # A listed path may be a DIRECTORY (labels/review, for one) as well as a file. What
+  # is set aside is exactly the files `git status` names under it, one by one, NUL-separated so any
+  # name survives: those are the files the live process changed, and only their bytes are newer
+  # than the merge's. Every other file under the path is left to the merge, so an upstream edit or
+  # deletion of a file the live copy never touched stands, and a file the merge adds is simply
+  # there. Ignored files are never named, and nothing below touches them.
+  # The -e guard keeps a listed path that no longer exists from RESURRECTING: a file replaced by a
+  # directory of shards is not -e once the old file is gone, so it is never set aside, and the
+  # commit that carries its deletion onto main is left to do so.
+  # A backup left by an interrupted run holds live bytes that exist nowhere else, so it is never
+  # overwritten: the checkout is left alone until someone puts it back by hand.
+  local f p ent bak aside=() saved=() gone=()
   for f in "$@"; do
-    # P2: a pathspec may be the shard DIRECTORY (metadata/listen_queue), not just a file — so guard
-    # with -e and back up with `cp -a` (recursive). `git diff/checkout -- <dir>` already handle a
-    # dir pathspec and only touch TRACKED files (the gitignored journal/derived views are left be).
-    # The -e guard also stops the deleted single listen_queue.json from RESURRECTING at migration
-    # time: once the split removes it, it is not -e, so its `git checkout HEAD -- $f` never runs (the
-    # ensure_tree_on_main sync commit is what carries its deletion onto main).
-    if [ -e "$repo/$f" ] && ! git -C "$repo" diff --quiet HEAD -- "$f"; then
-      rm -rf "${repo:?}/${f:?}.reconcile-bak"
-      cp -a "$repo/$f" "$repo/$f.reconcile-bak"   # the live bytes, restored below (gitignored)
-      git -C "$repo" checkout HEAD -- "$f"        # clean worktree AND index for this file/dir
-      aside+=("$f")
+    if [ -e "$repo/$f.reconcile-bak" ] || [ -L "$repo/$f.reconcile-bak" ]; then
+      say "  $label: $f.reconcile-bak is left from an interrupted run — it holds live data;"
+      say "          move it back by hand, then re-run. Nothing was moved."
+      BLOCKED="$BLOCKED $label"; return 0
     fi
   done
-  local ok=true
-  git -C "$repo" merge --ff-only origin/main || ok=false
-  # `${f:?}` is not decoration: an empty $f turns this into `rm -rf "$repo/"`, which is the whole
-  # live checkout. Not reachable today ($repo is `:?`-guarded above, $f comes from this file's own
-  # literal call sites) — but it is one careless caller away, against a repo holding live data.
-  for f in ${aside[@]+"${aside[@]}"}; do
-    rm -rf "${repo:?}/${f:?}"
-    mv "${repo:?}/${f:?}.reconcile-bak" "${repo:?}/${f:?}"
+  for f in "$@"; do
+    [ -e "$repo/$f" ] || continue
+    local names=()
+    while IFS= read -r -d '' ent; do names+=("${ent:3}"); done \
+      < <(git -C "$repo" status --porcelain -z --no-renames --untracked-files=all -- "$f")
+    [ "${#names[@]}" -gt 0 ] || continue
+    for p in "${names[@]}"; do
+      if [ -e "$repo/$p" ] || [ -L "$repo/$p" ]; then
+        if [ "$p" = "$f" ]; then bak="$f.reconcile-bak"; else bak="$f.reconcile-bak/${p#"$f"/}"; fi
+        mkdir -p "$(dirname "$repo/$bak")"
+        cp -a "$repo/$p" "$repo/$bak"   # the live bytes, put back below (gitignored)
+        saved+=("$p" "$bak")
+      else
+        gone+=("$p")                    # deleted locally: kept deleted below
+      fi
+    done
+    if git -C "$repo" cat-file -e "HEAD:$f" 2>/dev/null; then   # a path HEAD has at all
+      git -C "$repo" checkout HEAD -- "$f"      # clean worktree AND index for this file/dir
+    fi
+    git -C "$repo" clean -fq -- "$f"            # untracked files under it (a path: -d implied)
+    aside+=("$f")
   done
-  if $ok; then say "  $label: main fast-forwarded $n commit(s) (live data kept: ${aside[*]:-none})"
+  local ok=true put=true i=0
+  git -C "$repo" merge --ff-only origin/main || ok=false
+  # Put back exactly what was set aside, on top of whatever the merge wrote. A failed fast-forward
+  # leaves HEAD where it was, so this restores the live state exactly. Every step is non-fatal: one
+  # path that cannot be put back must not strand the others in their backups, so a failure is
+  # reported, the loop carries on, and the backup it could not move stays where it is.
+  # `${repo:?}`/`${p:?}` are not decoration: an empty one turns an `rm -rf` into the whole live
+  # checkout. Not reachable today, but it is one careless caller away, against a repo of live data.
+  while [ "$i" -lt "${#saved[@]}" ]; do
+    p="${saved[$i]}"; bak="${saved[$((i + 1))]}"; i=$((i + 2))
+    if ! { mkdir -p "$(dirname "$repo/$p")" && rm -rf "${repo:?}/${p:?}" \
+           && mv "$repo/$bak" "$repo/$p"; }; then
+      say "  $label: could not put back $p — its live bytes are at $bak"; put=false
+    fi
+  done
+  for p in ${gone[@]+"${gone[@]}"}; do
+    rm -f "${repo:?}/${p:?}" || { say "  $label: could not re-delete $p"; put=false; }
+  done
+  for f in ${aside[@]+"${aside[@]}"}; do   # a directory backup is now empty directories only
+    if [ -d "$repo/$f.reconcile-bak" ]; then find "$repo/$f.reconcile-bak" -depth -type d -empty -delete; fi
+    if [ -e "$repo/$f.reconcile-bak" ]; then
+      say "  $label: $f.reconcile-bak still holds files that were not put back"; put=false
+    fi
+  done
+  if ! $put; then
+    say "  $label: live files NOT all put back (above) — reconcile by hand"
+    BLOCKED="$BLOCKED $label"
+  elif $ok; then say "  $label: main fast-forwarded $n commit(s) (live data kept: ${aside[*]:-none})"
   else
     say "  $label: fast-forward FAILED (above) — live files restored; reconcile by hand"
     BLOCKED="$BLOCKED $label"
@@ -277,7 +324,13 @@ reconcile_main() {   # $1=repo-path  $2=label  [rel paths of live data files to 
 }
 
 # The live data files each checkout's running process rewrites, set aside around every fast-forward.
-reconcile_analysis() { reconcile_main "$ANALYSIS" "$LBL_A" "track-metadata.json" "TRACKLIST.md"; }
+# The analysis checkout's live processes rewrite data/rulings.json whole and write the review and
+# summary label files; once a commit of them merges upstream, the local copies are dirty or
+# untracked against it, and every one must be set aside or the fast-forward refuses.
+reconcile_analysis() {
+  reconcile_main "$ANALYSIS" "$LBL_A" "track-metadata.json" "TRACKLIST.md" \
+    "data/rulings.json" "labels/review" "labels/summary"
+}
 # EVERY path queue_sync commits must be listed here, or the ff-merge aborts on it and the player
 # repo is left un-reconciled. `metadata/queue_chapters` and `metadata/queue_info` were missing
 # until 2026-09-11 — a live `make sync` failed with "Your local changes to the following files
