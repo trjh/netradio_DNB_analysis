@@ -12,8 +12,7 @@ opens a PR with `gh pr create`. It **never pushes to main** and **never merges**
 reviews and merges the PR. If `gh` is missing (or the PR can't be opened), the branch is still
 pushed and publish prints the exact compare URL to open the PR by hand.
 
-The commit/push/PR all happen in a **throwaway git worktree** under `.worktree/` (the same
-pattern `scripts/tracklist_sync.sh` uses), so the **invoking checkout is left untouched** —
+The commit/push/PR all happen in a **throwaway git worktree** under `.worktree/`, so the **invoking checkout is left untouched** —
 its branch, index, and (except for the in-place sort, which is the tool's normal job and is
 what the PR proposes) working tree are unchanged. That makes publish safe to run from the live
 `main` checkout the harvester supervisor runs out of.
