@@ -202,6 +202,71 @@ class StartTests(LauncherTestCase):
         self.assertFalse(os.path.exists(self.pidfile))
 
 
+class HarvestTakesWhatTheLauncherForwards(LauncherTestCase):
+    """The two halves of `--accept-ledger-rebuild` agree: the argv the launcher hands the
+    interpreter is one `harvest.py`'s own parser accepts, with both flags set. The stand-in
+    records the argv; `harvest.main()` then parses exactly that and stops before it does
+    anything else, so no harvester runs and nothing is read or written."""
+
+    def parse_with_harvest(self, argv):
+        import argparse
+        import sys
+        from unittest import mock
+        sys.path.insert(0, os.path.join(os.path.dirname(HERE), "scripts"))
+        self.addCleanup(sys.path.remove, sys.path[0])
+        try:
+            import harvest
+        except Exception as exc:        # librosa/numba absent -> not this test's job
+            self.skipTest("harvest.py does not import here: %s" % exc)
+
+        class Parsed(Exception):
+            pass
+
+        real = argparse.ArgumentParser.parse_args
+
+        def parse_only(parser, args=None, namespace=None):
+            raise Parsed(real(parser, argv, namespace))
+
+        with mock.patch.object(argparse.ArgumentParser, "parse_args", parse_only):
+            try:
+                harvest.main()
+            except Parsed as done:
+                return done.args[0]
+            except SystemExit as exc:   # argparse's own refusal of an unknown argument
+                self.fail("harvest.py refused the launcher's argv %r (exit %s)" % (argv, exc.code))
+        self.fail("harvest.main() returned without parsing its arguments")
+
+    def forwarded_argv(self, *start_args):
+        self.fake_interpreter(body=CMDLINE_PY)
+        out = self.start(*start_args)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        with open(os.path.join(self.root, "cmdline-%d.txt" % self.read_pid())) as fh:
+            argv = fh.read().split("\x00")[:-1]
+        self.assertEqual(argv[0], "scripts/harvest.py")
+        return argv[1:]
+
+    def test_the_forwarded_flag_is_one_harvest_accepts(self):
+        args = self.parse_with_harvest(self.forwarded_argv("--accept-ledger-rebuild"))
+        self.assertTrue(args.run)
+        self.assertTrue(args.accept_ledger_rebuild)
+
+    def test_status_reads_the_stamp_harvest_writes(self):
+        """`status` greps the `updated` stamp out of state.json; the state it reads is the
+        one harvest.py's own blank_state() and _save() write, not a hand-made fixture."""
+        self.parse_with_harvest([])          # imports harvest (or skips), parses nothing
+        import harvest
+        state = harvest.blank_state()
+        os.makedirs(self.state_dir, exist_ok=True)
+        harvest._save(os.path.join(self.state_dir, "state.json"), state)
+        out = self.run_cmd("status")
+        self.assertIn("state:  updated %s" % state["updated"], out.stdout)
+
+    def test_a_plain_start_leaves_the_flag_off(self):
+        args = self.parse_with_harvest(self.forwarded_argv())
+        self.assertTrue(args.run)
+        self.assertFalse(args.accept_ledger_rebuild)
+
+
 class EnvFileTests(LauncherTestCase):
     """The repo's .env is read, and its absence is not an error."""
 
@@ -324,17 +389,17 @@ class StatusTests(LauncherTestCase):
         self.assertIn("absent (nothing signed yet)", out.stdout)
         self.assertEqual(out.stderr, "")
 
-    def test_status_prints_the_pid_and_the_phase(self):
+    def test_status_prints_the_pid_and_the_last_state_write(self):
         self.fake_interpreter()
         os.makedirs(self.state_dir, exist_ok=True)
         with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
-            fh.write('{"analyzed": 3, "session": {"phase": "waiting on example.test", '
-                     '"until": 0}, "current": null}')
+            fh.write('{"started": "2026-09-01T00:00:00+00:00", '
+                     '"updated": "2026-09-27T12:34:56+00:00", "analyzed": 3, "current": null}')
         self.assertEqual(self.start().returncode, 0)
         out = self.run_cmd("status")
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("harvester UP (pid %d)" % self.read_pid(), out.stdout)
-        self.assertIn("phase:  waiting on example.test", out.stdout)
+        self.assertIn("state:  updated 2026-09-27T12:34:56+00:00", out.stdout)
 
     def test_a_standing_signature_alert_is_shown(self):
         os.makedirs(self.state_dir, exist_ok=True)
@@ -348,6 +413,31 @@ class StatusTests(LauncherTestCase):
         self.assertIn("  alert:  8 of 40 signatures missing, stood still past the cap "
                       "(since 2026-09-01T10:00:00Z)", out.stdout)
         self.assertEqual(out.stderr, "")
+
+    def test_a_store_alert_with_its_kind_is_shown_the_same_way(self):
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
+            json.dump({"sig_alert": {"at": "2026-09-02T08:00:00Z", "kind": "store",
+                                     "missing": 12, "sidecars_missing": 0, "corpus": 90,
+                                     "why": "12 of 90 signed rows point at objects the "
+                                            "listing does not hold"}}, fh, indent=2)
+        out = self.run_cmd("status")
+        self.assertIn("  alert:  12 of 90 signatures missing, stood still past the cap "
+                      "(since 2026-09-02T08:00:00Z)", out.stdout)
+
+    def test_a_ledger_alert_names_the_difference_and_the_refused_start(self):
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
+            json.dump({"sig_alert": {"at": "2026-09-03T09:00:00Z", "kind": "ledger",
+                                     "differ": 30, "keys": 120, "ledger_rows": 100,
+                                     "rebuild_rows": 110, "pct": 25.0, "threshold_pct": 10.0,
+                                     "override": "scripts/harvest.py --run "
+                                                 "--accept-ledger-rebuild",
+                                     "why": "differ on 30 of 120 keys"}}, fh, indent=2)
+        out = self.run_cmd("status")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("  alert:  the ledger and its rebuild differ on 30 of 120 keys, start "
+                      "refused (since 2026-09-03T09:00:00Z)", out.stdout)
 
     def test_no_alert_line_without_a_standing_alert(self):
         os.makedirs(self.state_dir, exist_ok=True)
