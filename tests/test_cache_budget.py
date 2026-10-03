@@ -647,6 +647,46 @@ class Companions(CacheBudgetBase):
         self.assertFalse(cb.remove("c", a, "heard"))
         self.assertEqual(self.names(rec), ["a", "a.side"])
 
+    def test_an_eviction_of_an_entry_moved_away_records_nothing(self):
+        rec = self.comp_cache(cap=KB)
+        a = self.pair(rec, "a", 2 * KB, 100)
+        entries = cb._scan(rec)
+        os.rename(a, a + ".moved")
+        os.rename(self.side(a), self.side(a) + ".moved")
+        with cb._machine_lock():
+            self.assertTrue(cb._evict(rec, entries[0], "cap"))
+        self.assertEqual(cb._STATS["c"]["evicted"], 0)
+        self.assertEqual([e for e in self.events() if e["event"] == "evict"], [])
+
+    def test_locked_lets_a_removal_and_a_commit_run_inside_it(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a")
+        b = self.file(rec, "b")
+        done = []
+
+        def inside():
+            with cb.locked():
+                done.append(cb.remove("c", a, "heard"))
+                cb.commit("c", b)
+                done.append(True)
+        t = threading.Thread(target=inside)
+        t.start()
+        t.join(5)
+        self.assertFalse(t.is_alive(), "a call inside locked() waited on the lock forever")
+        self.assertEqual(done, [True, True])
+
+    def test_locked_still_excludes_another_thread(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a")
+        order = []
+        with cb.locked():
+            t = threading.Thread(target=lambda: order.append(("removed", cb.remove("c", a, "x"))))
+            t.start()
+            t.join(0.3)
+            order.append("released")
+        t.join(5)
+        self.assertEqual(order, ["released", ("removed", True)])
+
     def test_locked_is_a_no_op_while_dark_and_the_machine_lock_otherwise(self):
         with cb.locked():
             self.assertTrue(os.path.exists(os.path.join(self.root, cb.LOCK_NAME)))

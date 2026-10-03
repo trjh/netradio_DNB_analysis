@@ -73,6 +73,7 @@ EVENTS_NAME = "events.jsonl"
 _REGISTRY = {}          # name -> the cache's record, in registration order
 _STATS = {}             # name -> {"last_run", "evicted", "removed", "over_cap"}
 _mutex = threading.Lock()
+_held_here = threading.local()   # this thread's depth inside `_machine_lock`
 
 
 # --- the environment ------------------------------------------------------------------------
@@ -300,20 +301,35 @@ def _disk_pct(path, extra=0):
 @contextlib.contextmanager
 def _machine_lock():
     """One holder at a time across every process that shares the root. The kernel releases the
-    lock when the descriptor closes, so a killed holder leaves nothing to clean up."""
+    lock when the descriptor closes, so a killed holder leaves nothing to clean up. Re-entrant
+    within a thread: a flock taken on a second descriptor would wait on the first forever, so a
+    nested call (a `remove()` inside `locked()`) only counts its depth."""
+    depth = getattr(_held_here, "depth", 0)
+    if depth:
+        _held_here.depth = depth + 1
+        try:
+            yield
+        finally:
+            _held_here.depth = depth
+        return
     os.makedirs(root(), exist_ok=True)
     fd = os.open(os.path.join(root(), LOCK_NAME), os.O_RDWR | os.O_CREAT, 0o644)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
+        _held_here.depth = 1
+        try:
+            yield
+        finally:
+            _held_here.depth = 0
     finally:
         os.close(fd)
 
 
 def locked():
     """The machine-wide lock, for a caller whose own change must not interleave with an eviction
-    or a removal: an entry and its companions moved together, say. Nothing to hold while the
-    module is dark."""
+    or a removal: an entry and its companions moved together, say. Re-entrant within a thread, so
+    a `remove()` or `commit()` inside the block runs under the same hold. Nothing to hold while
+    the module is dark."""
     return _machine_lock() if enabled() else contextlib.nullcontext()
 
 
@@ -466,9 +482,10 @@ def _candidates(rec, entries, protect=()):
 def _unlink_entry(rec, path):
     """Delete one entry with its companions, the companions first. Asked again at the moment of
     deletion: an entry no longer at its path, or held now, keeps every file. Returns True when the
-    entry is gone, False when it stays; raises the entry's own OSError."""
+    entry is deleted, False when it stays; raises the entry's own OSError, FileNotFoundError when
+    it is no longer at its path (moved, with its companions: nothing was deleted or recorded)."""
     if not os.path.lexists(path):
-        return True                     # gone (moved, with its companions): nothing to take
+        raise FileNotFoundError(path)
     comps = _companions(rec, path)
     if comps and _held(rec, path):
         return False
