@@ -572,6 +572,129 @@ class DeletionsThroughTheApi(CacheBudgetBase):
                          ("refuse", "broken-entry", "pinned"))
 
 
+class Companions(CacheBudgetBase):
+    """A file that belongs to an entry (`companions`): counted with it, never a candidate alone,
+    deleted with it and before it."""
+
+    @staticmethod
+    def side(path):
+        return path + ".side"
+
+    def comp_cache(self, **kw):
+        kw.setdefault("companions", lambda p: [] if p.endswith(".side") else [self.side(p)])
+        return self.cache("c", **kw)
+
+    def pair(self, rec, name, size=KB, side=100, age_s=0):
+        main = self.file(rec, name, size, age_s)
+        self.file(rec, name + ".side", side, age_s)
+        return main
+
+    def test_a_companion_counts_with_its_entry_and_is_not_an_entry_of_its_own(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a", 3 * KB, 100)
+        row = cb.status()["caches"][0]
+        self.assertEqual((row["size"], row["entries"]), (3 * KB + 100, 1))
+        self.assertEqual([e[0] for e in cb._candidates(rec, cb._scan(rec))], [a])
+
+    def test_a_companion_with_no_entry_is_an_entry_of_its_own(self):
+        rec = self.comp_cache()
+        lone = self.file(rec, "gone.side", 100)
+        self.assertEqual([e[0] for e in cb._scan(rec)], [lone])
+
+    def test_an_eviction_deletes_the_companion_first(self):
+        rec = self.comp_cache(cap=2 * KB)
+        self.pair(rec, "old", KB, 100, age_s=60)
+        self.pair(rec, "new", KB, 100)
+        order = []
+        real = cb.os.unlink
+        self.addCleanup(setattr, cb.os, "unlink", real)
+        cb.os.unlink = lambda p: order.append(os.path.basename(p)) or real(p)
+        cb.run_eviction("c")
+        self.assertEqual(order, ["old.side", "old"])
+        self.assertEqual(self.names(rec), ["new", "new.side"])
+        [ev] = [e for e in self.events() if e["event"] == "evict"]
+        self.assertEqual((ev["entry"], ev["bytes"]), ("old", KB + 100))
+
+    def test_remove_deletes_the_companion_first_and_counts_its_bytes(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a", KB, 100)
+        order = []
+        real = cb.os.unlink
+        self.addCleanup(setattr, cb.os, "unlink", real)
+        cb.os.unlink = lambda p: order.append(os.path.basename(p)) or real(p)
+        self.assertTrue(cb.remove("c", a, "heard"))
+        self.assertEqual(order, ["a.side", "a"])
+        [ev] = self.events()
+        self.assertEqual((ev["event"], ev["bytes"]), ("remove", KB + 100))
+
+    def test_an_entry_no_longer_at_its_path_keeps_its_companion(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a")
+        os.unlink(a)
+        self.assertTrue(cb.remove("c", a, "heard"))
+        self.assertTrue(os.path.exists(self.side(a)))
+
+    def test_a_held_entry_or_companion_keeps_both(self):
+        held = set()
+        rec = self.comp_cache(cap=KB, pinned=lambda p: p in held)
+        a = self.pair(rec, "a", 2 * KB, 100)
+        held.add(self.side(a))
+        cb.run_eviction("c")
+        self.assertFalse(cb.remove("c", a, "heard"))
+        self.assertEqual(self.names(rec), ["a", "a.side"])
+        held.clear()
+        held.add(a)
+        self.assertFalse(cb.remove("c", a, "heard"))
+        self.assertEqual(self.names(rec), ["a", "a.side"])
+
+    def test_an_eviction_of_an_entry_moved_away_records_nothing(self):
+        rec = self.comp_cache(cap=KB)
+        a = self.pair(rec, "a", 2 * KB, 100)
+        entries = cb._scan(rec)
+        os.rename(a, a + ".moved")
+        os.rename(self.side(a), self.side(a) + ".moved")
+        with cb._machine_lock():
+            self.assertTrue(cb._evict(rec, entries[0], "cap"))
+        self.assertEqual(cb._STATS["c"]["evicted"], 0)
+        self.assertEqual([e for e in self.events() if e["event"] == "evict"], [])
+
+    def test_locked_lets_a_removal_and_a_commit_run_inside_it(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a")
+        b = self.file(rec, "b")
+        done = []
+
+        def inside():
+            with cb.locked():
+                done.append(cb.remove("c", a, "heard"))
+                cb.commit("c", b)
+                done.append(True)
+        t = threading.Thread(target=inside)
+        t.start()
+        t.join(5)
+        self.assertFalse(t.is_alive(), "a call inside locked() waited on the lock forever")
+        self.assertEqual(done, [True, True])
+
+    def test_locked_still_excludes_another_thread(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a")
+        order = []
+        with cb.locked():
+            t = threading.Thread(target=lambda: order.append(("removed", cb.remove("c", a, "x"))))
+            t.start()
+            t.join(0.3)
+            order.append("released")
+        t.join(5)
+        self.assertEqual(order, ["released", ("removed", True)])
+
+    def test_locked_is_a_no_op_while_dark_and_the_machine_lock_otherwise(self):
+        with cb.locked():
+            self.assertTrue(os.path.exists(os.path.join(self.root, cb.LOCK_NAME)))
+        os.environ.pop("NETRADIO_CACHE_ROOT")
+        with cb.locked():
+            pass
+
+
 class HeadroomAndOverflow(CacheBudgetBase):
 
     def test_a_planned_reserve_stops_at_cap_minus_headroom(self):
