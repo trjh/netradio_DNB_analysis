@@ -459,12 +459,52 @@ class StatusTests(LauncherTestCase):
         self.assertIn("ledger: absent (nothing signed yet)", out.stdout)
         self.assertNotIn("error", (out.stdout + out.stderr).lower())
 
-    def test_a_ledger_that_is_present_is_reported_as_present(self):
+    def write_ledger(self, rows, indent=2):
         os.makedirs(self.state_dir, exist_ok=True)
         with open(os.path.join(self.state_dir, "ledger.json"), "w") as fh:
-            fh.write("{}\n")
+            json.dump({r["key"]: r for r in rows}, fh, indent=indent)
+
+    @staticmethod
+    def row(key, status, reason=None, title=None):
+        return {"key": key, "size": None, "mtime": None, "status": status, "reason": reason,
+                "signed_at": None, "uploaded_etag": None, "url": None, "title": title,
+                "artist": None, "duration_s": None}
+
+    def test_an_empty_ledger_has_no_rows(self):
+        self.write_ledger([])
         out = self.run_cmd("status")
-        self.assertIn("ledger: present (3 bytes)", out.stdout)
+        self.assertIn("ledger: 0 rows (nothing signed yet)", out.stdout)
+        self.assertEqual(out.stderr, "")
+
+    def test_status_prints_the_ledgers_counts(self):
+        self.write_ledger([self.row("u1", "signed"), self.row("u2", "signed"),
+                           self.row("u3", "signed"),
+                           self.row("u4", "delayed", "no_space"),
+                           self.row("u5", "delayed", "decode_failed"),
+                           self.row("u6", "delayed", "no_space")])
+        out = self.run_cmd("status")
+        self.assertIn("ledger: 6 rows: 3 signed, 3 delayed (no_space 2, decode_failed 1)",
+                      out.stdout)
+        self.assertEqual(out.stderr, "")
+
+    def test_a_ledger_with_nothing_delayed_names_no_reasons(self):
+        self.write_ledger([self.row("u1", "signed")])
+        out = self.run_cmd("status")
+        self.assertIn("ledger: 1 rows: 1 signed, 0 delayed\n", out.stdout)
+
+    def test_the_counts_hold_for_a_ledger_on_one_line(self):
+        self.write_ledger([self.row("u1", "signed"), self.row("u2", "delayed", "too_long")],
+                          indent=None)
+        out = self.run_cmd("status")
+        self.assertIn("ledger: 2 rows: 1 signed, 1 delayed (too_long 1)", out.stdout)
+
+    def test_a_sidecar_field_does_not_pass_for_a_row(self):
+        """A title carried from a sidecar is the feeder's text: whatever it says, its quotes
+        are escaped in the file and it is never counted as a status or a reason."""
+        self.write_ledger([self.row("u1", "signed",
+                                    title='"status": "delayed", "reason": "no_space"')])
+        out = self.run_cmd("status")
+        self.assertIn("ledger: 1 rows: 1 signed, 0 delayed\n", out.stdout)
 
 
 class LogRotationTests(LauncherTestCase):
