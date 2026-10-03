@@ -105,7 +105,7 @@ own original, the change is wrong.
 scripts/run_harvester.sh start                                        # runs for weeks
 scripts/run_harvester.sh start --accept-ledger-rebuild                # forwarded to harvest.py
                                                                       # --run, that one start only
-scripts/run_harvester.sh status                                       # pid, updated stamp, ledger, alert
+scripts/run_harvester.sh status                                       # pid, updated stamp, ledger counts, alert
 scripts/run_harvester.sh stop                                         # / restart [--accept-ledger-rebuild]
 make harvest-run                                                      # alias for `start`
 
@@ -151,7 +151,9 @@ pidfile. `stop` asks for a clean exit and waits up to 30 seconds for it
 (`NETRADIO_HARVEST_STOP_WAIT_S`) before it resorts to `kill -9`. `status` prints whether it is
 up, its pid, the `updated` stamp in `.harvest/state.json` (set at the end of each signing
 pass, so it stands still while the harvester is paused, idle, or mid-decode of a long file),
-and whether the ledger is there — and **an absent ledger is a normal answer**, not an error:
+and the ledger's counts — its rows, how many are signed and how many delayed, and the delayed
+rows by reason, read with `grep` so `status` needs no interpreter — and **an absent ledger is a
+normal answer**, not an error:
 before the signing pass has run once there is nothing signed and no candidates, which is
 exactly what a fresh clone looks like. While the state carries a standing `sig_alert` (see
 **The ledger replaces the working queue** below), `status` adds one `alert:` line with its

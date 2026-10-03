@@ -446,7 +446,7 @@ Start and stop it with its own launcher — one pidfile, one log, one harvester:
 
 ```bash
 scripts/run_harvester.sh start      # in the background; it runs for weeks
-scripts/run_harvester.sh status     # up or down, the pid, the updated stamp, the ledger
+scripts/run_harvester.sh status     # up or down, the pid, the updated stamp, the ledger's counts
 scripts/run_harvester.sh stop       # asks for a clean exit, and waits for it
 scripts/run_harvester.sh restart
 ```
@@ -463,7 +463,9 @@ this pidfile — and [SCRIPTS](./docs/SCRIPTS.md) has the whole contract. The lo
 one generation back, nothing older kept. The rename happens between runs, never during one,
 so a run of weeks is bounded by when it is next restarted. Before the signing pass has ever
 run there is no ledger, and `status` says so plainly (`ledger: absent`): nothing signed yet
-is a state, not a fault.
+is a state, not a fault. Once there is one, `status` counts its rows — signed, delayed, and
+the delayed rows by reason, for example `ledger: 6 rows: 3 signed, 3 delayed (no_space 2,
+decode_failed 1)`.
 
 It knows directories, and nothing else. `NETRADIO_HARVEST_DIRS` (in `.env`) names one or more
 absolute directories, `:`-separated; the loop reads the **top level** of each and writes
