@@ -89,7 +89,6 @@ own original, the change is wrong.
 | `scripts/enrich_musicbrainz.py`, `enrich_mb_links.py`, `enrich_album_covers.py`, `enrich_covers_links.py` | fill artwork/links on `track-metadata.json` (network) |
 | `scripts/merge_track_sources.py`, `g4_missing_sources.py`, `find_streaming_links.py` | source inventory: what we have, what's missing, where to get it |
 | `scripts/backup_sheet.py` | back up the Google Sheet |
-| `scripts/check_tracklist_sync.sh` | does `track-metadata.json` match the peer checkout's mirror? (`make tracklist-check`) |
 | `scripts/cache_budget.py` | the one cache policy: a registry of size-bounded local caches, `reserve` before every write, an eviction run, one disk floor — a library the cache-holding scripts register with (dark until `NETRADIO_CACHE_ROOT` is set); the decoded-array cache in `scripts/streamalign/audio.py` registers with it |
 
 ## Retired

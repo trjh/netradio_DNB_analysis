@@ -12,8 +12,7 @@ Reports two lists:
     only. For a cache's family the default shown is what the registration sets -- the cap
     and age limit the registering code passes, which a bare name cannot state; caches whose
     registration departs from the generic cap (4 GB) or age (none) are named in the tool's
-    own table so the list states the default the code really uses. The wrapper and test
-    hand-off names (`INTERNAL`) are left out of this list; they still count as read.
+    own table so the list states the default the code really uses.
 
 Only names are printed, never values: a `.env` holds credentials and machine paths.
 
@@ -38,12 +37,6 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP_DIRS = {".git", ".worktree", ".venv", "Archive", "tests", "node_modules", "__pycache__",
              ".context"}
 SOURCE_EXT = (".py", ".sh", ".swift")
-# Names the code reads that are no `.env` setting -- hand-offs a wrapper or a test sets for
-# itself -- so they never belong in the informational list. They still count as read: a `.env`
-# that sets one is not flagged, because the code really does read it.
-#   NETRADIO_ANALYSIS_REPO           set by the Makefile's tracklist-check recipe (always this
-#                                    checkout)
-INTERNAL = ("NETRADIO_ANALYSIS_REPO",)
 CACHE_SUFFIXES = {"GB": "the cap the registration sets (4 GB where it sets none)",
                   "HEADROOM_MB": "the headroom the registration sets (0 unless it sets one)",
                   "MAX_AGE_DAYS": "the age limit the registration sets (none unless it sets one)",
@@ -192,8 +185,7 @@ def check(env_file, root=None):
     read = read_names(root)
     have = set_names(env_file)
     unread = sorted(have - set(read))
-    unset = sorted((n, read[n]) for n in set(read) - have
-                   if n not in INTERNAL)
+    unset = sorted((n, read[n]) for n in set(read) - have)
     return unread, unset
 
 
@@ -211,8 +203,6 @@ def main(argv=None):
     print("\nread by the code but unset (%d), with the default:" % len(unset))
     for name, default in unset:
         print("  %-44s %s" % (name, default if default is not None else "(no default stated in the code)"))
-    print("\n  (also left out: the wrapper and test hand-off names: %s)"
-          % ", ".join(INTERNAL))
     return 1 if unread else 0
 
 

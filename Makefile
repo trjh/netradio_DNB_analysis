@@ -133,18 +133,8 @@ harvest-run:          ## start the harvester (runs for weeks), under its own pid
 #########################################
 #####          TRACKLIST            #####
 #########################################
-# This repo is CANONICAL for `track-metadata.json` (a peer checkout holds a mirror). `make
-# tracklist` enriches each linked track with artwork_url/full_page_url and renders the public
-# TRACKLIST.md. The metadata sync that keeps the mirror in step runs from the peer checkout;
-# `make tracklist-check` reports whether the two copies agree (set NETRADIO_PLAYER_REPO).
+# This repo is CANONICAL for `track-metadata.json`. `make tracklist` enriches each linked track
+# with artwork_url/full_page_url and renders the public TRACKLIST.md.
 
 tracklist:            ## resolve artwork into track-metadata.json + render TRACKLIST.md (network)
 	$(PYTHON) scripts/render_tracklist.py
-
-# This needs NETRADIO_PLAYER_REPO, which is already in .env alongside every other machine
-# path -- but make does not export what it -includes, so it failed with "set
-# NETRADIO_PLAYER_REPO" even though it was set. Source it here. (`set -a` exports; `.env` is
-# required for this target anyway, but a missing file must not be a syntax error.)
-tracklist-check:      ## report whether track-metadata.json and the peer checkout's mirror match
-	set -a; [ -f .env ] && . ./.env; set +a; \
-	NETRADIO_ANALYSIS_REPO=$(CURDIR) bash scripts/check_tracklist_sync.sh

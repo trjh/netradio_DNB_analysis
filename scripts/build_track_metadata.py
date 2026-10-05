@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the authoritative track-metadata.json from the Audacity labels.
 
-This repo is the source of record; a peer checkout holds a mirror. The Audacity
+This repo is the source of record. The Audacity
 label exports own the master timeline and Track Title/Artist via
 `startNNN: ID: Artist - Title` rows. This script reads those identities and their
 resolved master positions and writes `track-metadata.json` at the repo root.
@@ -486,7 +486,7 @@ def _ordered(entries):
 def save(data, path):
     out = {"schema": data.get("schema", SCHEMA)}
     # Preserve the schema-v2 album records (album-shared metadata + per-track
-    # `album` refs) — the mirror's curation flows back through --seed, so dropping
+    # `album` refs) — album curation flows in through --seed, so dropping
     # `albums` here would lose every album cover/year/link on a regenerate.
     if "albums" in data:
         out["albums"] = _ordered(data.get("albums") or {})

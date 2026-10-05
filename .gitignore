@@ -82,10 +82,8 @@ clips_out/
 # regenerable; the `placed` op reads it for its grades when present.
 /sync-audit.json
 
-# pre-sync safety backups written by the metadata sync before overwriting a working copy
+# safety backups of working-copy files (*.presync-bak, *.reconcile-bak); never committed
 *.presync-bak
-# live files set aside by the metadata sync around a fast-forward, restored in the same run;
-# one left by an interrupted run blocks the next until its files are moved back by hand
 *.reconcile-bak
 .worktree
 

@@ -351,13 +351,6 @@ Need-to-know:
 - What you're checking: your new file's overlap pairs (if any) are **confirmed**, and no
   previously-confirmed pair went suspect.
 
-The mirror in the peer checkout is brought in step by the metadata sync, which runs from that
-checkout. To see whether the two copies agree:
-
-```bash
-make tracklist-check # reads NETRADIO_PLAYER_REPO from .env
-```
-
 ### 11. Publish — open a PR with your labels, merge it, refresh the sheet
 
 ```bash

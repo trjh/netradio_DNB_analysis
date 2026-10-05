@@ -366,7 +366,7 @@ class LiveTailTests(unittest.TestCase):
 
 class SavePreservesAlbumsTests(unittest.TestCase):
     """save() must round-trip the schema-v2 `albums` map (and any other top-level
-    keys), so a --seed regenerate never drops the mirror's album curation."""
+    keys), so a --seed regenerate never drops album curation."""
 
     def test_albums_and_extra_top_level_keys_survive(self):
         import json
