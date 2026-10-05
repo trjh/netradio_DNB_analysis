@@ -227,7 +227,7 @@ confirm. (The rate axis is still a research line — plain correlation doesn't l
 
 ## Build — labels → `track-metadata.json`
 
-**Q:** I changed labels (IDs, timings, syncs) — how do I rebuild the metadata the player reads?
+**Q:** I changed labels (IDs, timings, syncs) — how do I rebuild `track-metadata.json`?
 
 **A:**
 

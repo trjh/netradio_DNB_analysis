@@ -82,9 +82,6 @@ clips_out/
 # regenerable; the `placed` op reads it for its grades when present.
 /sync-audit.json
 
-# safety backups of working-copy files (*.presync-bak, *.reconcile-bak); never committed
-*.presync-bak
-*.reconcile-bak
 .worktree
 
 # Chroma signature cache. This is the point of the harvester -- the SIGNATURE outlives the audio
