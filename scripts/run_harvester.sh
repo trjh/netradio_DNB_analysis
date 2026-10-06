@@ -171,9 +171,9 @@ ledger_line() {
   # `"status": "<value>"` pair, and a delayed row one `"reason": "<value>"` pair (a signed
   # row's reason is null, which the pattern does not match). A field carried from a sidecar
   # cannot pass for one: harvest.py stores a sidecar's `url`, `title` and `artist` only as
-  # strings and its `duration_s` only as a number (anything else as null), and inside a JSON
-  # string the quotes are escaped, so `\"status\"` does not match `"status"` followed by a
-  # colon. `grep -o` finds every match on a line, so the counts hold for a ledger written on
+  # strings and its `duration_s` only as a number (anything else as null), and cleans a row
+  # written before that at its next start; inside a JSON string the quotes are escaped, so
+  # `\"status\"` does not match `"status"` followed by a colon. `grep -o` finds every match on a line, so the counts hold for a ledger written on
   # one line as well as for the indented one.
   if [ ! -r "$LEDGER" ]; then
     printf 'present, not readable'

@@ -2352,5 +2352,48 @@ class SidecarFieldTypes(unittest.TestCase):
         self.assertEqual(text.count('"reason"'), 1)
 
 
+
+class ALegacyRowIsCleaned(_SignerCase):
+    """A row written before the sidecar fields' types were enforced may carry a nested object.
+    The ledger loads clean, and the start (`reconcile_ledger`) saves it clean at once, so the
+    launcher's `status` count holds for a ledger the harvester has started on since."""
+
+    def _legacy(self):
+        key = "u" + "c" * 20
+        row = harvest._row(key, 1, 1.0, "signed", None, "then", "e", {})
+        row["title"] = {"status": "delayed", "reason": "no_space"}        # as written before
+        row["duration_s"] = {"reason": "too_long"}
+        harvest._save(harvest.LEDGER, {key: row})
+        return key
+
+    def test_the_ledger_loads_clean(self):
+        key = self._legacy()
+        row = harvest.load_ledger()[key]
+        self.assertIsNone(row["title"])
+        self.assertIsNone(row["duration_s"])
+        self.assertEqual((row["status"], row["uploaded_etag"]), ("signed", "e"))
+
+    def test_the_start_saves_it_clean_even_with_the_bucket_unlistable(self):
+        key = self._legacy()
+        with mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: None):
+            res = harvest.reconcile_ledger({"issues": []})
+        self.assertEqual(res["cleaned"], 1)
+        with open(harvest.LEDGER, encoding="utf-8") as fh:
+            text = fh.read()
+        self.assertEqual(text.count('"status"'), 1)
+        self.assertEqual(text.count('"reason"'), 1)
+        self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["status"], "signed")
+
+    def test_a_clean_ledger_is_not_rewritten(self):
+        key = "u" + "d" * 20
+        harvest._save(harvest.LEDGER, {key: harvest._row(key, 1, 1.0, "signed", None, "then",
+                                                         "e", {"title": "a set"})})
+        with mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: None), \
+                mock.patch.object(harvest, "_save") as save:
+            res = harvest.reconcile_ledger({"issues": []})
+        self.assertEqual(res["cleaned"], 0)
+        save.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

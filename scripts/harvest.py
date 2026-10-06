@@ -884,7 +884,26 @@ def load_ledger():
     by the harvester -- the shape and every field's meaning are the published contract
     (docs/HARVEST_FEED.md)."""
     ledger = _load(LEDGER, {})
-    return ledger if isinstance(ledger, dict) else {}
+    ledger = ledger if isinstance(ledger, dict) else {}
+    _clean_row_fields(ledger)
+    return ledger
+
+
+def _clean_row_fields(ledger):
+    """Give every row's sidecar fields the types `_sidecar_row_fields` allows, in place; how
+    many rows changed. A row written before those types were enforced may carry a nested
+    object, and its `status` or `reason` keys would be counted as a row's by
+    `run_harvester.sh status`. `load_ledger` applies it, so the next save of a loaded ledger
+    writes the rows clean, and `reconcile_ledger` saves at once when it changed any."""
+    changed = 0
+    for row in ledger.values():
+        if not isinstance(row, dict):
+            continue
+        fields = _sidecar_row_fields(row)
+        if any(row.get(name) != value for name, value in fields.items()):
+            row.update(fields)
+            changed += 1
+    return changed
 
 
 def _sidecar_row_fields(sidecar):
@@ -1002,10 +1021,18 @@ def reconcile_ledger(state=None, accept_rebuild=False):
 
     Mutates the caller's `state` when it keeps one (run does); loads its own otherwise.
     Returns {"seeded", "merged", "dropped", "restored", "sidecar_lost", "promoted",
-    "reported", "refused", "cleared", "why"}.
+    "cleaned", "reported", "refused", "cleared", "why"}. `cleaned` counts the rows whose
+    sidecar fields were given their types (`_clean_row_fields`), saved at once, before the
+    bucket is listed: the start is the upgrade boundary for a ledger written before them.
     """
     res = {"seeded": 0, "merged": 0, "dropped": 0, "restored": 0, "sidecar_lost": 0,
-           "promoted": 0, "reported": False, "refused": False, "cleared": False}
+           "promoted": 0, "cleaned": 0, "reported": False, "refused": False,
+           "cleared": False}
+    raw = _load(LEDGER, {})
+    if isinstance(raw, dict):
+        res["cleaned"] = _clean_row_fields(raw)
+        if res["cleaned"]:
+            _save(LEDGER, raw)
     objects = _remote_objects()
     if objects is None:
         return dict(res, why="the bucket cannot be listed -- cannot tell a gone object from "
