@@ -2344,6 +2344,22 @@ class SidecarFieldTypes(unittest.TestCase):
             with self.subTest(bad=bad):
                 self.assertIsNone(harvest._sidecar_row_fields({"duration_s": bad})["duration_s"])
 
+    def test_a_duration_that_is_not_finite_is_null(self):
+        """`json` reads a NaN a feeder wrote; a NaN never equals itself, so a row holding one
+        would read as changed, and be rewritten, at every start."""
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(bad=bad):
+                self.assertIsNone(harvest._sidecar_row_fields({"duration_s": bad})["duration_s"])
+        self.assertEqual(harvest._sidecar_row_fields({"duration_s": 10 ** 400})["duration_s"],
+                         10 ** 400)
+
+    def test_a_nan_duration_is_cleaned_once(self):
+        row = harvest._row("u" + "a" * 20, 1, 1.0, "signed", None, "then", "e", {})
+        row["duration_s"] = json.loads("NaN")
+        ledger = {row["key"]: row}
+        self.assertEqual(harvest._clean_row_fields(ledger), 1)
+        self.assertEqual(harvest._clean_row_fields(ledger), 0)
+
     def test_a_row_carries_no_nested_status_or_reason(self):
         row = harvest._row("u" + "a" * 20, 1, 1.0, "signed", None, "then", "e",
                            {"title": {"status": "delayed", "reason": "no_space"}})
@@ -2378,11 +2394,23 @@ class ALegacyRowIsCleaned(_SignerCase):
         with mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: None):
             res = harvest.reconcile_ledger({"issues": []})
         self.assertEqual(res["cleaned"], 1)
+        self.assertIn("cleaned the sidecar fields of 1 row(s)", res["why"])
+        self.assertNotIn("left untouched", res["why"])
         with open(harvest.LEDGER, encoding="utf-8") as fh:
             text = fh.read()
         self.assertEqual(text.count('"status"'), 1)
         self.assertEqual(text.count('"reason"'), 1)
         self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["status"], "signed")
+
+    def test_the_start_names_the_cleaning_when_the_bucket_lists(self):
+        key = self._legacy()
+        objects = {key + ".npy": "e", key + ".json": "e"}
+        with mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: objects):
+            res = harvest.reconcile_ledger({"issues": []})
+        self.assertFalse(res["refused"])
+        self.assertTrue(res["why"].startswith(
+            "cleaned the sidecar fields of 1 row(s) written before their types were "
+            "enforced; "), res["why"])
 
     def test_a_clean_ledger_is_not_rewritten(self):
         key = "u" + "d" * 20
@@ -2392,6 +2420,7 @@ class ALegacyRowIsCleaned(_SignerCase):
                 mock.patch.object(harvest, "_save") as save:
             res = harvest.reconcile_ledger({"issues": []})
         self.assertEqual(res["cleaned"], 0)
+        self.assertNotIn("cleaned", res["why"])
         save.assert_not_called()
 
 

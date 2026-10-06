@@ -171,10 +171,12 @@ ledger_line() {
   # `"status": "<value>"` pair, and a delayed row one `"reason": "<value>"` pair (a signed
   # row's reason is null, which the pattern does not match). A field carried from a sidecar
   # cannot pass for one: harvest.py stores a sidecar's `url`, `title` and `artist` only as
-  # strings and its `duration_s` only as a number (anything else as null), and cleans a row
+  # strings and its `duration_s` only as a finite number (anything else as null), and cleans a row
   # written before that at its next start; inside a JSON string the quotes are escaped, so
-  # `\"status\"` does not match `"status"` followed by a colon. `grep -o` finds every match on a line, so the counts hold for a ledger written on
-  # one line as well as for the indented one.
+  # `\"status\"` does not match `"status"` followed by a colon. `grep -o` finds every match
+  # on a line, so the counts hold for a ledger written on one line as well as for the
+  # indented one. `grep -a` reads a file holding a NUL byte as text: without it grep prints
+  # "Binary file ... matches" once instead of the matches.
   if [ ! -r "$LEDGER" ]; then
     printf 'present, not readable'
     return 0
@@ -187,7 +189,10 @@ ledger_line() {
     # No rows is "nothing signed yet" only for a ledger that really is empty, `{}`. A file
     # that is empty or garbled reads as no rows too, and harvest.py treats a ledger it cannot
     # parse as empty, so `status` is where that has to show.
-    if [ "$(tr -d '[:space:]' <"$LEDGER" 2>/dev/null | head -c 3 || true)" = '{}' ]; then
+    # `tr` runs in the C locale: under UTF-8 it stops at the first byte that is not UTF-8,
+    # and a `{}` followed by one would read as empty.
+    if [ "$(LC_ALL=C tr -d '[:space:]' <"$LEDGER" 2>/dev/null | head -c 3 || true)" = '{}' ]
+    then
       printf '0 rows (nothing signed yet)'
     else
       printf 'present, %s bytes, no rows the counter can read' \
@@ -200,17 +205,19 @@ ledger_line() {
   else
     printf '%s rows: %s signed, %s delayed' "$rows" "$signed" "$delayed"
   fi
-  # The reasons, most common first: `no_space 3, decode_failed 1`.
-  reasons="$(grep -o '"reason"[[:space:]]*:[[:space:]]*"[^"]*"' "$LEDGER" 2>/dev/null \
+  # The reasons, most common first: `no_space 3, decode_failed 1`. A reason is the whole
+  # rest of the `uniq -c` line, spaces and all; an empty one prints as `""`.
+  reasons="$(grep -ao '"reason"[[:space:]]*:[[:space:]]*"[^"]*"' "$LEDGER" 2>/dev/null \
     | sed 's/.*"\([^"]*\)"$/\1/' | sort | uniq -c | sort -k1,1nr -k2 \
-    | awk '{printf "%s%s %s", (NR > 1 ? ", " : ""), $2, $1}' || true)"
+    | awk '{n = $1; r = $0; sub(/^[[:space:]]*[0-9]+ /, "", r); if (r == "") r = "\"\""
+            printf "%s%s %s", (NR > 1 ? ", " : ""), r, n}' || true)"
   [ -z "$reasons" ] || printf ' (%s)' "$reasons"
 }
 
 ledger_count() {
   # $1 = a grep pattern. Prints how many times it occurs in the ledger, 0 when none.
   local n
-  n="$(grep -o "$1" "$LEDGER" 2>/dev/null | wc -l | tr -d ' ' || true)"
+  n="$(grep -ao "$1" "$LEDGER" 2>/dev/null | wc -l | tr -d ' ' || true)"
   printf '%s' "${n:-0}"
 }
 

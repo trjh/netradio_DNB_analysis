@@ -58,10 +58,10 @@ take the file for unfinished).
 | Field | Required | Meaning |
 |---|---|---|
 | `key` | yes | `u<sha1(url)[:20]>`, equal to the audio file's stem |
-| `url` | no | the source URL, fragment included; carried to the ledger and the bucket, never parsed |
-| `title` | no | as the source names it |
-| `artist` | no | the uploader or channel |
-| `duration_s` | no | the file's length in seconds, for the length check |
+| `url` | no | a string: the source URL, fragment included; carried to the ledger and the bucket, never parsed |
+| `title` | no | a string, as the source names it |
+| `artist` | no | a string: the uploader or channel |
+| `duration_s` | no | a finite number: the file's length in seconds, for the length check |
 | `fed_at` | yes | when the sidecar was written; a sidecar without it is refused, with a row in the issues list |
 
 **No sidecar, no signature.** A file without a sidecar is not complete, and the harvester
@@ -176,7 +176,7 @@ written only by the harvester.
 | `reason` | for `delayed`: one of the five reasons above; `null` otherwise |
 | `signed_at` | when the signature was written; `null` on a delayed row. For the canary's key (`NETRADIO_CANARY_KEY`), when the file was last re-signed and compared |
 | `uploaded_etag` | the signature object's ETag in the bucket; absent when the signature is not there |
-| `url`, `title`, `artist`, `duration_s` | carried from the sidecar unchanged when `url`, `title` and `artist` are strings and `duration_s` is a number; any other value is stored as null, and a row written before that rule is cleaned at the harvester's next start |
+| `url`, `title`, `artist`, `duration_s` | carried from the sidecar unchanged when `url`, `title` and `artist` are strings and `duration_s` is a finite number; any other value is stored as null, and a row written before that rule is cleaned at the harvester's next start |
 
 **The ledger is seeded at the harvester's first start**: one `signed` row for every key the
 signature bucket already holds **with its companion sidecar beside it** — both objects,

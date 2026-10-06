@@ -17,6 +17,7 @@ import os
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -530,6 +531,47 @@ class StatusTests(LauncherTestCase):
                               out.stdout)
                 self.assertNotIn("nothing signed yet", out.stdout)
                 self.assertEqual(out.returncode, 1)      # DOWN, as before: still an answer
+
+    # A UTF-8 locale, where `tr` and `grep` treat bytes that are not text differently from
+    # the C locale the other tests run under: the operator's shell usually has one.
+    UTF8 = {"LC_ALL": "en_US.UTF-8" if sys.platform == "darwin" else "C.UTF-8"}
+
+    def test_empty_braces_then_bytes_that_are_not_utf8_are_garbled(self):
+        """`{}` followed by a byte that is not UTF-8: under a UTF-8 locale `tr` stops at that
+        byte, and the file would read as `{}`. harvest.py reads it as empty too, so `status`
+        has to show it."""
+        for data in (b"{}\xff", b"{}\xff\xfe garbage", b"{}\n\xff"):
+            with self.subTest(data=data):
+                self.write_raw(data)
+                out = self.run_cmd("status", env=self.UTF8)
+                self.assertIn("ledger: present, %d bytes, no rows the counter can read"
+                              % len(data), out.stdout)
+                self.assertNotIn("nothing signed yet", out.stdout)
+
+    def test_a_nul_byte_in_a_row_does_not_hide_the_counts(self):
+        """A raw NUL makes `grep` call the file binary; without `-a` it prints one "Binary
+        file ... matches" line instead of the matches."""
+        rows = [self.row("u1", "signed", title="a\x00b"), self.row("u2", "signed"),
+                self.row("u3", "delayed", "no_space")]
+        data = json.dumps({r["key"]: r for r in rows}, indent=2)
+        data = data.replace("\\u0000", "\x00").encode("utf-8")
+        self.assertIn(b"\x00", data)
+        for env in ({}, self.UTF8):
+            with self.subTest(env=env):
+                self.write_raw(data)
+                out = self.run_cmd("status", env=env)
+                self.assertIn("ledger: 3 rows: 2 signed, 1 delayed (no_space 1)\n", out.stdout)
+                self.assertNotIn("Binary", out.stdout)
+
+    def test_a_reason_is_printed_whole(self):
+        """The harvester writes five one-word reasons; a hand-edited ledger may not. A reason
+        with spaces prints whole, and an empty one as `""`."""
+        self.write_ledger([self.row("u1", "delayed", "no space here"),
+                           self.row("u2", "delayed", ""),
+                           self.row("u3", "delayed", "no space here")])
+        out = self.run_cmd("status")
+        self.assertIn('ledger: 3 rows: 0 signed, 3 delayed (no space here 2, "" 1)\n',
+                      out.stdout)
 
     @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root reads any file")
     def test_an_unreadable_ledger_says_so(self):
