@@ -133,24 +133,8 @@ harvest-run:          ## start the harvester (runs for weeks), under its own pid
 #########################################
 #####          TRACKLIST            #####
 #########################################
-# This repo is CANONICAL for `track-metadata.json` (the player mirrors it). `make tracklist`
-# enriches each linked track with artwork_url/full_page_url and renders the public TRACKLIST.md.
-# `make sync` is the cross-repo sync — the SAME script runs in either repo (see scripts/
-# tracklist_sync.sh): it moves track-metadata.json between repos via PRs (never commits to main),
-# detects conflicts, and regenerates TRACKLIST.md. Cross-repo path from the env (no hardcoded
-# paths): set NETRADIO_PLAYER_REPO. Pass ARGS=--dry-run to preview.
+# This repo is CANONICAL for `track-metadata.json`. `make tracklist` enriches each linked track
+# with artwork_url/full_page_url and renders the public TRACKLIST.md.
 
 tracklist:            ## resolve artwork into track-metadata.json + render TRACKLIST.md (network)
 	$(PYTHON) scripts/render_tracklist.py
-
-# Both of these need NETRADIO_PLAYER_REPO, which is already in .env alongside every other
-# machine path -- but make does not export what it -includes, so they failed with "set
-# NETRADIO_PLAYER_REPO" even though it was set. Source it here. (`set -a` exports; `.env` is
-# required for these targets anyway, but a missing file must not be a syntax error.)
-sync:                 ## cross-repo tracklist sync (3-way, PR-based). Reads NETRADIO_PLAYER_REPO from .env. ARGS=--dry-run
-	set -a; [ -f .env ] && . ./.env; set +a; \
-	NETRADIO_ANALYSIS_REPO=$(CURDIR) bash scripts/tracklist_sync.sh $(ARGS)
-
-tracklist-check:      ## report whether the analysis<->player track-metadata.json copies match
-	set -a; [ -f .env ] && . ./.env; set +a; \
-	NETRADIO_ANALYSIS_REPO=$(CURDIR) bash scripts/check_tracklist_sync.sh

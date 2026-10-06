@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the authoritative track-metadata.json from the Audacity labels.
 
-This repo is the source of record (see the player repo's DESIGN.md). The Audacity
+This repo is the source of record. The Audacity
 label exports own the master timeline and Track Title/Artist via
 `startNNN: ID: Artist - Title` rows. This script reads those identities and their
 resolved master positions and writes `track-metadata.json` at the repo root.
@@ -67,7 +67,7 @@ def read_label_rows():
 
 
 def parse_file_timeline(label_rows):
-    """File master windows from the label sync chain (ported from the player)."""
+    """File master windows from the label sync chain."""
     starts, ends, current_by_path = {}, {}, {}
     for row in label_rows:
         m = re.search(r"\bfile(?:\s+start)?\s+sync:\s*([^\s]+)\s+(-?\d+(?:\.\d+)?)", row["text"], re.I)
@@ -170,8 +170,8 @@ def owning_file_for_label_path(path):
 def original_audio_name(stem):
     """The ORIGINAL capture filename for a label stem (.wav, or .au for 14Nov).
 
-    Track metadata in this repo is about the original files + tracks; the player
-    keeps its own original->transcoded(.mp3) mapping separately.
+    Track metadata in this repo is about the original files + tracks; a reader that
+    plays transcoded (.mp3) copies keeps its own original->transcoded mapping.
     """
     if "14Nov" in stem:
         if "." in stem:
@@ -290,7 +290,7 @@ def parse_remainder():
 
 def drop_labelled(rough_records, frontier):
     """Drop rough rows the second-pass labels already cover (master at/before the
-    labelling frontier), so the player updates tidily as labelling extends into the
+    labelling frontier), so a reader updates tidily as labelling extends into the
     tail. Assumes the second pass advances contiguously from the broadcast start —
     it does, the timeline is reconstructed continuously."""
     return [r for r in rough_records if r["master_begin_seconds"] > frontier]
@@ -300,7 +300,7 @@ def drop_labelled(rough_records, frontier):
 # from the tracklist-2017 "definitive track listing" file START/END markers (each a
 # clean ~20-min primary-file block; the filename minute-range is otherwise only a
 # hint). Rough tracks aren't labelled yet, so they carry no overlap-derived
-# source_files — this is the file the player should reach for to play them.
+# source_files — this is the file to reach for to play them.
 # [primary_file, span_end_master_seconds]; the span starts where the previous ends.
 TAIL_PRIMARY = [
     ("d336-355.wav", 21074.552),   # ...–351:14.552
@@ -446,7 +446,7 @@ def parse_label_track_ids():
         record["source_files"] = sorted(files, key=lambda n: (start_of.get(n) is None, start_of.get(n) or 0.0, n))
         # Definitive, NON-OVERLAPPING segment end: the label-derived end CLAMPED to
         # the next track's start, so master_end_seconds[n] is never past the next
-        # track's begin. The player switches track info at one unambiguous boundary;
+        # track's begin. A reader switches track info at one unambiguous boundary;
         # a genuine labelled gap (end < next begin) stays a gap → a future
         # "Unidentified"/Mystery segment. Clamping also neutralises duplicate-capture
         # phantom ends (e.g. #27, which over-ran by ~9 min). The track's TRUE musical
@@ -458,7 +458,7 @@ def parse_label_track_ids():
         elif nxt is not None:
             # No label end-marker yet (e.g. the 30 s promos): the segment is
             # treated as contiguous and runs to the next track's begin, so every
-            # track the player shows has a definitive end. A real end < nxt only
+            # track a reader shows has a definitive end. A real end < nxt only
             # appears once the labels carry one (then a gap/Mystery segment opens).
             record["master_end_seconds"] = nxt
         else:
@@ -486,7 +486,7 @@ def _ordered(entries):
 def save(data, path):
     out = {"schema": data.get("schema", SCHEMA)}
     # Preserve the schema-v2 album records (album-shared metadata + per-track
-    # `album` refs) — the player's curation flows back through --seed, so dropping
+    # `album` refs) — album curation flows in through --seed, so dropping
     # `albums` here would lose every album cover/year/link on a regenerate.
     if "albums" in data:
         out["albums"] = _ordered(data.get("albums") or {})
