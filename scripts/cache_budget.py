@@ -26,9 +26,15 @@ cache's name in upper case:
     companions function(path) -> [paths] of the files that belong to an entry and go with it,
                or None. A companion is part of its entry, not an entry of its own: its bytes
                count with the entry's, it is never a candidate alone, and an eviction or a
-               removal deletes it first, then the entry itself. Two entries' companion sets
-               must not overlap: a file both name is counted with one of them, but deleted
-               with either
+               removal deletes it first, then the entry itself. The relation is one-way: a
+               companion's own answer must be empty, and a file that is already a companion
+               claims none of its own (a two-way answer would otherwise make both files
+               companions and the pair would vanish from the cache). Two entries' companion
+               sets must not overlap: a file both name is counted with one of them, but
+               deleted with either. The age limit and the cache's order read the entry's own
+               mtime, never a companion's: refreshing a companion does not make an entry
+               younger. `remove()` takes an entry's path; given a companion's path it deletes
+               that file alone
 
 Machine-wide settings:
 
@@ -309,8 +315,8 @@ def _machine_lock():
     nested call (a `remove()` inside `locked()`) only counts its depth."""
     depth = getattr(_held_here, "depth", 0)
     if depth:
-        _held_here.depth = depth + 1
         try:
+            _held_here.depth = depth + 1
             yield
         finally:
             _held_here.depth = depth
@@ -319,8 +325,8 @@ def _machine_lock():
     fd = os.open(os.path.join(root(), LOCK_NAME), os.O_RDWR | os.O_CREAT, 0o644)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
-        _held_here.depth = 1
         try:
+            _held_here.depth = 1
             yield
         finally:
             _held_here.depth = 0
@@ -332,7 +338,9 @@ def locked():
     """The machine-wide lock, for a caller whose own change must not interleave with an eviction
     or a removal: an entry and its companions moved together, say. Re-entrant within a thread, so
     a `remove()` or `commit()` inside the block runs under the same hold. Nothing to hold while
-    the module is dark."""
+    the module is dark. Never fork inside the block: the child would copy the descriptor and the
+    depth and believe it holds the lock. A process started by exec never carries it (the
+    descriptor is not inherited)."""
     return _machine_lock() if enabled() else contextlib.nullcontext()
 
 
@@ -389,10 +397,16 @@ def _prune_events():
 
 # --- entries --------------------------------------------------------------------------------
 
-def _inside(rec, path):
-    base = os.path.realpath(rec["dir"])
-    real = os.path.realpath(path)
+def _inside(rec, path, base=None, real=None):
+    base = base or os.path.realpath(rec["dir"])
+    real = real or os.path.realpath(path)
     return real != base and os.path.commonpath([base, real]) == base
+
+
+class _Entries(list):
+    """The scan's entries, with each entry's companions as the scan found them (`comps`, keyed
+    by the entry's path), so the candidates and the holds need not ask the function again."""
+    comps = None
 
 
 def _rel(rec, path):
@@ -401,37 +415,54 @@ def _rel(rec, path):
 
 def _scan(rec):
     """Every entry under the cache's directory: [(path, size, mtime)], a companion's size counted
-    in its entry's and the companion itself left out (`_companions`)."""
+    in its entry's and the companion itself left out (`_companions`). The relation is one-way: a
+    file already claimed as a companion claims nothing, and a file that has claimed companions is
+    never claimed itself, so a two-way or chained answer still leaves every byte counted once."""
     files = _files(rec)
     if not rec.get("companions"):
         return files
-    sizes = {os.path.realpath(p): size for p, size, _m in files}
+    base = os.path.realpath(rec["dir"])
+    reals = {p: os.path.realpath(p) for p, _s, _m in files}
+    sizes = {reals[p]: size for p, size, _m in files}
     owned = set()
     extra = collections.defaultdict(int)        # entry -> its companions' bytes, in one pass
+    comps = {}
     for path, _size, _mtime in files:
-        owner = os.path.realpath(path)
-        for comp in _companions(rec, path):
+        owner = reals[path]
+        if owner in owned:
+            continue                            # a companion claims nothing of its own
+        mine = []
+        for comp in _companions(rec, path, base, owner):
             real = os.path.realpath(comp)
-            if real in sizes and real != owner and real not in owned:
+            if real in sizes and real not in owned and real not in extra:
                 owned.add(real)
                 extra[owner] += sizes[real]
-    out = []
+                mine.append(comp)
+        comps[path] = mine
+    out = _Entries()
+    out.comps = comps
     for path, size, mtime in files:
-        real = os.path.realpath(path)
+        real = reals[path]
         if real in owned:
             continue
         out.append((path, size + extra[real], mtime))
     return out
 
 
-def _companions(rec, path):
+def _companions(rec, path, base=None, real=None):
     """The companion files of one entry that exist inside the cache, never the entry itself."""
     fn = rec.get("companions")
     if not fn:
         return []
-    real = os.path.realpath(path)
-    return [c for c in (fn(path) or []) if os.path.realpath(c) != real
-            and _inside(rec, c) and os.path.isfile(c) and not os.path.islink(c)]
+    base = base or os.path.realpath(rec["dir"])
+    real = real or os.path.realpath(path)
+    out = []
+    for c in fn(path) or []:
+        creal = os.path.realpath(c)
+        if (creal != real and _inside(rec, c, base, creal) and os.path.isfile(c)
+                and not os.path.islink(c)):
+            out.append(c)
+    return out
 
 
 def _files(rec):
@@ -451,10 +482,12 @@ def _files(rec):
     return out
 
 
-def _held(rec, path):
+def _held(rec, path, comps=None):
     """Pinned, or a write in progress: never evicted. An entry whose companion is held is held
-    too, so the two never part."""
-    if any(_held_one(rec, c) for c in _companions(rec, path)):
+    too, so the two never part. `comps` is the scan's list, when the caller has one."""
+    if comps is None:
+        comps = _companions(rec, path)
+    if any(_held_one(rec, c) for c in comps):
         return True
     return _held_one(rec, path)
 
@@ -474,13 +507,22 @@ def _candidates(rec, entries, protect=()):
     """The entries the cache may give up, in the cache's own order. A protected path protects
     its entry, and so does a protected companion of it."""
     protect = {os.path.realpath(p) for p in protect}
+    known = getattr(entries, "comps", None)
 
-    def guarded(path):
+    def comps_of(path):
+        if known is not None and path in known:
+            return known[path]
+        return _companions(rec, path)
+
+    def guarded(path, comps):
         if os.path.realpath(path) in protect:
             return True
-        return bool(protect) and any(os.path.realpath(c) in protect
-                                     for c in _companions(rec, path))
-    out = [e for e in entries if not guarded(e[0]) and not _held(rec, e[0])]
+        return bool(protect) and any(os.path.realpath(c) in protect for c in comps)
+    out = []
+    for e in entries:
+        comps = comps_of(e[0])
+        if not guarded(e[0], comps) and not _held(rec, e[0], comps):
+            out.append(e)
     if rec["order"] == "oldest-added":
         out.sort(key=lambda e: e[2])
     elif rec["order"] == "newest-added":
@@ -505,6 +547,7 @@ def _unlink_entry(rec, path):
     comps = _companions(rec, path)
     if _held(rec, path):
         return "pinned"
+    gone = []
     for comp in comps:
         try:
             os.unlink(comp)
@@ -512,7 +555,12 @@ def _unlink_entry(rec, path):
             pass
         except OSError as exc:
             print("cache_budget: could not remove %s: %s" % (comp, exc))
+            if gone:
+                print("cache_budget: %s keeps %s; these companions were removed: %s"
+                      % (path, comp, ", ".join(gone)))
             return "companion: %s" % exc
+        else:
+            gone.append(comp)
     try:
         os.unlink(path)
     except FileNotFoundError:
@@ -530,7 +578,11 @@ def _evict(rec, entry, reason):
     if not _inside(rec, path):
         return False
     try:
-        if _unlink_entry(rec, path) is not None:
+        why = _unlink_entry(rec, path)
+        if why is not None:
+            if why != "pinned":
+                _record("refuse", rec["name"], _rel(rec, path), size, reason, op="evict",
+                        why=why)
             return False
     except FileNotFoundError:
         return True
@@ -628,7 +680,8 @@ def commit(name, path):
 def remove(name, path, reason):
     """Delete one entry for a reason the caller names, its companions first. Refuses (and records
     the refusal) a path outside the cache's directory and a pinned entry. An entry no longer at
-    its path keeps its companions. Returns True when the entry is gone."""
+    its path keeps its companions. Returns True when the entry is gone. `path` is the entry's:
+    given a companion's path, it deletes that file alone and leaves its entry."""
     rec = _REGISTRY.get(name) if enabled() else None
     if rec is None:
         return False
@@ -727,7 +780,8 @@ def status():
             "headroom": rec["headroom"], "max_age_days": rec["max_age"],
             "order": rec["order"], "refill": rec["refill"], "rank": rec["rank"],
             "size": sum(e[1] for e in entries), "entries": len(entries),
-            "pinned": sum(1 for e in entries if _held(rec, e[0])),
+            "pinned": sum(1 for e in entries
+                          if _held(rec, e[0], (getattr(entries, "comps", None) or {}).get(e[0]))),
             "last_run": stats["last_run"], "evicted_since_start": stats["evicted"],
             "removed_since_start": stats["removed"], "over_cap": stats["over_cap"],
         })

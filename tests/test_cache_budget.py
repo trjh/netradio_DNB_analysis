@@ -6,6 +6,7 @@ fixed base plus every byte under the temporary tree, so an eviction moves it the
 deletion would.
 """
 
+import collections
 import contextlib
 import io
 import json
@@ -672,7 +673,7 @@ class Companions(CacheBudgetBase):
                 done.append(cb.remove("c", a, "heard"))
                 cb.commit("c", b)
                 done.append(True)
-        t = threading.Thread(target=inside)
+        t = threading.Thread(target=inside, daemon=True)
         t.start()
         t.join(5)
         self.assertFalse(t.is_alive(), "a call inside locked() waited on the lock forever")
@@ -755,7 +756,70 @@ class Companions(CacheBudgetBase):
         entries = cb._scan(rec)
         self.assertEqual(len(entries), 50)
         self.assertEqual({e[1] for e in entries}, {KB + 100})
-        self.assertEqual(len(asked), 100)
+        self.assertEqual(max(collections.Counter(asked).values()), 1)
+        # The candidates and the holds use the scan's answers: nothing is asked again.
+        del asked[:]
+        cb._candidates(rec, entries, protect={entries[0][0]})
+        self.assertEqual(asked, [])
+
+    def test_a_two_way_answer_still_counts_the_pair_and_enforces_the_cap(self):
+        # The audio names its sidecar and the sidecar names its audio: one file is the entry,
+        # the other its companion, and the cap still holds.
+        def both(p):
+            return [p[:-len(".side")]] if p.endswith(".side") else [self.side(p)]
+        rec = self.comp_cache(cap=10 * KB, companions=both)
+        for i in range(5):
+            self.pair(rec, "e%d" % i, 10 * KB, KB, age_s=60 - i)
+        row = cb.status()["caches"][0]
+        self.assertEqual((row["size"], row["entries"]), (5 * 11 * KB, 5))
+        cb.run_eviction("c")
+        self.assertLessEqual(cb.status()["caches"][0]["size"], 10 * KB)
+
+    def test_a_chain_counts_every_byte_once(self):
+        # a names b, b names c: b is a's companion, and c, claimed by no entry, is its own.
+        rec = self.cache("c", companions=lambda p: {"a": [p[:-1] + "b"],
+                                                    "b": [p[:-1] + "c"]}.get(p[-1], []))
+        self.file(rec, "a", 100)
+        self.file(rec, "b", 200)
+        self.file(rec, "c", 400)
+        entries = cb._scan(rec)
+        self.assertEqual(sum(e[1] for e in entries), 700)
+        self.assertEqual(sorted((os.path.basename(e[0]), e[1]) for e in entries),
+                         [("a", 300), ("c", 400)])
+
+    def test_a_companion_that_fails_after_another_went_names_both(self):
+        rec = self.comp_cache(companions=lambda p: [] if p.endswith((".side", ".x"))
+                              else [p + ".side", p + ".x"])
+        a = self.file(rec, "a")
+        self.file(rec, "a.side", 100)
+        self.file(rec, "a.x", 100)
+        real = os.unlink
+
+        def unlink(p):
+            if p.endswith(".x"):
+                raise PermissionError(13, "Permission denied", p)
+            return real(p)
+        out = io.StringIO()
+        with unittest.mock.patch.object(cb.os, "unlink", side_effect=unlink), \
+                contextlib.redirect_stdout(out):
+            self.assertFalse(cb.remove("c", a, "heard"))
+        self.assertIn("these companions were removed: %s" % (a + ".side"), out.getvalue())
+
+    def test_an_eviction_refused_by_a_companion_is_recorded(self):
+        rec = self.comp_cache(cap=KB)
+        self.pair(rec, "a", 2 * KB, 100)
+        real = os.unlink
+
+        def unlink(p):
+            if p.endswith(".side"):
+                raise PermissionError(13, "Permission denied", p)
+            return real(p)
+        with unittest.mock.patch.object(cb.os, "unlink", side_effect=unlink), \
+                contextlib.redirect_stdout(io.StringIO()):
+            cb.run_eviction("c")
+        [ev] = [e for e in self.events() if e["event"] == "refuse"]
+        self.assertEqual((ev["op"], ev["reason"], ev["entry"]), ("evict", "cap", "a"))
+        self.assertTrue(ev["why"].startswith("companion: "), ev["why"])
 
     def test_an_entry_without_companions_is_asked_again_at_deletion(self):
         held = set()
