@@ -2320,5 +2320,37 @@ class TheLoopSignsAndScores(_SignerCase):
         self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
 
 
+
+class SidecarFieldTypes(unittest.TestCase):
+    """The sidecar is written by whatever feeds the harvester, so a row carries its `url`,
+    `title` and `artist` only as strings and its `duration_s` only as a number. A nested object
+    carried into a row would put a second `status` or `reason` key into the ledger, and
+    `run_harvester.sh status` counts those."""
+
+    def test_strings_and_a_number_are_carried(self):
+        got = harvest._sidecar_row_fields({"url": "https://y/a#t=1", "title": "a set",
+                                           "artist": "someone", "duration_s": 60})
+        self.assertEqual(got, {"url": "https://y/a#t=1", "title": "a set",
+                               "artist": "someone", "duration_s": 60})
+
+    def test_any_other_type_is_null(self):
+        got = harvest._sidecar_row_fields({
+            "url": ["https://y/a"], "title": {"status": "delayed", "reason": "no_space"},
+            "artist": 7, "duration_s": {"reason": "too_long"}})
+        self.assertEqual(got, {"url": None, "title": None, "artist": None, "duration_s": None})
+
+    def test_a_duration_that_is_a_string_or_a_bool_is_null(self):
+        for bad in ("an hour", True, None):
+            with self.subTest(bad=bad):
+                self.assertIsNone(harvest._sidecar_row_fields({"duration_s": bad})["duration_s"])
+
+    def test_a_row_carries_no_nested_status_or_reason(self):
+        row = harvest._row("u" + "a" * 20, 1, 1.0, "signed", None, "then", "e",
+                           {"title": {"status": "delayed", "reason": "no_space"}})
+        text = json.dumps({row["key"]: row}, indent=2)
+        self.assertEqual(text.count('"status"'), 1)
+        self.assertEqual(text.count('"reason"'), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

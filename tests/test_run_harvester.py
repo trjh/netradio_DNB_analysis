@@ -490,7 +490,7 @@ class StatusTests(LauncherTestCase):
     def test_a_ledger_with_nothing_delayed_names_no_reasons(self):
         self.write_ledger([self.row("u1", "signed")])
         out = self.run_cmd("status")
-        self.assertIn("ledger: 1 rows: 1 signed, 0 delayed\n", out.stdout)
+        self.assertIn("ledger: 1 row: 1 signed, 0 delayed\n", out.stdout)
 
     def test_the_counts_hold_for_a_ledger_on_one_line(self):
         self.write_ledger([self.row("u1", "signed"), self.row("u2", "delayed", "too_long")],
@@ -504,7 +504,41 @@ class StatusTests(LauncherTestCase):
         self.write_ledger([self.row("u1", "signed",
                                     title='"status": "delayed", "reason": "no_space"')])
         out = self.run_cmd("status")
-        self.assertIn("ledger: 1 rows: 1 signed, 0 delayed\n", out.stdout)
+        self.assertIn("ledger: 1 row: 1 signed, 0 delayed\n", out.stdout)
+
+    def write_raw(self, data):
+        os.makedirs(self.state_dir, exist_ok=True)
+        path = os.path.join(self.state_dir, "ledger.json")
+        with open(path, "wb") as fh:
+            fh.write(data)
+        return path
+
+    def test_an_empty_ledger_with_whitespace_is_still_empty(self):
+        self.write_raw(b"  {\n\n}  \n")
+        out = self.run_cmd("status")
+        self.assertIn("ledger: 0 rows (nothing signed yet)", out.stdout)
+
+    def test_a_garbled_ledger_is_not_reported_as_nothing_signed(self):
+        """A ledger the counter finds no rows in is "nothing signed yet" only when it really
+        is `{}`. harvest.py treats a ledger it cannot parse as empty, so `status` is where a
+        garbled one has to show."""
+        for data in (b"not json at all\n", bytes(range(256)), b"", b"{}x"):
+            with self.subTest(data=data[:12]):
+                self.write_raw(data)
+                out = self.run_cmd("status")
+                self.assertIn("ledger: present, %d bytes, no rows the counter can read" % len(data),
+                              out.stdout)
+                self.assertNotIn("nothing signed yet", out.stdout)
+                self.assertEqual(out.returncode, 1)      # DOWN, as before: still an answer
+
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root reads any file")
+    def test_an_unreadable_ledger_says_so(self):
+        path = self.write_raw(b"{}\n")
+        os.chmod(path, 0)
+        self.addCleanup(os.chmod, path, 0o644)
+        out = self.run_cmd("status")
+        self.assertIn("ledger: present, not readable", out.stdout)
+        self.assertNotIn("nothing signed yet", out.stdout)
 
 
 class LogRotationTests(LauncherTestCase):

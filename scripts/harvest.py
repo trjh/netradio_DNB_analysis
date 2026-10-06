@@ -889,9 +889,20 @@ def load_ledger():
 
 def _sidecar_row_fields(sidecar):
     """The row fields the sidecar contributes. Carried, never read for meaning: a `url` on a
-    row is for a third party's benefit and the join is always on the key."""
-    return {"url": sidecar.get("url"), "title": sidecar.get("title"),
-            "artist": sidecar.get("artist"), "duration_s": sidecar.get("duration_s")}
+    row is for a third party's benefit and the join is always on the key. The sidecar is
+    written by whatever feeds the harvester, so its types are not trusted: `url`, `title` and
+    `artist` are carried only as strings and `duration_s` only as a number, and anything else
+    is stored as null. A nested object carried into a row would put a second `status` or
+    `reason` key into the ledger, and the launcher's `status` counts those."""
+    def text(name):
+        value = sidecar.get(name)
+        return value if isinstance(value, str) else None
+
+    duration = sidecar.get("duration_s")
+    if isinstance(duration, bool) or not isinstance(duration, (int, float)):
+        duration = None
+    return {"url": text("url"), "title": text("title"), "artist": text("artist"),
+            "duration_s": duration}
 
 
 # The two `delayed` reasons the harvester retries on its own: neither is a verdict on the file

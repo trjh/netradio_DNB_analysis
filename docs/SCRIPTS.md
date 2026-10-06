@@ -154,7 +154,11 @@ and the ledger's counts — its rows, how many are signed and how many delayed, 
 rows by reason, read with `grep` so `status` needs no interpreter — and **an absent ledger is a
 normal answer**, not an error:
 before the signing pass has run once there is nothing signed and no candidates, which is
-exactly what a fresh clone looks like. While the state carries a standing `sig_alert` (see
+exactly what a fresh clone looks like. A ledger that is there but cannot be read says
+`present, not readable`, and one with no rows that is not `{}` (empty or garbled) says
+`present, N bytes, no rows the counter can read`, never "nothing signed yet": `harvest.py`
+reads a ledger it cannot parse as empty, so `status` is where that shows. While the state
+carries a standing `sig_alert` (see
 **The ledger replaces the working queue** below), `status` adds one `alert:` line with its
 numbers and since when; with no alert there is no such line. Same shape as the align server's
 `scripts/run_align.sh`, deliberately, so the two read alike.

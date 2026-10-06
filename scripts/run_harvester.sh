@@ -170,18 +170,36 @@ ledger_line() {
   # the other lines, so `status` needs no interpreter. Each row carries exactly one
   # `"status": "<value>"` pair, and a delayed row one `"reason": "<value>"` pair (a signed
   # row's reason is null, which the pattern does not match). A field carried from a sidecar
-  # cannot pass for one: inside a JSON string its quotes are escaped, and `\"status\"` does
-  # not match `"status"` followed by a colon. `grep -o` finds every match on a line, so the
-  # counts hold for a ledger written on one line as well as for the indented one.
+  # cannot pass for one: harvest.py stores a sidecar's `url`, `title` and `artist` only as
+  # strings and its `duration_s` only as a number (anything else as null), and inside a JSON
+  # string the quotes are escaped, so `\"status\"` does not match `"status"` followed by a
+  # colon. `grep -o` finds every match on a line, so the counts hold for a ledger written on
+  # one line as well as for the indented one.
+  if [ ! -r "$LEDGER" ]; then
+    printf 'present, not readable'
+    return 0
+  fi
   local rows signed delayed reasons
   rows="$(ledger_count '"status"[[:space:]]*:[[:space:]]*"[^"]*"')"
   signed="$(ledger_count '"status"[[:space:]]*:[[:space:]]*"signed"')"
   delayed="$(ledger_count '"status"[[:space:]]*:[[:space:]]*"delayed"')"
   if [ "$rows" -eq 0 ]; then
-    printf '0 rows (nothing signed yet)'
+    # No rows is "nothing signed yet" only for a ledger that really is empty, `{}`. A file
+    # that is empty or garbled reads as no rows too, and harvest.py treats a ledger it cannot
+    # parse as empty, so `status` is where that has to show.
+    if [ "$(tr -d '[:space:]' <"$LEDGER" 2>/dev/null | head -c 3 || true)" = '{}' ]; then
+      printf '0 rows (nothing signed yet)'
+    else
+      printf 'present, %s bytes, no rows the counter can read' \
+        "$(wc -c <"$LEDGER" | tr -d ' ')"
+    fi
     return 0
   fi
-  printf '%s rows: %s signed, %s delayed' "$rows" "$signed" "$delayed"
+  if [ "$rows" -eq 1 ]; then
+    printf '1 row: %s signed, %s delayed' "$signed" "$delayed"
+  else
+    printf '%s rows: %s signed, %s delayed' "$rows" "$signed" "$delayed"
+  fi
   # The reasons, most common first: `no_space 3, decode_failed 1`.
   reasons="$(grep -o '"reason"[[:space:]]*:[[:space:]]*"[^"]*"' "$LEDGER" 2>/dev/null \
     | sed 's/.*"\([^"]*\)"$/\1/' | sort | uniq -c | sort -k1,1nr -k2 \

@@ -176,7 +176,7 @@ written only by the harvester.
 | `reason` | for `delayed`: one of the five reasons above; `null` otherwise |
 | `signed_at` | when the signature was written; `null` on a delayed row. For the canary's key (`NETRADIO_CANARY_KEY`), when the file was last re-signed and compared |
 | `uploaded_etag` | the signature object's ETag in the bucket; absent when the signature is not there |
-| `url`, `title`, `artist`, `duration_s` | carried from the sidecar, unchanged |
+| `url`, `title`, `artist`, `duration_s` | carried from the sidecar unchanged when `url`, `title` and `artist` are strings and `duration_s` is a number; any other value is stored as null |
 
 **The ledger is seeded at the harvester's first start**: one `signed` row for every key the
 signature bucket already holds **with its companion sidecar beside it** — both objects,
