@@ -351,13 +351,6 @@ Need-to-know:
 - What you're checking: your new file's overlap pairs (if any) are **confirmed**, and no
   previously-confirmed pair went suspect.
 
-Then mirror to the player:
-
-```bash
-make sync            # 3-way, PR-based; reads NETRADIO_PLAYER_REPO from .env
-make tracklist-check # do the two copies agree?
-```
-
 ### 11. Publish — open a PR with your labels, merge it, refresh the sheet
 
 ```bash
@@ -376,7 +369,7 @@ branch and opens a PR for a human to merge:
 2. **Sort** each file **in place** in your checkout (so your local copy matches what the PR
    proposes, exactly as before).
 3. **Branch → commit → push → PR:** the commit/push/PR happen in a **throwaway `git worktree`
-   under `.worktree/`** cut from `origin/main` (the same pattern `make sync` uses). Your
+   under `.worktree/`** cut from `origin/main`. Your
    invoking checkout — its branch, index, HEAD — is left **untouched**, so publish is safe to
    run even from the live `main` checkout the harvester runs out of. The branch is
    `labels/publish-YYYYMMDD-HHMMSS` (UTC); the PR is opened with `gh pr create`.
