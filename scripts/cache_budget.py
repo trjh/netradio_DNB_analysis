@@ -466,10 +466,12 @@ def _companions(rec, path, base=None, real=None):
 
 
 def _files(rec):
-    """Every regular file under the cache's directory: [(path, size, mtime)]."""
+    """Every regular file under the cache's directory: [(path, size, mtime)], in name order, so
+    which file claims a companion never depends on the filesystem's enumeration order."""
     out = []
-    for dirpath, _dirs, files in os.walk(rec["dir"]):
-        for fname in files:
+    for dirpath, dirs, files in os.walk(rec["dir"]):
+        dirs.sort()
+        for fname in sorted(files):
             if fname in (LOCK_NAME, EVENTS_NAME, EVENTS_NAME + ".tmp"):
                 continue
             path = os.path.join(dirpath, fname)
@@ -545,7 +547,7 @@ def _unlink_entry(rec, path):
     if not os.path.lexists(path):
         raise FileNotFoundError(path)
     comps = _companions(rec, path)
-    if _held(rec, path):
+    if _held(rec, path, comps):
         return "pinned"
     gone = []
     for comp in comps:

@@ -784,8 +784,34 @@ class Companions(CacheBudgetBase):
         self.file(rec, "c", 400)
         entries = cb._scan(rec)
         self.assertEqual(sum(e[1] for e in entries), 700)
+        # The walk is in name order, so the fold is the same on every filesystem: a walk that
+        # lists the files in reverse gives the same entries.
         self.assertEqual(sorted((os.path.basename(e[0]), e[1]) for e in entries),
                          [("a", 300), ("c", 400)])
+        real = os.walk
+
+        def reversed_walk(top, *a, **k):
+            for dirpath, dirs, files in real(top, *a, **k):
+                yield dirpath, dirs, list(reversed(sorted(files)))
+        with unittest.mock.patch.object(cb.os, "walk", side_effect=reversed_walk):
+            again = cb._scan(rec)
+        self.assertEqual(sorted((os.path.basename(e[0]), e[1]) for e in again),
+                         [("a", 300), ("c", 400)])
+
+    def test_two_entries_naming_one_companion_count_it_once_and_either_deletes_it(self):
+        # The documented rule: overlapping companion sets count the file with one entry and
+        # delete it with either.
+        rec = self.cache("c", companions=lambda p: [] if p.endswith(".shared")
+                         else [os.path.join(os.path.dirname(p), "x.shared")])
+        a = self.file(rec, "a", 100)
+        b = self.file(rec, "b", 200)
+        shared = self.file(rec, "x.shared", 50)
+        entries = cb._scan(rec)
+        self.assertEqual(sorted(os.path.basename(e[0]) for e in entries), ["a", "b"])
+        self.assertEqual(sum(e[1] for e in entries), 350, "the shared file counted once")
+        self.assertTrue(cb.remove("c", b, "heard"))
+        self.assertFalse(os.path.exists(shared), "deleted with either entry")
+        self.assertTrue(os.path.exists(a))
 
     def test_a_companion_that_fails_after_another_went_names_both(self):
         rec = self.comp_cache(companions=lambda p: [] if p.endswith((".side", ".x"))
