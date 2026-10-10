@@ -6,6 +6,7 @@ fixed base plus every byte under the temporary tree, so an eviction moves it the
 deletion would.
 """
 
+import collections
 import contextlib
 import io
 import json
@@ -17,6 +18,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "scripts"))
@@ -570,6 +572,295 @@ class DeletionsThroughTheApi(CacheBudgetBase):
         [ev] = self.events()
         self.assertEqual((ev["event"], ev["reason"], ev["why"]),
                          ("refuse", "broken-entry", "pinned"))
+
+
+class Companions(CacheBudgetBase):
+    """A file that belongs to an entry (`companions`): counted with it, never a candidate alone,
+    deleted with it and before it."""
+
+    @staticmethod
+    def side(path):
+        return path + ".side"
+
+    def comp_cache(self, **kw):
+        kw.setdefault("companions", lambda p: [] if p.endswith(".side") else [self.side(p)])
+        return self.cache("c", **kw)
+
+    def pair(self, rec, name, size=KB, side=100, age_s=0):
+        main = self.file(rec, name, size, age_s)
+        self.file(rec, name + ".side", side, age_s)
+        return main
+
+    def test_a_companion_counts_with_its_entry_and_is_not_an_entry_of_its_own(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a", 3 * KB, 100)
+        row = cb.status()["caches"][0]
+        self.assertEqual((row["size"], row["entries"]), (3 * KB + 100, 1))
+        self.assertEqual([e[0] for e in cb._candidates(rec, cb._scan(rec))], [a])
+
+    def test_a_companion_with_no_entry_is_an_entry_of_its_own(self):
+        rec = self.comp_cache()
+        lone = self.file(rec, "gone.side", 100)
+        self.assertEqual([e[0] for e in cb._scan(rec)], [lone])
+
+    def test_an_eviction_deletes_the_companion_first(self):
+        rec = self.comp_cache(cap=2 * KB)
+        self.pair(rec, "old", KB, 100, age_s=60)
+        self.pair(rec, "new", KB, 100)
+        order = []
+        real = os.unlink
+        with unittest.mock.patch.object(cb.os, "unlink",
+                                        side_effect=lambda p: order.append(os.path.basename(p))
+                                        or real(p)):
+            cb.run_eviction("c")
+        self.assertEqual(order, ["old.side", "old"])
+        self.assertEqual(self.names(rec), ["new", "new.side"])
+        [ev] = [e for e in self.events() if e["event"] == "evict"]
+        self.assertEqual((ev["entry"], ev["bytes"]), ("old", KB + 100))
+
+    def test_remove_deletes_the_companion_first_and_counts_its_bytes(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a", KB, 100)
+        order = []
+        real = os.unlink
+        with unittest.mock.patch.object(cb.os, "unlink",
+                                        side_effect=lambda p: order.append(os.path.basename(p))
+                                        or real(p)):
+            self.assertTrue(cb.remove("c", a, "heard"))
+        self.assertEqual(order, ["a.side", "a"])
+        [ev] = self.events()
+        self.assertEqual((ev["event"], ev["bytes"]), ("remove", KB + 100))
+
+    def test_an_entry_no_longer_at_its_path_keeps_its_companion(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a")
+        os.unlink(a)
+        self.assertTrue(cb.remove("c", a, "heard"))
+        self.assertTrue(os.path.exists(self.side(a)))
+
+    def test_a_held_entry_or_companion_keeps_both(self):
+        held = set()
+        rec = self.comp_cache(cap=KB, pinned=lambda p: p in held)
+        a = self.pair(rec, "a", 2 * KB, 100)
+        held.add(self.side(a))
+        cb.run_eviction("c")
+        self.assertFalse(cb.remove("c", a, "heard"))
+        self.assertEqual(self.names(rec), ["a", "a.side"])
+        held.clear()
+        held.add(a)
+        self.assertFalse(cb.remove("c", a, "heard"))
+        self.assertEqual(self.names(rec), ["a", "a.side"])
+
+    def test_an_eviction_of_an_entry_moved_away_records_nothing(self):
+        rec = self.comp_cache(cap=KB)
+        a = self.pair(rec, "a", 2 * KB, 100)
+        entries = cb._scan(rec)
+        os.rename(a, a + ".moved")
+        os.rename(self.side(a), self.side(a) + ".moved")
+        with cb._machine_lock():
+            self.assertTrue(cb._evict(rec, entries[0], "cap"))
+        self.assertEqual(cb._STATS["c"]["evicted"], 0)
+        self.assertEqual([e for e in self.events() if e["event"] == "evict"], [])
+
+    def test_locked_lets_a_removal_and_a_commit_run_inside_it(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a")
+        b = self.file(rec, "b")
+        done = []
+
+        def inside():
+            with cb.locked():
+                done.append(cb.remove("c", a, "heard"))
+                cb.commit("c", b)
+                done.append(True)
+        t = threading.Thread(target=inside, daemon=True)
+        t.start()
+        t.join(5)
+        self.assertFalse(t.is_alive(), "a call inside locked() waited on the lock forever")
+        self.assertEqual(done, [True, True])
+
+    def test_locked_still_excludes_another_thread(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a")
+        order = []
+        with cb.locked():
+            t = threading.Thread(target=lambda: order.append(("removed", cb.remove("c", a, "x"))))
+            t.start()
+            t.join(0.3)
+            order.append("released")
+        t.join(5)
+        self.assertEqual(order, ["released", ("removed", True)])
+
+    def test_a_commit_of_the_companion_protects_its_entry(self):
+        # A writer that lands the companion last, as its completion mark, commits that path.
+        rec = self.comp_cache(cap=KB + 150, order="newest-added")
+        self.pair(rec, "old", KB, 100, age_s=60)
+        new = self.pair(rec, "new", KB, 100)
+        cb.commit("c", self.side(new))
+        self.assertEqual(self.names(rec), ["new", "new.side"])
+        admit = [e for e in self.events() if e["event"] == "admit"]
+        self.assertEqual(admit[0]["bytes"], 100)
+
+    def test_the_admit_record_counts_the_companions(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a", KB, 100)
+        cb.commit("c", a)
+        [ev] = [e for e in self.events() if e["event"] == "admit"]
+        self.assertEqual(ev["bytes"], KB + 100)
+
+    def test_a_companion_that_cannot_be_deleted_is_named_in_the_refusal(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a")
+        real = os.unlink
+
+        def unlink(p):
+            if p.endswith(".side"):
+                raise PermissionError(13, "Permission denied", p)
+            return real(p)
+        with unittest.mock.patch.object(cb.os, "unlink", side_effect=unlink), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertFalse(cb.remove("c", a, "heard"))
+        self.assertEqual(self.names(rec), ["a", "a.side"])
+        [ev] = self.events()
+        self.assertEqual(ev["event"], "refuse")
+        self.assertTrue(ev["why"].startswith("companion: "), ev["why"])
+        self.assertIn("Permission denied", ev["why"])
+
+    def test_an_entry_that_stays_after_its_companions_went_is_printed(self):
+        rec = self.comp_cache()
+        a = self.pair(rec, "a")
+        real = os.unlink
+
+        def unlink(p):
+            if not p.endswith(".side"):
+                raise PermissionError(13, "Permission denied", p)
+            return real(p)
+        out = io.StringIO()
+        with unittest.mock.patch.object(cb.os, "unlink", side_effect=unlink), \
+                contextlib.redirect_stdout(out):
+            self.assertFalse(cb.remove("c", a, "heard"))
+        self.assertEqual(self.names(rec), ["a"])
+        self.assertIn("stays without its companions", out.getvalue())
+
+    def test_many_pairs_each_count_their_companion_once(self):
+        # The scan folds each companion into its entry in one pass (no per-file sum over every
+        # pair); each file is asked for its companions once.
+        asked = []
+
+        def companions(p):
+            asked.append(p)
+            return [] if p.endswith(".side") else [self.side(p)]
+        rec = self.comp_cache(companions=companions)
+        for i in range(50):
+            self.pair(rec, "e%02d" % i, KB, 100)
+        entries = cb._scan(rec)
+        self.assertEqual(len(entries), 50)
+        self.assertEqual({e[1] for e in entries}, {KB + 100})
+        self.assertEqual(max(collections.Counter(asked).values()), 1)
+        # The candidates and the holds use the scan's answers: nothing is asked again.
+        del asked[:]
+        cb._candidates(rec, entries, protect={entries[0][0]})
+        self.assertEqual(asked, [])
+
+    def test_a_two_way_answer_still_counts_the_pair_and_enforces_the_cap(self):
+        # The audio names its sidecar and the sidecar names its audio: one file is the entry,
+        # the other its companion, and the cap still holds.
+        def both(p):
+            return [p[:-len(".side")]] if p.endswith(".side") else [self.side(p)]
+        rec = self.comp_cache(cap=10 * KB, companions=both)
+        for i in range(5):
+            self.pair(rec, "e%d" % i, 10 * KB, KB, age_s=60 - i)
+        row = cb.status()["caches"][0]
+        self.assertEqual((row["size"], row["entries"]), (5 * 11 * KB, 5))
+        cb.run_eviction("c")
+        self.assertLessEqual(cb.status()["caches"][0]["size"], 10 * KB)
+
+    def test_a_chain_counts_every_byte_once(self):
+        # a names b, b names c: b is a's companion, and c, claimed by no entry, is its own.
+        rec = self.cache("c", companions=lambda p: {"a": [p[:-1] + "b"],
+                                                    "b": [p[:-1] + "c"]}.get(p[-1], []))
+        self.file(rec, "a", 100)
+        self.file(rec, "b", 200)
+        self.file(rec, "c", 400)
+        entries = cb._scan(rec)
+        self.assertEqual(sum(e[1] for e in entries), 700)
+        # The walk is in name order, so the fold is the same on every filesystem: a walk that
+        # lists the files in reverse gives the same entries.
+        self.assertEqual(sorted((os.path.basename(e[0]), e[1]) for e in entries),
+                         [("a", 300), ("c", 400)])
+        real = os.walk
+
+        def reversed_walk(top, *a, **k):
+            for dirpath, dirs, files in real(top, *a, **k):
+                yield dirpath, dirs, list(reversed(sorted(files)))
+        with unittest.mock.patch.object(cb.os, "walk", side_effect=reversed_walk):
+            again = cb._scan(rec)
+        self.assertEqual(sorted((os.path.basename(e[0]), e[1]) for e in again),
+                         [("a", 300), ("c", 400)])
+
+    def test_two_entries_naming_one_companion_count_it_once_and_either_deletes_it(self):
+        # The documented rule: overlapping companion sets count the file with one entry and
+        # delete it with either.
+        rec = self.cache("c", companions=lambda p: [] if p.endswith(".shared")
+                         else [os.path.join(os.path.dirname(p), "x.shared")])
+        a = self.file(rec, "a", 100)
+        b = self.file(rec, "b", 200)
+        shared = self.file(rec, "x.shared", 50)
+        entries = cb._scan(rec)
+        self.assertEqual(sorted(os.path.basename(e[0]) for e in entries), ["a", "b"])
+        self.assertEqual(sum(e[1] for e in entries), 350, "the shared file counted once")
+        self.assertTrue(cb.remove("c", b, "heard"))
+        self.assertFalse(os.path.exists(shared), "deleted with either entry")
+        self.assertTrue(os.path.exists(a))
+
+    def test_a_companion_that_fails_after_another_went_names_both(self):
+        rec = self.comp_cache(companions=lambda p: [] if p.endswith((".side", ".x"))
+                              else [p + ".side", p + ".x"])
+        a = self.file(rec, "a")
+        self.file(rec, "a.side", 100)
+        self.file(rec, "a.x", 100)
+        real = os.unlink
+
+        def unlink(p):
+            if p.endswith(".x"):
+                raise PermissionError(13, "Permission denied", p)
+            return real(p)
+        out = io.StringIO()
+        with unittest.mock.patch.object(cb.os, "unlink", side_effect=unlink), \
+                contextlib.redirect_stdout(out):
+            self.assertFalse(cb.remove("c", a, "heard"))
+        self.assertIn("these companions were removed: %s" % (a + ".side"), out.getvalue())
+
+    def test_an_eviction_refused_by_a_companion_is_recorded(self):
+        rec = self.comp_cache(cap=KB)
+        self.pair(rec, "a", 2 * KB, 100)
+        real = os.unlink
+
+        def unlink(p):
+            if p.endswith(".side"):
+                raise PermissionError(13, "Permission denied", p)
+            return real(p)
+        with unittest.mock.patch.object(cb.os, "unlink", side_effect=unlink), \
+                contextlib.redirect_stdout(io.StringIO()):
+            cb.run_eviction("c")
+        [ev] = [e for e in self.events() if e["event"] == "refuse"]
+        self.assertEqual((ev["op"], ev["reason"], ev["entry"]), ("evict", "cap", "a"))
+        self.assertTrue(ev["why"].startswith("companion: "), ev["why"])
+
+    def test_an_entry_without_companions_is_asked_again_at_deletion(self):
+        held = set()
+        rec = self.cache("c", pinned=lambda p: p in held)
+        a = self.file(rec, "a")
+        held.add(a)                         # pinned between the scan and the deletion
+        self.assertEqual(cb._unlink_entry(rec, a), "pinned")
+        self.assertTrue(os.path.exists(a))
+
+    def test_locked_is_a_no_op_while_dark_and_the_machine_lock_otherwise(self):
+        with cb.locked():
+            self.assertTrue(os.path.exists(os.path.join(self.root, cb.LOCK_NAME)))
+        os.environ.pop("NETRADIO_CACHE_ROOT")
+        with cb.locked():
+            pass
 
 
 class HeadroomAndOverflow(CacheBudgetBase):

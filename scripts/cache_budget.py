@@ -23,6 +23,18 @@ cache's name in upper case:
     refill     how an evicted entry comes back (reported, never acted on here)
     rank       integer, or None for never: the order in which caches give up entries when the
                volume is past the floor and no cache is over its cap (1 goes first)
+    companions function(path) -> [paths] of the files that belong to an entry and go with it,
+               or None. A companion is part of its entry, not an entry of its own: its bytes
+               count with the entry's, it is never a candidate alone, and an eviction or a
+               removal deletes it first, then the entry itself. The relation is one-way: a
+               companion's own answer must be empty, and a file that is already a companion
+               claims none of its own (a two-way answer would otherwise make both files
+               companions and the pair would vanish from the cache). Two entries' companion
+               sets must not overlap: a file both name is counted with one of them, but
+               deleted with either. The age limit and the cache's order read the entry's own
+               mtime, never a companion's: refreshing a companion does not make an entry
+               younger. `remove()` takes an entry's path; given a companion's path it deletes
+               that file alone
 
 Machine-wide settings:
 
@@ -46,6 +58,7 @@ and is never evicted or removed. Older than that, it is a write that died part-w
 like any other entry.
 """
 
+import collections
 import contextlib
 import fcntl
 import json
@@ -69,6 +82,7 @@ EVENTS_NAME = "events.jsonl"
 _REGISTRY = {}          # name -> the cache's record, in registration order
 _STATS = {}             # name -> {"last_run", "evicted", "removed", "over_cap"}
 _mutex = threading.Lock()
+_held_here = threading.local()   # this thread's depth inside `_machine_lock`
 
 
 # --- the environment ------------------------------------------------------------------------
@@ -153,7 +167,7 @@ def _read_dir(name, default):
 # --- the registry ---------------------------------------------------------------------------
 
 def register(name, dir=None, cap=DEFAULT_CAP, headroom=0, max_age=None, order="oldest-added",
-             pinned=None, refill="none", rank=None, score=None):
+             pinned=None, refill="none", rank=None, score=None, companions=None):
     """Record one cache. The environment overrides `dir`, `cap`, `headroom` and `max_age`.
 
     Returns the record, or None when the module is dark or the directory is refused: one that
@@ -183,6 +197,7 @@ def register(name, dir=None, cap=DEFAULT_CAP, headroom=0, max_age=None, order="o
         "refill": refill,
         "rank": rank,
         "score": score,
+        "companions": companions,
     }
     with _mutex:
         _REGISTRY[name] = rec
@@ -295,14 +310,38 @@ def _disk_pct(path, extra=0):
 @contextlib.contextmanager
 def _machine_lock():
     """One holder at a time across every process that shares the root. The kernel releases the
-    lock when the descriptor closes, so a killed holder leaves nothing to clean up."""
+    lock when the descriptor closes, so a killed holder leaves nothing to clean up. Re-entrant
+    within a thread: a flock taken on a second descriptor would wait on the first forever, so a
+    nested call (a `remove()` inside `locked()`) only counts its depth."""
+    depth = getattr(_held_here, "depth", 0)
+    if depth:
+        try:
+            _held_here.depth = depth + 1
+            yield
+        finally:
+            _held_here.depth = depth
+        return
     os.makedirs(root(), exist_ok=True)
     fd = os.open(os.path.join(root(), LOCK_NAME), os.O_RDWR | os.O_CREAT, 0o644)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
+        try:
+            _held_here.depth = 1
+            yield
+        finally:
+            _held_here.depth = 0
     finally:
         os.close(fd)
+
+
+def locked():
+    """The machine-wide lock, for a caller whose own change must not interleave with an eviction
+    or a removal: an entry and its companions moved together, say. Re-entrant within a thread, so
+    a `remove()` or `commit()` inside the block runs under the same hold. Nothing to hold while
+    the module is dark. Never fork inside the block: the child would copy the descriptor and the
+    depth and believe it holds the lock. A process started by exec never carries it (the
+    descriptor is not inherited)."""
+    return _machine_lock() if enabled() else contextlib.nullcontext()
 
 
 def events_path():
@@ -358,10 +397,16 @@ def _prune_events():
 
 # --- entries --------------------------------------------------------------------------------
 
-def _inside(rec, path):
-    base = os.path.realpath(rec["dir"])
-    real = os.path.realpath(path)
+def _inside(rec, path, base=None, real=None):
+    base = base or os.path.realpath(rec["dir"])
+    real = real or os.path.realpath(path)
     return real != base and os.path.commonpath([base, real]) == base
+
+
+class _Entries(list):
+    """The scan's entries, with each entry's companions as the scan found them (`comps`, keyed
+    by the entry's path), so the candidates and the holds need not ask the function again."""
+    comps = None
 
 
 def _rel(rec, path):
@@ -369,10 +414,64 @@ def _rel(rec, path):
 
 
 def _scan(rec):
-    """Every regular file under the cache's directory: [(path, size, mtime)]."""
+    """Every entry under the cache's directory: [(path, size, mtime)], a companion's size counted
+    in its entry's and the companion itself left out (`_companions`). The relation is one-way: a
+    file already claimed as a companion claims nothing, and a file that has claimed companions is
+    never claimed itself, so a two-way or chained answer still leaves every byte counted once."""
+    files = _files(rec)
+    if not rec.get("companions"):
+        return files
+    base = os.path.realpath(rec["dir"])
+    reals = {p: os.path.realpath(p) for p, _s, _m in files}
+    sizes = {reals[p]: size for p, size, _m in files}
+    owned = set()
+    extra = collections.defaultdict(int)        # entry -> its companions' bytes, in one pass
+    comps = {}
+    for path, _size, _mtime in files:
+        owner = reals[path]
+        if owner in owned:
+            continue                            # a companion claims nothing of its own
+        mine = []
+        for comp in _companions(rec, path, base, owner):
+            real = os.path.realpath(comp)
+            if real in sizes and real not in owned and real not in extra:
+                owned.add(real)
+                extra[owner] += sizes[real]
+                mine.append(comp)
+        comps[path] = mine
+    out = _Entries()
+    out.comps = comps
+    for path, size, mtime in files:
+        real = reals[path]
+        if real in owned:
+            continue
+        out.append((path, size + extra[real], mtime))
+    return out
+
+
+def _companions(rec, path, base=None, real=None):
+    """The companion files of one entry that exist inside the cache, never the entry itself."""
+    fn = rec.get("companions")
+    if not fn:
+        return []
+    base = base or os.path.realpath(rec["dir"])
+    real = real or os.path.realpath(path)
     out = []
-    for dirpath, _dirs, files in os.walk(rec["dir"]):
-        for fname in files:
+    for c in fn(path) or []:
+        creal = os.path.realpath(c)
+        if (creal != real and _inside(rec, c, base, creal) and os.path.isfile(c)
+                and not os.path.islink(c)):
+            out.append(c)
+    return out
+
+
+def _files(rec):
+    """Every regular file under the cache's directory: [(path, size, mtime)], in name order, so
+    which file claims a companion never depends on the filesystem's enumeration order."""
+    out = []
+    for dirpath, dirs, files in os.walk(rec["dir"]):
+        dirs.sort()
+        for fname in sorted(files):
             if fname in (LOCK_NAME, EVENTS_NAME, EVENTS_NAME + ".tmp"):
                 continue
             path = os.path.join(dirpath, fname)
@@ -385,8 +484,17 @@ def _scan(rec):
     return out
 
 
-def _held(rec, path):
-    """Pinned, or a write in progress: never evicted."""
+def _held(rec, path, comps=None):
+    """Pinned, or a write in progress: never evicted. An entry whose companion is held is held
+    too, so the two never part. `comps` is the scan's list, when the caller has one."""
+    if comps is None:
+        comps = _companions(rec, path)
+    if any(_held_one(rec, c) for c in comps):
+        return True
+    return _held_one(rec, path)
+
+
+def _held_one(rec, path):
     if path.endswith(IN_PROGRESS):
         try:
             if _now().timestamp() - os.path.getmtime(path) < in_progress_s():
@@ -398,10 +506,25 @@ def _held(rec, path):
 
 
 def _candidates(rec, entries, protect=()):
-    """The entries the cache may give up, in the cache's own order."""
+    """The entries the cache may give up, in the cache's own order. A protected path protects
+    its entry, and so does a protected companion of it."""
     protect = {os.path.realpath(p) for p in protect}
-    out = [e for e in entries
-           if os.path.realpath(e[0]) not in protect and not _held(rec, e[0])]
+    known = getattr(entries, "comps", None)
+
+    def comps_of(path):
+        if known is not None and path in known:
+            return known[path]
+        return _companions(rec, path)
+
+    def guarded(path, comps):
+        if os.path.realpath(path) in protect:
+            return True
+        return bool(protect) and any(os.path.realpath(c) in protect for c in comps)
+    out = []
+    for e in entries:
+        comps = comps_of(e[0])
+        if not guarded(e[0], comps) and not _held(rec, e[0], comps):
+            out.append(e)
     if rec["order"] == "oldest-added":
         out.sort(key=lambda e: e[2])
     elif rec["order"] == "newest-added":
@@ -411,12 +534,58 @@ def _candidates(rec, entries, protect=()):
     return out
 
 
+def _unlink_entry(rec, path):
+    """Delete one entry with its companions, the companions first. Asked again at the moment of
+    deletion: an entry no longer at its path, or held now, keeps every file. Returns None when the
+    entry is deleted, else why it stays: "pinned", or "companion: <error>" when a companion could
+    not be deleted. Raises the entry's own OSError, and FileNotFoundError when it is no longer at
+    its path (moved, with its companions: nothing was deleted or recorded).
+
+    The companions go first so that a crash part-way never leaves a companion that names an entry
+    already gone. The cost: when the entry's own delete fails after its companions are gone, the
+    entry stays without them. That case is printed, and the next scan sees the entry alone."""
+    if not os.path.lexists(path):
+        raise FileNotFoundError(path)
+    comps = _companions(rec, path)
+    if _held(rec, path, comps):
+        return "pinned"
+    gone = []
+    for comp in comps:
+        try:
+            os.unlink(comp)
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            print("cache_budget: could not remove %s: %s" % (comp, exc))
+            if gone:
+                print("cache_budget: %s keeps %s; these companions were removed: %s"
+                      % (path, comp, ", ".join(gone)))
+            return "companion: %s" % exc
+        else:
+            gone.append(comp)
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        raise
+    except OSError as exc:
+        if comps:
+            print("cache_budget: %s stays without its companions, which were removed: %s"
+                  % (path, exc))
+        raise
+    return None
+
+
 def _evict(rec, entry, reason):
     path, size, _mtime = entry
     if not _inside(rec, path):
         return False
     try:
-        os.unlink(path)
+        why = _unlink_entry(rec, path)
+        if why is not None:
+            if why != "pinned":
+                _record("refuse", rec["name"], _rel(rec, path), size, reason, op="evict",
+                        why=why)
+            return False
     except FileNotFoundError:
         return True
     except OSError as exc:
@@ -436,6 +605,13 @@ def _evict_to(rec, entries, target, reason, protect=()):
         if _evict(rec, entry, reason):
             size -= entry[1]
     return size
+
+
+def _size(path):
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0
 
 
 # --- the calls a writer makes ---------------------------------------------------------------
@@ -482,8 +658,10 @@ def reserve(name, nbytes=None):
 
 
 def commit(name, path):
-    """Record an entry that has landed. If the cache is now over its cap, or the volume past the
-    floor, run the eviction at once: other entries go, in the cache's order, never this one."""
+    """Record an entry that has landed, its companions' bytes counted with it. If the cache is now
+    over its cap, or the volume past the floor, run the eviction at once: other entries go, in the
+    cache's order, never this one. A companion's path protects the entry it belongs to, so a
+    writer that lands the companion last may commit either."""
     rec = _REGISTRY.get(name) if enabled() else None
     if rec is None:
         return
@@ -491,7 +669,7 @@ def commit(name, path):
         raise ValueError("%s is not inside the %s cache" % (path, name))
     with _machine_lock():
         try:
-            nbytes = os.path.getsize(path)
+            nbytes = os.path.getsize(path) + sum(_size(c) for c in _companions(rec, path))
         except OSError:
             nbytes = None
         _record("admit", name, _rel(rec, path), nbytes)
@@ -502,8 +680,10 @@ def commit(name, path):
 
 
 def remove(name, path, reason):
-    """Delete one entry for a reason the caller names. Refuses (and records the refusal) a path
-    outside the cache's directory and a pinned entry. Returns True when the entry is gone."""
+    """Delete one entry for a reason the caller names, its companions first. Refuses (and records
+    the refusal) a path outside the cache's directory and a pinned entry. An entry no longer at
+    its path keeps its companions. Returns True when the entry is gone. `path` is the entry's:
+    given a companion's path, it deletes that file alone and leaves its entry."""
     rec = _REGISTRY.get(name) if enabled() else None
     if rec is None:
         return False
@@ -515,8 +695,11 @@ def remove(name, path, reason):
             _record("refuse", name, _rel(rec, path), reason=reason, op="remove", why="pinned")
             return False
         try:
-            nbytes = os.path.getsize(path)
-            os.unlink(path)
+            nbytes = os.path.getsize(path) + sum(_size(c) for c in _companions(rec, path))
+            why = _unlink_entry(rec, path)
+            if why is not None:
+                _record("refuse", name, _rel(rec, path), reason=reason, op="remove", why=why)
+                return False
         except FileNotFoundError:
             return True
         except OSError as exc:
@@ -599,7 +782,8 @@ def status():
             "headroom": rec["headroom"], "max_age_days": rec["max_age"],
             "order": rec["order"], "refill": rec["refill"], "rank": rec["rank"],
             "size": sum(e[1] for e in entries), "entries": len(entries),
-            "pinned": sum(1 for e in entries if _held(rec, e[0])),
+            "pinned": sum(1 for e in entries
+                          if _held(rec, e[0], (getattr(entries, "comps", None) or {}).get(e[0]))),
             "last_run": stats["last_run"], "evicted_since_start": stats["evicted"],
             "removed_since_start": stats["removed"], "over_cap": stats["over_cap"],
         })
