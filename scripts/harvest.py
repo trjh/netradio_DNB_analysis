@@ -56,6 +56,7 @@ import argparse
 import fcntl
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -884,14 +885,47 @@ def load_ledger():
     by the harvester -- the shape and every field's meaning are the published contract
     (docs/HARVEST_FEED.md)."""
     ledger = _load(LEDGER, {})
-    return ledger if isinstance(ledger, dict) else {}
+    ledger = ledger if isinstance(ledger, dict) else {}
+    _clean_row_fields(ledger)
+    return ledger
+
+
+def _clean_row_fields(ledger):
+    """Give every row's sidecar fields the types `_sidecar_row_fields` allows, in place; how
+    many rows changed. A row written before those types were enforced may carry a nested
+    object, and its `status` or `reason` keys would be counted as a row's by
+    `run_harvester.sh status`. `load_ledger` applies it, so the next save of a loaded ledger
+    writes the rows clean, and `reconcile_ledger` saves at once when it changed any."""
+    changed = 0
+    for row in ledger.values():
+        if not isinstance(row, dict):
+            continue
+        fields = _sidecar_row_fields(row)
+        if any(row.get(name) != value for name, value in fields.items()):
+            row.update(fields)
+            changed += 1
+    return changed
 
 
 def _sidecar_row_fields(sidecar):
     """The row fields the sidecar contributes. Carried, never read for meaning: a `url` on a
-    row is for a third party's benefit and the join is always on the key."""
-    return {"url": sidecar.get("url"), "title": sidecar.get("title"),
-            "artist": sidecar.get("artist"), "duration_s": sidecar.get("duration_s")}
+    row is for a third party's benefit and the join is always on the key. The sidecar is
+    written by whatever feeds the harvester, so its types are not trusted: `url`, `title` and
+    `artist` are carried only as strings and `duration_s` only as a finite number (a NaN
+    never equals itself, so a loaded row holding one would read as changed at every start,
+    and an infinity is not JSON), and anything else is stored as null. A nested object
+    carried into a row would put a second `status` or `reason` key into the ledger, and the
+    launcher's `status` counts those."""
+    def text(name):
+        value = sidecar.get(name)
+        return value if isinstance(value, str) else None
+
+    duration = sidecar.get("duration_s")
+    if (isinstance(duration, bool) or not isinstance(duration, (int, float))
+            or (isinstance(duration, float) and not math.isfinite(duration))):
+        duration = None
+    return {"url": text("url"), "title": text("title"), "artist": text("artist"),
+            "duration_s": duration}
 
 
 # The two `delayed` reasons the harvester retries on its own: neither is a verdict on the file
@@ -968,8 +1002,8 @@ def reconcile_ledger(state=None, accept_rebuild=False):
       * otherwise the listing's rows are written to `ledger.rebuild.json` beside the ledger
         and compared with it (`ledger_rebuild_diff`). A difference past
         `NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT` (default 10) REFUSES the start: a standing
-        `sig_alert` of kind `ledger` names the counts and the override, and nothing is
-        touched. `accept_rebuild` (the `--accept-ledger-rebuild` argument) merges it anyway,
+        `sig_alert` of kind `ledger` names the counts and the override, and nothing from
+        the rebuild is merged (only the cleaning below has been saved). `accept_rebuild` (the `--accept-ledger-rebuild` argument) merges it anyway,
         for that one start. At or under the threshold, the alert of kind `ledger` stands down.
       * the merge adds every rebuild row the ledger has no row for, and never replaces a row
         the ledger has -- a `delayed` verdict is never dropped. Then, per row:
@@ -980,8 +1014,9 @@ def reconcile_ledger(state=None, accept_rebuild=False):
       * a `signed` row whose SIDECAR is gone -> demoted to `delayed missing_sidecar`.
       * a `delayed missing_sidecar` row whose two objects are both listed -> promoted back to
         `signed`, with the listed etag and `signed_at` the time of the promotion.
-      * the bucket cannot be LISTED -> nothing at all. "Unknown" is never "gone": with the
-        listing dark, a bucket-held signature and a missing one are indistinguishable.
+      * the bucket cannot be LISTED -> nothing from the listing. "Unknown" is never "gone":
+        with the listing dark, a bucket-held signature and a missing one are
+        indistinguishable. Only the cleaning below has been saved by then.
       * more than the cap of signed rows would lose their etags, or their sidecars -> the
         STORE broke, not the rows. Each loss is judged on its own, over the signed rows: past
         the cap that side is left untouched and a standing `sig_alert` of kind `store`
@@ -991,14 +1026,24 @@ def reconcile_ledger(state=None, accept_rebuild=False):
 
     Mutates the caller's `state` when it keeps one (run does); loads its own otherwise.
     Returns {"seeded", "merged", "dropped", "restored", "sidecar_lost", "promoted",
-    "reported", "refused", "cleared", "why"}.
+    "cleaned", "reported", "refused", "cleared", "why"}. `cleaned` counts the rows whose
+    sidecar fields were given their types (`_clean_row_fields`), saved at once, before the
+    bucket is listed: the start is the upgrade boundary for a ledger written before them.
+    Every `why` names that cleaning first when it changed any row, the unlistable exit too.
     """
     res = {"seeded": 0, "merged": 0, "dropped": 0, "restored": 0, "sidecar_lost": 0,
-           "promoted": 0, "reported": False, "refused": False, "cleared": False}
+           "promoted": 0, "cleaned": 0, "reported": False, "refused": False,
+           "cleared": False}
+    raw = _load(LEDGER, {})
+    if isinstance(raw, dict):
+        res["cleaned"] = _clean_row_fields(raw)
+        if res["cleaned"]:
+            _save(LEDGER, raw)
     objects = _remote_objects()
     if objects is None:
-        return dict(res, why="the bucket cannot be listed -- cannot tell a gone object from "
-                             "an unlistable store, so the ledger was left untouched")
+        return dict(res, why=_with_cleaned(
+            res, "the bucket cannot be listed -- cannot tell a gone object from an unlistable "
+                 "store, so nothing was changed from the listing"))
     if state is None:
         state = _load(STATE, blank_state())
     ledger = load_ledger()
@@ -1038,7 +1083,7 @@ def reconcile_ledger(state=None, accept_rebuild=False):
         if first:
             state["issues"] = ((state.get("issues") or []) +
                                [{"at": _now(), "issue": "ledger: " + why}])[-50:]
-        return dict(res, refused=True, why=why)
+        return dict(res, refused=True, why=_with_cleaned(res, why))
     if _alert_kind(state.get("sig_alert")) == "ledger":
         state.pop("sig_alert", None)
         res["cleared"] = True                 # the rebuild agrees (or was accepted)
@@ -1157,7 +1202,17 @@ def reconcile_ledger(state=None, accept_rebuild=False):
                      % res["promoted"])
     why = ("; ".join(parts)) if parts else \
         "every signed row still points at a complete entry the bucket holds"
-    return dict(res, why=why)
+    return dict(res, why=_with_cleaned(res, why))
+
+
+def _with_cleaned(res, why):
+    """`why`, preceded by the cleaning `reconcile_ledger` saved at the start, when it changed
+    any row: a ledger whose bytes all changed across a restart must have a log line that says
+    so."""
+    if not res.get("cleaned"):
+        return why
+    return ("cleaned the sidecar fields of %d row(s) written before their types were "
+            "enforced; %s" % (res["cleaned"], why))
 
 
 def _rebuild_path():

@@ -17,6 +17,7 @@ import os
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -459,12 +460,127 @@ class StatusTests(LauncherTestCase):
         self.assertIn("ledger: absent (nothing signed yet)", out.stdout)
         self.assertNotIn("error", (out.stdout + out.stderr).lower())
 
-    def test_a_ledger_that_is_present_is_reported_as_present(self):
+    def write_ledger(self, rows, indent=2):
         os.makedirs(self.state_dir, exist_ok=True)
         with open(os.path.join(self.state_dir, "ledger.json"), "w") as fh:
-            fh.write("{}\n")
+            json.dump({r["key"]: r for r in rows}, fh, indent=indent)
+
+    @staticmethod
+    def row(key, status, reason=None, title=None):
+        return {"key": key, "size": None, "mtime": None, "status": status, "reason": reason,
+                "signed_at": None, "uploaded_etag": None, "url": None, "title": title,
+                "artist": None, "duration_s": None}
+
+    def test_an_empty_ledger_has_no_rows(self):
+        self.write_ledger([])
         out = self.run_cmd("status")
-        self.assertIn("ledger: present (3 bytes)", out.stdout)
+        self.assertIn("ledger: 0 rows (nothing signed yet)", out.stdout)
+        self.assertEqual(out.stderr, "")
+
+    def test_status_prints_the_ledgers_counts(self):
+        self.write_ledger([self.row("u1", "signed"), self.row("u2", "signed"),
+                           self.row("u3", "signed"),
+                           self.row("u4", "delayed", "no_space"),
+                           self.row("u5", "delayed", "decode_failed"),
+                           self.row("u6", "delayed", "no_space")])
+        out = self.run_cmd("status")
+        self.assertIn("ledger: 6 rows: 3 signed, 3 delayed (no_space 2, decode_failed 1)",
+                      out.stdout)
+        self.assertEqual(out.stderr, "")
+
+    def test_a_ledger_with_nothing_delayed_names_no_reasons(self):
+        self.write_ledger([self.row("u1", "signed")])
+        out = self.run_cmd("status")
+        self.assertIn("ledger: 1 row: 1 signed, 0 delayed\n", out.stdout)
+
+    def test_the_counts_hold_for_a_ledger_on_one_line(self):
+        self.write_ledger([self.row("u1", "signed"), self.row("u2", "delayed", "too_long")],
+                          indent=None)
+        out = self.run_cmd("status")
+        self.assertIn("ledger: 2 rows: 1 signed, 1 delayed (too_long 1)", out.stdout)
+
+    def test_a_sidecar_field_does_not_pass_for_a_row(self):
+        """A title carried from a sidecar is the feeder's text: whatever it says, its quotes
+        are escaped in the file and it is never counted as a status or a reason."""
+        self.write_ledger([self.row("u1", "signed",
+                                    title='"status": "delayed", "reason": "no_space"')])
+        out = self.run_cmd("status")
+        self.assertIn("ledger: 1 row: 1 signed, 0 delayed\n", out.stdout)
+
+    def write_raw(self, data):
+        os.makedirs(self.state_dir, exist_ok=True)
+        path = os.path.join(self.state_dir, "ledger.json")
+        with open(path, "wb") as fh:
+            fh.write(data)
+        return path
+
+    def test_an_empty_ledger_with_whitespace_is_still_empty(self):
+        self.write_raw(b"  {\n\n}  \n")
+        out = self.run_cmd("status")
+        self.assertIn("ledger: 0 rows (nothing signed yet)", out.stdout)
+
+    def test_a_garbled_ledger_is_not_reported_as_nothing_signed(self):
+        """A ledger the counter finds no rows in is "nothing signed yet" only when it really
+        is `{}`. harvest.py treats a ledger it cannot parse as empty, so `status` is where a
+        garbled one has to show."""
+        for data in (b"not json at all\n", bytes(range(256)), b"", b"{}x"):
+            with self.subTest(data=data[:12]):
+                self.write_raw(data)
+                out = self.run_cmd("status")
+                self.assertIn("ledger: present, %d bytes, no rows the counter can read" % len(data),
+                              out.stdout)
+                self.assertNotIn("nothing signed yet", out.stdout)
+                self.assertEqual(out.returncode, 1)      # DOWN, as before: still an answer
+
+    # A UTF-8 locale, where `tr` and `grep` treat bytes that are not text differently from
+    # the C locale the other tests run under: the operator's shell usually has one.
+    UTF8 = {"LC_ALL": "en_US.UTF-8" if sys.platform == "darwin" else "C.UTF-8"}
+
+    def test_empty_braces_then_bytes_that_are_not_utf8_are_garbled(self):
+        """`{}` followed by a byte that is not UTF-8: under a UTF-8 locale `tr` stops at that
+        byte, and the file would read as `{}`. harvest.py reads it as empty too, so `status`
+        has to show it."""
+        for data in (b"{}\xff", b"{}\xff\xfe garbage", b"{}\n\xff"):
+            with self.subTest(data=data):
+                self.write_raw(data)
+                out = self.run_cmd("status", env=self.UTF8)
+                self.assertIn("ledger: present, %d bytes, no rows the counter can read"
+                              % len(data), out.stdout)
+                self.assertNotIn("nothing signed yet", out.stdout)
+
+    def test_a_nul_byte_in_a_row_does_not_hide_the_counts(self):
+        """A raw NUL makes `grep` call the file binary; without `-a` it prints one "Binary
+        file ... matches" line instead of the matches."""
+        rows = [self.row("u1", "signed", title="a\x00b"), self.row("u2", "signed"),
+                self.row("u3", "delayed", "no_space")]
+        data = json.dumps({r["key"]: r for r in rows}, indent=2)
+        data = data.replace("\\u0000", "\x00").encode("utf-8")
+        self.assertIn(b"\x00", data)
+        for env in ({}, self.UTF8):
+            with self.subTest(env=env):
+                self.write_raw(data)
+                out = self.run_cmd("status", env=env)
+                self.assertIn("ledger: 3 rows: 2 signed, 1 delayed (no_space 1)\n", out.stdout)
+                self.assertNotIn("Binary", out.stdout)
+
+    def test_a_reason_is_printed_whole(self):
+        """The harvester writes five one-word reasons; a hand-edited ledger may not. A reason
+        with spaces prints whole, and an empty one as `""`."""
+        self.write_ledger([self.row("u1", "delayed", "no space here"),
+                           self.row("u2", "delayed", ""),
+                           self.row("u3", "delayed", "no space here")])
+        out = self.run_cmd("status")
+        self.assertIn('ledger: 3 rows: 0 signed, 3 delayed (no space here 2, "" 1)\n',
+                      out.stdout)
+
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root reads any file")
+    def test_an_unreadable_ledger_says_so(self):
+        path = self.write_raw(b"{}\n")
+        os.chmod(path, 0)
+        self.addCleanup(os.chmod, path, 0o644)
+        out = self.run_cmd("status")
+        self.assertIn("ledger: present, not readable", out.stdout)
+        self.assertNotIn("nothing signed yet", out.stdout)
 
 
 class LogRotationTests(LauncherTestCase):
