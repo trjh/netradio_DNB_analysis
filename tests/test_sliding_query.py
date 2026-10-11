@@ -80,6 +80,11 @@ class WindowPlacement(unittest.TestCase):
         self.assertEqual(harvest.MIN_QUERY_S, 60.0)
         self.assertEqual((harvest.QUERY_S, harvest.QUERY_STEP_S), (120.0, 15.0))
 
+    def test_a_pass_scores_five_pairs(self):
+        # A pair costs about thirteen windows now, so a pass scores five pairs, not 25,
+        # and the signing is not held up while the pool is asked again (decided 2026-10-11).
+        self.assertEqual(harvest.RESCAN_PER_PASS, 5)
+
 
 @unittest.skipUnless(harvest, "needs the analysis venv")
 class BestWindowWins(unittest.TestCase):
@@ -214,7 +219,7 @@ class EveryOldScoreIsStale(unittest.TestCase):
         qs = [(4, None, harvest.query_key(4, "abc"))]
         self.assertEqual([p[3] for p in harvest.unscored_pairs(state, ledger, set(), qs)], [a])
 
-    def test_the_migration_drops_old_leads_and_pairings_once(self):
+    def test_the_migration_drops_every_old_lead_and_pairing_once(self):
         a, b, r = self._key("a"), self._key("b"), self._key("c")
         state = {"kept": 2, "scored": {"4:abc": [a + ".npy"],
                                        harvest.query_key(4, "abc"): [b + ".npy"]},
@@ -225,17 +230,17 @@ class EveryOldScoreIsStale(unittest.TestCase):
         removed = []
         with unittest.mock.patch.object(harvest.cache_budget, "remove",
                                         lambda cache, path, why: removed.append(why) or True):
-            first = harvest.migrate_query_shape(state, {r})
+            first = harvest.migrate_query_shape(state)
             snapshot = repr(state)
-            second = harvest.migrate_query_shape(state, {r})
-        self.assertEqual(first, (1, 1))
-        self.assertEqual([m["key"] for m in state["matches"]], [r],
-                         "a ruled-on lead is kept: it will never be asked again")
+            second = harvest.migrate_query_shape(state)
+        self.assertEqual(first, (2, 1))
+        self.assertEqual(state["matches"], [],
+                         "every old lead goes, the ruled-on one too: past findings are not kept")
         self.assertEqual(list(state["scored"]), [harvest.query_key(4, "abc")])
         self.assertNotIn("current_query", state)
         self.assertEqual(state["query_shape"], "w120s15")
         self.assertEqual(removed, ["query-shape-changed"], "the dropped lead's excerpt went")
-        self.assertEqual(state["kept"], 1)
+        self.assertEqual(state["kept"], 0)
         self.assertIsNone(second, "the second call does nothing")
         self.assertEqual(repr(state), snapshot)
 
@@ -244,7 +249,7 @@ class EveryOldScoreIsStale(unittest.TestCase):
         ledger = self._held(free, retired)
         state = {"matches": [], "kept": 0,
                  "scored": {"4:abc": [free + ".npy", retired + ".npy"]}}
-        harvest.migrate_query_shape(state, {retired})
+        harvest.migrate_query_shape(state)
         qs = [(4, None, harvest.query_key(4, "abc"))]
         pairs = harvest.unscored_pairs(state, ledger, {retired}, qs)
         self.assertEqual([p[3] for p in pairs], [free])

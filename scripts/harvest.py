@@ -315,8 +315,10 @@ KEEP_TOP = 12
 # times the window count. Memory does not grow: the windows are scored one after another.
 SCORE_S_PER_PAIR = 5.0
 # How many cached signatures to re-score per pass of the loop. Small on purpose: rescanning is CPU,
-# so a modest chunk each pass rides along instead of stalling the signing.
-RESCAN_PER_PASS = 25
+# so a modest chunk each pass rides along instead of stalling the signing. Five pairs at a few
+# seconds each (SCORE_S_PER_PAIR) is well under half a minute a pass (decided 2026-10-11, when
+# sliding windows made a pair about thirteen times dearer).
+RESCAN_PER_PASS = 5
 KEEP_CEILING = 0.130      # never retain an excerpt worse than the worst plausible true match
 KEEP_TTL_DAYS = 30        # a lead not listened to in a month is not a lead -- swept
 # A reported MATCH still needs cost AND margin. The populations OVERLAP (true match up to 0.0971,
@@ -1744,7 +1746,7 @@ def migrate_matches(state):
     return moved
 
 
-def migrate_query_shape(state, ruled):
+def migrate_query_shape(state):
     """Once per change of query shape: forget every verdict reached with the old one.
 
     A lead, and a pairing in `state["scored"]`, is an answer to one way of asking. When the
@@ -1754,12 +1756,12 @@ def migrate_query_shape(state, ruled):
       * every `state["scored"]` pairing under another shape is dropped -- the query keys carry
         the shape, so the pool is asked again with the new one in any case, and the old lists
         are dead weight;
-      * every lead is dropped, with its excerpt, EXCEPT a lead whose key is in the retired set:
-        a ruled-on key is never asked again (unscored_pairs skips it), so its row is the only
-        record of what was found, and the ruling stands whatever the shape;
+      * every lead is dropped, with its excerpt, ruled-on or not: past findings are not
+        kept. The rulings themselves live in the rulings file, which this side only reads,
+        so a ruled-on key is still never asked again (unscored_pairs skips it);
       * the scorer's `current_query` block goes with the pairings it counted.
 
-    Signatures, clips, the canary and the ledger are untouched: nothing is decoded or signed
+    Signatures, clips, the canary, the ledger and the rulings file are untouched: nothing is decoded or signed
     again. Keyed on `state["query_shape"]`, so it runs once and a second call does nothing.
     Returns (leads dropped, pairings dropped), or None when there was nothing to do.
     """
@@ -1770,16 +1772,14 @@ def migrate_query_shape(state, ruled):
     stale = [k for k in scored if not str(k).endswith(suffix)]
     for k in stale:
         del scored[k]
-    kept, dropped = [], 0
+    dropped = 0
     for m in state.get("matches") or []:
-        if isinstance(m, dict) and m.get("key") in ruled:
-            kept.append(m)
-            continue
         dropped += 1
         path = m.get("audio") if isinstance(m, dict) else None
-        if path and cache_budget.remove(CANDIDATES_CACHE, path, "query-shape-changed"):
-            state["kept"] = max(0, state.get("kept", 0) - 1)
-    state["matches"] = kept
+        if path:
+            cache_budget.remove(CANDIDATES_CACHE, path, "query-shape-changed")
+    state["matches"] = []
+    state["kept"] = 0                 # no row names an excerpt any more
     state.pop("current_query", None)
     state["query_shape"] = QUERY_SHAPE
     return dropped, len(stale)
@@ -2567,11 +2567,11 @@ def run(args):
         _save(STATE, state)
         print("# moved %d old match row(s) from their urls onto keys" % moved)
     # A NEW WAY OF ASKING makes every old verdict stale: once, before the first score.
-    shaped = migrate_query_shape(state, ruled)
+    shaped = migrate_query_shape(state)
     if shaped is not None:
         _save(STATE, state)
         print("# the query is now %s: dropped %d lead(s) and %d scored pairing list(s) reached "
-              "the old way; the pool is asked again (ruled-on leads kept)"
+              "the old way; the pool is asked again"
               % ((QUERY_SHAPE,) + shaped))
     qs = queries(state)
     if note_no_queries(state, qs):
@@ -3080,7 +3080,7 @@ def main():
                   "from the bucket) and re-run." % LEDGER)
             return
         state = _load(STATE, blank_state())
-        if migrate_query_shape(state, ruled) is not None:
+        if migrate_query_shape(state) is not None:
             _save(STATE, state)
         ledger = load_ledger()
         qs = queries()

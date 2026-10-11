@@ -218,7 +218,7 @@ pool" per mystery.
 **A new mystery sees the WHOLE corpus.** A chroma signature is not tied to the question you asked
 of it: the same 12×N matrix answers MT4 today and MT8 next month, for free. So the harvester
 remembers which **(signature, mystery)** pairs it has scored, and any unpaired combination is work
-to do — a chunk each pass, riding along between signs. The day a new
+to do — a chunk each pass (`RESCAN_PER_PASS`, 5 pairs), riding along between signs. The day a new
 `Mystery Track N` clip lands, every signature the pool holds is scored against it **without a
 single new decode**: a few seconds a pair (one window's cost times the clip's window count,
 below), so hours for the whole pool rather than minutes. `--rescan` does it all at once, for
@@ -278,10 +278,10 @@ lengths) has no ratio, so the cost decides alone. The row carries the ratio as `
 
 **A new way of asking voids every old verdict.** The query key carries the query's shape
 (`w120s15`), so every pairing scored the old way is asked again. Once, at the first start under a
-new shape, the harvester drops every old lead and its excerpt, and the old pairing lists,
-except a lead whose key is in the rulings file: a ruled-on key is never asked again, so its row
-is the only record of what was found. Signatures, clips, the canary and the ledger are kept;
-nothing is decoded or signed again.
+new shape, the harvester drops every old lead and its excerpt, ruled-on or not, and the old
+pairing lists. The rulings themselves stay in the rulings file, so a ruled-on key is still never
+asked again. Signatures, clips, the canary, the ledger and the rulings file are kept; nothing is
+decoded or signed again.
 
 **A clip too short to distinguish records is refused** (`MIN_QUERY_S`, 60s). MT7's clip is **23
 seconds**, and it produced five *confident* false positives all within **0.0007** of each other: a
