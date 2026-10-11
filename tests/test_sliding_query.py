@@ -13,6 +13,7 @@ the old one. It skips when the audio is not on this machine.
 """
 
 import glob
+import importlib.util
 import os
 import shutil
 import sys
@@ -29,6 +30,10 @@ try:
     from streamalign import chroma_match as cm
 except Exception:                       # numpy/librosa absent -> not this test's job
     harvest = None
+
+
+# The real alignments need librosa; CI runs without it.
+HAVE_LIBROSA = importlib.util.find_spec("librosa") is not None
 
 
 def _frames(seconds):
@@ -147,6 +152,7 @@ class BestWindowWins(unittest.TestCase):
 
 
 @unittest.skipUnless(harvest, "needs the analysis venv")
+@unittest.skipUnless(HAVE_LIBROSA, "needs librosa (requirements-streamalign.txt)")
 class TheDecidingPass(unittest.TestCase):
     """The band-limited path and the ratio, on synthetic chroma (real DTW, small sizes)."""
 
@@ -263,6 +269,7 @@ def _real_audio():
 
 
 @unittest.skipUnless(harvest, "needs the analysis venv")
+@unittest.skipUnless(HAVE_LIBROSA, "needs librosa (requirements-streamalign.txt)")
 class OriginalSeventyOneOnD356(unittest.TestCase):
     """071 (Fokus - On Line) is seated at 913.6 s on d356-375, and its clear part starts about
     105 s later: the longest mixed front the labels record. A clip cut from the seat must be

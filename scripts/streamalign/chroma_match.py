@@ -212,9 +212,9 @@ def match_band(query, candidate, tries=N_PITCH):
     and the caller must decide without one. Everything is None when the query is not a chroma
     matrix or the candidate is too short to hold it at the fastest allowed rate.
     """
-    import librosa
     if getattr(query, "ndim", None) != 2:
         return None, None, None, None
+    import librosa
     query = np.asarray(query)
     candidate = np.asarray(candidate)
     n = query.shape[1]
