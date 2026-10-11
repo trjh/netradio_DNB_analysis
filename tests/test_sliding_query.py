@@ -80,10 +80,11 @@ class WindowPlacement(unittest.TestCase):
         self.assertEqual(harvest.MIN_QUERY_S, 60.0)
         self.assertEqual((harvest.QUERY_S, harvest.QUERY_STEP_S), (120.0, 15.0))
 
-    def test_a_pass_scores_five_pairs(self):
-        # A pair costs about thirteen windows now, so a pass scores five pairs, not 25,
-        # and the signing is not held up while the pool is asked again (decided 2026-10-11).
-        self.assertEqual(harvest.RESCAN_PER_PASS, 5)
+    def test_a_pass_spends_one_minute_re_asking(self):
+        # A budget of time, not of pairs: a pair costs seconds against a track and minutes
+        # against a long mix (decided 2026-10-11).
+        self.assertEqual(harvest.RESCAN_BUDGET_S, 60.0)
+        self.assertFalse(hasattr(harvest, "RESCAN_PER_PASS"))
 
 
 @unittest.skipUnless(harvest, "needs the analysis venv")
@@ -141,6 +142,21 @@ class BestWindowWins(unittest.TestCase):
             res = harvest.score_pair(self._query(), None)
         self.assertEqual(res["verdict"], "MATCH")
         self.assertIsNone(res["psr"])
+        self.assertEqual(res["psr_note"], harvest.PSR_NO_SIDELOBE,
+                         "the pass ran; the candidate had no sidelobe")
+
+    def test_a_pair_the_pass_never_ran_on_says_so(self):
+        with unittest.mock.patch.object(cm, "match", return_value=(0.08, 0, 5.0)):
+            res = harvest.score_pair(self._query(), None)
+        self.assertIsNone(res["psr"])
+        self.assertEqual(res["psr_note"], harvest.PSR_NOT_RUN)
+
+    def test_a_ratio_carries_no_note(self):
+        with unittest.mock.patch.object(cm, "match", return_value=(0.02, 0, 5.0)), \
+                unittest.mock.patch.object(cm, "match_band",
+                                           lambda q, c, tries=None: (0.01, 0, 5.0, 9.0)):
+            res = harvest.score_pair(self._query(), None)
+        self.assertEqual((res["psr"], res["psr_note"]), (9.0, None))
 
     def test_the_deciding_pass_runs_only_on_survivors(self):
         band = unittest.mock.Mock(return_value=(0.0, 0, 0.0, 9.0))
@@ -180,6 +196,15 @@ class TheDecidingPass(unittest.TestCase):
     def test_a_candidate_with_no_room_for_a_sidelobe_has_no_ratio(self):
         q = self.cand[:, 10:50]
         self.assertIsNone(cm.match_band(q, self.cand[:, :60])[3])
+
+    def test_a_candidate_shorter_than_the_window_is_refused_not_raised(self):
+        # librosa swaps the inputs when the candidate is the shorter one; the guard must
+        # refuse first, at any length between 6/7 of the window and the window.
+        rng = np.random.default_rng(3)
+        q = rng.random((12, 938)).astype("float32") + 1e-3
+        for frames in (810, 900, 937):
+            c = rng.random((12, frames)).astype("float32") + 1e-3
+            self.assertEqual(cm.match_band(q, c), (None, None, None, None), frames)
 
     def test_a_stand_in_query_is_not_scored(self):
         self.assertEqual(cm.match_band(None, self.cand), (None, None, None, None))
@@ -261,6 +286,97 @@ class EveryOldScoreIsStale(unittest.TestCase):
             harvest.rescan(state, ledger, {retired}, qs, verbose=False)
         self.assertEqual(loaded, [free], "the retired key's signature was never even loaded")
         self.assertEqual(state["scored"][qs[0][2]], [free + ".npy"])
+
+
+@unittest.skipUnless(harvest, "needs the analysis venv")
+class TheRescanMinute(unittest.TestCase):
+    """The loop's re-ask runs on a clock: a minute a pass, at least one pair, and a pair
+    that overruns finishes. A stop is noticed between pairs."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="minute-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.cache = os.path.join(self.tmp, "chroma")
+        os.makedirs(self.cache)
+        self.keys = ["u%020d" % i for i in range(6)]
+        self.ledger = {}
+        for k in self.keys:
+            np.save(os.path.join(self.cache, k + ".npy"), np.ones((12, 8), dtype="float32"))
+            self.ledger[k] = {"status": "signed"}
+        self.now = [0.0]
+        for name, value in (("_chroma_dir", lambda: self.cache),
+                            ("_clock", lambda: self.now[0])):
+            p = unittest.mock.patch.object(harvest, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+        self.addCleanup(harvest._STOP.update, {"signum": 0})
+
+    def _pair_takes(self, seconds, stop_after=None):
+        scored = []
+
+        def fake(qc, c):
+            scored.append(1)
+            self.now[0] += seconds
+            if stop_after and len(scored) >= stop_after:
+                harvest._STOP["signum"] = 15
+            return None
+        p = unittest.mock.patch.object(harvest, "score_pair", fake)
+        p.start()
+        self.addCleanup(p.stop)
+        return scored
+
+    def _rescan(self, **kw):
+        state = {"matches": [], "kept": 0, "scored": {}}
+        n = harvest.rescan(state, self.ledger, set(), [(4, None, "4:fp:w120s15")],
+                           verbose=False, **kw)
+        return n, state
+
+    def test_pairs_are_scored_until_the_minute_is_spent(self):
+        scored = self._pair_takes(25.0)
+        n, _state = self._rescan(budget_s=harvest.RESCAN_BUDGET_S)
+        self.assertEqual((n, len(scored)), (3, 3), "0, 25 and 50 s start a pair; 75 s does not")
+
+    def test_at_least_one_pair_and_an_overrun_finishes(self):
+        scored = self._pair_takes(600.0)
+        n, state = self._rescan(budget_s=harvest.RESCAN_BUDGET_S)
+        self.assertEqual((n, len(scored)), (1, 1),
+                         "one pair, though it ran ten times the budget")
+        self.assertEqual(len(state["scored"]["4:fp:w120s15"]), 1, "and it was recorded")
+
+    def test_even_a_spent_budget_scores_one_pair(self):
+        self._pair_takes(1.0)
+        n, _state = self._rescan(budget_s=0.0)
+        self.assertEqual(n, 1, "always at least one pair")
+
+    def test_without_a_budget_every_pair_is_scored(self):
+        self._pair_takes(600.0)
+        n, _state = self._rescan()
+        self.assertEqual(n, len(self.keys))
+
+    def test_a_stop_ends_the_rescan_between_pairs(self):
+        scored = self._pair_takes(1.0, stop_after=2)
+        n, state = self._rescan()
+        self.assertEqual((n, len(scored)), (2, 2), "the pair in hand finished; no third began")
+        self.assertEqual(len(state["scored"]["4:fp:w120s15"]), 2, "both are in the state")
+
+    def test_the_checkpoint_runs_as_time_passes(self):
+        self._pair_takes(harvest.RESCAN_SAVE_EVERY_S)
+        saves = []
+        self._rescan(checkpoint=lambda: saves.append(self.now[0]))
+        self.assertEqual(len(saves), len(self.keys))
+
+    def test_the_estimate_scales_with_the_candidate(self):
+        q = np.ones((12, _frames(300)), dtype="float32")
+        short, long_ = self.keys[0], self.keys[1]
+        ledger = {short: {"duration_s": 360.0}, long_: {"duration_s": 3600.0}}
+        with unittest.mock.patch.object(harvest, "_chroma_dir", lambda: None):
+            a = harvest.rescan_estimate_s([(4, q, "k", short)], ledger)
+            b = harvest.rescan_estimate_s([(4, q, "k", long_)], ledger)
+            c = harvest.rescan_estimate_s([(4, q, "k", "u" + "f" * 20)], ledger)
+        self.assertAlmostEqual(b / a, 10.0, places=6, msg="ten times the candidate, ten times the time")
+        self.assertAlmostEqual(a, 13 * 6 * harvest.SCORE_S_PER_WINDOW_MINUTE, places=6)
+        self.assertAlmostEqual(c, 13 * harvest.DEFAULT_CANDIDATE_MIN
+                               * harvest.SCORE_S_PER_WINDOW_MINUTE, places=6)
 
 
 def _real_audio():

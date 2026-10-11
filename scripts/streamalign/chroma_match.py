@@ -28,7 +28,6 @@ transpositions. Only the best few then pay for a DTW. Verified on the MT5 case: 
 true rotation (+11) first.
 """
 
-import math
 import os
 
 import numpy as np
@@ -210,7 +209,7 @@ def match_band(query, candidate, tries=N_PITCH):
     `psr` is None when the candidate leaves no end point a full query length from the winner
     (a candidate shorter than about two query lengths): there is no sidelobe to compare with,
     and the caller must decide without one. Everything is None when the query is not a chroma
-    matrix or the candidate is too short to hold it at the fastest allowed rate.
+    matrix or the candidate is shorter than the query.
     """
     if getattr(query, "ndim", None) != 2:
         return None, None, None, None
@@ -218,7 +217,9 @@ def match_band(query, candidate, tries=N_PITCH):
     query = np.asarray(query)
     candidate = np.asarray(candidate)
     n = query.shape[1]
-    if n < 2 or candidate.shape[1] < int(math.ceil(n * 6 / 7.0)) + 1:
+    # A candidate shorter than the query is refused outright: librosa would swap the two
+    # inputs, and the end costs would then run along the query, not the candidate.
+    if n < 2 or candidate.shape[1] < n:
         return None, None, None, None
     rotations = (range(N_PITCH) if tries >= N_PITCH
                  else transposition_order(query, candidate)[:max(1, tries)])

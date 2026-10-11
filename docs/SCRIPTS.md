@@ -218,11 +218,21 @@ pool" per mystery.
 **A new mystery sees the WHOLE corpus.** A chroma signature is not tied to the question you asked
 of it: the same 12×N matrix answers MT4 today and MT8 next month, for free. So the harvester
 remembers which **(signature, mystery)** pairs it has scored, and any unpaired combination is work
-to do — a chunk each pass (`RESCAN_PER_PASS`, 5 pairs), riding along between signs. The day a new
+to do — one minute of re-scoring each pass (`RESCAN_BUDGET_S`), riding along between signs.
+The clock is read between pairs, so a pass always scores at least one pair and a pair that
+runs past the minute finishes. The day a new
 `Mystery Track N` clip lands, every signature the pool holds is scored against it **without a
-single new decode**: a few seconds a pair (one window's cost times the clip's window count,
-below), so hours for the whole pool rather than minutes. `--rescan` does it all at once, for
-when you want it finished now. `--rescan` also needs the ledger to exist (start the harvester
+single new decode**. A pair costs one window's alignment times the clip's window count
+(below), and one window's alignment grows with the candidate's length: with a 5-minute clip,
+about 6 s against a 6-minute track and about a minute against an hour-long mix. A pass's
+minute therefore buys about nine pairs against a typical 6.5-minute track, three or four at the
+pool's 17-minute mean, and one against an hour-long mix. The whole pool is about 100 hours of
+scoring for two mysteries (about 11,000 signatures at the mean length), so the re-ask after a
+change of query takes many days of passes, not minutes. A stop is noticed between pairs, and
+what was scored is saved. `--rescan` does it all
+at once, for when you want it finished now. It takes the loop's writer lock (it refuses while
+`--run` is running), prints an estimate from each signature's length, saves every minute, and
+stops cleanly on Ctrl-C, keeping what it scored. `--rescan` also needs the ledger to exist (start the harvester
 once and it is seeded from the bucket) and the rulings file to be readable, for the same reason
 every scoring path does.
 
@@ -274,14 +284,20 @@ sharp minimum; a bland query fits about as well everywhere. It stays a MATCH onl
 at least `PSR_MATCH` (2.0): on 36 hand-labelled pairs the true ones had a median ratio of 9.5
 and the hardest wrong candidate at most 1.46. A pair that fails it is kept as `near` (the lead
 stays on the board), and a candidate too short to have a sidelobe (under about two query
-lengths) has no ratio, so the cost decides alone. The row carries the ratio as `psr`.
+lengths) has no ratio, so the cost decides alone. The row carries the ratio as `psr`; when it
+is null, `psr_note` says why: `not run` (the cost was above `MATCH_COST`) or `candidate too
+short`. The canary pass judges a new hit the same way, so a pair the search would keep as
+`near` raises no alert.
 
 **A new way of asking voids every old verdict.** The query key carries the query's shape
 (`w120s15`), so every pairing scored the old way is asked again. Once, at the first start under a
 new shape, the harvester drops every old lead and its excerpt, ruled-on or not, and the old
 pairing lists. The rulings themselves stay in the rulings file, so a ruled-on key is still never
 asked again. Signatures, clips, the canary, the ledger and the rulings file are kept; nothing is
-decoded or signed again.
+decoded or signed again. A lead found again comes back **without an excerpt**: the re-ask scores
+held signatures, and a signature is not audio, so there is nothing to cut one from. Only a file
+signed after the change gets an excerpt. An empty audio column on the old leads after the
+upgrade is expected; listen at the source.
 
 **A clip too short to distinguish records is refused** (`MIN_QUERY_S`, 60s). MT7's clip is **23
 seconds**, and it produced five *confident* false positives all within **0.0007** of each other: a
