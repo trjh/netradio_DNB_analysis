@@ -176,6 +176,13 @@ class _SignerCase(unittest.TestCase):
         self.put = []
         self.chroma_dir = os.path.join(self.root, "chroma")
         self.addCleanup(self._restore)
+        # The deciding pass is faked here as the matcher is (these cases hand in all-zero
+        # chroma, which a real DTW refuses): no ratio, so the cost decides, as it always did.
+        # tests/test_sliding_query.py exercises the real one.
+        band = mock.patch.object(harvest._cm, "match_band",
+                                 lambda q, c, tries=None: (None, None, None, None))
+        band.start()
+        self.addCleanup(band.stop)
 
     def _restore(self):
         (harvest.LEDGER, harvest.STATE, harvest.JOBS, harvest.WRITER_LOCK,
@@ -1372,6 +1379,24 @@ class TheCanaryPass(_SignerCase):
         self.assertIn("MT5", state["sig_alert"]["why"])
         self.assertEqual(state["matches"], [], "the canary pass records no lead of its own")
 
+    def test_a_hit_the_deciding_pass_withholds_is_not_a_new_hit(self):
+        """The canary judges a new hit as the search does: a pair under MATCH_COST whose
+        ratio fails the deciding pass is a `near` lead to the search, so it is not news here
+        either -- right after the query-shape migration there are no leads to compare with,
+        and a cost-only check would raise a false alert."""
+        _key_, path, stored = self._canary()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)), chroma=self.CHROMA)
+        self._live(ok=True)
+        self._match({5.0: 0.03})
+        band = mock.patch.object(harvest._cm, "match_band",
+                                 lambda q, c, tries=None: (0.04, 0, 1.0, 1.2))
+        band.start()
+        self.addCleanup(band.stop)
+        state = {"issues": [], "matches": []}
+        rec = harvest.canary_pass(state, path, stored, self._qs(5))
+        self.assertEqual(rec["new_hits"], [])
+        self.assertNotIn("sig_alert", state)
+
     def test_a_near_miss_is_not_a_new_hit(self):
         """An unrelated pair routinely scores under the keep-board ceiling (0.130): the
         non-match median sits near 0.095. Only a MATCH is news; a near-miss is noise, or a
@@ -1752,7 +1777,7 @@ class CurrentQueryBlock(_SignerCase):
         self.assertEqual((cq["compared"], cq["remaining"]), (3, 0))
 
     def test_reinitialises_the_block_per_chunk_across_calls(self):
-        """THE MULTI-CHUNK GUARD: a mystery whose backlog exceeds RESCAN_PER_PASS is
+        """THE MULTI-CHUNK GUARD: a mystery whose backlog exceeds one rescan call is
         worked across more than one rescan call -- the SAME (mystery, query_key) returns
         as the first pair of a later call. The block must re-initialise per chunk:
         `started` re-stamps when THIS call's chunk began, `remaining` re-counts from
@@ -2319,6 +2344,170 @@ class TheLoopSignsAndScores(_SignerCase):
         self.assertEqual(spawned, [], "ffmpeg never ran")
         self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
 
+
+
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class TheSlidingQueryIsWired(_SignerCase):
+    """Each place the sliding query, the migration or the minute's budget is plugged in.
+    Every test here fails when its one call site is put back the old way."""
+
+    def setUp(self):
+        super().setUp()
+        # A 5-minute query whose first chroma bin carries each frame's own index: 13 windows.
+        q = np.ones((12, int(round(300 * harvest._cm.FPS))), dtype="float32")
+        q[0, :] = np.arange(q.shape[1])
+        self.long_q = q
+
+    def _counting_match(self, cost=0.5):
+        calls = []
+
+        def fake(q, c):
+            calls.append(int(np.asarray(q)[0, 0]))
+            return cost, 0, 1.0
+        p = mock.patch.object(harvest._cm, "match", fake)
+        p.start()
+        self.addCleanup(p.stop)
+        return calls
+
+    def _stop_on_nap(self):
+        def _nap(seconds):
+            harvest._STOP["signum"] = signal.SIGTERM
+            return True
+        return _nap
+
+    def _loop_patches(self, qs, **extra):
+        patches = [mock.patch.object(harvest, "queries", lambda state=None: qs),
+                   mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: None),
+                   mock.patch.object(harvest, "_nap", self._stop_on_nap()),
+                   mock.patch.object(harvest, "write_excerpt", lambda *a, **k: False),
+                   mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}),
+                   mock.patch.object(harvest.memwatch, "allocator_canary",
+                                     lambda *a, **k: (0, 0, None))]
+        patches += [mock.patch.object(harvest, k, v) for k, v in extra.items()]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_the_sign_step_scores_every_window(self):
+        key = _key("https://y/signed-and-slid")
+        self._feed(key)
+        harvest._save(harvest.RULINGS, {})
+        self._store_on()
+        self._run_patches(fake_decode(pcm=_pcm(LONG_ENOUGH)))
+        calls = self._counting_match()
+        self._loop_patches([(4, self.long_q, harvest.query_key(4, "fp"))],
+                           rescan=lambda *a, **k: 0)
+        harvest.run(None)
+        self.assertEqual(harvest._load(harvest.LEDGER, {})[key]["status"], "signed")
+        self.assertEqual(len(calls), 13, "the new signature met all 13 windows, not the head")
+
+    def test_score_cached_scores_every_window(self):
+        key = _key("https://y/held")
+        os.makedirs(self.chroma_dir, exist_ok=True)
+        np.save(os.path.join(self.chroma_dir, key + ".npy"), np.ones((12, 8), dtype="float32"))
+        calls = self._counting_match()
+        state = {"matches": [], "kept": 0, "scored": {}}
+        harvest.score_cached(state, 4, self.long_q, harvest.query_key(4, "fp"), key)
+        self.assertEqual(len(calls), 13)
+
+    def test_the_deciding_pass_gets_the_winning_window(self):
+        target = int(round(90 * harvest._cm.FPS))         # a window start (k = 6)
+        p = mock.patch.object(harvest._cm, "match",
+                              lambda q, c: (0.004 + abs(int(q[0, 0]) - target) / 1e4, 0, 1.0))
+        p.start()
+        self.addCleanup(p.stop)
+        got = []
+        b = mock.patch.object(harvest._cm, "match_band",
+                              lambda q, c, tries=None: got.append(
+                                  (int(q[0, 0]), q.shape[1])) or (0.003, 0, 1.0, 9.0))
+        b.start()
+        self.addCleanup(b.stop)
+        harvest.score_pair(self.long_q, None)
+        self.assertEqual(got, [(target, int(round(120 * harvest._cm.FPS)))],
+                         "the window that won, one window long -- not window 0")
+
+    def test_the_self_test_asks_its_rivals_with_every_window(self):
+        calls = self._counting_match()
+        harvest.selftest.best_rival_cost([(4, self.long_q, "4:fp:w120s15")], None)
+        self.assertEqual(len(calls), 13)
+
+    def test_the_run_migrates_before_it_asks(self):
+        harvest._save(harvest.RULINGS, {})
+        order = []
+        real = harvest.migrate_query_shape
+        self._loop_patches([], migrate_query_shape=lambda st: order.append("migrate") or real(st))
+        q = mock.patch.object(harvest, "queries",
+                              lambda state=None: order.append("queries") or [])
+        q.start()
+        self.addCleanup(q.stop)
+        harvest.run(None)
+        self.assertEqual(order[:2], ["migrate", "queries"])
+        self.assertEqual(harvest._load(harvest.STATE, {})["query_shape"], harvest.QUERY_SHAPE)
+
+    def test_the_loop_gives_the_rescan_its_minute_and_honours_a_stop_inside_it(self):
+        key = _key("https://y/waits")
+        self._feed(key)
+        harvest._save(harvest.RULINGS, {})
+        seen = []
+
+        def _rescan(*a, **k):
+            seen.append(k.get("budget_s"))
+            harvest._STOP["signum"] = signal.SIGTERM        # a stop lands mid-rescan
+            return 0
+        scans = []
+        real_scan = harvest.scan_directories
+        self._loop_patches([], rescan=_rescan,
+                           scan_directories=lambda *a, **k: scans.append(1) or real_scan(*a, **k))
+        harvest.run(None)
+        self.assertEqual(seen, [harvest.RESCAN_BUDGET_S])
+        self.assertEqual(scans, [], "the pass stopped after the rescan: no scan, no sign")
+        self.assertNotIn(key, harvest._load(harvest.LEDGER, {}))
+        self.assertIsNone(harvest._load(harvest.STATE, {}).get("current"), "and it saved")
+
+    # --- --rescan -----------------------------------------------------------------------
+
+    def _rescan_main(self, **extra):
+        harvest._save(harvest.RULINGS, {})
+        harvest._save(harvest.LEDGER, {})
+        patches = [mock.patch.object(sys, "argv", ["harvest.py", "--rescan"]),
+                   mock.patch.object(harvest, "install_signal_handlers", lambda **k: None)]
+        patches += [mock.patch.object(harvest, k, v) for k, v in extra.items()]
+        out = io.StringIO()
+        with contextlib.ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
+            stack.enter_context(contextlib.redirect_stdout(out))
+            harvest.main()
+        return out.getvalue()
+
+    def test_the_rescan_migrates_before_it_asks(self):
+        order = []
+        real = harvest.migrate_query_shape
+        self._rescan_main(migrate_query_shape=lambda st: order.append("migrate") or real(st),
+                          queries=lambda state=None: order.append("queries") or [])
+        self.assertEqual(order, ["migrate", "queries"])
+        self.assertEqual(harvest._load(harvest.STATE, {})["query_shape"], harvest.QUERY_SHAPE)
+
+    def test_the_rescan_refuses_while_the_loop_holds_the_lock(self):
+        held = harvest.acquire_writer_lock()
+        self.addCleanup(held.close)
+        text = self._rescan_main(
+            queries=lambda state=None: self.fail("no query set is read under a running loop"))
+        self.assertIn("RUNNING", text)
+        self.assertFalse(os.path.exists(harvest.STATE), "a refused rescan writes nothing")
+
+    def test_the_rescan_saves_as_it_goes(self):
+        saves = []
+        real_save = harvest._save
+
+        def _rescan(state, ledger, ruled, qs, checkpoint=None, **k):
+            for i in range(3):
+                state.setdefault("scored", {}).setdefault("4:fp:w120s15", []).append(str(i))
+                checkpoint()
+            return 3
+        self._rescan_main(rescan=_rescan, queries=lambda state=None: [],
+                          _save=lambda path, data: saves.append(path) or real_save(path, data))
+        self.assertGreaterEqual(saves.count(harvest.STATE), 4, "every checkpoint, then the end")
 
 
 class SidecarFieldTypes(unittest.TestCase):

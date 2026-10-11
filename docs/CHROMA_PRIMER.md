@@ -46,6 +46,11 @@ frames match nothing cleanly. But a DJ blend is edges, not middle: for most of t
 the record plays alone (or dominates), and the sliding search finds the offset where that
 clean core locks on; the blended head and tail just add a bit of cost.
 
+The opening is where the blend sits, so the harvester does not ask with the clip's first
+two minutes. It asks with 120 s windows, a new one every 15 s along the whole clip, and keeps
+the lowest cost; the winning window is the one clear of the blend (see
+[SCRIPTS.md](./SCRIPTS.md), the harvester).
+
 This is exactly the clip-length lesson: MT7's 23 seconds was nearly all edge, so *every*
 candidate scored similarly low and five "confident" ties appeared — hence the 60-second
 floor (`MIN_QUERY_S`). Enough solo core, and the core outvotes the edges.

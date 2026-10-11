@@ -278,7 +278,17 @@ def acquire_writer_lock():
     return fh
 
 HOP = chroma_recipe.HOP          # single source: chroma_recipe.py
-QUERY_S = 120.0
+# THE QUERY: a mystery clip is asked as 120 s windows, a new one every 15 s, the last placed to
+# end at the clip's end; per (mystery, candidate) the lowest cost over the windows is the score.
+# Until 2026-10 the query was the clip's first 120 s alone -- the worst place to ask, because a
+# broadcast plays a record's opening mixed under the record before it (see
+# streamalign/chroma_match.py, "asking with sliding windows"). A clip between MIN_QUERY_S and
+# QUERY_S long is one window: the whole clip.
+QUERY_S = _cm.WINDOW_S            # 120 s
+QUERY_STEP_S = _cm.STEP_S         # 15 s, decided 2026-09-06
+# The query's SHAPE is part of every query key, so a change of shape makes every pairing in
+# `state["scored"]` stale and the whole pool is asked again (see migrate_query_shape).
+QUERY_SHAPE = "w%ds%d" % (QUERY_S, QUERY_STEP_S)
 # The shortest clip we will search WITH. MT7's is 23 seconds, and it produced five confident false
 # positives all within 0.0007 of each other: a short query drives every cost down until the matcher
 # can no longer tell records apart, and a degenerate ranking looks exactly like a real one. Better
@@ -299,9 +309,28 @@ MIN_QUERY_S = 60.0
 # lands. Bounded, predictable, and it cannot be wrong about a threshold because it does not use
 # one.
 KEEP_TOP = 12
-# How many cached signatures to re-score per pass of the loop. Small on purpose: rescanning is CPU,
-# so a modest chunk each pass rides along instead of stalling the signing.
-RESCAN_PER_PASS = 25
+# WHAT A SCORE COSTS, for the --rescan estimate only. A pair costs one window's alignment times
+# the clip's window count, and one window's alignment grows with the CANDIDATE's length. Measured
+# 2026-10-11 with a 5-minute clip (13 windows): ~5.7 s a pair against a 6-minute candidate,
+# ~59 s against a 60-minute one -- about 0.075 s per window per minute of candidate. So a single
+# track costs seconds and a two-hour mix about two minutes. Memory does not grow: the windows are
+# scored one after another.
+SCORE_S_PER_WINDOW_MINUTE = 0.075
+# A signature whose length nothing records (not in the working cache, no `duration_s` on its
+# row) is counted at the mean length of the rows that carry one: about 17 minutes in October 2026
+# (the median is 6.5; the long mixes pull the mean up, and the mean is what a sum needs).
+DEFAULT_CANDIDATE_MIN = 17.0
+# How long each pass of the loop spends re-scoring held signatures before it signs a file: one
+# minute (decided 2026-10-11). A budget of TIME, not of pairs, because a pair costs seconds
+# against a single track and minutes against a long mix. The clock is read between pairs: a
+# pass always scores at least one pair, and a pair that runs past the budget finishes. With a
+# 5-minute clip, a minute buys about nine pairs against a typical 6.5-minute track, three or
+# four at the pool's 17-minute mean, and one against an hour-long mix. A stop is noticed
+# between pairs too (see rescan).
+RESCAN_BUDGET_S = 60.0
+# `--rescan` runs for hours; it saves what it has scored at least this often, so a stop or a
+# crash loses at most this much work.
+RESCAN_SAVE_EVERY_S = 60.0
 KEEP_CEILING = 0.130      # never retain an excerpt worse than the worst plausible true match
 KEEP_TTL_DAYS = 30        # a lead not listened to in a month is not a lead -- swept
 # A reported MATCH still needs cost AND margin. The populations OVERLAP (true match up to 0.0971,
@@ -309,6 +338,19 @@ KEEP_TTL_DAYS = 30        # a lead not listened to in a month is not a lead -- s
 # the margin test is what actually carries the gate. 40 of 41 tracks rank #1 against their own
 # original, so the margin is real.
 MATCH_COST = 0.050
+# THE DECIDING PASS. A pair whose best window clears MATCH_COST is scored again, that window
+# only, with the band-limited path and the peak-to-sidelobe ratio (streamalign/chroma_match.py,
+# match_band), and stays a MATCH only when the ratio is at least PSR_MATCH. Where the number
+# comes from: 36 hand-labelled original/capture pairs scored this way gave the true pairs a
+# median ratio of 9.5 and the hardest wrong candidate at most 1.46 (median 1.13); 2.0 sits
+# clear above every wrong candidate measured. A pair whose candidate is too short to have a
+# sidelobe (about two query lengths) has no ratio, and the cost decides alone, as before. A
+# pair that fails the ratio is kept as `near`: the lead stays on the board, only the word
+# MATCH is withheld.
+PSR_MATCH = 2.0
+# Why a row's `psr` is None (its `psr_note`).
+PSR_NOT_RUN = "not run"                       # the cost was above MATCH_COST
+PSR_NO_SIDELOBE = "candidate too short"       # ran; no end point a query length away
 
 # THE BACKSTOP, not the rule. A file whose declared length -- or whose decoded length, when the
 # sidecar declares none -- is over four hours is `delayed` with `too_long`, refused and never
@@ -1719,6 +1761,45 @@ def migrate_matches(state):
     return moved
 
 
+def migrate_query_shape(state):
+    """Once per change of query shape: forget every verdict reached with the old one.
+
+    A lead, and a pairing in `state["scored"]`, is an answer to one way of asking. When the
+    asking changes (QUERY_SHAPE -- until 2026-10 the clip's first 120 s, now sliding windows)
+    the old answers no longer say what the search would say, so:
+
+      * every `state["scored"]` pairing under another shape is dropped -- the query keys carry
+        the shape, so the pool is asked again with the new one in any case, and the old lists
+        are dead weight;
+      * every lead is dropped, with its excerpt, ruled-on or not: past findings are not
+        kept. The rulings themselves live in the rulings file, which this side only reads,
+        so a ruled-on key is still never asked again (unscored_pairs skips it);
+      * the scorer's `current_query` block goes with the pairings it counted.
+
+    Signatures, clips, the canary, the ledger and the rulings file are untouched: nothing is decoded or signed
+    again. Keyed on `state["query_shape"]`, so it runs once and a second call does nothing.
+    Returns (leads dropped, pairings dropped), or None when there was nothing to do.
+    """
+    if state.get("query_shape") == QUERY_SHAPE:
+        return None
+    suffix = ":" + QUERY_SHAPE
+    scored = state.setdefault("scored", {})
+    stale = [k for k in scored if not str(k).endswith(suffix)]
+    for k in stale:
+        del scored[k]
+    dropped = 0
+    for m in state.get("matches") or []:
+        dropped += 1
+        path = m.get("audio") if isinstance(m, dict) else None
+        if path:
+            cache_budget.remove(CANDIDATES_CACHE, path, "query-shape-changed")
+    state["matches"] = []
+    state["kept"] = 0                 # no row names an excerpt any more
+    state.pop("current_query", None)
+    state["query_shape"] = QUERY_SHAPE
+    return dropped, len(stale)
+
+
 # THE BUCKET's object listing, {name: etag}, cached for a while -- None when the store is dark
 # or the listing failed (callers must not treat that as 'empty').
 _REMOTE_OBJECTS = {"at": 0.0, "objects": None}
@@ -1859,8 +1940,8 @@ def canary_pass(state, path, stored, qs):
          identical signature is the pass, any difference is flagged;
       3. the new signature is scored as if new against every mystery: against the canary's
          own mix it must show the known cost, rank and margin (`selftest.live`), and against
-         the current mysteries it must not MATCH (cost at or under MATCH_COST, the search's
-         own bar) anywhere the pool has not already recorded a lead for this key -- a new
+         the current mysteries it must not MATCH (the search's own verdict, `score_pair`:
+         cost at or under MATCH_COST and the deciding pass passed) anywhere the pool has not already recorded a lead for this key -- a new
          match is flagged. The bar is MATCH_COST, not the keep-board ceiling: an unrelated
          pair routinely scores inside the ceiling (the non-match median is above it), so a
          near-miss is noise, while a MATCH on a mystery for a track already solved is news.
@@ -1908,10 +1989,12 @@ def canary_pass(state, path, stored, qs):
 
         known = {m.get("mystery") for m in state.get("matches") or [] if m.get("key") == key}
         for num, qc, _qkey in qs:
-            cost, _shift, _at = _cm.match(qc, c)
-            if cost is None or cost > MATCH_COST or num in known:
+            # Judged the way the search judges a pair -- sliding windows, then the deciding
+            # pass -- so a pair the search would keep as `near` is not news here either.
+            res = score_pair(qc, c)
+            if res is None or res["verdict"] != "MATCH" or num in known:
                 continue
-            rec["new_hits"].append({"mystery": num, "cost": round(float(cost), 4)})
+            rec["new_hits"].append({"mystery": num, "cost": res["cost"]})
         if rec["new_hits"]:
             problems.append("the canary matched mystery %s, where the pool holds no lead for it"
                             % ", ".join("MT%d (cost %.4f)" % (h["mystery"], h["cost"])
@@ -1989,8 +2072,40 @@ def unscored_pairs(state, ledger, ruled, qs, limit=None):
     return out
 
 
+def score_pair(qc, c):
+    """One mystery query against one signature: the screen, then the deciding pass.
+
+    The screen is the free matcher over the query's sliding windows (`_cm.match_sliding`):
+    the lowest cost over the windows is the pair's cost, `at_s` is where in the CANDIDATE the
+    winning window fits, and `query_offset_s` is where in the mystery CLIP that window starts.
+    A pair under MATCH_COST then meets the deciding pass on its winning window alone
+    (`_cm.match_band`), and its peak-to-sidelobe ratio decides between MATCH and near (see
+    PSR_MATCH). Returns the row's numbers, or None when the pair is not worth a row (nothing
+    fits, or the cost is above KEEP_CEILING).
+
+    `psr` is None for one of two reasons, and `psr_note` says which: PSR_NOT_RUN (the cost was
+    above MATCH_COST, so the deciding pass never ran) or PSR_NO_SIDELOBE (it ran, but the
+    candidate is too short to have a sidelobe, so the cost decided). With a ratio, the note is
+    None.
+    """
+    cost, shift, at, offset = _cm.match_sliding(qc, c)
+    if cost is None or cost > KEEP_CEILING:
+        return None
+    out = {"cost": round(float(cost), 4), "semitones": shift,
+           "at_s": round(float(at or 0), 1), "query_offset_s": round(float(offset or 0), 1),
+           "psr": None, "psr_note": PSR_NOT_RUN, "verdict": "near"}
+    if cost <= MATCH_COST:
+        psr = _cm.match_band(_cm.window_at(qc, offset), c)[3]
+        out["psr"] = None if psr is None else round(float(psr), 2)
+        out["psr_note"] = PSR_NO_SIDELOBE if psr is None else None
+        out["verdict"] = "MATCH" if psr is None or psr >= PSR_MATCH else "near"
+    return out
+
+
 def score_cached(state, num, qc, qkey, key):
-    """Score one held signature against one mystery. No network, ~0.06s. Returns a hit or None.
+    """Score one held signature against one mystery. No network, a few seconds (one window's
+    cost times the clip's window count, growing with the candidate's length; see
+    SCORE_S_PER_WINDOW_MINUTE). Returns a hit or None.
 
     Updates an existing row rather than duplicating it -- which is also how the missing `at_s`
     gets filled in. Every match saved before the harvester recorded WHERE it hit has `at_s: None`,
@@ -2009,7 +2124,7 @@ def score_cached(state, num, qc, qkey, key):
     c = _load_sig(key)
     if c is None:
         return None
-    cost, shift, at = _cm.match(qc, c)
+    res = score_pair(qc, c)
     state.setdefault("scored", {}).setdefault(qkey, []).append(key + ".npy")
 
     # The `current_query` block: the scorer keeps it while it works one mystery. One more
@@ -2023,17 +2138,13 @@ def score_cached(state, num, qc, qkey, key):
         cq["remaining"] = max(0, int(cq.get("remaining") or 0) - 1)
         cq["updated"] = _now()
 
-    if cost is None or cost > KEEP_CEILING:
+    if res is None:
         return None
-    verdict = "MATCH" if cost <= MATCH_COST else "near"
     for m in state["matches"]:
         if m.get("key") == key and m.get("mystery") == num:
-            m.update(cost=round(float(cost), 4), semitones=shift,
-                     at_s=round(float(at or 0), 1), verdict=verdict)
+            m.update(res)
             return m
-    hit = {"at": _now(), "mystery": num, "cost": round(float(cost), 4),
-           "semitones": shift, "at_s": round(float(at or 0), 1), "key": key,
-           "verdict": verdict}
+    hit = dict({"at": _now(), "mystery": num, "key": key}, **res)
     state["matches"].append(hit)
     evict_overfull(state, num)
     return hit
@@ -2066,7 +2177,38 @@ def forget(state, num):
     return before - len(state["matches"]), len(dropped_keys)
 
 
-def rescan(state, ledger, ruled, qs, limit=None, verbose=True):
+_clock = time.monotonic                 # the rescan's clock; a seam for the tests
+
+
+def _candidate_minutes(key, ledger):
+    """A signature's length in minutes, for the time estimate: the working cache's copy (its
+    header only), else the ledger row's `duration_s`, else DEFAULT_CANDIDATE_MIN."""
+    d = _chroma_dir()
+    if d:
+        try:
+            return np.load(os.path.join(d, key + ".npy"), mmap_mode="r").shape[1] / _cm.FPS / 60
+        except (OSError, ValueError, IndexError):
+            pass
+    dur = (ledger.get(key) or {}).get("duration_s")
+    if isinstance(dur, (int, float)) and not isinstance(dur, bool) and dur > 0:
+        return dur / 60.0
+    return DEFAULT_CANDIDATE_MIN
+
+
+def rescan_estimate_s(pairs, ledger):
+    """Roughly how long scoring `pairs` takes: per pair, the clip's window count times the
+    candidate's length in minutes times SCORE_S_PER_WINDOW_MINUTE."""
+    total, minutes = 0.0, {}
+    for _num, qc, _qkey, key in pairs:
+        n_win = (len(_cm.window_starts(qc.shape[1])) if getattr(qc, "ndim", None) == 2 else 1)
+        if key not in minutes:
+            minutes[key] = _candidate_minutes(key, ledger)
+        total += n_win * minutes[key] * SCORE_S_PER_WINDOW_MINUTE
+    return total
+
+
+def rescan(state, ledger, ruled, qs, limit=None, verbose=True, checkpoint=None,
+           budget_s=None):
     """Work through the unscored pairs. Returns how many were scored -- a pair whose
     signature could not be loaded is not scored: it stays in the pending count and is
     tried again on the next pass, and the harvester never reports a held signature as
@@ -2079,7 +2221,7 @@ def rescan(state, ledger, ruled, qs, limit=None, verbose=True):
     Advances the `current_query` block (§5.6) as it works one mystery: `mystery`, `query_key`,
     `started` (when this mystery's chunk began), `compared`, `remaining`, `updated`. A rescan
     works the mysteries in the order `qs` carries them, and a chunk per pass
-    (`RESCAN_PER_PASS`) may finish a mystery and start the next within one call -- so the
+    (`RESCAN_BUDGET_S`) may finish a mystery and start the next within one call -- so the
     block is reset the moment the mystery changes, and `remaining` is the count left in this
     rescan batch for the mystery the block names.
 
@@ -2091,6 +2233,15 @@ def rescan(state, ledger, ruled, qs, limit=None, verbose=True):
     while scoring continues for hours. A local `started_in_this_call` set tracks which
     (mystery, query_key) values this call has already opened, so the second chunk for the
     same mystery re-stamps `started` and re-counts `remaining` from its own batch.
+
+    `budget_s` bounds the call by time (the loop passes RESCAN_BUDGET_S): the clock is read
+    between pairs, so at least one pair is always tried and a pair that overruns finishes.
+
+    A STOP is noticed between pairs: a pair against a long mix can take minutes, and the
+    launcher's stop wait is shorter than that, so the rescan returns early with what it has
+    scored and the caller saves it. `checkpoint`, when given, is called after a scored pair
+    once RESCAN_SAVE_EVERY_S has passed since the last call -- `--rescan` saves there, so a
+    crash loses at most that much work.
 
     When the backlog is empty (zero unscored pairs), the block is cleared: a stale block
     with `remaining > 0` and a frozen `updated` would let a reader show "in progress"
@@ -2111,12 +2262,19 @@ def rescan(state, ledger, ruled, qs, limit=None, verbose=True):
         remaining_in_batch[(num, qkey)] = remaining_in_batch.get((num, qkey), 0) + 1
     scored = state.setdefault("scored", {})
     # The (mystery, query_key) values THIS call has already opened a block for. A mystery
-    # whose backlog exceeds RESCAN_PER_PASS is worked across more than one call: its
+    # whose backlog exceeds one pass's budget is worked across more than one call: its
     # second chunk re-stamps `started` and re-counts `remaining` from this call's batch,
     # so the block does not freeze on the first chunk's values while scoring continues.
     started_in_this_call = set()
     n = 0
+    started_at = last_save = _clock()
+    tried = 0
     for num, qc, qkey, key in pairs:
+        if _stop_requested():
+            break                          # what is scored is in `state`; the caller saves
+        if budget_s is not None and tried and _clock() - started_at >= budget_s:
+            break                          # the pass's minute is spent; the rest wait
+        tried += 1
         cq = state.get("current_query")
         block_matches = (isinstance(cq, dict) and cq.get("mystery") == num
                          and cq.get("query_key") == qkey)
@@ -2139,6 +2297,9 @@ def rescan(state, ledger, ruled, qs, limit=None, verbose=True):
             a = int(hit.get("at_s") or 0)
             print("  %s  MT%d  cost %.4f  at %d:%02d  %s  (from a held signature -- no decode)"
                   % (hit["verdict"], num, hit["cost"], a // 60, a % 60, key))
+        if checkpoint is not None and _clock() - last_save >= RESCAN_SAVE_EVERY_S:
+            checkpoint()
+            last_save = _clock()
     return n
 
 
@@ -2314,13 +2475,19 @@ def clip_fingerprint(path):
     return h.hexdigest()[:12]
 
 
+def query_key(num, fingerprint):
+    """`<mystery>:<clip fingerprint>:<query shape>` -- what `state["scored"]` is keyed on."""
+    return "%d:%s:%s" % (num, fingerprint, QUERY_SHAPE)
+
+
 def queries(state=None):
     """The unsolved mysteries, as chroma. From track-metadata.json -- never from filenames.
 
-    Returns (mystery_number, chroma, query_key) triples. The QUERY KEY is the mystery number plus a
-    fingerprint of the clip's contents, and it is what `state["scored"]` is keyed on -- so a clip
-    that is RE-CUT invalidates every pairing made against the old one, and every held signature is
-    scored again automatically. Keying on the number alone would have meant a better MT7 clip
+    Returns (mystery_number, chroma, query_key) triples; the chroma is the whole clip's, and the
+    matcher asks with its sliding windows. The QUERY KEY is the mystery number, a fingerprint of
+    the clip's contents and the query's shape (QUERY_SHAPE), and it is what `state["scored"]` is
+    keyed on -- so a clip that is RE-CUT, or asked a new way, invalidates every pairing made
+    against the old one, and every held signature is scored again automatically. Keying on the number alone would have meant a better MT7 clip
     inherited the old clip's verdicts and was never actually asked: exactly the false negatives Tim
     was worried about.
 
@@ -2346,9 +2513,12 @@ def queries(state=None):
                                    "and it re-enters the search by itself."
                                    % (round(secs), MIN_QUERY_S)})
             continue
-        y = _audio.load_audio(e["clip"])[:int(QUERY_S * _audio.SR)]
+        # The WHOLE clip's chroma: the matcher asks with its sliding windows (QUERY_S long,
+        # every QUERY_STEP_S), cut from this one matrix, so the clip is decoded once.
+        y = _audio.load_audio(e["clip"])
         c = chroma_recipe.compute_chroma(y)          # same recipe as the candidates it scores
-        qkey = "%d:%s" % (e["number"], clip_fingerprint(e["clip"]))
+        y = None
+        qkey = query_key(e["number"], clip_fingerprint(e["clip"]))
         out.append((e["number"], c, qkey))
 
     if state is not None:                     # so the page can say what it is NOT asking, and why
@@ -2470,6 +2640,13 @@ def run(args):
     if moved:
         _save(STATE, state)
         print("# moved %d old match row(s) from their urls onto keys" % moved)
+    # A NEW WAY OF ASKING makes every old verdict stale: once, before the first score.
+    shaped = migrate_query_shape(state)
+    if shaped is not None:
+        _save(STATE, state)
+        print("# the query is now %s: dropped %d lead(s) and %d scored pairing list(s) reached "
+              "the old way; the pool is asked again"
+              % ((QUERY_SHAPE,) + shaped))
     qs = queries(state)
     if note_no_queries(state, qs):
         _save(STATE, state)                   # queries(state) stamped searching/skipped too
@@ -2604,7 +2781,7 @@ def run(args):
 
         # Score held signatures against any mystery they have not met yet -- a bounded chunk per
         # pass, so it rides along with the signing instead of blocking it. This is CPU only
-        # (~0.06s each), and it is what makes a NEW mystery see the WHOLE corpus: the day MT8's
+        # (a few seconds each), and it is what makes a NEW mystery see the WHOLE corpus: the day MT8's
         # clip lands, every signature the pool holds gets scored against it, without a single
         # new decode. Positions (`at_s`) on old rows get filled in on the way.
         todo = len(unscored_pairs(state, ledger, ruled, qs))
@@ -2615,8 +2792,10 @@ def run(args):
         # loop means a block whose final batch completed does not stay in state.json with
         # `remaining: 0` and a frozen `updated` until new work or forget() replaces it.
         state["rescan_pending"] = todo
-        n = rescan(state, ledger, ruled, qs, limit=RESCAN_PER_PASS)
+        n = rescan(state, ledger, ruled, qs, budget_s=RESCAN_BUDGET_S)
         state["rescan_pending"] = max(0, todo - n)
+        if _stop_requested():
+            return _stopped(state)           # saves what the chunk scored before the stop
         _save(STATE, state)
         if not todo and sigstore.enabled():
             # Rescan backlog empty = every held signature is scored vs every current mystery,
@@ -2750,9 +2929,10 @@ def run(args):
             c = samples = None
         if c is not None:
             for num, qc, _qkey in qs:
-                cost, shift, at = _cm.match(qc, c)
-                if cost is None or cost > KEEP_CEILING:
+                res = score_pair(qc, c)
+                if res is None:
                     continue
+                cost, shift, at = res["cost"], res["semitones"], res["at_s"]
                 board = [m for m in state["matches"] if m["mystery"] == num]
                 board.sort(key=lambda m: m["cost"])
                 if len(board) >= KEEP_TOP and cost >= board[-1]["cost"]:
@@ -2772,10 +2952,8 @@ def run(args):
                     kept = write_excerpt(samples, at or 0, excerpt)   # from memory; NO second decode
                     if kept:
                         state["kept"] += 1
-                hit = {"at": _now(), "mystery": num, "cost": round(cost, 4),
-                       "semitones": shift, "at_s": round(at or 0, 1), "key": rec_file["key"],
-                       "audio": excerpt if kept else None,
-                       "verdict": "MATCH" if cost <= MATCH_COST else "near"}
+                hit = dict({"at": _now(), "mystery": num, "key": rec_file["key"],
+                            "audio": excerpt if kept else None}, **res)
                 state["matches"].append(hit)
 
                 evict_overfull(state, num)
@@ -2977,20 +3155,45 @@ def main():
             print("# %s does not exist yet -- start the harvester once (it seeds the ledger "
                   "from the bucket) and re-run." % LEDGER)
             return
+        # ONE WRITER: the rescan rewrites the state file for hours, and so does the loop. Two
+        # writers means the last save wins and the other's work is silently lost, so this
+        # takes the loop's lock and refuses while the loop holds it -- as --sign-one does.
+        lock = acquire_writer_lock()
+        if lock is None:
+            print("# a ledger/state writer is RUNNING (a harvest.py --run) -- not rescanning "
+                  "under it: the loop scores the same pairs a chunk each pass. Stop it first "
+                  "if you want the rescan finished now.")
+            return
+        # A Ctrl-C or SIGTERM raises the stop flag instead of killing the process mid-save;
+        # rescan notices it between pairs and the state is saved below.
+        install_signal_handlers()
         state = _load(STATE, blank_state())
+        if migrate_query_shape(state) is not None:
+            _save(STATE, state)
         ledger = load_ledger()
         qs = queries()
-        todo = len(unscored_pairs(state, ledger, ruled, qs))
-        print("# rescanning %d (signature, mystery) pair(s) against MT%s -- no network, ~%.0f min"
-              % (todo, "/MT".join(str(n) for n, _, _ in qs), todo * 0.06 / 60))
-        n = rescan(state, ledger, ruled, qs)
+        pairs = unscored_pairs(state, ledger, ruled, qs)
+        todo = len(pairs)
+        print("# rescanning %d (signature, mystery) pair(s) against MT%s -- no network, ~%.0f min "
+              "(longer candidates cost more; saved every %d s, Ctrl-C stops cleanly)"
+              % (todo, "/MT".join(str(n) for n, _, _ in qs),
+                 rescan_estimate_s(pairs, ledger) / 60, RESCAN_SAVE_EVERY_S))
+        pairs = None
+
+        def checkpoint():
+            _save(STATE, state)
+
+        n = rescan(state, ledger, ruled, qs, checkpoint=checkpoint)
         # A pair whose signature could not be loaded is not scored: rescan left it out of
         # the count, so it stays in `rescan_pending` for the next pass. The completion
         # line is the one claim that must not over-reach -- it speaks only when every
         # held signature actually met every mystery this pass.
         state["rescan_pending"] = todo - n
         _save(STATE, state)
-        if n < todo:
+        if _stop_requested():
+            print("# stopped on %s after %d of %d pair(s) -- saved; the rest stay pending."
+                  % (_stop_name(), n, todo))
+        elif n < todo:
             print("# scored %d of %d; %d pair(s) could not load their signature and stay "
                   "pending -- re-run once the cache or bucket is whole." % (n, todo, todo - n))
         else:

@@ -178,7 +178,8 @@ class QueryKeysArePublished(unittest.TestCase):
             qs = harvest.queries(state)
         self.assertEqual([n for n, _, _ in qs], [4])
         self.assertEqual(state["searching"], [4])
-        self.assertEqual(state["query_keys"], {"4": "4:f00"})
+        self.assertEqual(state["query_keys"], {"4": "4:f00:w120s15"},
+                         "the key carries the query shape, so a new shape re-asks the pool")
 
 
 @unittest.skipUnless(harvest, "harvest deps unavailable")
@@ -227,6 +228,9 @@ class NothingToSearchForIsAState(unittest.TestCase):
         for k in [k for k in list(os.environ) if k.startswith("NETRADIO_")]:
             os.environ.pop(k, None)
         os.environ.update(self._saved_env)
+        # The test below stops the run by raising the stop flag; lower it again, or it leaks
+        # into every later test (the rescan honours it between pairs).
+        harvest._STOP.update({"signum": 0, "child": None, "procs": [], "part": None})
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_an_empty_query_set_is_stamped_and_the_run_goes_on(self):

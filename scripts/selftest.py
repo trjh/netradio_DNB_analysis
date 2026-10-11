@@ -226,7 +226,8 @@ def best_rival_cost(mystery_queries, c_fetched):
     """
     rivals = []
     for entry in (mystery_queries or []):
-        rc, _s, _a = _cm.match(entry[1], c_fetched)
+        # Asked the way the search asks: the mystery clip's sliding windows, the lowest wins.
+        rc, _s, _a, _off = _cm.match_sliding(entry[1], c_fetched)
         if rc is not None:
             rivals.append(float(rc))
     return (min(rivals) if rivals else 1.0), len(rivals)
