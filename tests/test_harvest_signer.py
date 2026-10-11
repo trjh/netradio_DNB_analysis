@@ -176,6 +176,13 @@ class _SignerCase(unittest.TestCase):
         self.put = []
         self.chroma_dir = os.path.join(self.root, "chroma")
         self.addCleanup(self._restore)
+        # The deciding pass is faked here as the matcher is (these cases hand in all-zero
+        # chroma, which a real DTW refuses): no ratio, so the cost decides, as it always did.
+        # tests/test_sliding_query.py exercises the real one.
+        band = mock.patch.object(harvest._cm, "match_band",
+                                 lambda q, c, tries=None: (None, None, None, None))
+        band.start()
+        self.addCleanup(band.stop)
 
     def _restore(self):
         (harvest.LEDGER, harvest.STATE, harvest.JOBS, harvest.WRITER_LOCK,

@@ -220,7 +220,8 @@ of it: the same 12×N matrix answers MT4 today and MT8 next month, for free. So 
 remembers which **(signature, mystery)** pairs it has scored, and any unpaired combination is work
 to do — a chunk each pass, riding along between signs. The day a new
 `Mystery Track N` clip lands, every signature the pool holds is scored against it **without a
-single new decode**: ~0.06 s each, ~3 minutes for the lot. `--rescan` does it all at once, for
+single new decode**: a few seconds a pair (one window's cost times the clip's window count,
+below), so hours for the whole pool rather than minutes. `--rescan` does it all at once, for
 when you want it finished now. `--rescan` also needs the ledger to exist (start the harvester
 once and it is seeded from the bucket) and the rulings file to be readable, for the same reason
 every scoring path does.
@@ -252,6 +253,36 @@ The rescan also fills in **where** each old match hit (`at_s`), which is why the
 can cue a lead to the moment it matched even for leads found before that field existed. The
 position was never lost: it is recomputable from the signature we already hold.
 
+**The query is sliding windows, not the clip's head.** A mystery clip is asked as 120 s
+windows, a new one every 15 s (`QUERY_S`, `QUERY_STEP_S`), the last one placed to end at the
+clip's end; a 5-minute clip is 13 windows, and a clip of 60–120 s is one window, the whole clip.
+Per (mystery, candidate) the lowest cost over the windows is the score. A match row records
+`at_s`, where in the candidate the winning window fits, and `query_offset_s`, where in the clip
+that window starts. Until 2026-10 the query was the clip's first 120 s alone, and that is the
+worst place to ask: the broadcast plays a record's opening mixed under the record before it. On
+the hand-labelled captures the clear part of an original starts 20 s in at the median, after
+60 s for a quarter of them, and up to 105 s in; on eight labelled originals the first 120 s
+found 1 and sliding windows found all 8. The step was decided 2026-09-06: 15 s placed a record
+best, 30 s found the same records, 5 s found nothing more. The windows are scored one after
+another, so memory stays at one window's alignment; time grows with the window count.
+
+**MATCH needs a sharp minimum, not only a low cost.** A pair whose best window clears
+`MATCH_COST` meets a deciding pass on that window: an alignment whose path may only run between
+6/7 and 7/6 of real time, and its peak-to-sidelobe ratio, the best fit anywhere in the
+candidate divided by the best fit at least one query length away from it. A true record is a
+sharp minimum; a bland query fits about as well everywhere. It stays a MATCH only at a ratio of
+at least `PSR_MATCH` (2.0): on 36 hand-labelled pairs the true ones had a median ratio of 9.5
+and the hardest wrong candidate at most 1.46. A pair that fails it is kept as `near` (the lead
+stays on the board), and a candidate too short to have a sidelobe (under about two query
+lengths) has no ratio, so the cost decides alone. The row carries the ratio as `psr`.
+
+**A new way of asking voids every old verdict.** The query key carries the query's shape
+(`w120s15`), so every pairing scored the old way is asked again. Once, at the first start under a
+new shape, the harvester drops every old lead and its excerpt, and the old pairing lists,
+except a lead whose key is in the rulings file: a ruled-on key is never asked again, so its row
+is the only record of what was found. Signatures, clips, the canary and the ledger are kept;
+nothing is decoded or signed again.
+
 **A clip too short to distinguish records is refused** (`MIN_QUERY_S`, 60s). MT7's clip is **23
 seconds**, and it produced five *confident* false positives all within **0.0007** of each other: a
 short query drives every cost down until the matcher can no longer tell records apart, and a
@@ -259,7 +290,7 @@ degenerate ranking looks exactly like a real one. Better to search for nothing t
 everything. The mystery re-enters the search **by itself** once a longer clip is cut.
 
 **A re-cut clip asks the whole corpus again.** `state["scored"]` is keyed on the mystery number
-**plus a fingerprint of the clip's contents** — so a better clip voids every pairing made against
+**plus a fingerprint of the clip's contents** (and the query's shape) — so a better clip voids every pairing made against
 the old one, and every held signature is scored against the new question. Keyed on the number
 alone, a better MT7 clip would have silently inherited the 23-second clip's verdicts and never
 actually been asked. Use `--forget N` to drop the stale *leads* as well: the pairings go by

@@ -178,7 +178,8 @@ class QueryKeysArePublished(unittest.TestCase):
             qs = harvest.queries(state)
         self.assertEqual([n for n, _, _ in qs], [4])
         self.assertEqual(state["searching"], [4])
-        self.assertEqual(state["query_keys"], {"4": "4:f00"})
+        self.assertEqual(state["query_keys"], {"4": "4:f00:w120s15"},
+                         "the key carries the query shape, so a new shape re-asks the pool")
 
 
 @unittest.skipUnless(harvest, "harvest deps unavailable")

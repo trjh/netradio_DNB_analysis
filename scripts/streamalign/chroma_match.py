@@ -28,6 +28,7 @@ transpositions. Only the best few then pay for a DTW. Verified on the MT5 case: 
 true rotation (+11) first.
 """
 
+import math
 import os
 
 import numpy as np
@@ -103,3 +104,146 @@ def describe_shift(semitones):
         return "same key"
     signed = semitones - N_PITCH if semitones > 6 else semitones
     return "%+d semitone%s (the copy is pitched)" % (signed, "" if abs(signed) == 1 else "s")
+
+
+# --- asking with sliding windows ------------------------------------------------------------
+#
+# A query is a stretch of broadcast, and a broadcast plays a record's opening mixed under the
+# record before it. A query cut from the first two minutes therefore asks with the least
+# reliable part of the record: on the hand-labelled captures the clear part of an original
+# starts 20 s in at the median and up to 105 s in, and in a test on eight labelled originals a
+# query from the first 120 s found 1 of 8 while 120 s windows sliding along the clip found
+# 8 of 8. So a long query is asked as windows: WINDOW_S long, a new one every STEP_S, the last
+# one placed to end where the query ends, and the lowest cost over all windows wins. The step
+# was decided 2026-09-06: 15 s placed a record best (median error 0.66 s against the labels);
+# 30 s found the same records; 5 s found nothing more and placed loop-built records worse.
+
+WINDOW_S = 120.0
+STEP_S = 15.0
+FPS = _SR / float(_HOP)                 # chroma frames per second (7.8125)
+
+
+def window_starts(n_frames, window_s=WINDOW_S, step_s=STEP_S):
+    """The first frame of every window over a query `n_frames` long.
+
+    Windows start at 0 and every `step_s` after it (each start rounded to the nearest frame,
+    so the spacing does not drift), and the last window is placed to end at the query's end.
+    A query no longer than one window is one window: the whole query.
+    """
+    width = int(round(window_s * FPS))
+    if n_frames <= width:
+        return [0]
+    last = n_frames - width
+    starts, k = [], 0
+    while True:
+        s = int(round(k * step_s * FPS))
+        if s >= last:
+            break
+        starts.append(s)
+        k += 1
+    starts.append(last)
+    return starts
+
+
+def windows(query, window_s=WINDOW_S, step_s=STEP_S):
+    """`(offset_seconds, chroma)` for every window of `query` (views, not copies)."""
+    query = np.asarray(query)
+    width = int(round(window_s * FPS))
+    return [(s / FPS, query[:, s:s + width])
+            for s in window_starts(query.shape[1], window_s, step_s)]
+
+
+def match_sliding(query, candidate, window_s=WINDOW_S, step_s=STEP_S):
+    """Best (cost, semitones, at_seconds, offset_seconds) over the windows of `query`.
+
+    `at_seconds` is where in the CANDIDATE the winning window fits; `offset_seconds` is where
+    in the QUERY that window starts. The windows are scored one after another, so memory
+    stays at one window's DTW whatever the query's length. A query that is not a chroma
+    matrix (a stand-in) is passed to `match` whole, at offset 0.
+    """
+    if getattr(query, "ndim", None) != 2:
+        cost, shift, at = match(query, candidate)
+        return cost, shift, at, 0.0
+    best = (None, None, None, 0.0)
+    for off, w in windows(query, window_s, step_s):
+        cost, shift, at = match(w, candidate)
+        if cost is not None and (best[0] is None or cost < best[0]):
+            best = (cost, shift, at, off)
+    return best
+
+
+def window_at(query, offset_s, window_s=WINDOW_S):
+    """The window of `query` that starts `offset_s` seconds in (the one `match_sliding`
+    reported), or the query itself when it is not a chroma matrix."""
+    if getattr(query, "ndim", None) != 2:
+        return query
+    s = int(round(offset_s * FPS))
+    return query[:, s:s + int(round(window_s * FPS))]
+
+
+# --- the deciding pass: a band-limited path and the peak-to-sidelobe ratio --------------------
+#
+# The free subsequence DTW above may hold a candidate frame against many query frames, so on a
+# long candidate it often finds a cheap fit that means nothing: the query parked on a few
+# smooth frames. Its cost alone cannot tell such a fit from a real one. The deciding pass
+# changes two things:
+#
+#   * the warp path may only take the steps (1,1), (6,7) and (7,6), so it runs between 6/7 and
+#     7/6 of real time -- the range of a DJ's pitch control -- and can neither hold still nor
+#     crawl;
+#   * the winner is judged by its peak-to-sidelobe ratio (PSR): the best end cost anywhere in
+#     the candidate divided by the best end cost at least one query length away from it, over
+#     all the rotations tried. A real fit is a sharp minimum; a bland query fits about as well
+#     everywhere, and its ratio sits near 1 however low its cost.
+#
+# Each step is weighted by the query frames it consumes (1, 6 or 7), so an accumulated end cost
+# divided by the query's frame count is a per-frame cost, comparable across end points without
+# tracing a path back from each one.
+
+BAND_STEPS = np.array([[1, 1], [6, 7], [7, 6]])
+BAND_WEIGHTS = np.array([1.0, 6.0, 7.0])
+
+
+def match_band(query, candidate, tries=N_PITCH):
+    """Best (cost, semitones, at_seconds, psr) of `query` inside `candidate`, band-limited.
+
+    `psr` is None when the candidate leaves no end point a full query length from the winner
+    (a candidate shorter than about two query lengths): there is no sidelobe to compare with,
+    and the caller must decide without one. Everything is None when the query is not a chroma
+    matrix or the candidate is too short to hold it at the fastest allowed rate.
+    """
+    import librosa
+    if getattr(query, "ndim", None) != 2:
+        return None, None, None, None
+    query = np.asarray(query)
+    candidate = np.asarray(candidate)
+    n = query.shape[1]
+    if n < 2 or candidate.shape[1] < int(math.ceil(n * 6 / 7.0)) + 1:
+        return None, None, None, None
+    rotations = (range(N_PITCH) if tries >= N_PITCH
+                 else transposition_order(query, candidate)[:max(1, tries)])
+    best = None                       # (cost, shift, start frame, end frame)
+    ends = []
+    for k in rotations:
+        D, wp = librosa.sequence.dtw(X=np.roll(query, k, axis=0), Y=candidate, subseq=True,
+                                     metric="cosine", step_sizes_sigma=BAND_STEPS,
+                                     weights_mul=BAND_WEIGHTS)
+        per_frame = np.asarray(D[-1, :], dtype="float64") / float(n)
+        ends.append(per_frame)
+        cost = float(per_frame[wp[0][1]])
+        if np.isfinite(cost) and (best is None or cost < best[0]):
+            best = (cost, k, int(wp[-1][1]), int(wp[0][1]))
+    if best is None:
+        return None, None, None, None
+    j = best[3]
+    idx = np.arange(candidate.shape[1])
+    far = np.abs(idx - j) >= n
+    side = None
+    for e in ends:
+        v = e[far]
+        v = v[np.isfinite(v)]
+        if v.size:
+            m = float(v.min())
+            side = m if side is None else min(side, m)
+    psr = side / best[0] if (side is not None and best[0] > 0) else None
+    return best[0], best[1], best[2] / FPS, psr

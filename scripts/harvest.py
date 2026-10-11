@@ -278,7 +278,17 @@ def acquire_writer_lock():
     return fh
 
 HOP = chroma_recipe.HOP          # single source: chroma_recipe.py
-QUERY_S = 120.0
+# THE QUERY: a mystery clip is asked as 120 s windows, a new one every 15 s, the last placed to
+# end at the clip's end; per (mystery, candidate) the lowest cost over the windows is the score.
+# Until 2026-10 the query was the clip's first 120 s alone -- the worst place to ask, because a
+# broadcast plays a record's opening mixed under the record before it (see
+# streamalign/chroma_match.py, "asking with sliding windows"). A clip between MIN_QUERY_S and
+# QUERY_S long is one window: the whole clip.
+QUERY_S = _cm.WINDOW_S            # 120 s
+QUERY_STEP_S = _cm.STEP_S         # 15 s, decided 2026-09-06
+# The query's SHAPE is part of every query key, so a change of shape makes every pairing in
+# `state["scored"]` stale and the whole pool is asked again (see migrate_query_shape).
+QUERY_SHAPE = "w%ds%d" % (QUERY_S, QUERY_STEP_S)
 # The shortest clip we will search WITH. MT7's is 23 seconds, and it produced five confident false
 # positives all within 0.0007 of each other: a short query drives every cost down until the matcher
 # can no longer tell records apart, and a degenerate ranking looks exactly like a real one. Better
@@ -299,6 +309,11 @@ MIN_QUERY_S = 60.0
 # lands. Bounded, predictable, and it cannot be wrong about a threshold because it does not use
 # one.
 KEEP_TOP = 12
+# Roughly what one (mystery, signature) score costs with sliding windows, for the --rescan
+# estimate only. Measured 2026-10-11: a 5-minute clip is 13 windows, and against a 6-minute
+# candidate the pair took ~4-6 s where the first-120-s query took ~0.4 s -- one window's cost
+# times the window count. Memory does not grow: the windows are scored one after another.
+SCORE_S_PER_PAIR = 5.0
 # How many cached signatures to re-score per pass of the loop. Small on purpose: rescanning is CPU,
 # so a modest chunk each pass rides along instead of stalling the signing.
 RESCAN_PER_PASS = 25
@@ -309,6 +324,16 @@ KEEP_TTL_DAYS = 30        # a lead not listened to in a month is not a lead -- s
 # the margin test is what actually carries the gate. 40 of 41 tracks rank #1 against their own
 # original, so the margin is real.
 MATCH_COST = 0.050
+# THE DECIDING PASS. A pair whose best window clears MATCH_COST is scored again, that window
+# only, with the band-limited path and the peak-to-sidelobe ratio (streamalign/chroma_match.py,
+# match_band), and stays a MATCH only when the ratio is at least PSR_MATCH. Where the number
+# comes from: 36 hand-labelled original/capture pairs scored this way gave the true pairs a
+# median ratio of 9.5 and the hardest wrong candidate at most 1.46 (median 1.13); 2.0 sits
+# clear above every wrong candidate measured. A pair whose candidate is too short to have a
+# sidelobe (about two query lengths) has no ratio, and the cost decides alone, as before. A
+# pair that fails the ratio is kept as `near`: the lead stays on the board, only the word
+# MATCH is withheld.
+PSR_MATCH = 2.0
 
 # THE BACKSTOP, not the rule. A file whose declared length -- or whose decoded length, when the
 # sidecar declares none -- is over four hours is `delayed` with `too_long`, refused and never
@@ -1719,6 +1744,47 @@ def migrate_matches(state):
     return moved
 
 
+def migrate_query_shape(state, ruled):
+    """Once per change of query shape: forget every verdict reached with the old one.
+
+    A lead, and a pairing in `state["scored"]`, is an answer to one way of asking. When the
+    asking changes (QUERY_SHAPE -- until 2026-10 the clip's first 120 s, now sliding windows)
+    the old answers no longer say what the search would say, so:
+
+      * every `state["scored"]` pairing under another shape is dropped -- the query keys carry
+        the shape, so the pool is asked again with the new one in any case, and the old lists
+        are dead weight;
+      * every lead is dropped, with its excerpt, EXCEPT a lead whose key is in the retired set:
+        a ruled-on key is never asked again (unscored_pairs skips it), so its row is the only
+        record of what was found, and the ruling stands whatever the shape;
+      * the scorer's `current_query` block goes with the pairings it counted.
+
+    Signatures, clips, the canary and the ledger are untouched: nothing is decoded or signed
+    again. Keyed on `state["query_shape"]`, so it runs once and a second call does nothing.
+    Returns (leads dropped, pairings dropped), or None when there was nothing to do.
+    """
+    if state.get("query_shape") == QUERY_SHAPE:
+        return None
+    suffix = ":" + QUERY_SHAPE
+    scored = state.setdefault("scored", {})
+    stale = [k for k in scored if not str(k).endswith(suffix)]
+    for k in stale:
+        del scored[k]
+    kept, dropped = [], 0
+    for m in state.get("matches") or []:
+        if isinstance(m, dict) and m.get("key") in ruled:
+            kept.append(m)
+            continue
+        dropped += 1
+        path = m.get("audio") if isinstance(m, dict) else None
+        if path and cache_budget.remove(CANDIDATES_CACHE, path, "query-shape-changed"):
+            state["kept"] = max(0, state.get("kept", 0) - 1)
+    state["matches"] = kept
+    state.pop("current_query", None)
+    state["query_shape"] = QUERY_SHAPE
+    return dropped, len(stale)
+
+
 # THE BUCKET's object listing, {name: etag}, cached for a while -- None when the store is dark
 # or the listing failed (callers must not treat that as 'empty').
 _REMOTE_OBJECTS = {"at": 0.0, "objects": None}
@@ -1908,7 +1974,7 @@ def canary_pass(state, path, stored, qs):
 
         known = {m.get("mystery") for m in state.get("matches") or [] if m.get("key") == key}
         for num, qc, _qkey in qs:
-            cost, _shift, _at = _cm.match(qc, c)
+            cost, _shift, _at, _off = _cm.match_sliding(qc, c)
             if cost is None or cost > MATCH_COST or num in known:
                 continue
             rec["new_hits"].append({"mystery": num, "cost": round(float(cost), 4)})
@@ -1989,8 +2055,33 @@ def unscored_pairs(state, ledger, ruled, qs, limit=None):
     return out
 
 
+def score_pair(qc, c):
+    """One mystery query against one signature: the screen, then the deciding pass.
+
+    The screen is the free matcher over the query's sliding windows (`_cm.match_sliding`):
+    the lowest cost over the windows is the pair's cost, `at_s` is where in the CANDIDATE the
+    winning window fits, and `query_offset_s` is where in the mystery CLIP that window starts.
+    A pair under MATCH_COST then meets the deciding pass on its winning window alone
+    (`_cm.match_band`), and its peak-to-sidelobe ratio decides between MATCH and near (see
+    PSR_MATCH). Returns the row's numbers, or None when the pair is not worth a row (nothing
+    fits, or the cost is above KEEP_CEILING).
+    """
+    cost, shift, at, offset = _cm.match_sliding(qc, c)
+    if cost is None or cost > KEEP_CEILING:
+        return None
+    out = {"cost": round(float(cost), 4), "semitones": shift,
+           "at_s": round(float(at or 0), 1), "query_offset_s": round(float(offset or 0), 1),
+           "psr": None, "verdict": "near"}
+    if cost <= MATCH_COST:
+        psr = _cm.match_band(_cm.window_at(qc, offset), c)[3]
+        out["psr"] = None if psr is None else round(float(psr), 2)
+        out["verdict"] = "MATCH" if psr is None or psr >= PSR_MATCH else "near"
+    return out
+
+
 def score_cached(state, num, qc, qkey, key):
-    """Score one held signature against one mystery. No network, ~0.06s. Returns a hit or None.
+    """Score one held signature against one mystery. No network, a few seconds (one window's
+    cost times the clip's window count; see SCORE_S_PER_PAIR). Returns a hit or None.
 
     Updates an existing row rather than duplicating it -- which is also how the missing `at_s`
     gets filled in. Every match saved before the harvester recorded WHERE it hit has `at_s: None`,
@@ -2009,7 +2100,7 @@ def score_cached(state, num, qc, qkey, key):
     c = _load_sig(key)
     if c is None:
         return None
-    cost, shift, at = _cm.match(qc, c)
+    res = score_pair(qc, c)
     state.setdefault("scored", {}).setdefault(qkey, []).append(key + ".npy")
 
     # The `current_query` block: the scorer keeps it while it works one mystery. One more
@@ -2023,17 +2114,13 @@ def score_cached(state, num, qc, qkey, key):
         cq["remaining"] = max(0, int(cq.get("remaining") or 0) - 1)
         cq["updated"] = _now()
 
-    if cost is None or cost > KEEP_CEILING:
+    if res is None:
         return None
-    verdict = "MATCH" if cost <= MATCH_COST else "near"
     for m in state["matches"]:
         if m.get("key") == key and m.get("mystery") == num:
-            m.update(cost=round(float(cost), 4), semitones=shift,
-                     at_s=round(float(at or 0), 1), verdict=verdict)
+            m.update(res)
             return m
-    hit = {"at": _now(), "mystery": num, "cost": round(float(cost), 4),
-           "semitones": shift, "at_s": round(float(at or 0), 1), "key": key,
-           "verdict": verdict}
+    hit = dict({"at": _now(), "mystery": num, "key": key}, **res)
     state["matches"].append(hit)
     evict_overfull(state, num)
     return hit
@@ -2314,13 +2401,19 @@ def clip_fingerprint(path):
     return h.hexdigest()[:12]
 
 
+def query_key(num, fingerprint):
+    """`<mystery>:<clip fingerprint>:<query shape>` -- what `state["scored"]` is keyed on."""
+    return "%d:%s:%s" % (num, fingerprint, QUERY_SHAPE)
+
+
 def queries(state=None):
     """The unsolved mysteries, as chroma. From track-metadata.json -- never from filenames.
 
-    Returns (mystery_number, chroma, query_key) triples. The QUERY KEY is the mystery number plus a
-    fingerprint of the clip's contents, and it is what `state["scored"]` is keyed on -- so a clip
-    that is RE-CUT invalidates every pairing made against the old one, and every held signature is
-    scored again automatically. Keying on the number alone would have meant a better MT7 clip
+    Returns (mystery_number, chroma, query_key) triples; the chroma is the whole clip's, and the
+    matcher asks with its sliding windows. The QUERY KEY is the mystery number, a fingerprint of
+    the clip's contents and the query's shape (QUERY_SHAPE), and it is what `state["scored"]` is
+    keyed on -- so a clip that is RE-CUT, or asked a new way, invalidates every pairing made
+    against the old one, and every held signature is scored again automatically. Keying on the number alone would have meant a better MT7 clip
     inherited the old clip's verdicts and was never actually asked: exactly the false negatives Tim
     was worried about.
 
@@ -2346,9 +2439,12 @@ def queries(state=None):
                                    "and it re-enters the search by itself."
                                    % (round(secs), MIN_QUERY_S)})
             continue
-        y = _audio.load_audio(e["clip"])[:int(QUERY_S * _audio.SR)]
+        # The WHOLE clip's chroma: the matcher asks with its sliding windows (QUERY_S long,
+        # every QUERY_STEP_S), cut from this one matrix, so the clip is decoded once.
+        y = _audio.load_audio(e["clip"])
         c = chroma_recipe.compute_chroma(y)          # same recipe as the candidates it scores
-        qkey = "%d:%s" % (e["number"], clip_fingerprint(e["clip"]))
+        y = None
+        qkey = query_key(e["number"], clip_fingerprint(e["clip"]))
         out.append((e["number"], c, qkey))
 
     if state is not None:                     # so the page can say what it is NOT asking, and why
@@ -2470,6 +2566,13 @@ def run(args):
     if moved:
         _save(STATE, state)
         print("# moved %d old match row(s) from their urls onto keys" % moved)
+    # A NEW WAY OF ASKING makes every old verdict stale: once, before the first score.
+    shaped = migrate_query_shape(state, ruled)
+    if shaped is not None:
+        _save(STATE, state)
+        print("# the query is now %s: dropped %d lead(s) and %d scored pairing list(s) reached "
+              "the old way; the pool is asked again (ruled-on leads kept)"
+              % ((QUERY_SHAPE,) + shaped))
     qs = queries(state)
     if note_no_queries(state, qs):
         _save(STATE, state)                   # queries(state) stamped searching/skipped too
@@ -2604,7 +2707,7 @@ def run(args):
 
         # Score held signatures against any mystery they have not met yet -- a bounded chunk per
         # pass, so it rides along with the signing instead of blocking it. This is CPU only
-        # (~0.06s each), and it is what makes a NEW mystery see the WHOLE corpus: the day MT8's
+        # (a few seconds each), and it is what makes a NEW mystery see the WHOLE corpus: the day MT8's
         # clip lands, every signature the pool holds gets scored against it, without a single
         # new decode. Positions (`at_s`) on old rows get filled in on the way.
         todo = len(unscored_pairs(state, ledger, ruled, qs))
@@ -2750,9 +2853,10 @@ def run(args):
             c = samples = None
         if c is not None:
             for num, qc, _qkey in qs:
-                cost, shift, at = _cm.match(qc, c)
-                if cost is None or cost > KEEP_CEILING:
+                res = score_pair(qc, c)
+                if res is None:
                     continue
+                cost, shift, at = res["cost"], res["semitones"], res["at_s"]
                 board = [m for m in state["matches"] if m["mystery"] == num]
                 board.sort(key=lambda m: m["cost"])
                 if len(board) >= KEEP_TOP and cost >= board[-1]["cost"]:
@@ -2772,10 +2876,8 @@ def run(args):
                     kept = write_excerpt(samples, at or 0, excerpt)   # from memory; NO second decode
                     if kept:
                         state["kept"] += 1
-                hit = {"at": _now(), "mystery": num, "cost": round(cost, 4),
-                       "semitones": shift, "at_s": round(at or 0, 1), "key": rec_file["key"],
-                       "audio": excerpt if kept else None,
-                       "verdict": "MATCH" if cost <= MATCH_COST else "near"}
+                hit = dict({"at": _now(), "mystery": num, "key": rec_file["key"],
+                            "audio": excerpt if kept else None}, **res)
                 state["matches"].append(hit)
 
                 evict_overfull(state, num)
@@ -2978,11 +3080,13 @@ def main():
                   "from the bucket) and re-run." % LEDGER)
             return
         state = _load(STATE, blank_state())
+        if migrate_query_shape(state, ruled) is not None:
+            _save(STATE, state)
         ledger = load_ledger()
         qs = queries()
         todo = len(unscored_pairs(state, ledger, ruled, qs))
         print("# rescanning %d (signature, mystery) pair(s) against MT%s -- no network, ~%.0f min"
-              % (todo, "/MT".join(str(n) for n, _, _ in qs), todo * 0.06 / 60))
+              % (todo, "/MT".join(str(n) for n, _, _ in qs), todo * SCORE_S_PER_PAIR / 60))
         n = rescan(state, ledger, ruled, qs)
         # A pair whose signature could not be loaded is not scored: rescan left it out of
         # the count, so it stays in `rescan_pending` for the next pass. The completion
