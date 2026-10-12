@@ -4,7 +4,7 @@
 > **Fits in:** [../../README](../../README.md) (master index).
 
 Reconstruct the netradio DNB master timeline by **audio analysis**: place every
-capture file on the master clock (precise, skip-resolved), validated against Tim's
+capture file on the master clock (precise, skip-resolved), validated against the
 hand alignments, then emit alignment labels for the captures not yet done by hand.
 
 See [`../../STREAM_PROVENANCE.md`](../../STREAM_PROVENANCE.md) for what the data is
@@ -37,7 +37,7 @@ function-by-function tour of how the pieces compose.
 ## Modules — three roles
 
 **1. Ground truth (the answer key).** `groundtruth.py` parses the label files for
-Tim's hand-measured alignments — the `file start sync` placements and the
+the hand-measured alignments — the `file start sync` placements and the
 `verified` pairs — into `{stem: master_start}` and a list of known-overlapping
 pairs. This is the data everything else is graded against.
 
@@ -52,9 +52,9 @@ pairs. This is the data everything else is graded against.
 - `solve.py` — propagate pairwise offsets from the anchor (`d000-018 = 0`) into
   absolute master positions, with per-file corroboration diagnostics.
 - `clips.py` — render skip-check review clips (A+B across a skip, B bridging the
-  gap) into the clip player's `manifest.json` for Tim to verify by ear.
+  gap) into the skip-clip review's `manifest.json` for verifying by ear.
 
-`track_mix.py` (original-track↔mix, G2) parses Tim's `origNNN`/`track` sync points
+`track_mix.py` (original-track↔mix, G2) parses the hand-marked `origNNN`/`track` sync points
 into per-track ground truth (the **rate** = mix-seconds per original-second) that
 the chroma+DTW aligner is graded against.
 
@@ -105,7 +105,7 @@ verification.
   `resid_ms` measures how far off), or **adjacent** (labels place the pair
   end-to-end, no overlap to compare — listed apart, not an error), then a summary
   (graded / confirmed / suspect / adjacent / skipped). The headline "does the audio
-  confirm Tim's hand labels" check.
+  confirm the hand labels" check.
 - **`track-mix`** — G2 1st pass: chroma+DTW-align every synced original to its mix
   region, grade the recovered rate against the sync ground truth, and print a
   per-track table (rate / gt_rate / err / confidence / cost / reliable / within-tol)
@@ -149,7 +149,7 @@ verification.
     no original on disk are listed and skipped); an explicit list of track numbers
     (`match-hints STEM 71 72`) overrides.
 - **`inspect-slice STEM NNN --stream-t S --orig-t S`** — align-tool Pass 2 slice
-  provider for the player's `/align` inspector (JSON on stdout; all DSP happens
+  provider for the `/align` inspector (JSON on stdout; all DSP happens
   here, in the venv). Default: base64 int16 stereo slices of the stream and the
   rate-corrected original around one sync point. `--refine` runs the GCC-PHAT
   snap-to-best instead; `--refine --engine match` snaps to the **trimmed MATCH
@@ -167,7 +167,7 @@ verification.
   one JSON response line each, holding the decoded stream + rate-corrected
   original for the current (stem, orig, rate) pair so repeat requests skip the
   decode/resample cost (`placed` is label bookkeeping only — it touches no audio
-  and leaves the pair cache alone). The player spawns it and falls back to
+  and leaves the pair cache alone). The inspector's server spawns it and falls back to
   one-shot subprocesses when it can't start.
 - **`placed [STEM]`** — DP-22 review-tool data source: the hand-placed
   `origNNN sync:`/`track sync:` marker pairs as JSON, per capture stem ×
@@ -190,7 +190,7 @@ verification.
 
 ## Status (current)
 
-- **P0 ground truth** — resolves all hand placements; matches the player's trusted
+- **P0 ground truth** — resolves all hand placements; matches the trusted reference
   parser exactly (55 files, 0 mismatches).
 - **P1 pairwise align** — reproduces hand alignments to ±1 sample on clean overlaps.
 - **P2 skip detection** — recovers documented skips with exact magnitudes

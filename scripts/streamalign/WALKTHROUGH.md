@@ -101,15 +101,15 @@ libraries — `ffmpeg` handles every container/endianness, numpy does the rest.
 
 ---
 
-## 4. `groundtruth.py` — Tim's hand work as the grading key
+## 4. `groundtruth.py` — the hand work as the grading key
 
-The labels encode Tim's manual alignments as `file start sync:` rows. This module
+The labels encode the manual alignments as `file start sync:` rows. This module
 turns them into (a) the answer key and (b) the list of pairs he actually overlaid.
 
 | function | role |
 |---|---|
-| `resolve_starts()` | `{stem: master_start_seconds}` — a faithful port of the player's trusted `parse_file_timeline` (3 passes). **Pass 1** seeds files whose sync row sits at local 0.0 (the number *is* the master start). **Pass 2** fills plain `file start` fallbacks. **Pass 3** iteratively resolves syncs expressed in another file's coordinates (`master = owner_master + row_seconds`), so chains like `d000-018 → … → d336-355` resolve. |
-| `alignment_edges()` | `[(stem, verified_against_stem), …]` from the `verified [by] X` notes — the pairs Tim aligned, i.e. the graph edges + P1 validation pairs |
+| `resolve_starts()` | `{stem: master_start_seconds}` — a faithful port of the trusted reference parser `parse_file_timeline` (3 passes). **Pass 1** seeds files whose sync row sits at local 0.0 (the number *is* the master start). **Pass 2** fills plain `file start` fallbacks. **Pass 3** iteratively resolves syncs expressed in another file's coordinates (`master = owner_master + row_seconds`), so chains like `d000-018 → … → d336-355` resolve. |
+| `alignment_edges()` | `[(stem, verified_against_stem), …]` from the `verified [by] X` notes — the pairs aligned by hand, i.e. the graph edges + P1 validation pairs |
 | `_verified_refs(text)` | pull capture-looking tokens after `verified` |
 | `_read_label_rows`, `_stem` | tsv reading / name normalization |
 | `ground_truth()` | thin alias of `resolve_starts` |
@@ -117,7 +117,7 @@ turns them into (a) the answer key and (b) the list of pairs he actually overlai
 The subtlety it gets right: a trailing number in a sync row is a **master value**
 when the row is at local 0.0 in its *own* file (pass 1), but a **reference anchor**
 when embedded in another file at a non-zero timestamp (pass 3 uses the row's
-timestamp, not the trailing number). Verified to match the player parser exactly
+timestamp, not the trailing number). Verified to match the reference parser exactly
 (55 files, 0 mismatches).
 
 ---
@@ -144,7 +144,7 @@ align_pair(A, B)
 
 Why two stages: a single full-resolution FFT over two 20-min files is wasteful and
 the PHAT peak is sharpest in a focused window. Coarse finds the neighbourhood
-cheaply; refine nails it to a fraction of a sample. **Result:** reproduces Tim's
+cheaply; refine nails it to a fraction of a sample. **Result:** reproduces the
 hand alignments to ±1 sample at confidence 0.97–0.999.
 
 **Limitation (why P2 exists):** `align_pair` returns *one* offset. That's only
@@ -197,7 +197,7 @@ two independent sources, and this module measures both. The unit is **samples at
 |---|---|
 | `score_pairwise(results, gt)` | P1 offset estimates vs `gt[b]-gt[a]` for each pair |
 | `score_absolute(estimates, gt, anchor)` | a full `{stem: master_start}` solution vs ground truth, shifted to a common anchor |
-| `consistency_report(placements, edges)` | **no ground truth needed** — for each redundant overlap, `residual = measured - (place[b]-place[a])`; a large residual flags a missed skip or bad lock. This is the finer P4 check (and where the engine can exceed Tim's hand precision). |
+| `consistency_report(placements, edges)` | **no ground truth needed** — for each redundant overlap, `residual = measured - (place[b]-place[a])`; a large residual flags a missed skip or bad lock. This is the finer P4 check (and where the engine can exceed hand precision). |
 | `_stats(errors)` | median / max / mean in samples and ms |
 
 ---
@@ -229,7 +229,7 @@ multi-minute "error"; the equal-length slice compare keeps the peak well inside
 
 ## 9. How it reaches the goal (and what's still ahead)
 
-Built today, validated against Tim's hand work:
+Built today, validated against the hand work:
 
 - **P0** `groundtruth` + `score` + `audio` → the answer key and the measuring stick.
 - **P1** `align_pair` → precise offset for a clean overlapping pair.

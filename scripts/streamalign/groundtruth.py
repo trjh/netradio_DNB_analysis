@@ -1,15 +1,15 @@
 """Ground truth for the stream alignment engine.
 
-Tim hand-aligned ~55 capture files by overlaying them in Audacity and recording
+About 55 capture files were hand-aligned by overlaying them in Audacity and recording
 the result as ``file start sync:`` rows in ``labels/*.labels.tsv``. Those resolved
 master-start values are the ground truth the engine is graded against, and the
 ``verified [by] X`` annotations record which neighbour each file was aligned
-*against* — i.e. the edges of the alignment graph Tim built by hand.
+*against* — i.e. the edges of the alignment graph built by hand.
 
-The resolution logic here is a faithful port of the player's trusted
-``server.py::parse_file_timeline`` (passes 1-3, starts only), kept independent so
-the engine stands alone in the analysis repo. A test cross-checks it against the
-player's parser and the TIMELINE_GUIDE smoke values.
+The resolution logic here is a faithful port of the trusted reference parser
+``parse_file_timeline`` (passes 1-3, starts only), kept independent so the engine
+stands alone in this repo. A test cross-checks it against the reference values and
+the TIMELINE_GUIDE smoke values.
 """
 
 import os
@@ -92,7 +92,7 @@ def _verified_refs(text):
 def resolve_starts(labels_dir=None):
     """Return {stem: master_start_seconds} from the hand `file start sync` rows.
 
-    Port of server.py parse_file_timeline passes 1-3 (starts only), keyed by file
+    Port of the reference parse_file_timeline passes 1-3 (starts only), keyed by file
     stem (no extension) so it maps directly onto audio files.
     """
     labels_dir = labels_dir or LABELS_DIR
@@ -151,7 +151,7 @@ def resolve_starts(labels_dir=None):
 def alignment_edges(labels_dir=None):
     """Return [(stem, verified_against_stem), ...] from the `verified` annotations.
 
-    These are the pairs Tim actually overlaid by hand — useful both as P1
+    These are the pairs actually overlaid by hand — useful both as P1
     validation pairs and as a seed for the P4 global-solve graph.
     """
     labels_dir = labels_dir or LABELS_DIR

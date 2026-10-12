@@ -2,10 +2,10 @@
 
 For a detected skip between the **skipper** A (the recording that skips) and a
 **reference** B (in sync over that segment), build one listenable clip that presents
-the broadcast continuously across the skip, so Tim can hear whether the skip's
+the broadcast continuously across the skip, so a listener can hear whether the skip's
 position and magnitude are right: in sync ⇒ coherent; wrong ⇒ doubling/dissonance.
 
-Per Tim's spec: A+B combined until A skips; on a skip-AHEAD, B alone fills the
+Per the spec: A+B combined until A skips; on a skip-AHEAD, B alone fills the
 content A jumped over, then A+B resume; on a skip-BACK, B rewinds to where A
 returned and A+B resume. 15 s before the skip + 15 s after.
 

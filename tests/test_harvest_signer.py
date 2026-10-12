@@ -913,7 +913,7 @@ class TheLedger(_SignerCase):
 
     def test_a_healed_store_stands_the_alert_down(self):
         """The alert is standing, not permanent: a start with a mis-listed bucket raises it,
-        and the store that heals must bring it down -- or the page reports a broken store
+        and the store that heals must bring it down -- or the state reports a broken store
         forever, and an operator re-fixes a configuration that is already fixed. Any reconcile
         that does not report clears it."""
         keys = [("u" + ("%02d" % i) * 10) for i in range(10)]
@@ -1904,7 +1904,7 @@ class CurrentQueryBlock(_SignerCase):
                          "the stale block was cleared when the backlog was empty")
 
     def test_forget_clears_the_block_if_it_names_the_forgotten_mystery(self):
-        """`forget(N)` clears the block if it names MTN -- otherwise the page could show
+        """`forget(N)` clears the block if it names MTN -- otherwise the state could show
         "the last query was MTN" right after forgetting it, and the block would stay
         stale until the next rescan resets it."""
         state = {"matches": [{"mystery": 4, "key": "u" + "a" * 20, "cost": 0.01}],
@@ -2019,7 +2019,7 @@ class SignOneIsTheHandTool(_SignerCase):
         """A hand sign reconciles like a run, and the alert a reconcile raises is standing
         state, not this command's output: it must reach the state file even when the key turns
         out to be absent and the tool returns early -- or a store that broke between runs
-        leaves the page unwarned by the one writer that saw it."""
+        leaves the state unwarned by the one writer that saw it."""
         keys = [("u" + ("%02d" % i) * 10) for i in range(10)]
         rows = {k: harvest._row(k, 1, 1.0, "signed", None, "then", "e-%s" % k, {})
                 for k in keys}

@@ -1,7 +1,7 @@
 """Tests for the stream alignment engine (P0/P1).
 
 Ground-truth parsing runs anywhere (labels are committed). Audio-dependent tests
-skip gracefully when the capture files / ffmpeg aren't present (they live on Tim's
+skip gracefully when the capture files / ffmpeg aren't present (they live on a local
 disk, not in the repo). The cache-policy and resolution tests are synthetic
 and run everywhere: they stub the decode and drive `cache_budget` against a
 temporary root.

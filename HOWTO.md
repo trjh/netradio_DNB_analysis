@@ -1,9 +1,8 @@
 # HOWTO / FAQ — which tool, when, and why
 
 > **What this is:** a plain-language, question→answer reference for *when to run each tool*
-> in this repo, so the pipeline order is reproducible and nothing sits unused. It consolidates
-> the player repo's `ROADMAP.md` §7 "Tool run-triggers (F4)" into the analysis repo, next to
-> the code.
+> in this repo, so the pipeline order is reproducible and nothing sits unused, kept next to the
+> code.
 > **For the process itself** — the per-recording loop, the by-ear technique, and what the
 > engine can and cannot do — see **[PROCESS.md](./PROCESS.md)**. This doc answers *"which tool
 > now?"*; that one answers *"how is this done?"*.
@@ -22,14 +21,14 @@ sheet:
    are `<stem>.starter.labels.tsv` / `<stem>.start-unprocessed.labels.tsv` (lowest priority).
 2. **Build** — `scripts/build_track_metadata.py` turns the labels into the authoritative
    **`track-metadata.json`**.
-3. **Serve** — `track-metadata.json` drives the player.
+3. **Serve** — `track-metadata.json` is the published result that everything downstream reads.
 
 **Publish** (`labels/publish.py`) takes finished labels → GitHub → the Google Sheet view.
 
 > **The one rule that answers "does this update `track-metadata.json`?":** *only the **build**
 > step does.* Everything in **Notate** below produces **labels, clips, or scores for you to
 > review** — none of those commands write `track-metadata.json`. When you've changed labels and
-> want the player to see it, run `build_track_metadata.py` (the Build section). That's the single
+> want the JSON to show it, run `build_track_metadata.py` (the Build section). That's the single
 > writer of the JSON.
 
 The golden rule of the file naming: **hand** = `<stem>.labels.tsv` (yours, authoritative),

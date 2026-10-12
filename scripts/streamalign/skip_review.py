@@ -12,7 +12,7 @@ Two pieces the rest of G1 leaves open:
    `Archive/skip-clips/`: two recordings mixed on top of each other never gave an
    audible coherent-vs-doubling signal.)
 
-2. **Confirm/reject write-back** (the loop Tim asked for), keyed by clip id:
+2. **Confirm/reject write-back** (the review loop), keyed by clip id:
    * **CONFIRM** (the clip sounds coherent ⇒ the skip is right) → append the skip to
      the skipper's **hand** `<stem>.labels.tsv` as
      `file note: skip <dir> <mag>s verified <ref>` — the existing hand grammar, so it
@@ -265,7 +265,7 @@ def enumerate_candidates(labels_dir=None, pairs=None, conf_min=0.7,
             if skip_rejected and is_rejected(skipper, sk["at_s"], sk["delta_s"], rejections):
                 continue
             # local skipper→reference offsets bracketing the skip, so the write-back can
-            # convert into the reference's timeline if Tim reattributes (--owner).
+            # convert into the reference's timeline if the skip is reattributed (--owner).
             off_before = _skips.offset_at(char["walk"], sk["before_s"])
             off_after = _skips.offset_at(char["walk"], sk["after_s"])
             candidates.append({

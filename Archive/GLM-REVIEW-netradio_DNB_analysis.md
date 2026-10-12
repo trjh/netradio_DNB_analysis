@@ -57,7 +57,7 @@ data/sheet/                  — CSV snapshots of the Google Sheet
 - **solve.py** (222 lines): BFS-based global solve from hand-verified edges. Correctly chains pairwise offsets. Redundant edges cross-check via `score.consistency_report`.
 - **groundtruth.py** (161 lines): Faithful port of the player's parser. Good — keeps the engine independent. The test cross-checks against the player's parser.
 - **score.py** (97 lines): Simple, clear scoring. Stats in both samples and ms.
-- **clips.py** (160 lines): Skip-check clip generator. Follows Tim's spec (A+B combined, skip-ahead/back handling). Clean numpy + ffmpeg.
+- **clips.py** (160 lines): Skip-check clip generator. Follows the spec (A+B combined, skip-ahead/back handling). Clean numpy + ffmpeg.
 - **emit_labels.py** (187 lines): AUTO GENERATED label emitter. Correctly enforces the two hard rules (AUTO GENERATED suffix, separate .auto. file).
 - **track_mix.py**: Chroma+DTW aligner. Uses Theil-Sen for rate estimation (robust choice). Good reliability gate.
 

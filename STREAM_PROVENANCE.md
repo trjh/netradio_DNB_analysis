@@ -7,7 +7,7 @@
 
 This explains how the netradio DNB capture files came to exist, why they overlap,
 why they contain skips, and — importantly for the [Stream Alignment Engine](#the-reconstruction-problem)
-— what the project's "master timeline" actually *is*. Tim wrote most of this down
+— what the project's "master timeline" actually *is*. Most of this was written down
 here for the first time on 2026-06-11; the [README](./README.md) has the shorter
 origin story.
 
@@ -23,7 +23,7 @@ shaped it:
 3. **It was broadcast on a loop** over the internet via RealAudio/RealPlayer. The
    listener did **not** choose a position in the stream — you clicked the station
    and heard *whatever the "broadcast" was playing at that moment*. It just looped.
-4. **Tim played the stream on his Sun workstation** and used a syscall tracer
+4. **The author played the stream on a Sun workstation** and used a syscall tracer
    (`truss`/`strace`-style) to **dump the bytes being written to `/dev/audio`**.
    These came out as very large text files. *(The original capture code still
    exists and can be added here if useful.)*
@@ -38,8 +38,8 @@ recorded many times, at different points in the loop).
 ## What a capture file *is*: a window onto the loop
 
 Because the broadcast was a loop you joined at an arbitrary point, each capture
-file is just a **window** onto that loop — a slice starting wherever Tim happened
-to begin recording, running until he stopped. Different windows overlap heavily,
+file is just a **window** onto that loop — a slice starting wherever the recording
+happened to begin, running until it stopped. Different windows overlap heavily,
 and between two windows the **same broadcast audio is recorded twice**. That
 redundancy is the whole basis for alignment: where two windows overlap, they are
 (barring capture artifacts) the *same samples*, so one window can be positioned
@@ -93,14 +93,14 @@ Skips are not a footnote; they are central to the reconstruction:
 The above is why the headline analysis effort is to **reconstruct the master
 timeline by audio alignment**: starting from the anchor file, find the precise,
 skip-resolved placement of every capture window on the master timeline, validate it
-against the ~45 file-alignments Tim has already done by hand (in `labels/*.labels.tsv`
+against the ~45 file-alignments already done by hand (in `labels/*.labels.tsv`
 as `file start sync:` rows), and then emit alignment labels for the windows not yet
 done by hand. Between two capture windows the relationship is expected to be a pure
 time offset (no clock drift, no polarity inversion — those artifacts in the hand
 labels were *original-track-vs-stream* comparisons, not stream-vs-stream); that
-assumption is to be **verified, not assumed**. See the player repo's `TASKLIST.md`
-("Stream Alignment Engine") and `scripts/alignfinder.py` (the earlier interactive,
-pairwise prototype) for the working plan.
+assumption is to be **verified, not assumed**. See
+[`scripts/streamalign/README.md`](./scripts/streamalign/README.md) and
+`scripts/alignfinder.py` (the earlier interactive, pairwise prototype) for the working plan.
 
 ## Three timelines (decided 2026-07-26)
 

@@ -2,7 +2,7 @@
 
 The decision store, confirm/reject, apply_decisions and the candidate sidecar are
 pure I/O and run anywhere. Candidate enumeration + clip generation stub the audio /
-detection / ffmpeg layers (the captures live on Tim's disk, not in the repo), mirroring
+detection / ffmpeg layers (the captures live on a local disk, not in the repo), mirroring
 the _Stub pattern in test_streamalign.py.
 """
 

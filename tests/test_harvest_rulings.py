@@ -1,16 +1,15 @@
 """The retired set is a file -- the search reads only the keys.
 
-The harvester used to derive its never-again set -- every key the search must not propose,
-for any mystery, present or future -- from the queue's ruling flags, read directly every
-pass. It now reads a rulings file committed in this repo: `data/rulings.json`,
-`{key: reason}`, which the harvester only reads and re-reads every pass. The tests below point
+The never-again set -- every key the search must not propose, for any mystery, present or
+future -- is a rulings file committed in this repo: `data/rulings.json`, `{key: reason}`,
+which the harvester only reads and re-reads every pass. The tests below point
 `harvest.RULINGS` at a temporary file, so they never read or write the committed one.
 These tests pin the read side: which keys the file retires, that nothing else is
 retired, that an absent or torn file refuses the run rather than emptying the set, and -- the
 one that actually costs something if it breaks -- that a ruled-out record never comes back, not
 even for a mystery that did not exist when the ruling was made.
 
-No librosa import here: the module pulls in numpy/librosa at import, so the queue logic is
+No librosa import here: the module pulls in numpy/librosa at import, so the rulings logic is
 exercised through a stub-free import guard (skipped if the analysis venv is absent).
 """
 
@@ -74,7 +73,7 @@ class TheRulingsFile(unittest.TestCase):
                 self.assertEqual(harvest.load_rulings(), {bare})
 
     def test_an_empty_file_retires_nothing(self):
-        # A queue with no rulings at all is a real state, and a valid one -- an empty set, not
+        # A file with no rulings at all is a real state, and a valid one -- an empty set, not
         # "cannot read": the distinction is what the run's refusal turns on.
         self._file({})
         self.assertEqual(harvest.load_rulings(), set())

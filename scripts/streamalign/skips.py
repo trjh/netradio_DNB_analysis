@@ -6,7 +6,7 @@ other file. Over a skip-free segment the offset is constant (confidence ~1); at 
 skip the confidence dips and the offset steps by the skip magnitude. The sequence
 of confident offsets is piecewise-constant; its steps ARE the skips.
 
-This is the algorithmic form of Tim overlaying two files and listening for the
+This is the algorithmic form of overlaying two files by hand and listening for the
 moment they fall out of sync.
 
 Offset convention matches align.py: a[i] ~ b[i - offset] over the overlap; offset

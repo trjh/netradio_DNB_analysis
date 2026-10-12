@@ -284,7 +284,7 @@ class LiveTailTests(unittest.TestCase):
     def test_tail_present_and_tagged(self):
         self.assertGreaterEqual(len(self.tr), 91)
         self.assertEqual(self.tr["66"]["source"], "precise")
-        # The tail is now precisely labelled through 71 (…Urban Style, On Line) — Tim's
+        # The tail is now precisely labelled through 71 (…Urban Style, On Line) — the
         # hand review keeps pushing this frontier, so this pin moves as the labels do
         # (it read "through 69" until 2026-07-30). 72+ are still the rough first-pass fold.
         self.assertEqual(self.tr["70"]["source"], "precise")
