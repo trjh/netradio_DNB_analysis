@@ -68,8 +68,7 @@ class SigKeyFor(unittest.TestCase):
 
 @unittest.skipUnless(make_canary, "make_canary.py needs numpy -- not this test's job")
 class KeyCommandLine(unittest.TestCase):
-    """`make_canary.py --key <url>` prints the key and exits. It does not require
-    `--out`, `--source-dir`, or any audio, and it does not run the canary build."""
+    """`make_canary.py --key <url>` prints the key and exits. It needs no audio."""
 
     def _run(self, argv):
         out = io.StringIO()
@@ -84,12 +83,6 @@ class KeyCommandLine(unittest.TestCase):
         self.assertEqual(printed, make_canary.sig_key_for(url))
         self.assertTrue(printed.startswith("u"))
         self.assertEqual(len(printed), 21)      # `u` + 20 hex chars
-
-    def test_does_not_require_out_or_source_dir(self):
-        # Before the `--key` flag landed, `--out` was required. Now `--key` exits before
-        # that check, so a caller printing the key needs no `--out` or `--source-dir`.
-        printed = self._run(["make_canary.py", "--key", "https://x"])
-        self.assertEqual(printed, make_canary.sig_key_for("https://x"))
 
 
 if __name__ == "__main__":

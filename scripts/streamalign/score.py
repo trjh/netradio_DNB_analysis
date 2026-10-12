@@ -1,7 +1,7 @@
-"""Scoring the engine against Tim's hand alignments (P0).
+"""Scoring the engine against the hand alignments (P0).
 
 Master time is self-defined (reconstructed from the windows), so "correct" means:
-  1. matches Tim's hand `file start sync` values (this module), and
+  1. matches the hand `file start sync` values (this module), and
   2. redundant overlaps are self-consistent (consistency_report).
 The unit that matters is samples at 16 kHz (Audacity's 0.001 s == 16 samples).
 """

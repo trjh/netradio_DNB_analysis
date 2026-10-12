@@ -14,7 +14,7 @@ Two things live here:
     turns that off, and that variable is UNDOCUMENTED, so the harvester re-measures it on every
     start rather than trusting a number from a past OS release.
 
-A broken probe must cost the harvester its watchdog, never its run. Every entry point here
+A broken probe must cost the harvester its memory watch, never its run. Every entry point here
 returns None rather than raising.
 """
 
@@ -124,8 +124,9 @@ def canary_line(retained_mb):
 def canary_issue(retained_mb):
     """The `issues` row for a canary that came back dirty, or None when it came back clean.
 
-    `notices.py` in the player surfaces these, so a regression in the allocator shows up as a
-    light on the queue page rather than as a slowly growing swap file nobody is watching.
+    The row lands in the harvester's `issues` list in `.harvest/state.json`, so a regression in
+    the allocator is written down rather than left as a slowly growing swap file nobody is
+    watching.
     """
     if retained_mb is None or retained_mb <= CANARY_RETAINED_MB:
         return None

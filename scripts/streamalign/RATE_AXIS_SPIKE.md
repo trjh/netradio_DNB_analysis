@@ -2,8 +2,7 @@
 
 | | |
 |---|---|
-| **What this is** | The G2 "rate axis" research spike (chunk **A7a** of `docs/ROADMAP_stream_analysis.md` in the player repo): a short, time-boxed investigation that designs the original↔mix **rate axis** and returns a **go/no-go**, *not* production code. |
-| **Owner** | Tim |
+| **What this is** | The G2 "rate axis" research spike (roadmap chunk **A7a**): a short, time-boxed investigation that designs the original↔mix **rate axis** and returns a **go/no-go**, *not* production code. |
 | **Date** | 2026-06-21 |
 | **Verdict** | **GO** — but the rate axis already exists; promote A7b to the *remaining* gaps (piecewise segmentation + polarity), not a new rate-search primitive. |
 
@@ -11,7 +10,7 @@
 
 > T1 proved plain waveform correlation does **not** work (`PLAN_track_mix.md`), so design the
 > **rate axis** (tempo/pitch-rate search added to the streamalign primitives) and validate the
-> *idea* on one or two tracks Tim already hand-synced. **Deliverable: a design note + go/no-go**,
+> *idea* on one or two tracks already hand-synced. **Deliverable: a design note + go/no-go**,
 > promote to a Pass-2 sub-plan only if the spike works.
 
 ## Finding 1 — waveform correlation is dead (confirmed)
@@ -26,8 +25,7 @@ sweep using raw and PHAT cross-correlation of `010-Odyssey - Artificial Life` ag
 region failing to lock — it reports best ncc ≈ 0.11 vs a ≈0.03 noise floor. The reason: the mix
 is the DJ's EQ'd / level-ridden version captured as lossy 16 kHz RealAudio, spectrally far from
 the clean source, so correlation (even whitened) is the wrong tool. *(Those exact ncc figures
-are quoted from that external player-repo plan; the claim verifiable in **this** repo is the
-README line above.)* Not re-litigated here.
+are quoted from that plan.)* Not re-litigated here.
 
 ## Finding 2 — the rate axis already exists (and it isn't a rate *search*)
 
@@ -54,7 +52,7 @@ wrong rate.
 
 ## Validation — the idea works at scale (the spike's evidence)
 
-The ground truth is Tim's `origNNN`/`track` sync pairs → per-track `rate` (the sheet's
+The ground truth is the hand-marked `origNNN`/`track` sync pairs → per-track `rate` (the sheet's
 `(trackB−trackA)/(origB−origA)`), via `track_sync_groundtruth()`. The aligner is graded against
 it by `align_track` / `batch_align` (the `track-mix` CLI). Documented results (see
 `scripts/streamalign/README.md` §Status, "G2/T1" and "G2/T2"):
@@ -76,7 +74,7 @@ So the *idea* — chroma+DTW recovers the original↔mix rate where correlation 
 on more than one or two hand-synced tracks**; it is validated across the whole synced set with a
 working precision gate. (A *fresh* run needs the librosa `.venv` —
 `. .venv/bin/activate && python -m streamalign track-mix` — which is not installed on every
-machine; the figures above are the engine's own recorded validation against Tim's sync points.)
+machine; the figures above are the engine's own recorded validation against the hand sync points.)
 
 ## What's actually still open (→ scope for A7b)
 
@@ -90,7 +88,7 @@ surfaces*, in priority order:
    disagrees* — i.e. the warp path is clean enough to trust yet a single slope is wrong, the
    signature of a piecewise track. **Start A7b here**, on 8/10/19: detect warp-path knees →
    segment → per-segment rate, validate each segment against the relevant `A`/`B` sync pair.
-2. **Polarity / inversion.** Tim's notes flag "now inverted?" on some tracks; not handled today.
+2. **Polarity / inversion.** The hand notes flag "now inverted?" on some tracks; not handled today.
    Chroma is polarity-agnostic so DTW won't catch a phase flip — decide whether polarity even
    matters for the rate map, or detect it separately if it does.
 3. **Premise & coverage failures.** Subsequence DTW requires mix ≤ original (flagged: "mix

@@ -16,7 +16,7 @@ new, compares the new signature with the stored one, and hands the NEW signature
 Why this exists
 ---------------
 A broken harvester and a pool that does not contain the answer produce the **identical** output:
-zero matches. Week after week of "0 found" looks the same either way. The dashboard proves the
+zero matches. Week after week of "0 found" looks the same either way. The state file proves the
 process is *alive*; it proves nothing at all about whether the matching is *correct*.
 
 So we hold out a track we have already SOLVED — we have its mix, its original, and the answer —
@@ -375,10 +375,8 @@ def _chroma_cache_dir():
     misconfiguration, rather than scoring from a legacy directory the harvester's loop
     never reads. The harvester itself refuses to start on a dark policy, so a by-hand
     `--live` CLI that silently fell back to `<repo>/.chroma-cache` would read a directory
-    no current writer of the pool's signatures produces: `match_queue.py` does cache its
-    own content-addressed signatures there, but under sha1(basename|size|mtime) keys,
-    never the pool's `u` + sha1(url)[:20] keys, so the canary's `.npy` would never be
-    found and the loop never reads the directory.
+    no current writer of the pool's signatures produces: the canary's `.npy` would never
+    be found there, and the loop never reads the directory.
     """
     try:
         import harvest                          # lazy: registers the chroma cache

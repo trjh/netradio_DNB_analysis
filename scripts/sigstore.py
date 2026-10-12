@@ -17,7 +17,7 @@ Rules that keep this safe:
   * **Dark unless configured** (`NETRADIO_SIG_BUCKET`), like every optional integration; with
     the store dark, nothing is ever deleted and the harvester behaves exactly as before.
 
-Speaks S3 through the aws CLI — an external tool exactly like yt-dlp and ffmpeg, so this repo
+Speaks S3 through the aws CLI — an external tool exactly like ffmpeg, so this repo
 keeps its zero-pip-dependency posture for storage too. Env is read lazily (config may load
 after import).
 """
@@ -111,21 +111,11 @@ def _head(key):
     return _verified[key]
 
 
-def remote_size(key):
-    """HEAD the object -> size in bytes, or None if absent/unreachable. Cached per session
-    once seen (an immutable object's size does not change)."""
-    return _head(key)[0]
-
-
 def verified_size(key):
     """The remote size a HEAD in this process has already returned for `key`, or None. Never
     asks the bucket: the cache policy's pin reads it for every entry on every run."""
     seen = _verified.get(key)
     return seen[0] if seen else None
-
-
-def have_remote(key):
-    return enabled() and remote_size(key) is not None
 
 
 def put(path, key):
@@ -252,7 +242,7 @@ def evictable(path, key, scored, qkeys):
         local = os.path.getsize(path)
     except OSError:
         return False
-    return remote_size(key) == local
+    return _head(key)[0] == local
 
 
 def evict_cold(cache_dir, scored, qkeys):

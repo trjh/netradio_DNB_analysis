@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Regularized start/stop for the HARVESTER (scripts/harvest.py --run) — the signature
-# collector, which runs for weeks and has to outlive the terminal that started it. It gets
+# Regularized start/stop for the HARVESTER (scripts/harvest.py --run) — the long-running
+# signer and scorer, which runs for weeks and has to outlive the terminal that started it. It gets
 # the same launcher shape as the align server (scripts/run_align.sh): its own pidfile, its
 # own log with a size cap, and a start that refuses to put a second harvester on the same
 # state directory.

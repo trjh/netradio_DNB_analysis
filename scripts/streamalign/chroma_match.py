@@ -7,7 +7,7 @@ chroma bins ROTATE -- so a matcher that compares them directly is holding C majo
 C# major and correctly concluding they are unrelated. It returns a confident FALSE NEGATIVE.
 
 That is not hypothetical. Mystery Track 5 is Jacob's Optical Stairway - "Solar Feelings"
-(J Majik mix): Tim identified it by ear, and the matcher said no (cost 0.069, non-match). The
+(J Majik mix): it was identified by ear, and the matcher said no (cost 0.069, non-match). The
 record was there all along, a semitone away:
 
     shift   vs the record   vs a control

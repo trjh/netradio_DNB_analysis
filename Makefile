@@ -3,7 +3,7 @@ ifeq (, $(PYTHON))
     $(error "PYTHON=$(PYTHON) not found in $(PATH)")
 endif
 
-# The ONE virtualenv is `.venv`, and uv builds and fills it (Tim, 2026-09-17; before that
+# The ONE virtualenv is `.venv`, and uv builds and fills it (2026-09-17; before that
 # `python -m venv` + pip). `UV` resolves at parse time to the first uv that runs: the one on
 # PATH, else the Homebrew binary. The fallback exists because an asdf shim can sit first on PATH
 # and answer "No version is set for command uv" (exit 126) in any directory without a
@@ -22,7 +22,7 @@ UV_PYTHON ?= 3.13
 # Machine-specific paths and credentials (NETRADIO_SOURCES_DIR, ...) live in `.env`, gitignored
 # since this repo is PUBLIC. `VAR=value` lines, so the file is both make-includable and
 # shell-sourceable (`set -a; . ./.env; set +a`). Optional: the leading `-` means "don't fail if
-# it isn't there". Same name and format as the player repo's `.env`, so one block can serve both.
+# it isn't there".
 #
 # Until 2026-09 `.env` was the general virtualenv DIRECTORY and the variables lived in
 # `.env_vars`. `-include` of a directory stops make dead with "Is a directory", so say what
@@ -83,7 +83,7 @@ dep: uv-check         ## install/upgrade both requirement sets into the existing
 
 # `. .venv/bin/activate && python -m streamalign ...` needs `scripts/` on sys.path, and there is
 # no pyproject to install it from. So the venv carries `netradio-scripts.pth` in its site-packages
-# with the absolute path of `scripts/` (Tim, 2026-09-17). It is written here, at make time, so no
+# with the absolute path of `scripts/` (2026-09-17). It is written here, at make time, so no
 # machine path is committed; `venv` and `dep` both run this, and a venv built by hand gets it from
 # `make scripts-pth`. That is why no recipe below sets PYTHONPATH=scripts any more.
 scripts-pth:          ## put <repo>/scripts on the venv's sys.path (site-packages/netradio-scripts.pth)

@@ -1,16 +1,16 @@
-"""The facts the harvest page renders must actually be published — and .wv clips must be seen.
+"""The facts the harvester's state reports must actually be written — and .wv clips must be seen.
 
-The 2026-07-29 harvest-page diagnosis found four lies on the dashboard, three of which
-start here (the page renders what this repo writes):
+The 2026-07-29 diagnosis found four wrong readings of the harvester's state, three of which
+start in what the harvester writes:
 
   * Mystery Track 4's clip was wavpack-compacted and became INVISIBLE — `.wv` was missing
     from the clip whitelist even though ffmpeg decodes it natively, so the harvester ran
-    with an empty query set while the page said "working".
+    with an empty query set while its state said "working".
   * the signature count read the local working cache (~1 file) when the pool lives in the
     bucket (~4,244) — `stamp_pool` publishes the bucket's count.
   * "compared: N of pool" needs the CURRENT clip's query key per mystery — a re-cut clip
     changes the key, so only the harvester can say which one is now (`state["query_keys"]`).
-  * an empty query set once exited the process and respawned it forever while the page
+  * an empty query set once exited the process and respawned it forever while the state
     showed the stale last phase — now a first-class `state["no_queries"]`, self-clearing,
     and the run keeps going.
 """
@@ -107,11 +107,10 @@ class PoolStamp(unittest.TestCase):
         self.assertEqual(state["pool"]["count"], 4244)      # the honest last stamp stands
 
     def test_the_stamp_is_the_count_and_the_canary_only(self):
-        # The active/retired breakdown left with the queue-flag read it came from: every such
-        # figure is the rulings writer's own join of the ledger with its queue and the rulings
-        # file now, so this stamp publishes the count and the canary and nothing derived. The
-        # page renders the breakdown only while all three of its fields arrive as numbers,
-        # so their absence reads as the plain "in the bucket" line -- never a crash.
+        # The active/retired breakdown is gone: any such figure is a join of the ledger with
+        # the rulings file that a reader makes for itself, so this stamp publishes the count
+        # and the canary and nothing derived. A reader of the state must take the absence of
+        # the breakdown's three fields as the plain "in the bucket" count -- never a crash.
         names = tuple("u" + c * 20 + ".npy" for c in "abcd")
         harvest._remote_objects = lambda max_age_s=900: self._objects(*names)
         os.environ["NETRADIO_CANARY_KEY"] = "u" + "d" * 20

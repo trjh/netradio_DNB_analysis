@@ -1,7 +1,7 @@
 # G3 — AcoustID application registration (draft)
 
 Draft of the AcoustID **application** to register so G3 (identifying the "Mystery
-Track" segments by acoustic fingerprint) can run. Tim registers it; the resulting
+Track" segments by acoustic fingerprint) can run. The repository owner registers it; the resulting
 **application API key** replaces `ACOUSTID_API_KEY` in the analysis repo's gitignored
 `.env`.
 

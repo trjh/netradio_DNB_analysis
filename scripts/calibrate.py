@@ -10,7 +10,7 @@ Every threshold the matchers use -- MATCH at 0.050, KEEP at 0.075, "must beat th
 78). One positive does not characterise a failure mode, and trusting it has already cost us:
 
   * Mystery Track 5 was a CONFIDENT FALSE NEGATIVE (0.069, "no match") because chroma is not
-    pitch-invariant and the copy was a semitone off. Tim's ear caught it; the tool did not.
+    pitch-invariant and the copy was a semitone off. A listener's ear caught it; the tool did not.
   * Mystery Track 7 produced five CONFIDENT FALSE POSITIVES, all within 0.0007 of each other,
     because a 23s query drives every cost down.
 
@@ -65,7 +65,7 @@ def chroma(y):
 
 
 def imprecise(stem):
-    """Captures named `d-...` do NOT have precise timing yet (Tim). Their master positions are
+    """Captures named `d-...` do NOT have precise timing yet. Their master positions are
     approximate, so an extract taken from one lands in the wrong place -- and then scores as a
     failed match against the RIGHT original, which looks exactly like a broken matcher.
 

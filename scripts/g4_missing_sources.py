@@ -6,14 +6,14 @@ originals folder (`sources_local/`) and classify every track's source:
 - **have**        — a real audio file is present (known audio extension, non-empty).
 - **placeholder** — a stub stands in for the missing original: a `.null` file or any
                     zero-byte file (e.g. `014-… Stay (The Midnight Rockers Remix).null`,
-                    the track Tim still wants to buy).
+                    a track still to be bought).
 - **missing**     — no file at all for that track number.
 
 For each gap we also surface the acquisition leads already recorded in the track
 metadata (`fields`: discogs / spotify / release / year / allmusic), so G4 pass 2
 (sourcing) starts from real pointers rather than a blank search.
 
-This is inventory only — it never downloads or buys anything (Tim's call). Run:
+This is inventory only — it never downloads or buys anything (by design). Run:
 
     python3 scripts/g4_missing_sources.py --meta track-metadata.json \\
         --sources sources_local [--json out.json]

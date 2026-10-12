@@ -259,9 +259,8 @@ def _keep_dir():
 # it -- each hold this flock for their lifetime, so a second of them refuses loudly instead of
 # interleaving their writes of ledger.json and state.json. The rare hand tool --forget also
 # rewrites state.json, with no lock: use it on a stopped run, since beside a live one it can
-# interleave. The path keeps its historic name (collector.lock) -- the split runtime's collector
-# shared it -- so a writer still running under an old binary and this one still exclude each
-# other.
+# interleave. The path keeps its historic name (collector.lock), so a writer still running under
+# an old binary and this one still exclude each other.
 WRITER_LOCK = os.path.join(STATE_DIR, "collector.lock")
 
 
@@ -439,8 +438,7 @@ def _expect_s(sidecar):
 #
 # There was no signal handler at all, once. A SIGINT or SIGTERM to this pid alone raised
 # KeyboardInterrupt inside whatever was running and the process left -- while ffmpeg carried
-# on decoding with nobody watching. (The supervisor was never affected: it signals the whole
-# process group.)
+# on decoding with nobody watching. (A stop sent to the whole process group was never affected.)
 #
 # The handler sets a FLAG and does not raise. Raising lands on whatever bytecode happened to be
 # executing, which includes the middle of a state save; a flag is checked at points we choose.
@@ -844,8 +842,8 @@ def _decode_and_sign(path, job, expect_s=None, publish=True):
 def _spawn_argv(job):
     """The decode child's command line. THE FILE PATH IS NOT ON IT.
 
-    The supervisor finds a live harvester by looking for `--run` as a SUBSTRING of the whole
-    `ps` command line. So anything on this argv that somebody else chose is a way for a
+    A process manager can find a live harvester by looking for `--run` as a SUBSTRING of the
+    whole `ps` command line. So anything on this argv that somebody else chose is a way for a
     process that lives for one file to be mistaken for the harvester. The audio path therefore
     travels in the job directory (`sign.json`) and the argv carries only the job path, whose
     last component is a key.
@@ -866,7 +864,7 @@ def _run_sign_child(path, job, expect_s=None, publish=True):
     argv = _spawn_argv(job)
     # The invariant, checked rather than argued. `_spawn_argv` cannot put `--run` on the command
     # line, but the interpreter path and the repo path are not ours to promise, and a command line
-    # carrying that substring anywhere would be adopted by the supervisor as the harvester
+    # carrying that substring anywhere could be adopted by a process manager as the harvester
     # itself. So look, and run the decode here rather than spawn something that will be misread.
     if "--run" in " ".join(argv):
         return _decode_and_sign(path, job, expect_s, publish)
@@ -885,8 +883,8 @@ def _run_sign_child(path, job, expect_s=None, publish=True):
     except OSError as exc:
         return {"ok": False, "reason": "decode_failed",
                 "error": "could not start the decode child: %s" % exc}
-    # Same process group as us on purpose (no start_new_session), so the supervisor's killpg
-    # reaches the parent, this child and ffmpeg together.
+    # Same process group as us on purpose (no start_new_session), so a killpg from whatever
+    # stops the run reaches the parent, this child and ffmpeg together.
     _STOP["child"] = child
     try:
         if _stop_requested():
@@ -899,7 +897,7 @@ def _run_sign_child(path, job, expect_s=None, publish=True):
         _STOP["child"] = None
 
     if child.returncode in (130, 143):          # 128 + SIGINT / SIGTERM
-        # The child was signalled. Usually this process was too -- the supervisor signals the
+        # The child was signalled. Usually this process was too -- a stop is usually sent to the
         # whole group -- but our own handler may not have run yet, and a `kill` aimed at the
         # child alone would not raise the flag at all. Raise it here, so the naps, the loop
         # checks and the callers' guards all read one answer and none of them can file a
@@ -1063,7 +1061,7 @@ def reconcile_ledger(state=None, accept_rebuild=False):
         STORE broke, not the rows. Each loss is judged on its own, over the signed rows: past
         the cap that side is left untouched and a standing `sig_alert` of kind `store`
         reports it. The alert stands down on the first later reconcile that does not report:
-        an alarm that outlives the healed store it was raised over is a page reporting a break
+        an alarm that outlives the healed store it was raised over is a state file reporting a break
         that is gone.
 
     Mutates the caller's `state` when it keeps one (run does); loads its own otherwise.
@@ -1695,7 +1693,7 @@ def purge_audio():
     Retained audio turned out to be the weakest part of this design. It is the only thing here that
     is a copy of someone's record, it is the thing that went wrong (full-length mixes were retained
     instead of excerpts), and it is not actually needed: a lead is a URL, and a URL can be listened
-    to at the source. So the audio goes, and the harvest page plays the candidate from an embed instead.
+    to at the source. So the audio goes, and the candidate is reviewed from an embed instead.
 
     What survives is everything that took work to compute -- the url, the cost, the mystery it
     matched, the key it matched in, and WHERE in the candidate it matched. Nothing is re-fetched and
@@ -1726,8 +1724,8 @@ def purge_audio():
         m.pop("audio", None)                  # the lead stays; the copy does not
     state["kept"] = 0
     _save(STATE, state)
-    return "purged %d retained files (%.1f GB). %d leads kept -- review them by embed on the " \
-           "harvest page." % (n, freed / 1e9, len(state.get("matches") or []))
+    return "purged %d retained files (%.1f GB). %d leads kept -- review them by embed at the " \
+           "source." % (n, freed / 1e9, len(state.get("matches") or []))
 
 
 def _sig_key(url):
@@ -1818,7 +1816,7 @@ def _remote_objects(max_age_s=900):
 
 
 def stamp_pool(state):
-    """Record the BUCKET's signature count on the state, for the page. Post-migration the
+    """Record the BUCKET's signature count on the state, for whoever reads it. Post-migration the
     bucket is the pool's only home, so counting local `.npy` undercounts by thousands (the
     working cache holds work-in-progress, ~1 file). Rides `_remote_objects()`'s ≤15-min
     session cache -- no extra bucket listing, and a reader without the bucket's credentials
@@ -1830,7 +1828,7 @@ def stamp_pool(state):
     never a candidate. The canary is named by its key (`NETRADIO_CANARY_KEY`), so membership
     is a dictionary lookup, not a fetch. The `active`/`retired` breakdown the stamp once
     carried came from a read this side no longer makes: every such figure is the rulings
-    writer's own join of the ledger with its queue and the rulings file."""
+    writer's own join of the ledger with the rulings file."""
     objects = _remote_objects()
     if objects is None:
         return False
@@ -1900,7 +1898,7 @@ def stored_signature(key):
 def _canary_alert(state, why):
     """Raise (or keep) the canary's `sig_alert`. Returns True when the state changed.
 
-    `sig_alert` is the one alarm the page shows for "the store or the matcher is broken", and
+    `sig_alert` is the one alarm the state file carries for "the store or the matcher is broken", and
     the two paths that raise it -- the ledger's reconcile (a mass bucket loss) and the canary
     -- are KEPT APART by a `kind` field. A store alert takes precedence and is never
     overwritten here; a canary alert already standing with the same why is not rewritten
@@ -1949,7 +1947,7 @@ def canary_pass(state, path, stored, qs):
     Anything flagged raises `sig_alert` (kind `canary`). A pass with nothing flagged and the
     known match confirmed stands a canary alert down; one that could not check the known
     match (no calibration cases) leaves a standing alert alone. The outcome is recorded in
-    `state["canary"]` for the page. Returns None on a stop (never a verdict), else the record.
+    `state["canary"]` for whoever reads the state. Returns None on a stop (never a verdict), else the record.
     """
     key = file_key(path)
     # The canary cuts no excerpt: the decoded samples are dropped with the tuple.
@@ -2109,14 +2107,14 @@ def score_cached(state, num, qc, qkey, key):
 
     Updates an existing row rather than duplicating it -- which is also how the missing `at_s`
     gets filled in. Every match saved before the harvester recorded WHERE it hit has `at_s: None`,
-    so the page could not cue the link and the position had to be hunted by hand. The position
+    so nothing could cue the link and the position had to be hunted by hand. The position
     was never lost: it is recomputable from the signature we already hold.
 
     A match row carries `key`, never `url`: the row's join to whatever owns the candidate is
     the key alone, and the readers compute the same key from their own side.
 
     Advances the `current_query` block when it scores the mystery the block names -- the
-    page's "what the scorer is working on right now" (§5.6): one more compared, one fewer
+    state file's "what the scorer is working on right now": one more compared, one fewer
     remaining, an `updated` stamp. A score against a different mystery (the sign step scores
     a freshly signed file against every mystery inline, not through here) leaves the block
     alone -- the block tracks the rescan, not the sign step.
@@ -2167,8 +2165,8 @@ def forget(state, num):
     dropped_keys = [k for k in scored if k.split(":", 1)[0] == str(num)]
     for k in dropped_keys:
         del scored[k]
-    # Clear the `current_query` block if it names the forgotten mystery -- otherwise the
-    # page could show "the last query was MT%d" right after forgetting it, and the block
+    # Clear the `current_query` block if it names the forgotten mystery -- otherwise a
+    # reader could show "the last query was MT%d" right after forgetting it, and the block
     # would stay stale until the next rescan resets it. The block is the scorer's
     # "what I am working on right now"; a forgotten mystery is no longer being worked.
     cq = state.get("current_query")
@@ -2218,7 +2216,7 @@ def rescan(state, ledger, ruled, qs, limit=None, verbose=True, checkpoint=None,
     scored -- whether it matched or not -- so a pair whose `_load_sig` returned None is
     the one that is not recorded, and that is the one this count leaves pending.
 
-    Advances the `current_query` block (§5.6) as it works one mystery: `mystery`, `query_key`,
+    Advances the `current_query` block as it works one mystery: `mystery`, `query_key`,
     `started` (when this mystery's chunk began), `compared`, `remaining`, `updated`. A rescan
     works the mysteries in the order `qs` carries them, and a chunk per pass
     (`RESCAN_BUDGET_S`) may finish a mystery and start the next within one call -- so the
@@ -2313,7 +2311,7 @@ def evict_overfull(state, num):
     This must never raise. It runs on the hot path of every hit, and it used to do
     `os.unlink(dead["audio"])` catching only OSError -- so once the audio was purged, the first
     match in any full board raised KeyError and killed the harvester. Every board was already at
-    KEEP_TOP, so that was every start, forever, and the watchdog restarted it into the same wall.
+    KEEP_TOP, so that was every start, forever, and each restart ran into the same wall.
     """
     board = sorted([m for m in state["matches"] if m["mystery"] == num],
                    key=lambda m: m["cost"])
@@ -2446,7 +2444,7 @@ def note_no_queries(state, qs):
     the query set (run(), at its start).
 
     An empty query set is a first-class state, not a print-and-vanish: the harvester KEEPS
-    RUNNING -- signing files is worth doing whatever the mysteries look like -- but the page
+    RUNNING -- signing files is worth doing whatever the mysteries look like -- but the state
     must not claim the scoring is working while nothing is searchable. Stamped once (the `at`
     is when it AROSE, like sig_alert), and it stands down by itself the moment a refresh
     finds something searchable. Returns True when the state changed (worth persisting)."""
@@ -2488,8 +2486,8 @@ def queries(state=None):
     the clip's contents and the query's shape (QUERY_SHAPE), and it is what `state["scored"]` is
     keyed on -- so a clip that is RE-CUT, or asked a new way, invalidates every pairing made
     against the old one, and every held signature is scored again automatically. Keying on the number alone would have meant a better MT7 clip
-    inherited the old clip's verdicts and was never actually asked: exactly the false negatives Tim
-    was worried about.
+    inherited the old clip's verdicts and was never actually asked: exactly the false negatives that
+    were the worry.
 
     A clip shorter than MIN_QUERY_S is REFUSED, and this is why: MT7's clip is 23 seconds, and it
     produced five confident false positives all within 0.0007 of each other. A short query drives
@@ -2521,13 +2519,13 @@ def queries(state=None):
         qkey = query_key(e["number"], clip_fingerprint(e["clip"]))
         out.append((e["number"], c, qkey))
 
-    if state is not None:                     # so the page can say what it is NOT asking, and why
+    if state is not None:                     # so the state says what it is NOT asking, and why
         state["searching"] = [n for n, _, _ in out]
         state["skipped_queries"] = skipped
         # The CURRENT clip's query key per mystery. `state["scored"]` is keyed on these, and
         # a re-cut clip CHANGES the key -- so only the harvester can say which key is "now".
-        # The page joins this map to state["scored"] for its live "compared: N of pool"
-        # column, instead of guessing among stale fingerprints.
+        # A reader joins this map to state["scored"] for a live "compared: N of pool"
+        # count, instead of guessing among stale fingerprints.
         state["query_keys"] = {str(n): qkey for n, _, qkey in out}
     for s in skipped:
         print("# NOT searching MT%d -- %s" % (s["mystery"], s["why"]))
@@ -2593,7 +2591,7 @@ def check_memory(state, key, child=None):
 
     A child over the ceiling only earns an issues row: its memory left with it, so there is
     nothing to restart. A parent over the ceiling returns from `run()` with exit 0 -- the
-    supervisor's watchdog sees a run that is not standing still and spawns a fresh one.
+    whatever restarts the harvester sees a run that has stopped and starts a fresh one.
     """
     row = record_memory(state, key, child)
     ceiling = mem_ceiling_mb()
@@ -2607,10 +2605,10 @@ def check_memory(state, key, child=None):
     if (row["parent_mb"] or 0) > ceiling:
         state["issues"] = ((state.get("issues") or []) + [{
             "at": _now(),
-            "issue": "parent at %.0f MB, over the %.0f MB ceiling -- standing down so the "
-                     "supervisor can restart it" % (row["parent_mb"], ceiling)}])[-50:]
+            "issue": "parent at %.0f MB, over the %.0f MB ceiling -- standing down so "
+                     "whatever restarts it can" % (row["parent_mb"], ceiling)}])[-50:]
         print("# parent footprint %.0f MB is over the %.0f MB ceiling -- stopping so the "
-              "watchdog restarts us" % (row["parent_mb"], ceiling))
+              "run is restarted" % (row["parent_mb"], ceiling))
         return True
     return False
 
@@ -2755,7 +2753,7 @@ def run(args):
         # Re-read the rulings file every pass, before anything consumes it: a ruling in the file
         # must reach this search within one loop iteration. Unreadable is NOT "nothing ruled" --
         # a run that carried on would score against an empty retired set and hand back records
-        # already rejected, so stand down and let the supervisor restart the run once the file
+        # already rejected, so stand down and let whatever restarts it start the run once the file
         # is back.
         ruled = load_rulings()
         if ruled is None:
@@ -2777,7 +2775,7 @@ def run(args):
             _save(STATE, state)
             print("dropped %d ruled-on excerpt(s) -- the leads keep their numbers" % n_dropped)
         if stamp_pool(state):
-            _save(STATE, state)          # the bucket's count for the page; ≤15-min cached
+            _save(STATE, state)          # the bucket's count for the state; ≤15-min cached
 
         # Score held signatures against any mystery they have not met yet -- a bounded chunk per
         # pass, so it rides along with the signing instead of blocking it. This is CPU only
@@ -2978,8 +2976,8 @@ def main():
     ap.add_argument("--sign-job", metavar="DIR",
                     help="the form --run spawns: decode the file named in DIR/sign.json and "
                          "write result.json. The audio path stays OFF the command line, "
-                         "because the supervisor reads that command line to find the "
-                         "harvester -- see _spawn_argv.")
+                         "because a process manager may read that command line to find "
+                         "the harvester -- see _spawn_argv.")
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--pause", action="store_true")
     ap.add_argument("--resume", action="store_true")
@@ -2990,11 +2988,6 @@ def main():
                     help="drop every lead for Mystery Track N, and every scored pairing against "
                          "it. For when the QUESTION was bad -- a clip too short to distinguish "
                          "records with. The next clip then starts clean against the whole pool.")
-    ap.add_argument("--migrate-sigs", action="store_true",
-                    help="move the signature archive fully into the bucket: upload+verify every "
-                         "local signature, then evict the cold ones (verified remote AND scored "
-                         "against every current mystery). Run with the harvester STOPPED or "
-                         "paused. After this, local disk holds only work in progress.")
     ap.add_argument("--rescan", action="store_true",
                     help="score every held signature against every mystery it has not met yet, "
                          "in one go. No network. The running harvester does this by itself, a "
@@ -3040,41 +3033,6 @@ def main():
               % (args.forget, leads, pairs))
         print("# Cut a better clip and it re-enters the search by itself, against every held "
               "signature.")
-        return
-    if args.migrate_sigs:
-        if not sigstore.enabled():
-            print("# sigstore is dark -- set NETRADIO_SIG_BUCKET (and profile/endpoint) in "
-                  ".env first.")
-            return
-        cache = _chroma_dir()
-        if cache is None:
-            print("# the signature cache is dark -- set NETRADIO_CACHE_ROOT in .env first.")
-            return
-        state = _load(STATE, blank_state())
-        qs = queries()
-        names = sorted(n for n in os.listdir(cache)
-                       if n.startswith("u") and n.endswith(".npy")) if os.path.isdir(cache) else []
-        up = failed = 0
-        for name in names:
-            path = os.path.join(cache, name)
-            try:
-                local = os.path.getsize(path)
-            except OSError:
-                continue
-            if sigstore.remote_size(name) == local:
-                continue                        # already there, verified
-            if sigstore.put(path, name):
-                up += 1
-            else:
-                failed += 1
-        n_ev, freed = sigstore.evict_cold(cache, state.get("scored") or {},
-                                          [qk for _, _, qk in qs])
-        left = len(names) - n_ev
-        print("# migrate: %d uploaded, %d upload failure(s); %d evicted (%.1f MB freed); "
-              "%d signature(s) still local (unscored vs a current mystery, or unverified)."
-              % (up, failed, n_ev, freed / 1e6, left))
-        if failed:
-            print("# NOTHING that failed to upload was deleted. Fix the store config and re-run.")
         return
     if args.sign_one and not _KEY.fullmatch(args.sign_one):
         print("# %r is not a key (u + 20 hex) -- a signature filed under it would be "

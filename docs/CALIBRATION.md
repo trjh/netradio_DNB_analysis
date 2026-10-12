@@ -117,7 +117,7 @@ scan.
   (a 0.1096 "non-match" that was really 0.0699 in the right key).
 - **No leader changed**: MT4's and MT6's best candidates (0.0547 / 0.0850) and their
   dense top-5 boards were identical at both settings — no hidden lead *that day*.
-- Decision (Tim): the false-negative risk is real, the cost is 4x DTW at fetch rate
+- Decision: the false-negative risk is real, the cost is 4x DTW at fetch rate
   (negligible next to polite fetching), so **`DEFAULT_TRIES` is now 12** — exhaustive —
   env-tunable via `NETRADIO_CHROMA_TRIES`. `tries=3` remains fine for bulk offline
   sweeps where wall-clock matters more than the last 0.04 of cost.
