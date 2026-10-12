@@ -3,7 +3,7 @@
 > **What this is:** the log of numbered design decisions (`DP-nn`) that the code, the tests and the
 > documents cite.
 >
-> **Fits in:** [../README](../README.md) (master) → Reference.
+> **Fits in:** [README](../README.md) (master) → Reference.
 
 The code, the tests and the design documents cite decisions as `DP-nn`. The numbers come from one
 large design phase in August 2026, when the align tools and the label workflow took shape, and they
@@ -38,7 +38,7 @@ A new decision takes the next free number. Numbers are never reused.
 | DP-22 | The whole-song left/right review mode: a phone-first web page, then a Mac app | [`docs/PLAN_align_tool.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_align_tool.md) §6 |
 | DP-23 | Originals are kept as FLAC beside their lossless masters, and review audio serves FLAC first with no transcode fallback | [`docs/PLAN_align_tool.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_align_tool.md) §6.8 |
 | DP-24 | The labels layout: `labels/automated/`, `labels/review/` and `labels/summary/` | [`docs/PLAN_align_tool.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_align_tool.md) §6.14 |
-| DP-25 | The export writes back to its input files, built as the summary compile | [`docs/PLAN_align_tool.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_align_tool.md) §6.14 |
+| DP-25 | The export writes back to its input files, built as the summary compile | [`docs/PLAN_align_export_writeback.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_align_export_writeback.md) §A |
 | DP-26 | Anchor rows (sync, start and end) are written without the trailing ` HINT`: the ` verified` token and the confidence carry their provenance, and every reader accepts rows with or without it | [`align_inspect.py`](https://github.com/trjh/netradio_DNB_analysis/blob/main/align_inspect.py) |
 | DP-27 | The overview's numbered point flags sit on the lane's bottom edge, clear of the legend | [`docs/PLAN_align_tool.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_align_tool.md) §5.3 |
 | DP-28 | The inspector's context strip comes before its controls, and the controls' text is two points larger | [`docs/PLAN_align_tool.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_align_tool.md) §5.3 |

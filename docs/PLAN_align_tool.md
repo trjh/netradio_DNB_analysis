@@ -1544,7 +1544,7 @@ the same stack as tooling, not as an align feature.
 
 **Built — analysis repo:** #120 (`match-hints`, Pass 1), #121 (`inspect-slice`, the DSP
 provider), #124 (`make env` installs the MATCH binaries), #125 (converter trust:
-DP-02/03/01/04/05/06 — trim, referee, `verified` plumbing, solo seeding, batch, seat
+DP-01/02/03/04/05/06 — `verified` plumbing, trim, referee, solo seeding, batch, seat
 derivation), #126 (Phase C providers + worker + MATCH engine), #127 (overview provider),
 #128 (DP-26: anchor rows drop the ` HINT` suffix — the ` verified` / `confidence n/10`
 in-row marks carry provenance), #129 (docs: PROCESS.md step 9 rewritten to the

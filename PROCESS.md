@@ -235,8 +235,8 @@ stream is trimmed to the original's expected neighbourhood first — auto-derive
 track's master span and the capture's placement, or `--around <seconds>` when the track
 isn't placed yet.
 
-**Pass 2 — verify (the align inspector):** open each point in the companion player
-project's **/align inspector** — stream fixed, original shiftable, a live **subtraction
+**Pass 2 — verify (the align inspector):** open each point in the align server's
+**/align inspector** — stream fixed, original shiftable, a live **subtraction
 lane** (the null test, no Invert/un-Invert dance), snap-to-best under either engine
 (**PHAT | MATCH**). Accept or nudge each point, and **snap after any hand move** — the
 snap *is* the machine check. Export the adjusted rows when done. The rule that keeps the
@@ -646,8 +646,8 @@ is listed in the [decision-point log](./docs/DECISIONS.md)):
 |---|---|---|---|
 | `labels/` (root) | the authoritative `<stem>.labels.tsv` (+ `sort_tsv.py`, `publish.py`) | **you**, by hand, via Audacity + the fold | **no — the record of truth** |
 | `labels/automated/` | script suggestion output — the `match-hints` pairs, `hints`, future tools (NOT `.auto.labels.tsv`, which reaches the sheet and stays at the root) | the analysis scripts; freely overwritten on re-run | yes — pure machine output |
-| `labels/review/` | `<stem>.origNNN.review.tsv` — machine context + hand notations from the align review surfaces | the companion player's review-note route (auto-committed via its `review_sync`) | **no — hand judgement; the reason it is in git** |
-| `labels/summary/` | ONE importable label set per audio file (`<stem>.summary.tsv` / `origNNN.summary.tsv`), compiled from `automated/` + `review/` | the export compile (companion player project) | yes — derived; committed for phone visibility + DR |
+| `labels/review/` | `<stem>.origNNN.review.tsv` — machine context + hand notations from the align review surfaces | the align server's review-note route (auto-committed via `review_sync`) | **no — hand judgement; the reason it is in git** |
+| `labels/summary/` | ONE importable label set per audio file (`<stem>.summary.tsv` / `origNNN.summary.tsv`), compiled from `automated/` + `review/` | the align server's summary compile | yes — derived; committed for phone visibility + DR |
 
 | File | Written by | Committed? | Authority |
 |---|---|---|---|
@@ -656,8 +656,8 @@ is listed in the [decision-point log](./docs/DECISIONS.md)):
 | `<stem>.starter.labels.tsv` | `sort_tsv.py` / `starter` | gitignored | seed only; excluded everywhere |
 | `automated/<stem>.hints.tsv` | `streamalign hints` | **yes** | suggestions + questions; invisible to solve/build/sheet |
 | `automated/<stem>.origNNN.match.hints.tsv` + `automated/origNNN.<stem>.match.hints.tsv` | `streamalign match-hints` (step 9 Pass 1) | **yes** | paired sync-point proposals; invisible to solve/build/sheet |
-| `review/<stem>.origNNN.review.tsv` | the align review surfaces (player) | **yes** | hand notations; folded into the hand labels manually |
-| `summary/<stem>.summary.tsv` / `summary/origNNN.summary.tsv` | the export compile (player) | **yes** | derived; the one label set the Audacity review imports |
+| `review/<stem>.origNNN.review.tsv` | the align review surfaces (the align server's review-note route) | **yes** | hand notations; folded into the hand labels manually |
+| `summary/<stem>.summary.tsv` / `summary/origNNN.summary.tsv` | the align server's summary compile | **yes** | derived; the one label set the Audacity review imports |
 
 The sheet importer (`sheetscript/Code.js`) reads **only** the root's `*.labels.tsv` (incl.
 `.auto.`) + the hand-kept `remainder.tsv` — mirroring `groundtruth.is_pipeline_label_file`;
