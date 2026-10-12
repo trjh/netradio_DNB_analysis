@@ -148,7 +148,7 @@ class EvictingAPurgedLead(unittest.TestCase):
     record. But the eviction path still did `os.unlink(dead["audio"])`, catching only OSError. So
     the first match good enough to displace anyone raised KeyError and killed the harvester. Every
     board was already full (12 of 12, for each of MT4/6/7), so it died on essentially its first
-    piece of real work, every start -- and the watchdog dutifully restarted it into the same wall.
+    piece of real work, every start -- and each restart ran it into the same wall.
 
     A unit test does not catch this; nothing exercised the branch. So the branch is exercised here.
     """
@@ -581,8 +581,8 @@ class TheOnDemandRescanRefusesADarkPolicy(unittest.TestCase):
     counted the pairs (a bucket-held signature reads as held), `_load_sig` answered None for
     every one, and the run stamped `rescan_pending` to 0 over "Every cached signature has now
     met every mystery" -- a completion claim about work that never ran, where every sibling
-    mode refuses (run(), --migrate-sigs).
-    It refuses now, before the query set is even read, with the message --migrate-sigs uses."""
+    mode refuses (run()).
+    It refuses now, before the query set is even read, naming the setting to fix."""
 
     def test_rescan_refuses_before_the_query_set_is_read(self):
         tmp = tempfile.mkdtemp(prefix="rescan-dark-")
@@ -763,73 +763,6 @@ class AFailedLoadIsNotACompletedScore(unittest.TestCase):
         self.assertEqual(state["scored"]["4:fp"], [key + ".npy"])
 
 
-@unittest.skipIf(harvest is None, "needs the librosa venv")
-class TheOtherCacheReadingModesRefuseADarkPolicy(unittest.TestCase):
-    """`--rescan` is not the only mode that reads the signature cache. `--migrate-sigs`
-    walks the cache directory, and with the cache dark there is no directory at all, so
-    without its gate it reaches `os.path.isdir(None)` and dies with a TypeError where it
-    should print the setting to fix."""
-
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="dark-modes-")
-        self.addCleanup(shutil.rmtree, self.tmp, True)
-        self._paths = harvest.STATE_DIR, harvest.STATE, harvest.WRITER_LOCK
-        harvest.STATE_DIR = os.path.join(self.tmp, "harvest")
-        harvest.STATE = os.path.join(self.tmp, "state.json")
-        harvest.WRITER_LOCK = os.path.join(self.tmp, "writer.lock")
-        self.addCleanup(self._restore_paths)
-        self._saved = {k: os.environ.get(k) for k in list(os.environ)
-                       if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)}
-        for k in self._saved:
-            os.environ.pop(k, None)
-        self._attrs = (harvest.CACHE, harvest.KEEP, harvest._CACHE_AT_IMPORT,
-                       harvest._KEEP_AT_IMPORT)
-        self._registry = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
-        self.addCleanup(self._restore_policy)
-        cache_budget._REGISTRY.clear()
-        cache_budget._STATS.clear()
-        harvest.register_caches()             # re-read: the signature cache is dark
-        self.assertIsNone(harvest._chroma_dir())
-
-    def _restore_paths(self):
-        (harvest.STATE_DIR, harvest.STATE, harvest.WRITER_LOCK) = self._paths
-
-    def _restore_policy(self):
-        cache_budget._REGISTRY.clear()
-        cache_budget._REGISTRY.update(self._registry[0])
-        cache_budget._STATS.clear()
-        cache_budget._STATS.update(self._registry[1])
-        for k in [k for k in list(os.environ)
-                  if k.startswith("NETRADIO_") and ("CACHE" in k or k in CACHE_ENV)]:
-            os.environ.pop(k, None)
-        os.environ.update(self._saved)
-        for name, value in zip(("CACHE", "KEEP", "_CACHE_AT_IMPORT", "_KEEP_AT_IMPORT"),
-                               self._attrs):
-            setattr(harvest, name, value)
-
-    def test_migrate_sigs_refuses_instead_of_crashing_on_a_directory_that_is_none(self):
-        """The store is configured -- so the mode is past its own sigstore gate -- and the
-        cache is dark. It must name the setting and stop, not walk a directory that does
-        not exist: `os.path.isdir(None)` is a TypeError, a traceback where an operator
-        needs a sentence."""
-        uploaded = []
-        argv = ["harvest.py", "--migrate-sigs"]
-        with unittest.mock.patch.object(sys, "argv", argv), \
-                unittest.mock.patch.object(harvest.sigstore, "enabled", lambda: True), \
-                unittest.mock.patch.object(harvest.sigstore, "put",
-                                          lambda *a: uploaded.append(a) or True), \
-                unittest.mock.patch.object(harvest.sigstore, "evict_cold",
-                                          lambda *a: (_ for _ in ()).throw(
-                                              AssertionError("refused before any eviction"))), \
-                unittest.mock.patch.object(harvest, "queries",
-                                          lambda state=None: (_ for _ in ()).throw(
-                                              AssertionError("refused before the query set"))), \
-                contextlib.redirect_stdout(io.StringIO()) as out:
-            harvest.main()                     # no TypeError escapes: that is half the test
-        self.assertIn("the signature cache is dark", out.getvalue())
-        self.assertIn("NETRADIO_CACHE_ROOT", out.getvalue())
-        self.assertEqual(uploaded, [], "nothing was uploaded, and nothing was listed")
-        self.assertFalse(os.path.exists(harvest.STATE), "a refused migrate writes no state")
 
 
 if __name__ == "__main__":
@@ -843,8 +776,8 @@ class ANewMysteryMustSeeTheWholeCorpus(unittest.TestCase):
     it. Every signature gathered before that point (the entire corpus, ~900 of them, built over
     weeks) would silently never be tested against MT8-MT11.
 
-    Tim assumed the opposite, reasonably: "when they come, I assume they'll be searched against all
-    current chroma signatures." The code did not honour that. Now it does, and it REMEMBERS which
+    The expectation was the opposite, reasonably: "when they come, I assume they'll be searched
+    against all current chroma signatures." The code did not honour that. Now it does, and it REMEMBERS which
     (signature, mystery) pairs it has already scored, so the work is done exactly once.
     """
 
@@ -894,10 +827,10 @@ class ANewMysteryMustSeeTheWholeCorpus(unittest.TestCase):
 
 @unittest.skipIf(harvest is None, "needs the librosa venv")
 class ABetterClipMustNotInheritTheOldOnesVerdicts(unittest.TestCase):
-    """Tim: "when I get the chance to add a new one, I don't want any false negatives from the 23s
-    version."
+    """The request: "when I get the chance to add a new one, I don't want any false negatives from
+    the 23s version."
 
-    He was right to worry. `state["scored"]` was keyed on the mystery NUMBER, so a re-cut MT7 clip
+    That was right to worry about. `state["scored"]` was keyed on the mystery NUMBER, so a re-cut MT7 clip
     would have inherited every pairing made against the 23-second one: the harvester would think it
     had already asked, and never re-score a single signature against the better question. Silent,
     and exactly the false negatives he named.

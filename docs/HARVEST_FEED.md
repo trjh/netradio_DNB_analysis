@@ -76,7 +76,7 @@ it is the mid-write state again, retried on the next pass.
 1. It decodes the file with ffmpeg (mono float32 at 16 kHz) in a child process — the audio
    never persists; the decoded samples are dropped as soon as the signature and any excerpt
    are cut.
-2. It computes the chroma signature — the pool's one recipe, published as `chroma/_recipe.json`.
+2. It computes the chroma signature — the pool's one recipe, `scripts/chroma_recipe.py`.
 3. It uploads `<key>.npy` to the signature bucket, verified, and the sidecar beside it as
    `<key>.json`.
 4. It writes the ledger row.

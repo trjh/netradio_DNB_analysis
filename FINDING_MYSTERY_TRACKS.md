@@ -46,7 +46,7 @@ publishing is §1.
 
 ### Ready to publish
 
-Prepared, loudness-normalised, in `~/Downloads/Netradio/mystery-uploads/`:
+Prepared, loudness-normalised, in a local `mystery-uploads/` folder:
 
 | Track | Length | Note |
 |---|---|---|
@@ -141,8 +141,8 @@ set -a && . ./.env && set +a
 # 1. search the originals you already have
 . .venv/bin/activate && python scripts/identify_by_chroma.py --all-mystery
 
-# 2. search the listen queue's downloaded, UNLISTENED tracks (slow — runs for hours)
-. .venv/bin/activate && python scripts/match_queue.py --out /tmp/queue-match.txt
+# 2. nothing to run: the harvester (scripts/harvest.py) scores every file it signs against
+#    the searchable mysteries, so the new clip is searched from its next pass on
 
 # 3. a cheap re-check against the commercial catalogues (ACRCloud + AudD). Proven defeated by
 #    the codec on the clips tried so far (see §4), so expect nothing — but catalogues grow and a
@@ -199,12 +199,11 @@ candidates.**
 
 ### Where the candidates come from
 
-- **The listen queue** — 567 unlistened items, 233 already downloaded. Being checked by
-  `scripts/match_queue.py` (only the *unlistened* ones: if he'd heard it and it were the mystery,
-  it would not be a mystery).
+- **The harvester's directories** — every audio file that lands there is signed and scored
+  against the mysteries by `scripts/harvest.py` (see [docs/SCRIPTS.md](./docs/SCRIPTS.md)).
 - **YouTube archive channels** of the era — e.g.
-  <https://www.youtube.com/@back2theoldskoolera999>. This is why the player's listen queue wants
-  **channel/playlist subscriptions**: they are a candidate *stream*.
+  <https://www.youtube.com/@back2theoldskoolera999>. Followed as **channel/playlist
+  subscriptions**, they are a candidate *stream*.
 - **Discogs**, by label and year: the identified tracks reveal which labels this DJ was playing.
 
 ---
@@ -222,9 +221,8 @@ signatures** — and the audio never has to touch the disk at all:
 yt-dlp -o - <url> | ffmpeg -i - -ac 1 -ar 16000 -f wav - | chroma → .npy → discard audio
 ```
 
-`scripts/match_queue.py` already caches signatures this way (`.chroma-cache/`, content-addressed,
-float16). Extending it to *stream* rather than read a local file is a small change, and it is the
-only way this scales.
+The harvester (`scripts/harvest.py`) works this way: it signs each file once, keeps the float16
+signature, and drops the audio. It is the only way this scales.
 
 **Be a good citizen.** Rate-limit, back off hard on any refusal, and stop when told to. We do
 **not** crawl -- every URL is one a human or a catalogue lookup put in the queue deliberately, and
@@ -314,9 +312,9 @@ minutes. The DJ beatmatches (so a fixed-lag correlation drifts) and the broadcas
 [`Archive/LESSON_locate_original.md`](./Archive/LESSON_locate_original.md). **With a prior it
 works** — that's `solo_anchors`.
 
-### ✗ Matching the mysteries against Tim's own library
+### ✗ Matching the mysteries against the user's own library
 
-Pointless by definition: a Mystery Track is one he did *not* recognise, so it isn't in his
+Pointless by definition: a Mystery Track is one the user did *not* recognise, so it isn't in that
 collection. (Run anyway as a control — every mystery scored at the non-match floor, as expected.)
 
 ### ✗ A public database of raw chroma signatures
@@ -330,7 +328,7 @@ hashes* — the thing we've proven useless here. **The signature pool has to be 
 chroma bins **rotate**, so a naive matcher compares C major against C♯ major, sees nothing in
 common, and returns a confident **no match**.
 
-This is not theoretical. **Mystery Track 5 was missed exactly this way.** Tim identified it by
+This is not theoretical. **Mystery Track 5 was missed exactly this way.** It was identified by
 ear as Jacob's Optical Stairway — *Solar Feelings* (J Majik mix); the matcher scored it 0.069
 (non-match) and I nearly wrote the ID off. The record was there all along, one semitone away:
 

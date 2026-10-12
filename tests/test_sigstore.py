@@ -79,7 +79,6 @@ class TestDark(Base):
         path, key = self._sig()
         self.assertIsNone(sigstore.put(path, key))
         self.assertIsNone(sigstore.list_objects())
-        self.assertFalse(sigstore.have_remote(key))
         self.assertEqual(self.rec.calls, [])
 
     def test_dark_never_evicts(self):
