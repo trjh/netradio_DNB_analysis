@@ -111,12 +111,6 @@ def _head(key):
     return _verified[key]
 
 
-def remote_size(key):
-    """HEAD the object -> size in bytes, or None if absent/unreachable. Cached per session
-    once seen (an immutable object's size does not change)."""
-    return _head(key)[0]
-
-
 def verified_size(key):
     """The remote size a HEAD in this process has already returned for `key`, or None. Never
     asks the bucket: the cache policy's pin reads it for every entry on every run."""
@@ -248,7 +242,7 @@ def evictable(path, key, scored, qkeys):
         local = os.path.getsize(path)
     except OSError:
         return False
-    return remote_size(key) == local
+    return _head(key)[0] == local
 
 
 def evict_cold(cache_dir, scored, qkeys):

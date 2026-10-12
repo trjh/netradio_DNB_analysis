@@ -123,16 +123,16 @@ class TestRemote(Base):
     def test_head_caches_per_session(self):
         _, key = self._sig()
         self.rec.results = [FakeProc(stdout=json.dumps([55, "e-55"]))]
-        self.assertEqual(sigstore.remote_size(key), 55)
-        self.assertEqual(sigstore.remote_size(key), 55)                # cached
+        self.assertEqual(sigstore._head(key)[0], 55)
+        self.assertEqual(sigstore._head(key)[0], 55)                # cached
         self.assertEqual(len(self.rec.calls), 1)
 
     def test_absent_object_is_none_and_not_cached(self):
         _, key = self._sig()
         self.rec.results = [FakeProc(returncode=254, stderr="Not Found"),
                             FakeProc(stdout=json.dumps([55, "e-55"]))]
-        self.assertIsNone(sigstore.remote_size(key))
-        self.assertEqual(sigstore.remote_size(key), 55)                # re-asked, now present
+        self.assertIsNone(sigstore._head(key)[0])
+        self.assertEqual(sigstore._head(key)[0], 55)                # re-asked, now present
 
     def test_a_head_without_a_size_is_none(self):
         # A shape the contract does not describe (a torn [null, ...]) is an absence, not a
@@ -140,8 +140,8 @@ class TestRemote(Base):
         _, key = self._sig()
         self.rec.results = [FakeProc(stdout=json.dumps([None, "e"])),
                             FakeProc(stdout=json.dumps([7, "e"]))]
-        self.assertIsNone(sigstore.remote_size(key))
-        self.assertEqual(sigstore.remote_size(key), 7)
+        self.assertIsNone(sigstore._head(key)[0])
+        self.assertEqual(sigstore._head(key)[0], 7)
 
     def test_the_listing_carries_the_etags(self):
         # The ledger's rows record the etags, and one listing answers both questions: what is
