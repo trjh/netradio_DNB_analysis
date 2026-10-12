@@ -1,0 +1,6 @@
+#!/bin/bash
+# pre-commit: this repo's core.hooksPath replaces the global one, so run the global pre-commit
+# hook, if any, from here and keep its verdict.
+# shellcheck source=.githooks/chain-global.sh
+. "$(dirname "${BASH_SOURCE[0]}")/chain-global.sh"
+chain_global pre-commit "$@"

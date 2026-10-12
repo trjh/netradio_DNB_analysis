@@ -41,6 +41,7 @@ help in summarizing and cross-referencing the information.
 * [FINDING_MYSTERY_TRACKS.md](./FINDING_MYSTERY_TRACKS.md) -- **identifying the unnamed tracks**: where to publish the excerpts and ask (Dogs on Acid, r/AtmosphericDnB, Discogs, tuneID), the chroma-matching method that works offline, and every dead end already tried (incl. the commercial fingerprint APIs — see below)
 * [PROCESS.md](./PROCESS.md) -- **how the analysis is actually done**: the per-recording loop (manual + engine), the by-ear technique for seating an original against the mix, and what the engine can/cannot do
 * [HOWTO.md](./HOWTO.md) -- howto / FAQ: **which tool to run, when, and why** (notate → build → serve → publish)
+* [scripts/run_align.sh](./scripts/run_align.sh) -- the align server: the `/align` inspector and the whole-song `/align/review` page ([public/](./public)), run from this checkout; see [HOWTO](./HOWTO.md#align-tools--the-server-the-review-app-and-the-align-flow)
 
 ### Reference
 

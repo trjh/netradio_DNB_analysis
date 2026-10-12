@@ -57,6 +57,20 @@ that creates it: `self.addCleanup(shutil.rmtree, d, True)` for a directory,
 | `scripts/build_track_metadata.py` | labels → `track-metadata.json`. **The only writer of that file.** | after changing labels |
 | `scripts/render_tracklist.py` | `track-metadata.json` → `TRACKLIST.md` (with per-track `#tNN` anchors) | after the build; needs network for artwork |
 
+## The align tools (see [HOWTO](../HOWTO.md#align-tools--the-server-the-review-app-and-the-align-flow) and [the runbook](./RUNBOOK_align_workflow.md))
+
+The align server is its own process (stdlib-only; its DSP runs in `.venv` as a subprocess). It
+finds this checkout from its own location: the venv, `labels/` and `sources_local/` are this
+checkout's unless `.env` says otherwise (`.env.example`, "The align server").
+
+| Script | What | When |
+|---|---|---|
+| `scripts/run_align.sh start\|stop\|status\|restart\|help` | the launcher: own pidfile (`.align.pid`), own log (`logs/align.log`), the port cleared of a stale process first; refuses `start`/`stop`/`restart` from a linked worktree | to run the `/align` inspector and the `/align/review` page |
+| `scripts/align_server.py` | the server: the two pages under `public/`, the inspector's JSON routes, the review-audio routes, the review-note and compile routes. Its modules: `align_inspect.py` (the DSP boundary), `review_audio.py`, `review_notes.py`, `summary_compile.py`, `rangeserve.py` | started by the launcher |
+| `scripts/review_sync.py` | commits `labels/review/`, `labels/summary/` and `data/rulings.json` to the standing `align-review-data` branch with git plumbing (the working tree never moves), pushes hourly; rides the server. `make review-sync` opens the one squash PR, `make review-sync-automerge` merges it when it changes only `data/rulings.json`, `make review-sync-postmerge` recreates the branch after a merge by hand. Dark in a linked worktree | the PR when you want the notes on `main` |
+| `scripts/summary_compile.py` | `labels/automated/` + `labels/review/` → `labels/summary/`, one importable label set per audio file (`make compile-summary`, or the page's button) | before folding accepted points into the hand labels |
+| `scripts/post_pull_restart.sh` | run by `.githooks/post-merge` after a pull: restarts a running align server when the pull changed `scripts/` or `public/`. `make hooks` switches the hooks on, once per machine | automatic once `make hooks` has run |
+
 ## Identifying the Mystery Tracks (see [FINDING_MYSTERY_TRACKS](../FINDING_MYSTERY_TRACKS.md))
 
 | Script | What | When |

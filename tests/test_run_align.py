@@ -1,0 +1,111 @@
+"""scripts/run_align.sh: the status probe and the checkout guard.
+
+The status probe must probe, and print, the host the server is bound on (with
+NETRADIO_ALIGN_HOST set to a LAN address nothing answers on loopback). The guard refuses
+start, stop and restart from a linked worktree, whose launcher would otherwise act on the live
+server's port. No server is started: the probe is run as an extracted snippet, and the guard
+runs against a throwaway root.
+"""
+
+import os
+import shutil
+import socket
+import subprocess
+import tempfile
+import unittest
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _read(*parts):
+    with open(os.path.join(HERE, *parts), encoding="utf-8") as fh:
+        return fh.read()
+
+
+class TheStatusProbeBehaves(unittest.TestCase):
+    def _host(self, bound):
+        sh = _read("scripts", "run_align.sh").split("\nstatus() {", 1)[1]
+        start = sh.index("local host;")
+        end = sh.index("\n", sh.index("(bound to"))
+        snippet = sh[start:end]
+        script = ('env_or_dotenv() { printf "%%s" "$BOUND"; }\nPORT=8766\n'
+                  'probe() {\n%s\ntrue\n}\nprobe' % snippet)
+        out = subprocess.run(["bash", "-c", script], env={"BOUND": bound, "PATH": os.environ["PATH"]},
+                             capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return out.stdout
+
+    def test_a_lan_bind_is_printed_and_flagged(self):
+        out = self._host("192.168.1.57")
+        self.assertIn("http://192.168.1.57:8766/align", out)
+        self.assertIn("bound to 192.168.1.57", out)
+
+    def test_unset_and_wildcard_binds_print_loopback_unflagged(self):
+        for bound in ("", "0.0.0.0"):
+            out = self._host(bound)
+            self.assertIn("http://127.0.0.1:8766/align", out)
+            self.assertNotIn("bound to", out)
+
+
+class TheStatusProbe(unittest.TestCase):
+    def test_status_probes_and_prints_the_bound_host_not_loopback(self):
+        sh = _read("scripts", "run_align.sh")
+        status = sh.split("\nstatus() {", 1)[1]
+        self.assertIn('host="$(env_or_dotenv NETRADIO_ALIGN_HOST)"', status)
+        self.assertIn('"http://$host:$PORT/api/align/sources"', status)
+        self.assertNotIn("http://127.0.0.1:$PORT/api/align/sources", status)
+        self.assertIn('echo "  http://$host:$PORT/align"', status)
+
+
+def _free_port():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+class TheCheckoutGuard(unittest.TestCase):
+    """The launcher and its two libraries copied into a throwaway root; `.git` a file there
+    (a linked worktree) or a directory (a main checkout)."""
+
+    def setUp(self):
+        self.root = os.path.realpath(tempfile.mkdtemp(prefix="run-align-"))
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        os.makedirs(os.path.join(self.root, "scripts", "lib"))
+        for rel in ("scripts/run_align.sh", "scripts/lib/env.sh", "scripts/lib/checkout.sh"):
+            shutil.copy2(os.path.join(HERE, rel), os.path.join(self.root, rel))
+        self.port = str(_free_port())
+
+    def _run(self, verb, **env):
+        full = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": self.root,
+                "NETRADIO_ALIGN_PORT": self.port}
+        full.update(env)
+        return subprocess.run(["bash", os.path.join(self.root, "scripts", "run_align.sh"), verb],
+                              capture_output=True, text=True, env=full, timeout=60)
+
+    def test_a_linked_worktree_is_refused_before_the_port_is_touched(self):
+        with open(os.path.join(self.root, ".git"), "w") as fh:
+            fh.write("gitdir: /nowhere/.git/worktrees/x\n")
+        for verb in ("start", "stop", "restart"):
+            r = self._run(verb)
+            self.assertEqual(r.returncode, 2, verb + r.stdout + r.stderr)
+            self.assertIn("REFUSING", r.stderr)
+            self.assertIn("python3 scripts/align_server.py", r.stderr)
+            self.assertFalse(os.path.exists(os.path.join(self.root, "logs")), verb)
+
+    def test_the_opt_out_and_the_read_verbs_pass(self):
+        with open(os.path.join(self.root, ".git"), "w") as fh:
+            fh.write("gitdir: /nowhere/.git/worktrees/x\n")
+        self.assertEqual(self._run("running").returncode, 1)     # nothing on the port
+        r = self._run("stop", NETRADIO_ALLOW_OFF_MAIN="1")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("stopped", r.stdout)
+
+    def test_a_main_checkout_is_not_refused(self):
+        os.makedirs(os.path.join(self.root, ".git"))
+        r = self._run("stop")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("stopped", r.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()
