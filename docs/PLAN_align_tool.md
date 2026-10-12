@@ -1494,14 +1494,14 @@ authoritative root `labels/*.labels.tsv`, and reach the
 
 ### 6.13 Build plan — small review-gated PRs stacked on the current chain
 
-| PR | Contents | Gate |
+| Step | Contents | Gate |
 |---|---|---|
-| **7/7 (this)** | the DP-22 design (docs only) | Local Reviewer, user merge |
-| **8/8 (this)** | **DP-23 — flac-canonical sources**: `scripts/sync_sources.sh` transcode-on-sync (`wv → flac`, idempotent; the server's host stores flac-only) — its own small PR (§6.8) — **BUILT** | reviewed PR |
-| **9/9 (this)** | server: **audio delivery routes** — stream passthrough + the flac-first original route (wv-only **refused**, §6.8 step 3 — no transcode fallback) + capability gates + tests (§6.8) — **BUILT** | reviewed PR |
-| **10/10 (this)** | server: **review-note route + `review_sync.py`** + tests (`tests/test_review_notes.py`, `tests/test_review_sync.py`) (§6.6/§6.7) + the `list_placed()` provider; analysis repo: the small **`placed` op** PR (§6.5) rides beside it — **BUILT** | reviewed PRs |
-| **11/11 (this)** | server: **`/align/review` web page** — playback engine, scrolling waveforms, pair selection, in-waveform notes, rate/drift readouts (§6.9-a) — **BUILT**; the §6.10 gate (the user's live pass) stays open | **the web POC gate (§6.10)** |
-| last | server: **Mac native POC** — single-file SwiftUI + `swiftc` build script (§6.9-b; GUI shape is carte-blanche (A8) — the bar is guaranteed-aligned, correct-rate simultaneous playback with the dual scrolling waveform view) — **BUILT** (PR 12/12; the §6.10 live-pass gate stays open) | **the native POC gate (§6.10)** |
+| 1 | the DP-22 design (docs only) | Local Reviewer, user merge |
+| 2 | **DP-23 — flac-canonical sources**: `scripts/sync_sources.sh` transcode-on-sync (`wv → flac`, idempotent; the server's host stores flac-only) — its own small PR (§6.8) — **BUILT** | reviewed PR |
+| 3 | server: **audio delivery routes** — stream passthrough + the flac-first original route (wv-only **refused**, §6.8 step 3 — no transcode fallback) + capability gates + tests (§6.8) — **BUILT** | reviewed PR |
+| 4 | server: **review-note route + `review_sync.py`** + tests (`tests/test_review_notes.py`, `tests/test_review_sync.py`) (§6.6/§6.7) + the `list_placed()` provider; analysis repo: the small **`placed` op** PR (§6.5) rides beside it — **BUILT** | reviewed PRs |
+| 5 | server: **`/align/review` web page** — playback engine, scrolling waveforms, pair selection, in-waveform notes, rate/drift readouts (§6.9-a) — **BUILT**; the §6.10 gate (the user's live pass) stays open | **the web POC gate (§6.10)** |
+| 6 | server: **Mac native POC** — single-file SwiftUI + `swiftc` build script (§6.9-b; GUI shape is carte-blanche (A8) — the bar is guaranteed-aligned, correct-rate simultaneous playback with the dual scrolling waveform view) — **BUILT** (PR 12/12; the §6.10 live-pass gate stays open) | **the native POC gate (§6.10)** |
 
 Order is deliberate: DP-23 first so the audio route's mainline (a flac sibling on the serving
 machine) is real before the route lands; the server pieces land reviewable and dark before
