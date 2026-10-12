@@ -8,8 +8,9 @@ Netradio D&B ISDN reconstruction. Companion to mkmysteryvideo.sh (the single-tra
 
 What it builds, from this repo's own data (never the CSV): the tracks and their master
 positions from `track-metadata.json`, the capture files' positions on the master timeline
-from `stream-files.json` (a mirror of the file the stream's file-ordering generator writes),
-the album art from the art folder, and the audio from NETRADIO_MP3_DIR:
+from `stream-files.json` (a generated copy, refreshed from outside this repository: a hand
+edit is overwritten at the next refresh), the album art from the art folder, and the audio
+from NETRADIO_MP3_DIR:
   * ONE continuous audio file for master span [begin(start) .. end(end)], stitched
     from the PRIMARY capture files by MASTER TIME (filenames are hints, not authority).
     Every file->file seam is snapped to a TRACK BOUNDARY that lies inside the overlap
