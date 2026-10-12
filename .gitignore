@@ -45,8 +45,7 @@ sheetscript/logs
 # NOTE: this repo is PUBLIC. Anything listed here is world-readable the moment it is committed,
 # so keep local paths, working notes and machine-specific config out of it.
 # AGENT.md -- the agent/contributor guide. Carries local paths, machine-specific symlinks and
-# working hypotheses, so it stays out of this public repo. It is versioned in the PRIVATE
-# player repo instead (netradio_DNB_player, under docs/).
+# working hypotheses, so it stays out of this public repo and is kept privately elsewhere.
 AGENT.md
 .claude/
 # `.env_vars` -- the variables file's OLD name (renamed `.env` 2026-09); still ignored, because
@@ -64,7 +63,8 @@ labels/tmp/
 labels/*.starter.labels.tsv
 logo-tmp/
 sources_local
-TIM-ENV.md
+# Local environment notes (`<name>-ENV.md`): machine-specific, never committed.
+*-ENV.md
 tmp_o
 tmp_t
 tmp/
@@ -93,3 +93,5 @@ clips_out/
 .venv
 # An in-progress atomic write of data/rulings.json (`rulings.json.<pid>.tmp`), renamed into place when done.
 data/rulings.json.*.tmp
+# The stream video's album-art folder (scripts/streamvideo.py; NETRADIO_ART_DIR moves it).
+/art/

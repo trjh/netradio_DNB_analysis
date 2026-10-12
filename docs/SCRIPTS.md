@@ -56,6 +56,7 @@ that creates it: `self.addCleanup(shutil.rmtree, d, True)` for a directory,
 | `streamalign skip-clips / skip-confirm / skip-reject` | find and rule on skips | after placing, before chaining onward |
 | `scripts/build_track_metadata.py` | labels → `track-metadata.json`. **The only writer of that file.** | after changing labels |
 | `scripts/render_tracklist.py` | `track-metadata.json` → `TRACKLIST.md` (with per-track `#tNN` anchors) | after the build; needs network for artwork |
+| `scripts/mkstreamvideo.sh <start> <end>` (`scripts/streamvideo.py`) | a video of a span of the stream: the audio stitched from the primary captures by master time, a card per track, an album-cover mosaic, and a chapters list. Reads `track-metadata.json`, `stream-files.json` (the capture files' master positions: a generated copy, refreshed from outside this repository, so a hand edit is overwritten at the next refresh), the MP3s in `NETRADIO_MP3_DIR`, and the covers in `NETRADIO_ART_DIR` (default `art/`), downloading a missing cover from its recorded URL unless `--no-fetch`. A track's own cover wins over its album's (the metadata's inheritance rule), so a track that records only an artwork URL shows that image rather than its album cover; with `--no-fetch` such a track shows the album cover | when you want to post a stretch of the stream |
 
 ## Identifying the Mystery Tracks (see [FINDING_MYSTERY_TRACKS](../FINDING_MYSTERY_TRACKS.md))
 
