@@ -1,4 +1,4 @@
-"""Keep-warm DSP worker for the player's /align inspector (DP-07).
+"""Keep-warm DSP worker for the /align inspector (DP-07).
 
 Every one-shot `inspect-slice` subprocess pays the decode + rate-correction cost
 (seconds) before doing milliseconds of actual work. This worker is the long-lived
