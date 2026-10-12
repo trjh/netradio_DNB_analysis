@@ -137,7 +137,7 @@ class TestBuildSlices(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg not on PATH")
 class TestBuildContext(TestBuildSlices):
-    """AP-05: the zoomed-out context strip -- decimated min/max columns, not audio."""
+    """DP-09: the zoomed-out context strip -- decimated min/max columns, not audio."""
 
     def _ctx(self, **kw):
         args = dict(stream_src=self.stream_path, orig_src=self.orig_path,
@@ -238,7 +238,7 @@ class TestBuildContext(TestBuildSlices):
 
 @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg not on PATH")
 class TestBuildOverview(TestBuildSlices):
-    """AP-10: the whole-capture overview -- coarse stream envelope + the original
+    """DP-10: the whole-capture overview -- coarse stream envelope + the original
     piecewise-linearly stretched between sync points. Fixture geometry: the
     original (30 s) sits in the 40 s stream starting at 4.0 s, rate 1.0."""
 
@@ -362,7 +362,7 @@ class TestBuildOverview(TestBuildSlices):
 
 @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg not on PATH")
 class TestLoadedPairSeam(TestBuildSlices):
-    """AP-08: the pair seam gives identical answers to the load-per-call path."""
+    """DP-07: the pair seam gives identical answers to the load-per-call path."""
 
     def test_pair_reuse_matches_fresh_loads(self):
         pair = isl.LoadedPair(self.stream_path, self.orig_path, 1.0)
@@ -379,7 +379,7 @@ class TestLoadedPairSeam(TestBuildSlices):
 
 
 class TestMatchEngine(unittest.TestCase):
-    """AP-14: the MATCH-path snap engine's target math + gross-median gate.
+    """DP-08: the MATCH-path snap engine's target math + gross-median gate.
 
     Hermetic: the MATCH path itself is injected by monkeypatching the pair's
     `match_pairs` (running sonic-annotator is Pass-1-tested); these pin the target

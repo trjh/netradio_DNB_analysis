@@ -30,10 +30,10 @@
       loop-shift disambiguation by whole-overlap anchor mass) and emit the paired
       *.match.hints.tsv files for Audacity import. The stream is trimmed to the
       original's expected neighbourhood before MATCH runs (--around, else derived
-      from the track's master span; AP-02); the MATCH path then referees each PHAT
-      anchor (per-anchor delta, QUESTION on disagreement; AP-03); solo-anchor
-      moments seed the rate sweep where librosa is available (AP-13). `--all` (or
-      an explicit list of track numbers) batches every overlapping track (AP-16).
+      from the track's master span; DP-02); the MATCH path then referees each PHAT
+      anchor (per-anchor delta, QUESTION on disagreement; DP-03); solo-anchor
+      moments seed the rate sweep where librosa is available (DP-04). `--all` (or
+      an explicit list of track numbers) batches every overlapping track (DP-05).
       Needs numpy + ffmpeg (venv); needs sonic-annotator + the match-vamp plugin
       unless --csv provides a pre-exported match:a_b path CSV.
 
@@ -44,13 +44,13 @@
       for the player's /align inspector; all DSP happens here.
 
   .venv/bin/python -m streamalign inspect-worker --sources sources_local
-      AP-08 keep-warm worker: JSON-lines requests on stdin (op: slice|refine|
+      DP-07 keep-warm worker: JSON-lines requests on stdin (op: slice|refine|
       context|overview|placed, same fields/guards as inspect-slice/placed), one JSON
       response line each; holds the current (stem, orig, rate) pair's decoded audio
       between requests.
 
   python3 -m streamalign placed [d376-395]
-      AP-26 review-tool data source: the hand-placed original<->capture sync pairs
+      DP-22 review-tool data source: the hand-placed original<->capture sync pairs
       (the `origNNN sync:`/`track sync:` marker pairs sync-audit grades) as JSON --
       per stem x original: rate + per-point stream/original-native instants, a
       derivable flag, and the saved sync-audit grade where sync-audit.json exists
@@ -109,7 +109,7 @@ def _match_hints_one(stem, stream, orig_num, args, meta, master):
     if args.csv:
         pairs = _mc.parse_ab_csv(args.csv)
     else:
-        # AP-02: make MATCH's forced files-start-together assumption approximately true
+        # DP-02: make MATCH's forced files-start-together assumption approximately true
         # by handing it only the slice of the capture where the original is expected.
         around = args.around
         if around is None:
@@ -166,7 +166,7 @@ def _match_hints_one(stem, stream, orig_num, args, meta, master):
         for a, b, text in sorted(stream_rows + orig_rows, key=lambda r: (r[0], r[1])):
             print("%10.3f %10.3f  %s" % (a, b, text))
         return
-    # AP-30: hints are script output -> labels/automated/ (committed), unless
+    # DP-24: hints are script output -> labels/automated/ (committed), unless
     # --out says otherwise. --labels moves the whole labels root, automated/ rides it.
     out_dir = args.out or _gt.automated_dir(args.labels)
     os.makedirs(out_dir, exist_ok=True)
@@ -193,7 +193,7 @@ def _cmd_match_hints(args):
 
     if args.orig:                      # an explicit list always wins (with or without --all)
         nums = [int(n) for n in args.orig]
-    elif args.all:                     # AP-16: every overlapping track with an original
+    elif args.all:                     # DP-05: every overlapping track with an original
         if master is None:
             print("capture %s has no resolved master start -- cannot derive its overlap "
                   "worklist; give explicit track numbers instead" % stem)
@@ -234,7 +234,7 @@ def _cmd_sync_audit(args):
                        tracks=args.tracks, background=args.background,
                        search_s=args.search)
     if args.only_unchecked:
-        # AP-04: the hand points the system has never touched (no `verified` token)
+        # DP-01: the hand points the system has never touched (no `verified` token)
         result = dict(result, points=[p for p in result["points"] if not p.get("verified")])
     print(_sa.render(result))
     if args.json:
@@ -288,7 +288,7 @@ def _cmd_inspect_slice(args):
     elif not orig_path:
         out = {"error": "no original %03d-* under %s" % (int(args.orig), args.sources)}
     if out is None and args.overview:
-        # AP-10: the whole-capture overview takes the sync points, not one seat
+        # DP-10: the whole-capture overview takes the sync points, not one seat
         try:
             points = [tuple(float(v) for v in p.split(":", 1))
                       for p in (args.point or [])]
@@ -335,7 +335,7 @@ def _cmd_hints(args):
         for a, b, text in sorted(rows, key=lambda r: (r[0], r[1])):
             print("%10.3f %10.3f  %s" % (a, b, text))
     else:
-        out_dir = args.out or _gt.automated_dir(args.labels)   # AP-30
+        out_dir = args.out or _gt.automated_dir(args.labels)   # DP-24
         os.makedirs(out_dir, exist_ok=True)
         path = _hints.write_hints(
             rows, os.path.join(out_dir, _audio.stem_of(args.stem) + ".hints.tsv"))
@@ -573,10 +573,10 @@ def main(argv=None):
                     help="original track number(s) (NNN, per sources_local); an explicit "
                          "list overrides --all")
     pm.add_argument("--all", action="store_true",
-                    help="AP-16: run every track whose master span overlaps the capture "
+                    help="DP-05: run every track whose master span overlaps the capture "
                          "(tracks with no original on disk are listed and skipped)")
     pm.add_argument("--around", type=float, default=None,
-                    help="AP-02: rough capture-local seconds of the original's start; the "
+                    help="DP-02: rough capture-local seconds of the original's start; the "
                          "stream is trimmed to that neighbourhood before MATCH runs "
                          "(auto-derived from the track's master span when omitted)")
     pm.add_argument("--csv", default=None,
@@ -599,7 +599,7 @@ def main(argv=None):
     psa.add_argument("--search", type=float, default=1.5,
                      help="seat search radius seconds around the reconstructed seat")
     psa.add_argument("--only-unchecked", action="store_true",
-                     help="AP-04: list only the hand points that do NOT carry the "
+                     help="DP-01: list only the hand points that do NOT carry the "
                           "`verified` token (never touched by the system)")
     psa.add_argument("--json", default=None, help="write the full results JSON here")
 
@@ -629,24 +629,24 @@ def main(argv=None):
     pi.add_argument("--refine", action="store_true", help="snap-to-best instead of slices")
     pi.add_argument("--radius", type=float, default=0.05, help="refine radius seconds (cap 2)")
     pi.add_argument("--engine", choices=("phat", "match"), default="phat",
-                    help="AP-14: --refine's snap engine -- phat (GCC-PHAT residual, the "
+                    help="DP-08: --refine's snap engine -- phat (GCC-PHAT residual, the "
                          "default) or match (the trimmed MATCH path's implied instant; "
                          "needs sonic-annotator)")
     pi.add_argument("--context", type=float, default=None,
-                    help="AP-05: emit the zoomed-out context strip instead -- decimated "
+                    help="DP-09: emit the zoomed-out context strip instead -- decimated "
                          "min/max columns over +/-SECONDS around the point (default "
                          "45 when the player asks, cap 60); not full audio")
     pi.add_argument("--overview", action="store_true",
-                    help="AP-10: emit the whole-capture overview instead -- one coarse "
+                    help="DP-10: emit the whole-capture overview instead -- one coarse "
                          "envelope for the full stream plus the original's envelope "
                          "piecewise-linearly stretched between the --point sync points; "
                          "not full audio")
     pi.add_argument("--point", action="append", default=None, metavar="STREAM_S:ORIG_S",
-                    help="AP-10: one sync point for --overview (repeatable; stream "
+                    help="DP-10: one sync point for --overview (repeatable; stream "
                          "seconds : original-native seconds)")
 
     pw = sub.add_parser("inspect-worker",
-                        help="AP-08: keep-warm DSP worker -- JSON-lines requests on stdin "
+                        help="DP-07: keep-warm DSP worker -- JSON-lines requests on stdin "
                              "(op: slice|refine|context|overview|placed, same fields as "
                              "inspect-slice/placed), one JSON response line each; caches "
                              "the current (stem, orig, rate) pair's decoded audio between "
@@ -654,7 +654,7 @@ def main(argv=None):
     pw.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
 
     pp = sub.add_parser("placed",
-                        help="AP-26: list the hand-placed original<->capture sync pairs "
+                        help="DP-22: list the hand-placed original<->capture sync pairs "
                              "as JSON (per stem x original: rate, per-point stream/"
                              "original-native instants, derivable flag, sync-audit grade "
                              "where a saved report exists). Read-only; no audio opened")

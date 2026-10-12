@@ -187,7 +187,7 @@ span, rebuild the JSON afterwards.
 
 **What you get:** a paired hints file per track in `labels/automated/` —
 `<stem>.origNNN.match.hints.tsv` + `origNNN.<stem>.match.hints.tsv` (committed machine
-output since AP-30, freely overwritten on re-run — hints, **never** labels): `track sync:` /
+output since DP-24, freely overwritten on re-run — hints, **never** labels): `track sync:` /
 `origNNN sync:` anchor pairs carrying ` verified confidence n/10`, proposed
 `origNNN start:`/`end:` rows — one pair per sync point, each naming its point's marker
 number plus `confidence n/10`. These are **native clip seats** (where the unstretched

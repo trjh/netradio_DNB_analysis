@@ -25,17 +25,17 @@ ever remove.
 
 With --refine it instead runs GCC-PHAT (`align.refine_offset`) on the window at the
 current seat and reports the residual nudge + confidence -- the inspector's
-snap-to-best button. `--engine match` (AP-14) swaps the snap target: the (trimmed,
+snap-to-best button. `--engine match` (DP-08) swaps the snap target: the (trimmed,
 Phase-B) MATCH path is computed for the pair and its implied original instant at the
 current stream time becomes the target, with the PHAT-vs-MATCH delta reported; a
 globally mis-seated path (the Phase-B gross-median case) is an error, never a snap.
 
-With --context (AP-05) it emits the zoomed-out CONTEXT strip instead: decimated
+With --context (DP-09) it emits the zoomed-out CONTEXT strip instead: decimated
 min/max column pairs (COLS_PER_S per second, mono) for the stream and the
 rate-corrected original around the point -- a small payload for the player's context
 lane, NOT full audio (playback slices are fetched separately on click).
 
-With --overview (AP-10) it emits the WHOLE-CAPTURE overview instead: one coarse
+With --overview (DP-10) it emits the WHOLE-CAPTURE overview instead: one coarse
 min/max envelope for the full stream (OVERVIEW_COLS_PER_S per second) plus the
 original's envelope PIECEWISE-LINEARLY stretched between the given sync points --
 each inter-point segment of the native original is decimated into exactly the
@@ -45,7 +45,7 @@ resolution. The head (before the first point, back to original local 0) and tail
 clamped to the capture. Column counts are capped (MAX_OVERVIEW_COLS) so a request
 can never buy an unbounded payload.
 
-`LoadedPair` is the keep-warm seam (AP-08): the decode + rate-correction that
+`LoadedPair` is the keep-warm seam (DP-07): the decode + rate-correction that
 dominates a one-shot run's latency is bundled into one cacheable object, and every
 entry point accepts `pair=` so the `inspect-worker` process can reuse it across
 requests. The one-shot CLI simply builds a fresh pair per call.
@@ -63,13 +63,13 @@ SR = _audio.SR
 MARGIN_S = 0.5            # nudge headroom shipped with every slice (client-side shifts)
 MAX_WIN_S = 30.0          # hard cap; the player's endpoint enforces it too
 MAX_REFINE_RADIUS_S = 2.0
-DEFAULT_CONTEXT_S = 45.0  # AP-05: context strip half-width (± seconds around the point)
+DEFAULT_CONTEXT_S = 45.0  # DP-09: context strip half-width (± seconds around the point)
 MAX_CONTEXT_S = 60.0      # hard cap; the player's endpoint enforces it too
 CONTEXT_COLS_PER_S = 50   # min/max column pairs per second in the context payload
-OVERVIEW_COLS_PER_S = 6.0     # AP-10: whole-capture envelope resolution (coarse)
-MAX_OVERVIEW_COLS = 20000     # AP-10: hard cap on the overview payload's columns
-MAX_OVERVIEW_POINTS = 64      # AP-10: hard cap on client-supplied sync points
-ENGINES = ("phat", "match")   # AP-14: refine_seat's snap engines
+OVERVIEW_COLS_PER_S = 6.0     # DP-10: whole-capture envelope resolution (coarse)
+MAX_OVERVIEW_COLS = 20000     # DP-10: hard cap on the overview payload's columns
+MAX_OVERVIEW_POINTS = 64      # DP-10: hard cap on client-supplied sync points
+ENGINES = ("phat", "match")   # DP-08: refine_seat's snap engines
 
 
 def _check_params(stream_t, orig_t, rate, win_s, radius_s=0.05):
@@ -99,7 +99,7 @@ def _check_context(context_s):
 
 
 def _check_points(points):
-    """AP-10's sync-point guard: a bounded list of finite (stream_s, orig_s) pairs.
+    """DP-10's sync-point guard: a bounded list of finite (stream_s, orig_s) pairs.
 
     Shared by build_overview and the worker's request boundary, mirroring
     _check_params' role: nonsense answers ValueError (JSON at the CLI boundary),
@@ -147,10 +147,10 @@ def _rate_correct_stereo(orig, rate):
 
 
 class LoadedPair:
-    """One (stream, original, rate)'s decoded audio -- the keep-warm unit (AP-08).
+    """One (stream, original, rate)'s decoded audio -- the keep-warm unit (DP-07).
 
     Holds the stereo stream, the stereo native original, and the rate-corrected
-    original (the expensive resample). The MATCH path (AP-14's snap engine) is
+    original (the expensive resample). The MATCH path (DP-08's snap engine) is
     computed lazily and cached here too, keyed by its trim anchor so a snap at a
     far-away point recomputes rather than reads a window that missed it.
     """
@@ -184,7 +184,7 @@ class LoadedPair:
 
 
 def compute_match_pairs(stream_mono, orig2_mono, around_s, rate):
-    """Run the trimmed MATCH path for the inspector (AP-14). [(a_s, b_native_s)].
+    """Run the trimmed MATCH path for the inspector (DP-08). [(a_s, b_native_s)].
 
     Two departures from Phase B's match-hints trim, both possible because the seat
     here is the inspector's CURRENT point -- approximately right by construction --
@@ -241,7 +241,7 @@ def build_slices(stream_src, orig_src, stream_t, orig_t, rate, invert, win_s,
     path); `stream_t` is capture-local seconds; `orig_t` is ORIGINAL-NATIVE
     seconds (the number on an `origNNN sync:` row); `rate` is original-seconds per
     stream-second (M6); `invert` applies the polarity flip to the original (M2).
-    `pair` (AP-08) is an already-loaded `LoadedPair` for this exact trio.
+    `pair` (DP-07) is an already-loaded `LoadedPair` for this exact trio.
     """
     _check_params(stream_t, orig_t, rate, win_s)
     win_s = min(float(win_s), MAX_WIN_S)
@@ -284,7 +284,7 @@ def refine_seat(stream_src, orig_src, stream_t, orig_t, rate, invert, win_s,
     move later), the confidence at the refined seat, and the corrected
     original-native instant to adopt.
 
-    `engine="match"` (AP-14): the snap target is instead the (trimmed, Phase-B)
+    `engine="match"` (DP-08): the snap target is instead the (trimmed, Phase-B)
     MATCH path's implied original instant at the current stream time. The PHAT
     refine still runs, and the PHAT-vs-MATCH delta is reported (`match_vs_phat_ms`;
     `confidence` stays PHAT's -- MATCH has no per-instant confidence). A path whose
@@ -370,7 +370,7 @@ def _minmax_columns(x, cols):
 
 def build_context(stream_src, orig_src, stream_t, orig_t, rate, invert,
                   win_s=6.0, context_s=DEFAULT_CONTEXT_S, pair=None):
-    """The zoomed-out context strip around one sync point (AP-05). JSON-ready dict.
+    """The zoomed-out context strip around one sync point (DP-09). JSON-ready dict.
 
     Emits DECIMATED min/max column pairs (CONTEXT_COLS_PER_S per second, mono) for
     the stream and the rate-corrected, polarity-applied, RMS-matched original over
@@ -449,7 +449,7 @@ def _seg_env(x, lo_s, hi_s, cols):
 
 
 def build_overview(stream_src, orig_src, points, rate, invert, pair=None):
-    """The whole-capture overview (AP-10). JSON-ready dict.
+    """The whole-capture overview (DP-10). JSON-ready dict.
 
     One coarse min/max envelope for the FULL stream, plus the original's envelope
     piecewise-linearly stretched between the sync `points` ([(stream_s, orig_s)]

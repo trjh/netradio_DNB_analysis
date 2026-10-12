@@ -26,9 +26,9 @@ absolute: verified seats range ~28%..~110% whole-window depending on how exposed
 record is in the mix).
 
 Converter-trust additions (2026-08): every point reports whether its row text carries
-the AP-04 `verified` token (`--only-unchecked` lists the points the system has never
+the DP-01 `verified` token (`--only-unchecked` lists the points the system has never
 touched), and points that used to skip for "no origNNN start: row" get their seat
-derived from a STRONG-audited neighbour capture that shares the clip seating (AP-17,
+derived from a STRONG-audited neighbour capture that shares the clip seating (DP-06,
 `derive_seat` -- the 066-A method), marked `seat<-<neighbour>` in the output.
 
 Read-only: writes nothing but the optional --json report.
@@ -124,7 +124,7 @@ def _inside(a_s, b2_s, stream_len_s, orig2_len_s, win_s=WIN_S, search_s=SEARCH_S
 
 
 def derive_seat(num, stem, label, orig_ts, starts, masters, graded_points):
-    """AP-17: reconstruct a missing clip seat from a neighbour capture's bookkeeping.
+    """DP-06: reconstruct a missing clip seat from a neighbour capture's bookkeeping.
 
     A capture with `origNNN sync:` rows but no `origNNN start:` row cannot be audited
     directly -- those points were SKIPPED. But the labeller works with adjacent captures
@@ -170,9 +170,9 @@ def audit(labels_dir=None, sources_dir="sources_local", audio_dir=None,
     `tracks`: optional iterable of track numbers to limit to. `background`: mismatch
     samples per audited point (0 = skip; they cost one metrics() each).
 
-    Each point also reports `verified` (does its row text carry the AP-04 `verified`
+    Each point also reports `verified` (does its row text carry the DP-01 `verified`
     token -- i.e. has the system already touched it). Points that would skip for
-    "no origNNN start: row" get a second chance (AP-17): where a STRONG-audited
+    "no origNNN start: row" get a second chance (DP-06): where a STRONG-audited
     neighbour capture shares the clip seating, the seat is derived from it (see
     `derive_seat`) and the point is graded with `seat_source` marking the derivation
     instead of being skipped.
@@ -252,7 +252,7 @@ def audit(labels_dir=None, sources_dir="sources_local", audio_dir=None,
             start_t = start_for(starts, stem, num, pr["label"], pr["orig_ts"])
             if start_t is None:
                 rec["why"] = "no origNNN start: row"
-                deferred.append((rec, num, pr, rate_mc))     # AP-17 second chance below
+                deferred.append((rec, num, pr, rate_mc))     # DP-06 second chance below
                 continue
             b_native = pr["orig_ts"] - start_t
             if b_native < 0:
@@ -260,7 +260,7 @@ def audit(labels_dir=None, sources_dir="sources_local", audio_dir=None,
                 continue
             _grade(rec, num, pr, rate_mc, b_native)
 
-    # AP-17 pass 2: the "no origNNN start: row" points, seats derived from the STRONG
+    # DP-06 pass 2: the "no origNNN start: row" points, seats derived from the STRONG
     # neighbours graded above (never from other derived seats -- one hop only).
     graded_now = [p for p in points if p["verdict"] != "SKIPPED"]
     for rec, num, pr, rate_mc in deferred:
@@ -283,8 +283,8 @@ def audit(labels_dir=None, sources_dir="sources_local", audio_dir=None,
 def render(result):
     """The human-readable table (one line per point) + summary counts.
 
-    The `vfd` column is AP-04: `verified` when the row text carries the token (the
-    system has touched this point), `unchecked` otherwise. Seat-derived points (AP-17)
+    The `vfd` column is DP-01: `verified` when the row text carries the token (the
+    system has touched this point), `unchecked` otherwise. Seat-derived points (DP-06)
     carry a trailing `seat<-<neighbour>` marker instead of being SKIPPED.
     """
     lines = []

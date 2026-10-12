@@ -17,31 +17,31 @@ does work, verified against a hand-seated pair to ~10 ms: use the path only to s
      lets a window lock onto the wrong loop repetition with respectable confidence);
   5. keep the best spread-out survivors and emit them as paired hint rows.
 
-Converter-trust additions (2026-08, AP-02/03/04/13/16):
+Converter-trust additions (2026-08, DP-01/02/03/04/05):
 
-  * **Trim before MATCH (AP-02).** MATCH's forced files-start-together assumption is made
+  * **Trim before MATCH (DP-02).** MATCH's forced files-start-together assumption is made
     approximately true by trimming the stream WAV to the expected overlap (`trim_window`)
     before sonic-annotator runs; `apply_trim_offset` shifts the path back onto the full
     capture's clock. The expected position auto-derives from the track's master span and
     the capture's resolved master start (`derive_around`), or comes from `--around`.
-  * **MATCH as referee (AP-03).** PHAT remains the ONLY anchor source; the (trimmed) MATCH
+  * **MATCH as referee (DP-03).** PHAT remains the ONLY anchor source; the (trimmed) MATCH
     path's implied original position is evaluated at each selected anchor
     (`referee_deltas`) and the delta reported per anchor -- a disagreement beyond
     REFEREE_TOL_S becomes a `note QUESTION:` row.
-  * **`verified` token (AP-04).** Emitted sync rows read `track sync: 1 verified
+  * **`verified` token (DP-01).** Emitted sync rows read `track sync: 1 verified
     confidence 5.9/10` -- the token, immediately after the marker, is what the sheet
     and `sync-audit` recognise as "machine-checked". Distinct from (and never to be
     conflated with) the file-sync `verified <neighbour>` keyword. Anchor rows
-    (sync/start/end) carry NO trailing ` HINT` (RC-1): they arrive on their own imported
+    (sync/start/end) carry NO trailing ` HINT` (DP-26): they arrive on their own imported
     hints track, and each keeps its own in-row machine mark -- ` verified` on sync rows,
     per-sync-point start/end rows (each naming its anchor, `confidence n/10`); readers
     accept both forms, since files in the wild still hold suffixed rows. The
     `note HINT:`/`note QUESTION:` prose rows are unchanged -- there HINT/QUESTION is the
     row-type prefix, not a provenance suffix.
-  * **Solo-anchor probe seeding (AP-13).** Where librosa is available the rate sweep also
+  * **Solo-anchor probe seeding (DP-04).** Where librosa is available the rate sweep also
     probes the record-playing-alone moments (`track_mix.solo_anchors`) -- the instants
     PHAT locks best -- instead of only blind fractions of the overlap.
-  * **Batch worklist (AP-16).** `tracks_overlapping` lists every track whose master span
+  * **Batch worklist (DP-05).** `tracks_overlapping` lists every track whose master span
     overlaps a capture, for `match-hints <stem> --all`.
 
 Output is two `.hints.tsv` files in the existing grammar (never `.labels.tsv` -- written
@@ -74,9 +74,9 @@ RATE_STEP = 0.005              # coarse sweep step; the anchor refit recovers th
 RATE_PRIOR = (0.90, 1.10)      # a DJ pitches by a few percent; slopes outside this are noise
 MIN_CONF = 0.15                # an anchor below this is a guess, not a hint
 OUTLIER_TOL_S = 0.25           # offset residual vs the local median that marks a loop-skip
-TRIM_MARGIN_S = 60.0           # AP-02: slack either side of the expected overlap when trimming
-REFEREE_TOL_S = 0.25           # AP-03: MATCH-vs-PHAT disagreement that earns a QUESTION row
-REFEREE_GROSS_S = 5.0          # AP-03: a MEDIAN delta beyond this is a globally-off MATCH
+TRIM_MARGIN_S = 60.0           # DP-02: slack either side of the expected overlap when trimming
+REFEREE_TOL_S = 0.25           # DP-03: MATCH-vs-PHAT disagreement that earns a QUESTION row
+REFEREE_GROSS_S = 5.0          # DP-03: a MEDIAN delta beyond this is a globally-off MATCH
                                # path (its forced-start failure), not 8 separate disputes
 
 
@@ -99,7 +99,7 @@ def parse_ab_csv(path):
 
 
 def trim_window(around_s, orig_len_s, stream_len_s, rate_guess=1.0, margin_s=TRIM_MARGIN_S):
-    """(lo_s, hi_s) of the capture worth handing to MATCH, given a rough start (AP-02).
+    """(lo_s, hi_s) of the capture worth handing to MATCH, given a rough start (DP-02).
 
     MATCH's headless online DTW is forced to start the two files together, so on a full
     20-minute mix its path lands seconds-to-tens-of-seconds off. Trimming the stream to
@@ -116,7 +116,7 @@ def trim_window(around_s, orig_len_s, stream_len_s, rate_guess=1.0, margin_s=TRI
 
 
 def apply_trim_offset(pairs, lo_s):
-    """Shift a trimmed run's a_b path back onto the FULL capture's clock (AP-02).
+    """Shift a trimmed run's a_b path back onto the FULL capture's clock (DP-02).
 
     MATCH saw only stream[lo:hi], so its `a` column is seconds into the trimmed WAV;
     adding `lo_s` restores capture-local time and everything downstream (coarse map,
@@ -127,7 +127,7 @@ def apply_trim_offset(pairs, lo_s):
 
 
 def derive_around(orig_num, tracks_meta, capture_master_start):
-    """Auto-derive `--around`: the track's expected capture-local position, or None (AP-02).
+    """Auto-derive `--around`: the track's expected capture-local position, or None (DP-02).
 
     Expected local position = the track's master-timeline position (build_track_metadata's
     `master_begin_seconds`, itself resolved from the hand `start<NNN>:` label rows) minus
@@ -144,7 +144,7 @@ def derive_around(orig_num, tracks_meta, capture_master_start):
 
 
 def tracks_overlapping(capture_master_start, capture_len_s, tracks_meta):
-    """[(num, master_begin_s, master_end_s)] for every track overlapping the capture (AP-16).
+    """[(num, master_begin_s, master_end_s)] for every track overlapping the capture (DP-05).
 
     Overlap is judged on the master timeline: the track's [master_begin, master_end] span
     (build_track_metadata output) against [capture_start, capture_start + length]. This is
@@ -171,7 +171,7 @@ def match_predict(pairs, a_s):
     """The (trimmed) MATCH path's own implied original-native seconds at stream `a_s`.
 
     Linear interpolation over the a_b rows; None outside the path's span. This is the
-    quantity AP-03 referees against the PHAT anchors -- MATCH stays a coarse map, never
+    quantity DP-03 referees against the PHAT anchors -- MATCH stays a coarse map, never
     an anchor source, but where the two disagree the labeller should hear about it.
     """
     if not pairs:
@@ -184,7 +184,7 @@ def match_predict(pairs, a_s):
 
 
 def referee_deltas(pairs, anchors, rate):
-    """Per selected anchor: MATCH-implied minus PHAT-implied original position (AP-03).
+    """Per selected anchor: MATCH-implied minus PHAT-implied original position (DP-03).
 
     PHAT's implied original-native position at an anchor is `(a - off) * rate`; MATCH's
     is `match_predict(a)`. Returns one delta (seconds, or None where the MATCH path does
@@ -286,7 +286,7 @@ def _refine_both_polarities(stream, orig2, a_s, b2_s, win_s, radius_s):
 
 
 def solo_probe_positions(stream, orig, offset0, top=4):
-    """Capture-local instants where the original plays ALONE, to seed the sweep (AP-13).
+    """Capture-local instants where the original plays ALONE, to seed the sweep (DP-04).
 
     The rate sweep's default probes are blind fractions of the coarse overlap; a probe
     that lands on heavily layered audio wastes its window. `track_mix.solo_anchors`
@@ -324,7 +324,7 @@ def sweep_rate(stream, orig, offset0, rate0, span=RATE_SPAN, step=RATE_STEP,
     score is the summed confidence of probes that AGREE on an offset -- and the runner-up
     seats are returned too, for the caller to disambiguate by grid coverage.
 
-    `probe_positions` (AP-13): extra capture-local probe instants -- typically the
+    `probe_positions` (DP-04): extra capture-local probe instants -- typically the
     solo-anchor moments from `solo_probe_positions` -- tried IN ADDITION to the blind
     fractions of the overlap (positions outside the coarse overlap are dropped).
     """
@@ -472,18 +472,18 @@ def build_rows(orig_num, anchors, rate, inverted, orig_native_len_s, stream_len_
     original's native rate (b_native = (a - off) * rate -- rate-corrected coordinates map
     back to native seconds by construction, whatever the native sample rate is).
 
-    Sync rows carry the ` verified` token immediately after the marker (AP-04) -- the
+    Sync rows carry the ` verified` token immediately after the marker (DP-01) -- the
     machine-checked mark the sheet/audit plumbing keys on; it is free text to the sync-row
     grammar, and deliberately NOT the file-sync `verified <neighbour>` keyword (a different,
     load-bearing thing). Anchor rows (the sync pairs and the proposed `origNNN start:`/
     `end:`) go out through `hints._anchor`, i.e. WITHOUT the trailing ` HINT` suffix
-    (RC-1: redundant on rows that arrive on their own imported track; the sync rows'
+    (DP-26: redundant on rows that arrive on their own imported track; the sync rows'
     machine mark is ` verified`; every sync point gets its own start/end rows, each
     naming its anchor + `confidence n/10` (the machine mark; never ` verified`) — the
     anchor-to-anchor spread of the native clip seats is pitch + drift made visible
     (rate != 1.000 shifts the seat even when perfectly constant)
     the prose rows keep their `note HINT:`/`note QUESTION:`
-    grammar. `match_deltas` (AP-03, from `referee_deltas`) appends each anchor's
+    grammar. `match_deltas` (DP-03, from `referee_deltas`) appends each anchor's
     MATCH-vs-PHAT delta to its row text; a disagreement beyond REFEREE_TOL_S earns a
     `note QUESTION:` row at that anchor -- unless the MEDIAN delta is itself beyond
     REFEREE_GROSS_S, in which case the MATCH path is globally off (its forced-start
@@ -647,9 +647,9 @@ def convert(stream, orig, csv_pairs, anchor_count=8,
 
     `csv_pairs` is the parsed MATCH a_b path (already shifted back onto the full
     capture's clock if the run was trimmed -- see `apply_trim_offset`); `stream`/`orig`
-    are float arrays at SR. `solo_probes=True` (AP-13) seeds the rate sweep with the
+    are float arrays at SR. `solo_probes=True` (DP-04) seeds the rate sweep with the
     solo-anchor moments (needs librosa; silently skipped without it). The result carries
-    `match_deltas` (AP-03): the MATCH path's own disagreement with each selected anchor.
+    `match_deltas` (DP-03): the MATCH path's own disagreement with each selected anchor.
     """
     offset0, rate0 = coarse_map(csv_pairs, orig_len_s=len(orig) / SR)
     probe_positions = solo_probe_positions(stream, orig, offset0) if solo_probes else []

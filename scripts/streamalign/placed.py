@@ -15,7 +15,7 @@ i.e. the same convention as the match-hints summary rate and `inspect-slice --ra
 and per sync point: the marker key, the capture-local stream instant, the
 original-NATIVE instant where the `origNNN start:` clip bookkeeping derives one
 (`orig_ts - start_t`, exactly `sync-audit`'s seat reconstruction), a `derivable`
-flag with the reason when it is false, the AP-04 `verified` token, and -- where a
+flag with the reason when it is false, the DP-01 `verified` token, and -- where a
 saved `sync-audit --json` report is on disk -- that point's audited verdict and
 seat confidence.
 

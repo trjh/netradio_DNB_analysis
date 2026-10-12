@@ -1,4 +1,4 @@
-"""placed: the hand-placed pair listing (AP-26 review-tool data source).
+"""placed: the hand-placed pair listing (DP-22 review-tool data source).
 
 Hermetic: fabricated labels dirs only -- the op is pure label bookkeeping, so no
 audio, no ffmpeg, no venv extras are involved anywhere in these tests. Covers the

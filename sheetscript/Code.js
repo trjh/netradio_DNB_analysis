@@ -82,7 +82,7 @@ function ParseTSV(fileContent) {
     var syncDiff = '';
     var syncNum = undefined;
     var match = '';
-    // AP-04: 'Y' only for a track/orig sync row whose `verified` token sits immediately
+    // DP-01: 'Y' only for a track/orig sync row whose `verified` token sits immediately
     // after the marker (machine-checked point). NEVER set from a file sync row's
     // `verified <neighbour>` keyword -- that is the file-position/alignment-edge record,
     // a different family (mirror of labels/sort_tsv.py sync_verified; the two are pinned
@@ -225,7 +225,7 @@ function ParseTSV(fileContent) {
 }
 
 function updatesheet() {
-  // AP-04 migration: the Verified column (12) is new, so name it -- otherwise every
+  // DP-01 migration: the Verified column (12) is new, so name it -- otherwise every
   // import would fill a blank-headed column and the machine-checked state would not be
   // an identifiable spreadsheet field. Only the NEW column's header is written (and only
   // when it isn't already right); columns 1-11 stay owner-maintained.

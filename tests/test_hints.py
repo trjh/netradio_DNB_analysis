@@ -55,7 +55,7 @@ class TestEveryRowIsMarkedAndScored(unittest.TestCase):
             self.assertTrue(row[2].endswith(hints.SUFFIX), row[2])
 
     def test_anchor_rows_carry_no_suffix(self):
-        # RC-1: matchconv's sync/start/end anchor rows go out through _anchor -- no
+        # DP-26: matchconv's sync/start/end anchor rows go out through _anchor -- no
         # trailing HINT (the ` verified` token carries the provenance role there).
         a, b, text = hints._anchor(1.0, 2.0, "track sync: 1 verified confidence 5.9/10")
         self.assertEqual((a, b), (1.0, 2.0))

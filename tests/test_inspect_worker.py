@@ -1,4 +1,4 @@
-"""AP-08 keep-warm worker: protocol framing + pair-cache behaviour, no audio needed.
+"""DP-07 keep-warm worker: protocol framing + pair-cache behaviour, no audio needed.
 
 The DSP itself is inspect_slice's and tested there; these pin the worker's own
 contract -- one JSON line out per line in (ids echoed, errors as data, blank lines
@@ -128,7 +128,7 @@ class TestHandle(unittest.TestCase):
         self.assertEqual(calls["refine"]["engine"], "match")
         self.assertEqual(calls["refine"]["radius_s"], 0.1)
         self.assertEqual(calls["context"]["context_s"], 30.0)
-        # AP-10: the points reach build_overview cleaned (sorted) with the pair
+        # DP-10: the points reach build_overview cleaned (sorted) with the pair
         self.assertEqual(calls["overview"]["points"], [(14.0, 10.0), (24.0, 20.0)])
         self.assertEqual(calls["overview"]["pair"][0], "pair")
         self.assertTrue(calls["overview"]["invert"])

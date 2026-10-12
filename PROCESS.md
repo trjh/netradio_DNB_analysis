@@ -82,7 +82,7 @@ Need-to-know:
   pair, see step 9); `note QUESTION:` wherever it cannot corroborate.
 - Every row carries confidence (`confidence 9.8/10`) and is marked `HINT`.
 - **Hints never touch your labels.** `labels/automated/<stem>.hints.tsv` is machine output
-  (committed since AP-30, freely overwritten on re-run), invisible to solve/build/sheet.
+  (committed since DP-24, freely overwritten on re-run), invisible to solve/build/sheet.
   Import, copy what you accept — a re-run replaces the file.
 - Three sources, three trust levels: **audio cross-correlation** (measured — strongest);
   **your own previous labels** (as good as that label); **the 1998/2017 notes** (approximate —
@@ -640,7 +640,7 @@ mention any original; put genuine cross-references in the primary track.
 
 ## File-naming: who owns what
 
-The `labels/` tree is layered by **who may write where** (the AP-30 layout):
+The `labels/` tree is layered by **who may write where** (the DP-24 layout):
 
 | Path | Holds | Written by | Regenerable? |
 |---|---|---|---|

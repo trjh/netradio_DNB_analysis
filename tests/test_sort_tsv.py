@@ -315,7 +315,7 @@ class ValidationTests(unittest.TestCase):
 
     def test_track_sync_verified_never_trips_the_file_sync_notice(self):
         # the file-sync sanity NOTICE keys on the FILE sync grammar; a track/orig sync
-        # row's AP-04 `verified` token (or its absence) is none of its business
+        # row's DP-01 `verified` token (or its absence) is none of its business
         import contextlib
         import io
         err = io.StringIO()
@@ -338,7 +338,7 @@ class ValidationTests(unittest.TestCase):
 
 
 class VerifiedTokenTests(unittest.TestCase):
-    """AP-04: the track/orig-sync `verified` token -- recognised, preserved, and kept
+    """DP-01: the track/orig-sync `verified` token -- recognised, preserved, and kept
     strictly apart from the load-bearing FILE-sync `verified <neighbour>` keyword."""
 
     def setUp(self):
