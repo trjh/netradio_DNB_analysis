@@ -104,11 +104,11 @@ libraries — `ffmpeg` handles every container/endianness, numpy does the rest.
 ## 4. `groundtruth.py` — the hand work as the grading key
 
 The labels encode the manual alignments as `file start sync:` rows. This module
-turns them into (a) the answer key and (b) the list of pairs he actually overlaid.
+turns them into (a) the answer key and (b) the list of pairs overlaid by hand.
 
 | function | role |
 |---|---|
-| `resolve_starts()` | `{stem: master_start_seconds}` — a faithful port of the trusted reference parser `parse_file_timeline` (3 passes). **Pass 1** seeds files whose sync row sits at local 0.0 (the number *is* the master start). **Pass 2** fills plain `file start` fallbacks. **Pass 3** iteratively resolves syncs expressed in another file's coordinates (`master = owner_master + row_seconds`), so chains like `d000-018 → … → d336-355` resolve. |
+| `resolve_starts()` | `{stem: master_start_seconds}` — a port of an earlier timeline parser (`parse_file_timeline`, not in this repo) (3 passes). **Pass 1** seeds files whose sync row sits at local 0.0 (the number *is* the master start). **Pass 2** fills plain `file start` fallbacks. **Pass 3** iteratively resolves syncs expressed in another file's coordinates (`master = owner_master + row_seconds`), so chains like `d000-018 → … → d336-355` resolve. |
 | `alignment_edges()` | `[(stem, verified_against_stem), …]` from the `verified [by] X` notes — the pairs aligned by hand, i.e. the graph edges + P1 validation pairs |
 | `_verified_refs(text)` | pull capture-looking tokens after `verified` |
 | `_read_label_rows`, `_stem` | tsv reading / name normalization |
@@ -117,7 +117,7 @@ turns them into (a) the answer key and (b) the list of pairs he actually overlai
 The subtlety it gets right: a trailing number in a sync row is a **master value**
 when the row is at local 0.0 in its *own* file (pass 1), but a **reference anchor**
 when embedded in another file at a non-zero timestamp (pass 3 uses the row's
-timestamp, not the trailing number). Verified to match the reference parser exactly
+timestamp, not the trailing number). Verified to match that earlier parser exactly
 (55 files, 0 mismatches).
 
 ---

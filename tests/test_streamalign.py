@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 import cache_budget  # noqa: E402
 from streamalign import align, audio, emit_labels, graph, groundtruth, score, skips, solve, track_mix  # noqa: E402
 
-# Known hand values from TIMELINE_GUIDE / the labels (master_start seconds).
+# Known hand values, checked by hand against the labels (master_start seconds).
 SMOKE = {
     "d000-018": 0.0,
     "d019-040": 1102.848,

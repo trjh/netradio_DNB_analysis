@@ -6,10 +6,10 @@ master-start values are the ground truth the engine is graded against, and the
 ``verified [by] X`` annotations record which neighbour each file was aligned
 *against* — i.e. the edges of the alignment graph built by hand.
 
-The resolution logic here is a faithful port of the trusted reference parser
-``parse_file_timeline`` (passes 1-3, starts only), kept independent so the engine
-stands alone in this repo. A test cross-checks it against the reference values and
-the TIMELINE_GUIDE smoke values.
+The resolution logic here is a port of an earlier timeline parser
+(``parse_file_timeline``, not in this repo; passes 1-3, starts only), so the engine
+stands alone in this repo. A test checks it against known hand values
+(``tests/test_streamalign.py`` ``SMOKE``).
 """
 
 import os
@@ -92,7 +92,7 @@ def _verified_refs(text):
 def resolve_starts(labels_dir=None):
     """Return {stem: master_start_seconds} from the hand `file start sync` rows.
 
-    Port of the reference parse_file_timeline passes 1-3 (starts only), keyed by file
+    Port of the earlier parse_file_timeline passes 1-3 (starts only), keyed by file
     stem (no extension) so it maps directly onto audio files.
     """
     labels_dir = labels_dir or LABELS_DIR

@@ -511,7 +511,7 @@ harvest-run` starts one.
 
 The harvester **proposes**; you **dispose**. It never marks a mystery solved (costs are
 distances; the true/non-match populations overlap; the matcher has been caught vouching for
-itself). Three rulings, recorded against the lead:
+itself). Three rulings, each kept against the lead's key:
 
 - **match** — it's the record. Finish the job: fill the identification (step 8) and **name
   the mystery** so it leaves the query set — a solved track still titled `Mystery Track N`
@@ -536,8 +536,9 @@ Warnings:
 Need-to-know:
 - Nothing is kept as audio (`--purge-audio`): a lead = key + cost + mystery + transposition +
   where it matched. Review a candidate by listening to the source it came from.
-- Rulings are durable: every ruled key goes into `data/rulings.json`, the retired set, and a
-  record already heard and discarded is not offered again as a discovery.
+- Rulings are durable. A key ruled **match** or **no** is listed in `data/rulings.json`, the
+  retired set, with its reason, alongside keys retired for other reasons (listened, ignored,
+  duplicate). A **near** is not listed and stays a lead. The harvester only reads this file.
 - `skipped_queries` in `.harvest/state.json` names the mysteries it **cannot** search (no
   clip) — otherwise invisible.
 - Self-test states: **PASS / FAIL / not checked** — a skip is never a pass. *offline* proves

@@ -190,7 +190,7 @@ verification.
 
 ## Status (current)
 
-- **P0 ground truth** — resolves all hand placements; matches the trusted reference
+- **P0 ground truth** — resolves all hand placements; matches the earlier timeline
   parser exactly (55 files, 0 mismatches).
 - **P1 pairwise align** — reproduces hand alignments to ±1 sample on clean overlaps.
 - **P2 skip detection** — recovers documented skips with exact magnitudes

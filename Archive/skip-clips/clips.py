@@ -11,7 +11,7 @@ returned and A+B resume. 15 s before the skip + 15 s after.
 
 Convention: the walk's offset(t) means A[t] ~ B[t − offset], so B-local for A-local
 t is `t − offset`. Clips + annotations are appended to a manifest the clip review
-player (`player/public/clips/`) reads. ffmpeg writes the audio; numpy builds it.
+page reads. ffmpeg writes the audio; numpy builds it.
 """
 
 import json
