@@ -353,7 +353,7 @@ stays on the feeder's list and is signed again when it comes back.
 
 **It proposes; you dispose.** It never marks a mystery solved. It keeps the best **leads** (best 12
 per mystery, evicting the worst when a better one lands) and you rule on each one — see
-[PROCESS: *Ruling on what the harvester finds*](../PROCESS.md#ruling-on-what-the-harvester-finds-harvest).
+[PROCESS: *Ruling on what the harvester finds*](../PROCESS.md#ruling-on-what-the-harvester-finds).
 
 **A lead is a URL, not audio.** `--purge-audio` threw away the retained excerpts, and nothing is
 hoarded now: what survives is the key, the cost, the mystery, and *where* in the candidate it

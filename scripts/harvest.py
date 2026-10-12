@@ -1828,7 +1828,7 @@ def stamp_pool(state):
     never a candidate. The canary is named by its key (`NETRADIO_CANARY_KEY`), so membership
     is a dictionary lookup, not a fetch. The `active`/`retired` breakdown the stamp once
     carried came from a read this side no longer makes: every such figure is the rulings
-    writer's own join of the ledger with its queue and the rulings file."""
+    writer's own join of the ledger with the rulings file."""
     objects = _remote_objects()
     if objects is None:
         return False
