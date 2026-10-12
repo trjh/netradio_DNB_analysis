@@ -2114,7 +2114,7 @@ def score_cached(state, num, qc, qkey, key):
     the key alone, and the readers compute the same key from their own side.
 
     Advances the `current_query` block when it scores the mystery the block names -- the
-    page's "what the scorer is working on right now" (§5.6): one more compared, one fewer
+    state file's "what the scorer is working on right now": one more compared, one fewer
     remaining, an `updated` stamp. A score against a different mystery (the sign step scores
     a freshly signed file against every mystery inline, not through here) leaves the block
     alone -- the block tracks the rescan, not the sign step.
@@ -2165,8 +2165,8 @@ def forget(state, num):
     dropped_keys = [k for k in scored if k.split(":", 1)[0] == str(num)]
     for k in dropped_keys:
         del scored[k]
-    # Clear the `current_query` block if it names the forgotten mystery -- otherwise the
-    # page could show "the last query was MT%d" right after forgetting it, and the block
+    # Clear the `current_query` block if it names the forgotten mystery -- otherwise a
+    # reader could show "the last query was MT%d" right after forgetting it, and the block
     # would stay stale until the next rescan resets it. The block is the scorer's
     # "what I am working on right now"; a forgotten mystery is no longer being worked.
     cq = state.get("current_query")
@@ -2216,7 +2216,7 @@ def rescan(state, ledger, ruled, qs, limit=None, verbose=True, checkpoint=None,
     scored -- whether it matched or not -- so a pair whose `_load_sig` returned None is
     the one that is not recorded, and that is the one this count leaves pending.
 
-    Advances the `current_query` block (§5.6) as it works one mystery: `mystery`, `query_key`,
+    Advances the `current_query` block as it works one mystery: `mystery`, `query_key`,
     `started` (when this mystery's chunk began), `compared`, `remaining`, `updated`. A rescan
     works the mysteries in the order `qs` carries them, and a chunk per pass
     (`RESCAN_BUDGET_S`) may finish a mystery and start the next within one call -- so the
@@ -2524,8 +2524,8 @@ def queries(state=None):
         state["skipped_queries"] = skipped
         # The CURRENT clip's query key per mystery. `state["scored"]` is keyed on these, and
         # a re-cut clip CHANGES the key -- so only the harvester can say which key is "now".
-        # The page joins this map to state["scored"] for its live "compared: N of pool"
-        # column, instead of guessing among stale fingerprints.
+        # A reader joins this map to state["scored"] for a live "compared: N of pool"
+        # count, instead of guessing among stale fingerprints.
         state["query_keys"] = {str(n): qkey for n, _, qkey in out}
     for s in skipped:
         print("# NOT searching MT%d -- %s" % (s["mystery"], s["why"]))

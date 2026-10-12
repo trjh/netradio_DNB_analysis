@@ -763,8 +763,6 @@ class AFailedLoadIsNotACompletedScore(unittest.TestCase):
         self.assertEqual(state["scored"]["4:fp"], [key + ".npy"])
 
 
-
-
 if __name__ == "__main__":
     unittest.main()
 
@@ -833,7 +831,7 @@ class ABetterClipMustNotInheritTheOldOnesVerdicts(unittest.TestCase):
     That was right to worry about. `state["scored"]` was keyed on the mystery NUMBER, so a re-cut MT7 clip
     would have inherited every pairing made against the 23-second one: the harvester would think it
     had already asked, and never re-score a single signature against the better question. Silent,
-    and exactly the false negatives he named.
+    and exactly the false negatives the request named.
 
     So the key carries a FINGERPRINT OF THE CLIP'S CONTENTS. Change the clip, and every pairing
     against the old one is void.

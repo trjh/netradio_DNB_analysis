@@ -74,7 +74,7 @@ that creates it: `self.addCleanup(shutil.rmtree, d, True)` for a directory,
 |---|---|---|
 | `scripts/extract_tracks.py` | cut every well-defined track **out of the mix**, reassembling across captures. Refuses anything it cannot place precisely. | once; **re-run whenever a capture gains precise timing or a track's span changes** |
 | `scripts/calibrate.py` | score every known mix track against every known original → `docs/CALIBRATION.md` | **whenever the matcher changes.** It is the regression test for the whole matching stack |
-| `scripts/selftest.py` | the **canary**: score the canary's signature (named by `NETRADIO_CANARY_KEY`) against the canary's mix and the current mysteries, demanding cost, rank **and** margin; `--offline` re-runs one calibration case from local files | by the harvester, whenever the feeder puts the canary's file back (re-signed and compared first). Surfaced on the harvest page. See [below](#the-canary-does-the-matcher-still-work) |
+| `scripts/selftest.py` | the **canary**: score the canary's signature (named by `NETRADIO_CANARY_KEY`) against the canary's mix and the current mysteries, demanding cost, rank **and** margin; `--offline` re-runs one calibration case from local files | by the harvester, whenever the feeder puts the canary's file back (re-signed and compared first). Its result is recorded in the harvester's state file. See [below](#the-canary-does-the-matcher-still-work) |
 
 `calibrate.py` is not a one-off. It is how we know that the true-match and non-match populations
 **overlap** — and therefore that *rank*, not cost, is the reliable signal. Any change to
@@ -352,13 +352,12 @@ no row. A file that vanishes mid-sign gets **no row at all**, so it
 stays on the feeder's list and is signed again when it comes back.
 
 **It proposes; you dispose.** It never marks a mystery solved. It keeps the best **leads** (best 12
-per mystery, evicting the worst when a better one lands) and you rule on them on the harvest
-page — see
+per mystery, evicting the worst when a better one lands) and you rule on each one — see
 [PROCESS: *Ruling on what the harvester finds*](../PROCESS.md#ruling-on-what-the-harvester-finds-harvest).
 
 **A lead is a URL, not audio.** `--purge-audio` threw away the retained excerpts, and nothing is
 hoarded now: what survives is the key, the cost, the mystery, and *where* in the candidate it
-matched. The page reviews each candidate by **embed at its source**. This is both the better
+matched. Each candidate is reviewed by **embed at its source**. This is both the better
 review and the only defensible copyright posture — the retained audio had grown to 2.2 GB and
 included a 108-minute DJ mix kept whole, which broke the one claim the posture rested on. There is
 now a hard cap in `write_excerpt`, and a test that feeds it that mix and demands 30 seconds back.
