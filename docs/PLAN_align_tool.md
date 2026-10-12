@@ -397,7 +397,7 @@ anything the gate-0 smoke test contradicts gets corrected there)*:
 
 ### 5.2 Pass 1 — the converter (align points → label tracks / hints files)
 
-> **Status: ✅ BUILT 2026-07-31 — analysis repo PR #120 (`streamalign match-hints`), Local
+> **Status: ✅ BUILT 2026-07-31 — PR #120 (`streamalign match-hints`), Local
 > Reviewer passed.** One command (`match-hints d376-395 72`) runs MATCH headless, recovers
 > rate + polarity + ranked anchors, and emits the paired `.match.hints.tsv` files. On the
 > field pair it lands on the ear-verified seat to **7 ms** with no prior anchor input.
@@ -455,7 +455,7 @@ The conversion itself, for align point N with **SSN** (stream sample number) and
 
 ### 5.3 Pass 2 — the `/align` sample inspector (mockup: [docs/mockups/align_tool_inspector.html](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/mockups/align_tool_inspector.html))
 
-> **Status: ✅ v1 BUILT 2026-07-31 — `/align` + `align_inspect.py` on the server + analysis
+> **Status: ✅ v1 BUILT 2026-07-31 — `/align` + `align_inspect.py` on the server +
 > PR #121 (`streamalign inspect-slice`, the DSP provider, stacked on #120). Local Reviewer
 > passed on both.** Delivered per the accepted v1 scope (converter + inspector, overview
 > deferred): hints-driven pair/point pickers, the three lanes with drag/±smp/±ms nudging on a
@@ -1005,7 +1005,7 @@ Both sources feed **the one mixed selection list of §6.2** (A4) — a hints anc
 hand-placed anchor are the same kind of row there (source-tagged, stream-ordered,
 individually selectable); nothing downstream cares which source a selected pair came from.
 
-**Status: BUILT (PR 10/10 + analysis PR #130)** — analysis: `streamalign placed`
+**Status: BUILT (PR #130)** — analysis: `streamalign placed`
 (`scripts/streamalign/placed.py`; read-only label bookkeeping, the sync-audit seat
 reconstruction without audio, grades from a saved repo-root `sync-audit.json` when present,
 `placed` added to the inspect-worker OPS; pinned by `tests/test_placed.py`); server:
@@ -1125,8 +1125,7 @@ row when the human folds them in.
 **The write path.** A new `POST /api/align/review-note` on `align_server.py` appends one row
 per call.
 
-**What lands on disk — one file per capture↔original pair**, in the ANALYSIS repo checkout
-(`NETRADIO_ANALYSIS_REPO`):
+**What lands on disk — one file per capture↔original pair**, in this checkout:
 
 ```text
 <analysis>/labels/review/<stem>.origNNN.review.tsv
@@ -1209,7 +1208,7 @@ requirements:
    absent, un-fetchable, or a rejected-but-surviving remote delete all refuse with both refs
    intact.
 8. **Dark unless the analysis checkout is the ROOT of a git work tree** (a strict
-   `in_git_repo` check, pointed at `NETRADIO_ANALYSIS_REPO`); `NETRADIO_REVIEW_SYNC=0` is the
+   `in_git_repo` check, pointed at the running checkout); `NETRADIO_REVIEW_SYNC=0` is the
    kill switch.
 9. **The pathspec is `labels/review/` (and `labels/summary/`) exactly — it physically cannot
    reach the authoritative `labels/<stem>.labels.tsv` files** (§6.11): no configuration of this
@@ -1221,7 +1220,7 @@ Until the squash PR merges, the review files sit untracked in the analysis root'
 tree — visible in `git status` there, harmless. **The analysis repo is PUBLIC**: review notes are broadcast annotations and
 belong there, but the squash PR is the user's contents gate (risk table, §6.12).
 
-**Status: BUILT (PR 10/10)** — `review_notes.py` (the §6.6 grammar writer + validation +
+**Status: BUILT** — `review_notes.py` (the §6.6 grammar writer + validation +
 sanitization + durable per-file session keys, fsync-before-ack) behind
 `POST /api/align/review-note` on `align_server.py`, and `review_sync.py` (the plumbing-commit
 design above; all nine invariants above, `make review-sync` /
@@ -1542,7 +1541,7 @@ export-side DP-26 (anchor rows drop the ` HINT` suffix); and DP-34 (the jitter g
 light inspector-lane ribbon — out of the overview/context). A PR recap generator (DP-19) rode
 the same stack as tooling, not as an align feature.
 
-**Built — analysis repo:** #120 (`match-hints`, Pass 1), #121 (`inspect-slice`, the DSP
+**Built — this repo:** #120 (`match-hints`, Pass 1), #121 (`inspect-slice`, the DSP
 provider), #124 (`make env` installs the MATCH binaries), #125 (converter trust:
 DP-01/02/03/04/05/06 — `verified` plumbing, trim, referee, solo seeding, batch, seat
 derivation), #126 (Phase C providers + worker + MATCH engine), #127 (overview provider),

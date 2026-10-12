@@ -19,8 +19,8 @@
 
 ## 0. What was built (2026-08-30)
 
-- **`summary_compile.py`**: reads `labels/automated/` + `labels/review/` in the
-  analysis checkout (`NETRADIO_ANALYSIS_REPO`), emits `labels/summary/<stem>.summary.tsv`
+- **`summary_compile.py`**: reads `labels/automated/` + `labels/review/` in
+  this checkout, emits `labels/summary/<stem>.summary.tsv`
   (stream-clocked) and `labels/summary/origNNN.summary.tsv` (original-clocked). Rows are
   copied **verbatim** (both `verified` families untouched, markers identical across the pair);
   the converter's per-anchor `origNNN start: k confidence n/10` **seat rows** ride with them
@@ -125,7 +125,7 @@ current row per marker (the page's restore; a later Mac app port uses the same).
 after the refine response; nudge → 600 ms debounce at the folded seat; pair open → restore
 from the GET. Indicator beside the export section: `saved ✓ r14` / `saving…` / red sticky
 `FAILED — <error> (seats NOT saved)`. A dark server (GET 404 on load) shows a persistent
-red banner naming `NETRADIO_ANALYSIS_REPO`. Download button removed.
+red banner saying the checkout is not configured. Download button removed.
 
 **5. Delivery (decision 6).** Two PRs from `main`: server side
 (writer, routes, compile preference + auto-run, tests; doc updates to `PLAN_align_tool.md`
