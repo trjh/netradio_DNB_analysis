@@ -1624,7 +1624,7 @@
       "fields": {
         "musicbrainz": "https://musicbrainz.org/recording/d77f795b-4019-40a9-b93d-1e4b168347b3"
       },
-      "id_note": "Verified by chroma against the original: 0.0040 (a true match runs 0.004-0.03 on a clean extract). Note it also scores 0.031 against every Remember the Roller remix -- far below the 0.095 non-match median, so there is a real harmonic relationship between the two records (shared break or sample). It is NOT Remember the Roller; John B wins by 8x. Tim's ear picked up something real.",
+      "id_note": "Verified by chroma against the original: 0.0040 (a true match runs 0.004-0.03 on a clean extract). Note it also scores 0.031 against every Remember the Roller remix -- far below the 0.095 non-match median, so there is a real harmonic relationship between the two records (shared break or sample). It is NOT Remember the Roller; John B wins by 8x. The ear picked up something real.",
       "id_verified": true,
       "master_begin_seconds": 16487.65,
       "master_end_seconds": 17021.016,

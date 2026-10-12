@@ -1,7 +1,7 @@
 """align-tool Pass 2 slice provider: geometry, gain, polarity, and the refine seam.
 
 Hermetic: synthetic stereo WAVs in a tempdir, decoded through the real ffmpeg path
-(skipped if ffmpeg is absent), so the numbers the player's inspector will draw are
+(skipped if ffmpeg is absent), so the numbers the inspector will draw are
 exercised end-to-end -- slicing geometry, zero-padding at file edges, rate
 correction, RMS matching, polarity, and snap-to-best.
 """
@@ -445,7 +445,7 @@ if __name__ == "__main__":
 @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg not on PATH")
 class TestParamGuards(TestBuildSlices):
     """Nonsense parameters raise ValueError (the CLI turns it into JSON), never a
-    numpy traceback -- the subprocess's stdout must stay parseable by the player."""
+    numpy traceback -- the subprocess's stdout must stay parseable by the inspector."""
 
     def test_bad_params_raise_valueerror_not_numpy_errors(self):
         for kw in (dict(rate=0.0), dict(win_s=-2.0), dict(win_s=float("nan")),

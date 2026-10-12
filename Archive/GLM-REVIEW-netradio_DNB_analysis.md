@@ -13,7 +13,7 @@ Reviewed and archived. Suggestion-by-suggestion outcome:
 | # | Suggestion | Outcome |
 |---|---|---|
 | 1 | Split `sort_tsv.py` into a package | Deferred — "it works and is well-tested"; low priority. |
-| 2 | `track_mix.py --dry-run-emit` | Deferred to the player-repo ROADMAP (F3 emission path). |
+| 2 | `track_mix.py --dry-run-emit` | Deferred to a later roadmap item (F3 emission path). |
 | 3 | `backup_sheet.py` xlsx fragility | Won't-fix — acceptable for a personal project, noted. |
 | 4 | Archive `sheetscript/*draft.js` | **Done** — moved to `Archive/sheetscript-drafts/`. |
 | 5 | Document the two requirements files | **Done** — added a header comment to `requirements.txt`. |
@@ -55,9 +55,9 @@ data/sheet/                  — CSV snapshots of the Google Sheet
 - **align.py** (162 lines): Clean FFT cross-correlation + GCC-PHAT with parabolic interpolation. Good docstrings explaining offset convention. The two-stage approach (coarse decimated → fine full-rate) is efficient.
 - **skips.py** (132 lines): Windowed local-offset tracking for skip detection. The algorithm is well-documented and validated against a known 4-skip overlap.
 - **solve.py** (222 lines): BFS-based global solve from hand-verified edges. Correctly chains pairwise offsets. Redundant edges cross-check via `score.consistency_report`.
-- **groundtruth.py** (161 lines): Faithful port of the player's parser. Good — keeps the engine independent. The test cross-checks against the player's parser.
+- **groundtruth.py** (161 lines): Faithful port of an earlier timeline parser. Good — keeps the engine independent. The test checks known hand values.
 - **score.py** (97 lines): Simple, clear scoring. Stats in both samples and ms.
-- **clips.py** (160 lines): Skip-check clip generator. Follows Tim's spec (A+B combined, skip-ahead/back handling). Clean numpy + ffmpeg.
+- **clips.py** (160 lines): Skip-check clip generator. Follows the spec (A+B combined, skip-ahead/back handling). Clean numpy + ffmpeg.
 - **emit_labels.py** (187 lines): AUTO GENERATED label emitter. Correctly enforces the two hard rules (AUTO GENERATED suffix, separate .auto. file).
 - **track_mix.py**: Chroma+DTW aligner. Uses Theil-Sen for rate estimation (robust choice). Good reliability gate.
 
@@ -79,7 +79,7 @@ data/sheet/                  — CSV snapshots of the Google Sheet
 
 ## Documentation
 
-Excellent. README covers the full manual workflow + process. HOWTO.md, STREAM_PROVENANCE.md, and the streamalign docs (README, WALKTHROUGH, TAIL_SOLVE, RATE_AXIS_SPIKE) are thorough. The `docs/` directory (in the player repo) holds the ROADMAP, plans, and WORM log.
+Excellent. README covers the full manual workflow + process. HOWTO.md, STREAM_PROVENANCE.md, and the streamalign docs (README, WALKTHROUGH, TAIL_SOLVE, RATE_AXIS_SPIKE) are thorough.
 
 ## Suggestions
 
@@ -93,7 +93,7 @@ Excellent. README covers the full manual workflow + process. HOWTO.md, STREAM_PR
 
 5. **requirements-streamalign.txt vs requirements.txt:** Two requirements files with overlapping but different deps. Consider documenting which to use when (the Makefile handles this, but a comment would help).
 
-6. **track-metadata.json is 46KB of JSON:** At this size it's fine, but if it grows significantly, consider a schema validation step (jsonschema or a hand-written validator) to catch corruption before it propagates to the player.
+6. **track-metadata.json is 46KB of JSON:** At this size it's fine, but if it grows significantly, consider a schema validation step (jsonschema or a hand-written validator) to catch corruption before it propagates downstream.
 
 7. **No CI:** The repo has no GitHub Actions. A simple workflow running `python -m pytest tests/` on push would catch regressions. The publish gate (A4) has a webhook trigger design but it's not wired to CI.
 

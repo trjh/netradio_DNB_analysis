@@ -33,7 +33,7 @@ class TestHintsNeverOverrideLabels(unittest.TestCase):
     def test_hints_file_is_invisible_to_the_pipeline(self):
         # The naming trap: is_pipeline_label_file() accepts ANYTHING ending .labels.tsv
         # except .starter. -- so a `<stem>.hint.labels.tsv` would have been swallowed into
-        # the solve and into the player's track metadata. `.hints.tsv` cannot be.
+        # the solve and into the track metadata. `.hints.tsv` cannot be.
         self.assertFalse(gt.is_pipeline_label_file("d356-375.hints.tsv"))
         # guard the trap itself, so nobody "helpfully" renames the output later:
         self.assertTrue(gt.is_pipeline_label_file("d356-375.hint.labels.tsv"))

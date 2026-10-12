@@ -34,7 +34,7 @@ Clean windows, all hits
 Each service reads only ~10-12 s per request, so we cut several short windows from the
 **interior** of the clip (the edges are where a neighbouring record bleeds in) and submit each.
 Every result each service returns is printed -- no consensus, no gate; you audition them all,
-the way the listen/harvest queues are triaged.
+the way any list of candidates is triaged.
 
 Credentials (in `.env`, gitignored)
 -----------------------------------------

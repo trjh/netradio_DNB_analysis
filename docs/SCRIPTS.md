@@ -65,7 +65,6 @@ that creates it: `self.addCleanup(shutil.rmtree, d, True)` for a directory,
 | `scripts/mkmysteryvideo.sh` | build the "Unknown Track N" video for a track-ID post, locally | when you have a clip to publish. **The highest-yield method — humans have solved 2 of 3.** |
 | `scripts/identify_by_chroma.py` | chroma-match a clip against a pool of candidate records | when you have candidate audio |
 | `scripts/identify_by_api.py` | ask the commercial catalogues (ACRCloud + AudD) to name a clip — searches ~150-160M tracks you don't own, unlike the local chroma pool | when a mystery may be a catalogued release. **Acoustic fingerprinting may be defeated by the 1998 codec/EQ like AcoustID is — it's an experiment; every hit is a lead to confirm by ear.** Needs `ACRCLOUD_*` / `AUDD_API_TOKEN` in `.env` |
-| `scripts/match_queue.py` | chroma-match the mysteries against the listen queue's **downloaded, unlistened** tracks | one-off sweep of what's already on disk |
 | `scripts/harvest.py` | the long-runner: sign the audio that lands in the harvest directories → chroma signature → **drop the audio** → score | continuously. See [the harvester](#the-harvester) |
 | `scripts/discogs_leads.py` | read the labels this DJ actually played, ask Discogs what else they released 1994–99. A lead is tested by adding its audio to a directory the harvester reads | when the pool needs new leads |
 | `scripts/acoustid_check.py` | verify the **originals** against AcoustID; catch mislabelled source files | occasionally. **Does not work on stream audio** — see `Archive/LESSON_acoustid_stream.md` |
@@ -76,7 +75,7 @@ that creates it: `self.addCleanup(shutil.rmtree, d, True)` for a directory,
 |---|---|---|
 | `scripts/extract_tracks.py` | cut every well-defined track **out of the mix**, reassembling across captures. Refuses anything it cannot place precisely. | once; **re-run whenever a capture gains precise timing or a track's span changes** |
 | `scripts/calibrate.py` | score every known mix track against every known original → `docs/CALIBRATION.md` | **whenever the matcher changes.** It is the regression test for the whole matching stack |
-| `scripts/selftest.py` | the **canary**: score the canary's signature (named by `NETRADIO_CANARY_KEY`) against the canary's mix and the current mysteries, demanding cost, rank **and** margin; `--offline` re-runs one calibration case from local files | by the harvester, whenever the feeder puts the canary's file back (re-signed and compared first). Surfaced on the harvest page. See [below](#the-canary-does-the-matcher-still-work) |
+| `scripts/selftest.py` | the **canary**: score the canary's signature (named by `NETRADIO_CANARY_KEY`) against the canary's mix and the current mysteries, demanding cost, rank **and** margin; `--offline` re-runs one calibration case from local files | by the harvester, whenever the feeder puts the canary's file back (re-signed and compared first). Its result is recorded in the harvester's state file. See [below](#the-canary-does-the-matcher-still-work) |
 
 `calibrate.py` is not a one-off. It is how we know that the true-match and non-match populations
 **overlap** — and therefore that *rank*, not cost, is the reliable signal. Any change to
@@ -208,12 +207,12 @@ name once ffmpeg has it.
 **Clip formats: `.wav`, `.wv`, `.flac`, `.m4a`, `.mp3`** — lossless preferred, in that order
 (everything decodes through ffmpeg, which reads WavPack natively). `.wv` earned its place the
 hard way: Mystery Track 4's clip was wavpack-compacted and silently **left the query set** —
-the harvester ran for days with the page saying "working" while searching for everything except
+the harvester ran for days with its state saying "working" while searching for everything except
 the one thing missing a clip. With no searchable clip at all, the harvester now stamps a
 first-class **"nothing to search for"** state (`state["no_queries"]`) and keeps signing, instead
 of leaving a stale "working" phase behind; and each pass it publishes the **bucket's**
 signature count (`state["pool"]`, the pool's real size post-migration) and the current query
-key per mystery (`state["query_keys"]`) so the harvest page can show a live "compared: N of
+key per mystery (`state["query_keys"]`) so the state file shows a live "compared: N of
 pool" per mystery.
 
 **A new mystery sees the WHOLE corpus.** A chroma signature is not tied to the question you asked
@@ -260,8 +259,8 @@ paths (`--run`, `--sign-one`) hold the same flock (`harvest.WRITER_LOCK`, under 
 `collector.lock` name) for their lifetime — a second writer, including the hand tool under a
 running daemon, refuses loudly instead of interleaving.
 
-The rescan also fills in **where** each old match hit (`at_s`), which is why the harvest page
-can cue a lead to the moment it matched even for leads found before that field existed. The
+The rescan also fills in **where** each old match hit (`at_s`), which is why a lead can be
+cued to the moment it matched even for leads found before that field existed. The
 position was never lost: it is recomputable from the signature we already hold.
 
 **The query is sliding windows, not the clip's head.** A mystery clip is asked as 120 s
@@ -354,13 +353,12 @@ no row. A file that vanishes mid-sign gets **no row at all**, so it
 stays on the feeder's list and is signed again when it comes back.
 
 **It proposes; you dispose.** It never marks a mystery solved. It keeps the best **leads** (best 12
-per mystery, evicting the worst when a better one lands) and you rule on them on the harvest
-page — see
-[PROCESS: *Ruling on what the harvester finds*](../PROCESS.md#ruling-on-what-the-harvester-finds-harvest).
+per mystery, evicting the worst when a better one lands) and you rule on each one — see
+[PROCESS: *Ruling on what the harvester finds*](../PROCESS.md#ruling-on-what-the-harvester-finds).
 
 **A lead is a URL, not audio.** `--purge-audio` threw away the retained excerpts, and nothing is
 hoarded now: what survives is the key, the cost, the mystery, and *where* in the candidate it
-matched. The page reviews each candidate by **embed at its source**. This is both the better
+matched. Each candidate is reviewed by **embed at its source**. This is both the better
 review and the only defensible copyright posture — the retained audio had grown to 2.2 GB and
 included a 108-minute DJ mix kept whole, which broke the one claim the posture rested on. There is
 now a hard cap in `write_excerpt`, and a test that feeds it that mix and demands 30 seconds back.
@@ -368,9 +366,9 @@ now a hard cap in `write_excerpt`, and a test that feeds it that mix and demands
 **Why signatures.** The matcher can only find what's in the pool, and the pool we want is far
 bigger than this disk. 100,000 tracks is ~5 GB of signatures and 0 GB of audio.
 
-**Watch it** on the harvest page: pause/resume, the self-test, the mysteries it is *not*
-searching for, and the ruling buttons. The peer repo **supervises** it — it adopts a
-hand-started harvester rather than spawning a second, and a watchdog revives it if it dies.
+**Watch it** with `scripts/run_harvester.sh status` and the state file: pause/resume, the
+self-test, the mysteries it is *not* searching for. The launcher refuses to start a second
+harvester on the same state directory; whatever restarts it after a stop is up to you.
 
 ### How much memory it uses, and why
 
@@ -390,7 +388,7 @@ Three things put the memory back:
 | ffmpeg writes the decoded PCM to a **file** in the job directory | The old path piped it through `communicate()`, which builds a chunk list and then joins it — two full copies of the audio at the moment of the join (1,034 MB held for 451 MB of PCM, measured). The parent reads the spool back as a memory map, and the file is unlinked as soon as it is mapped. Disk cost is 64 KB per second of audio, for as long as the file is being scored. |
 
 The child's command line is `harvest.py --sign-job <dir>` and the audio path is **not on it** —
-it is handed over in the job directory. The peer repo's supervisor finds a live harvester by
+it is handed over in the job directory. A process manager may find a live harvester by
 matching `--run` as a substring of the whole `ps` line, so a path on the argv would be a way for
 a process that lives for one file to be adopted as the harvester. The job file (`sign.json`)
 carries the path **and** the sidecar's declared length for it, so the child's length check weighs
@@ -402,7 +400,7 @@ takes the writer lock and reconciles the ledger first).
 is for diagnosing a venv or environment problem in the child; it brings the memory back with it,
 so it is not for normal use.
 
-`make harvest-run` sets `MallocLargeCache=0` for you; the peer repo's supervisor sets it too. It
+`make harvest-run` and `scripts/run_harvester.sh start` set `MallocLargeCache=0` for you. It
 is read at process start, so setting it from inside a running harvester does nothing. On every
 start the harvester allocates and frees 800 MB and prints what the allocator kept — if that
 number goes back up after an OS upgrade, the variable has stopped working and an `issues` row
@@ -411,15 +409,15 @@ says so.
 Each signed file leaves a row in `state["mem"]` (and the last 50 in `state["mem_log"]`): the
 parent's footprint, the parent's lifetime peak, and the decode child's peak and final footprint.
 Set `NETRADIO_HARVEST_MEM_CEILING_MB` to have the **parent** stand down when it goes over that
-number — the supervisor's watchdog then restarts it. It is **off by default**, because the right
+number — whatever restarts it then starts a fresh run. It is **off by default**, because the right
 number depends on what a long file actually costs and that measurement has not been taken yet. A
 child over the ceiling only earns an `issues` row: its memory left with it.
 
 **Stopping it.** `Ctrl-C`, or `SIGTERM` to the parent's pid, stops cleanly: the state is saved, the
 file that was being signed gets **no ledger row**, and it is signed again on a later pass. No
 signature is ever written unless ffmpeg exited 0, the decode is long enough, the file is not
-over-long, the length matches the sidecar's claim, and no stop was asked for. The supervisor's
-`stop()` signals the whole process group and still works.
+over-long, the length matches the sidecar's claim, and no stop was asked for. A `SIGTERM` to
+the whole process group stops it the same way.
 
 ### The canary: does the matcher still WORK?
 
@@ -435,7 +433,7 @@ degenerate matcher scores everything identically, ties sort by track number, and
 lowest-numbered case — ranks first. The canary then vouches for a completely broken matcher. *A tie
 is not a win.*
 
-The live check's three outcomes, all reported on the harvest page as distinct states — *a skip is
+The live check's three outcomes, all recorded in the state file as distinct states — *a skip is
 not a pass*:
 
 - **PASS** — the canary's signature, scored against the canary's mix and the current mysteries,

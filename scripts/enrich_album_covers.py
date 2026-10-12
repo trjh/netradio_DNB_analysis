@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Move cover art to the ALBUM level (Tim, 2026-06-22).
+"""Move cover art to the ALBUM level (2026-06-22).
 
 The first enrichment put `artwork_url`/`artwork_hires` on individual tracks, so tracks that
 share an album ended up with *different* covers (each matched its own single) — inconsistent in

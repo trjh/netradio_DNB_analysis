@@ -10,7 +10,7 @@ Three hard rules
 1. **Hints never override hand labels.** Output is ALWAYS ``<stem>.hints.tsv``. That name
    does not end in ``.labels.tsv``, so it is invisible to ``groundtruth.is_pipeline_label_file``,
    to ``build_track_metadata``, to the solve and to the sheet import: a hint can never be
-   mistaken for a fact or leak into the player's metadata. ``write_hints`` refuses to write
+   mistaken for a fact or leak into the track metadata. ``write_hints`` refuses to write
    any ``*.labels.tsv`` path at all, so this cannot be undone by a stray ``--out``.
    Hints only ever *add*: import them as their own track and copy across what you accept.
 2. **Every row is marked.** Each line this module emits ends in ``HINT`` (mirroring the

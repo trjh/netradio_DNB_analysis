@@ -5,7 +5,7 @@ a long window from one file and find where it occurs in the other. Confidence
 cleanly separates a real overlap (~0.99) from none (~0.1), so the same primitive
 both measures the offset and discovers which files overlap at all.
 
-The discovered edges + Tim's hand `verified` edges form the graph the global solve
+The discovered edges + the hand `verified` edges form the graph the global solve
 walks, anchored at d000-018 = master 0.
 """
 
@@ -76,7 +76,7 @@ def blind_offset(a_name, b_name, win_s=20.0, n_probes=8, sr=_audio.SR):
     confidence even though they DO overlap (e.g. d084-103b/d065-087 ≈ 0.6,
     d086-105/d065-087 ≈ 0.1). So a low score means "no large clean overlap found",
     not "no overlap". Robust detection of small/skip-heavy overlaps is unsolved —
-    see README. Use this for seeding, and prefer Tim's `verified` edges where they
+    see README. Use this for seeding, and prefer the hand `verified` edges where they
     exist.
     """
     a = _audio.load_audio(a_name)
@@ -123,7 +123,7 @@ def discover_overlaps(stems, conf_min=0.8, max_gap_min=30, win_s=20.0):
     **miss small / skip-heavy ones** (see `blind_offset` scope). So a missing edge
     does NOT prove two files don't overlap, and `connected_components()` over these
     edges can show spurious islands from detector false-negatives — do not treat
-    component structure as ground truth. For the labelled region prefer Tim's
+    component structure as ground truth. For the labelled region prefer the hand
     `alignment_edges()` (known-good overlap pairs).
     """
     edges = []
@@ -212,7 +212,7 @@ def next_stem(stem, labels_dir=None):
     """Best guess at the capture that follows `stem`, with the reason it was chosen.
 
     Returns `(stem, why)` or `(None, why)`. Sources, most-authoritative first:
-      1. **hand link** -- a `file_<other>:` row in `<stem>.labels.tsv` (Tim saying "next");
+      1. **hand link** -- a `file_<other>:` row in `<stem>.labels.tsv` (a hand "next" mark);
       2. **1998/2017 notes** -- `tracklist2017`'s transition/stream order;
       3. **filename range** -- nearest labelled capture starting after this one (a hint).
 

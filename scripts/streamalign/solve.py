@@ -4,7 +4,7 @@ Given a set of overlapping pairs with measured offsets, anchor one file at maste
 and propagate outward: master_start(b) = master_start(a) + offset(a->b). The
 result is every reachable file's absolute master start.
 
-This first cut uses Tim's hand `verified` edges (known-good overlap pairs) and the
+This first cut uses the hand `verified` edges (known-good overlap pairs) and the
 precise pairwise aligner, so it can be validated against ground truth on the
 labelled region with NO dependence on the unsolved blind-overlap-discovery problem.
 Redundant edges let `score.consistency_report` cross-check the result.
@@ -170,7 +170,7 @@ def solve_robust(edges, anchor="d000-018", anchor_master=0.0,
 
 
 def solve_from_verified(labels_dir=None, conf_min=0.7, anchor="d000-018"):
-    """End-to-end: take Tim's verified edges, measure them, solve absolute positions.
+    """End-to-end: take the hand-verified edges, measure them, solve absolute positions.
 
     Returns (positions, edges, dropped). `positions` = {stem: master_start_seconds};
     `dropped` = edges removed by consistency rejection.

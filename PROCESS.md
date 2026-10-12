@@ -192,13 +192,13 @@ Need-to-know:
 
 ```bash
 cp "my-extract.wav" "$NETRADIO_SOURCES_DIR/Mystery Track 8.wav"
-# then restart the harvester from /harvest (off → on)
+scripts/run_harvester.sh restart
 ```
 
 Warnings:
 - **No clip = not searched.** A mystery with no clip is not in the query set at all — the
-  harvester can run a month without ever looking for it. `/harvest` lists what it cannot
-  search and why.
+  harvester can run a month without ever looking for it. `skipped_queries` in
+  `.harvest/state.json` lists what it cannot search and why.
 - **Full-length extract, not a snippet.** A short query drives every cost down until
   unrelated records tie (MT7's 23 s clip → five "confident" false positives within 0.0007).
 - The number is the **mystery's** number (4, 6, 7, 8…), *not* the master track number.
@@ -432,7 +432,8 @@ the rate difference, solved downstream by `speed = (trackB − trackA) / (origB 
 
 `harvest.py` signs the audio that lands in the harvest directories, reduces each file to a
 chroma signature, discards the audio, and scores the signature against every unsolved mystery,
-for weeks. Watch it — and rule — on the harvest page.
+for weeks. Its leads are the `matches` in `.harvest/state.json`, and
+`python3 scripts/harvest.py --status` prints its counts.
 
 Start and stop it with its own launcher — one pidfile, one log, one harvester:
 
@@ -500,22 +501,21 @@ Need-to-know:
   `too_long`, refused and never truncated. A file whose decoded length disagrees with its
   sidecar's `duration_s` by more than `max(10 s, 2 %)` is `delayed` with `length_mismatch` —
   a hand-over that disagrees with its own label is not signed.
-- The harvester's own fetch leg is gone, with the queue read, the cookie handling and the
-  host pacing that went with it: nothing that runs in this repo fetches from the web. What
+- The harvester does not fetch: nothing that runs in this repo fetches from the web. What
   arrives in the directories is signed; what never arrives is not missed.
 
-The harvester runs on one machine, supervised by the peer repo's watchdog; it adopts a
-hand-started run rather than spawning a second. `make harvest-run` starts one by hand.
+The harvester runs on one machine; its writer lock means only one ever runs. `make
+harvest-run` starts one.
 
-## Ruling on what the harvester finds (`/harvest`)
+## Ruling on what the harvester finds
 
 The harvester **proposes**; you **dispose**. It never marks a mystery solved (costs are
 distances; the true/non-match populations overlap; the matcher has been caught vouching for
-itself). Three rulings, one click each, recorded against the lead:
+itself). Three rulings, each kept against the lead's key:
 
-- **match** — it's the record. Favourites + marks heard in the listen queue. Then finish the
-  job: fill the identification (step 8) and **name the mystery** so it leaves the query set —
-  a solved track still titled `Mystery Track N` keeps being searched for.
+- **match** — it's the record. Finish the job: fill the identification (step 8) and **name
+  the mystery** so it leaves the query set — a solved track still titled `Mystery Track N`
+  keeps being searched for.
 - **near** — related, not it (shared break / sample / remix). Kept as a lead.
 - **no** — dismissed, won't return.
 
@@ -534,12 +534,13 @@ Warnings:
   hits within 0.0007 — cause: a 23 s query). Fix the clip (§8b); don't rule on noise.
 
 Need-to-know:
-- Nothing is kept as audio (`--purge-audio`): a lead = URL + cost + mystery + key + where it
-  matched. `/harvest` plays candidates from a source embed — better review, defensible
-  copyright posture.
-- Rulings are durable and shared with the listen queue (chroma-sig badge there; queue flags
-  here) — a track you've already heard and discarded is not re-offered as a discovery.
-- `/harvest` also names mysteries it **cannot** search (no clip) — otherwise invisible.
+- Nothing is kept as audio (`--purge-audio`): a lead = key + cost + mystery + transposition +
+  where it matched. Review a candidate by listening to the source it came from.
+- Rulings are durable. A key ruled **match** or **no** is listed in `data/rulings.json`, the
+  retired set, with its reason, alongside keys retired for other reasons (listened, ignored,
+  duplicate). A **near** is not listed and stays a lead. The harvester only reads this file.
+- `skipped_queries` in `.harvest/state.json` names the mysteries it **cannot** search (no
+  clip) — otherwise invisible.
 - Self-test states: **PASS / FAIL / not checked** — a skip is never a pass. *offline* proves
   the matcher works (re-IDs a known track); *live* proves it end-to-end from a real stream,
   and refuses to establish a canary on a wrong upload (hand it a known-good URL if it never

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enrich track-metadata.json with cover art + streaming links (Tim, 2026-06-22).
+"""Enrich track-metadata.json with cover art + streaming links (2026-06-22).
 
 For every track we try, in priority order, to fill **cover art** (the main goal) and
 **links** toward having two of {apple, spotify, discogs}:
@@ -8,7 +8,7 @@ For every track we try, in priority order, to fill **cover art** (the main goal)
      find_streaming_links' matchers so an obscure 1998 D&B track never links the wrong
      recording). From the accepted result we take the album art (`artworkUrl100`) and store
      a normal `artwork_url` (600x600, for TRACKLIST.md) and a hi-res `artwork_hires`
-     (1200x1200, for the local player) — the "change NxN" trick Tim found. Tracks that
+     (1200x1200, for full-size display) — the "change NxN" trick. Tracks that
      already have an Apple link get their cover upgraded via an iTunes *lookup* of the id.
   2. Discogs — the public search API (no token; rate-limited, conservative match). Adds a
      `discogs` link (and a cover only if Discogs has a real one).
@@ -36,7 +36,7 @@ sys.path.insert(0, str(REPO / "scripts"))
 import find_streaming_links as fsl   # noqa: E402  — canon / artist_ok / title_ok
 OUT = REPO / "track-metadata.json"
 
-UA = "netradio-meta/1.0 (+listen-queue metadata enrichment)"
+UA = "netradio-meta/1.0 (+metadata enrichment)"
 
 
 def curl_json(url, ua=None, timeout=10):
