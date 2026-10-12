@@ -96,9 +96,11 @@ class TheRunningHereVerb(unittest.TestCase):
             time.sleep(0.1)
         self.fail("listener did not come up")
 
-    def _verb(self, verb):
+    def _verb(self, verb, path=None):
         env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": self.root,
                "NETRADIO_ALIGN_PORT": self.port}
+        if path:
+            env["PATH"] = path + os.pathsep + env["PATH"]
         return subprocess.run(["bash", os.path.join(self.root, "scripts", "run_align.sh"), verb],
                               capture_output=True, text=True, env=env, timeout=60).returncode
 
@@ -115,6 +117,15 @@ class TheRunningHereVerb(unittest.TestCase):
         self._listen(self.other)
         self.assertEqual(self._verb("running"), 0)
         self.assertEqual(self._verb("running-here"), 1)
+
+    def test_a_listener_with_no_readable_directory_is_cannot_tell(self):
+        # lsof lists the port's listener but gives no working directory for it
+        fake = os.path.join(self.root, "fakebin")
+        os.makedirs(fake)
+        with open(os.path.join(fake, "lsof"), "w") as fh:
+            fh.write('#!/bin/bash\ncase "$*" in *" -d "*) exit 1 ;; *) echo 12345 ;; esac\n')
+        os.chmod(os.path.join(fake, "lsof"), 0o755)
+        self.assertEqual(self._verb("running-here", path=fake), 2)
 
 
 class TheLogSetting(unittest.TestCase):

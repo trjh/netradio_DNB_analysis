@@ -19,8 +19,12 @@ STUB = """#!/bin/bash
 echo "{name} $*" >> "$STUB_LOG"
 env | grep -E '^GIT|git-core' | sort >> "$STUB_ENV"
 case "$1" in
-  running) [ -e "$STUB_STATE/{name}.up" ] || [ -e "$STUB_STATE/{name}.foreign" ] ;;
-  running-here) [ -e "$STUB_STATE/{name}.up" ] ;;
+  running) [ -e "$STUB_STATE/{name}.up" ] || [ -e "$STUB_STATE/{name}.foreign" ] \
+             || [ -e "$STUB_STATE/{name}.unknown" ] ;;
+  running-here)
+    [ -e "$STUB_STATE/{name}.up" ] && exit 0
+    [ -e "$STUB_STATE/{name}.unknown" ] && exit 2
+    exit 1 ;;
   restart) [ ! -e "$STUB_STATE/{name}.fail" ] ;;
 esac
 """
@@ -153,7 +157,16 @@ class RestartTests(HookCase):
         self.upstream("scripts/align_server.py")
         r = self.pull()
         self.assertEqual(self.restarts(), [])
-        self.assertIn("not started from this checkout; left alone", r.stderr)
+        self.assertIn("the align server on its port belongs to another checkout; left alone",
+                      r.stderr)
+
+    def test_a_server_whose_checkout_cannot_be_told_is_left_alone(self):
+        open(os.path.join(self.state, "run_align.unknown"), "w").close()
+        self.upstream("scripts/align_server.py")
+        r = self.pull()
+        self.assertEqual(self.restarts(), [])
+        self.assertIn("could not tell whether the align server on its port is this "
+                      "checkout's; left alone", r.stderr)
 
     def test_could_not_tell_what_changed_counts_as_code(self):
         # a fresh clone: no ORIG_HEAD, and HEAD@{1} does not exist yet
