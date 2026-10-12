@@ -93,3 +93,5 @@ clips_out/
 .venv
 # An in-progress atomic write of data/rulings.json (`rulings.json.<pid>.tmp`), renamed into place when done.
 data/rulings.json.*.tmp
+# The stream video's album-art folder (scripts/streamvideo.py; NETRADIO_ART_DIR moves it).
+/art/

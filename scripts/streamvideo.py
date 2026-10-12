@@ -3,10 +3,13 @@
 Netradio D&B ISDN reconstruction. Companion to mkmysteryvideo.sh (the single-track
 "Unknown Track N" mystery posts); this one does a continuous multi-track span.
 
-  scripts/streamvideo.py <start> <end> [outdir]
+  scripts/streamvideo.py <start> <end> [outdir] [--no-fetch]
   scripts/streamvideo.py 1 31
 
-What it builds, from the player repo's committed metadata (never the CSV):
+What it builds, from this repo's own data (never the CSV): the tracks and their master
+positions from `track-metadata.json`, the capture files' positions on the master timeline
+from `stream-files.json` (a mirror of the file the stream's file-ordering generator writes),
+the album art from the art folder, and the audio from NETRADIO_MP3_DIR:
   * ONE continuous audio file for master span [begin(start) .. end(end)], stitched
     from the PRIMARY capture files by MASTER TIME (filenames are hints, not authority).
     Every file->file seam is snapped to a TRACK BOUNDARY that lies inside the overlap
@@ -24,19 +27,43 @@ What it builds, from the player repo's committed metadata (never the CSV):
   * chapters.txt: a YouTube-ready timestamped tracklist (paste into the description;
     YouTube renders it as clickable scrubber chapters).
 
+Album art: each track's cover is `<art folder>/<artwork>`, the file name `track-metadata.json`
+records (the track's own, else its album's). The art folder is NETRADIO_ART_DIR, default `art/`
+in this repo (gitignored). A cover that is not in the folder is downloaded from the artwork URL
+the same entry records (`artwork_hires`, else `artwork_url`) and kept there; `--no-fetch` turns
+that off. Only http/https URLs whose host resolves to public addresses are fetched (each
+redirect is checked the same way), with a timeout and a size cap, and only a response that is
+an image is kept. Nothing is ever generated: a track with no cover file and no URL, or
+whose download fails, shows the netradio.com logo.
+
+Settings come from the environment, else from this repo's `.env` (see `.env.example`).
+
 Deps: python3 + Pillow (brew install pillow) for the stills, ffmpeg for audio+encode.
 This Homebrew ffmpeg has no libfreetype (no drawtext) -- all text is drawn with Pillow.
 """
-import json, os, subprocess, sys, tempfile, shutil
+import argparse
+import ipaddress
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import OrderedDict
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
+
+try:                                    # the rendering needs Pillow; the planning does not
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
+except ImportError:                     # pragma: no cover - checked again in main()
+    Image = ImageDraw = ImageFont = ImageFilter = ImageEnhance = None
 
 # --- paths ------------------------------------------------------------------
 SELF = os.path.dirname(os.path.abspath(__file__))
-LOCALDISK = os.path.dirname(SELF)
-PLAYER = os.environ.get("NETRADIO_PLAYER_DIR",
-                        os.path.normpath(os.path.join(LOCALDISK, "..", "player")))
-LOGO = os.path.join(LOCALDISK, "logo", "logo.jpg")
+REPO = os.path.dirname(SELF)
+LOGO = os.path.join(REPO, "logo", "logo.jpg")
 FONTDIR = "/System/Library/Fonts/Supplemental"
 
 
@@ -53,9 +80,16 @@ def read_env(path):
     return env
 
 
-ENV = read_env(os.path.join(PLAYER, ".env"))
-MP3_DIR = os.environ.get("NETRADIO_MP3_DIR") or ENV.get("NETRADIO_MP3_DIR")
-FFMPEG = os.environ.get("NETRADIO_FFMPEG", "ffmpeg")
+def setting(name, env=None):
+    """The environment wins; this repo's `.env` fills a gap."""
+    env = ENV if env is None else env
+    return os.environ.get(name) or env.get(name) or None
+
+
+ENV = read_env(os.path.join(REPO, ".env"))
+MP3_DIR = setting("NETRADIO_MP3_DIR")
+FFMPEG = setting("NETRADIO_FFMPEG") or "ffmpeg"
+ART_DIR = os.path.expanduser(setting("NETRADIO_ART_DIR") or os.path.join(REPO, "art"))
 
 W, H = 1920, 1080
 FPS = int(os.environ.get("FPS", "30"))
@@ -71,9 +105,11 @@ def font(name, size):
 
 
 # --- metadata ---------------------------------------------------------------
-def load_meta():
-    d = json.load(open(os.path.join(PLAYER, "metadata/track-metadata.json")))
-    sf = json.load(open(os.path.join(PLAYER, "metadata/stream-files.json")))
+def load_meta(repo=REPO):
+    with open(os.path.join(repo, "track-metadata.json"), encoding="utf-8") as fh:
+        d = json.load(fh)
+    with open(os.path.join(repo, "stream-files.json"), encoding="utf-8") as fh:
+        sf = json.load(fh)
     return d["tracks"], d["albums"], sf
 
 
@@ -87,18 +123,161 @@ def merged(tr, albums, n):
         "year": af.get("year") or tf.get("year") or "",   # prefer the album's year
         "album_id": t.get("album"),
         "release": alb.get("title") or "",          # album/release name
-        "artwork": t.get("artwork") or alb.get("artwork"),
         "begin": t["master_begin_seconds"],
         "end": t["master_end_seconds"],
     }
 
 
-def cover_path(albums, album_id, artwork):
-    if artwork:
-        p = os.path.join(PLAYER, "art", artwork)
-        if os.path.exists(p):
-            return p
-    return LOGO
+# --- album art ---------------------------------------------------------------
+ART_MAX_BYTES = 10 * 1024 * 1024        # a cover is a few hundred KB; anything near this is not one
+ART_TIMEOUT_S = 20
+ART_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".gif")
+UA = "netradio-streamvideo/1.0 (+album art for a stream video)"
+
+
+def _is_image(head):
+    """JPEG, PNG, GIF or WebP, by the first bytes -- never by a header the server chose."""
+    return (head[:3] == b"\xff\xd8\xff" or head[:8] == b"\x89PNG\r\n\x1a\n"
+            or head[:6] in (b"GIF87a", b"GIF89a")
+            or (head[:4] == b"RIFF" and head[8:12] == b"WEBP"))
+
+
+def _http_url(url):
+    try:
+        u = urllib.parse.urlsplit(url or "")
+    except ValueError:
+        return False
+    return u.scheme in ("http", "https") and bool(u.hostname)
+
+
+def _public_host(host, resolve=None):
+    """True when every address `host` resolves to is a public one. A private, loopback,
+    link-local, multicast, reserved or unspecified address -- or a name that does not
+    resolve -- is refused, so a recorded URL can never reach this machine or its network."""
+    resolve = resolve or socket.getaddrinfo
+    try:
+        infos = resolve(host, None)
+    except (OSError, UnicodeError, ValueError):
+        return False
+    addrs = {info[4][0].split("%", 1)[0] for info in infos}
+    if not addrs:
+        return False
+    for a in addrs:
+        try:
+            ip = ipaddress.ip_address(a)
+        except ValueError:
+            return False
+        if getattr(ip, "ipv4_mapped", None):
+            ip = ip.ipv4_mapped
+        if not ip.is_global or ip.is_multicast:
+            return False
+    return True
+
+
+def _safe_url(url, resolve=None):
+    """http/https, with a host that resolves only to public addresses."""
+    return _http_url(url) and _public_host(urllib.parse.urlsplit(url).hostname, resolve)
+
+
+class _CheckedRedirect(urllib.request.HTTPRedirectHandler):
+    """Every redirect hop is checked as the first URL was, before it is followed."""
+
+    def __init__(self, resolve=None):
+        super().__init__()
+        self._resolve = resolve
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not _safe_url(newurl, self._resolve):
+            raise urllib.error.URLError("redirect to a refused URL: %s" % newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _default_opener(resolve=None):
+    return urllib.request.build_opener(_CheckedRedirect(resolve)).open
+
+
+def fetch_art(url, dest, opener=None, max_bytes=ART_MAX_BYTES, timeout=ART_TIMEOUT_S,
+              resolve=None):
+    """Download one cover to `dest`. Returns True when `dest` now holds an image.
+
+    http/https only, to a host whose addresses are all public (checked after resolution, and
+    again at every redirect hop), `timeout` seconds, at most `max_bytes`, and the bytes must be
+    an image. The file is written beside `dest` and renamed into place, so a failed download
+    never leaves a half file to be read later."""
+    if not _http_url(url):
+        print(f"  art: not an http(s) URL, not fetched: {url!r}", file=sys.stderr)
+        return False
+    if not _public_host(urllib.parse.urlsplit(url).hostname, resolve):
+        print(f"  art: host is not a public address, not fetched: {url}", file=sys.stderr)
+        return False
+    opener = opener or _default_opener(resolve)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": UA})
+        with opener(req, timeout=timeout) as resp:
+            final = resp.geturl() if hasattr(resp, "geturl") else url
+            if final != url and not _safe_url(final, resolve):
+                print(f"  art: redirected to a refused URL: {url}", file=sys.stderr)
+                return False
+            data = resp.read(max_bytes + 1)
+    except Exception as exc:                       # network, HTTP status, timeout: no cover
+        print(f"  art: download failed ({exc.__class__.__name__}): {url}", file=sys.stderr)
+        return False
+    if len(data) > max_bytes:
+        print(f"  art: over {max_bytes} bytes, refused: {url}", file=sys.stderr)
+        return False
+    if not _is_image(data[:16]):
+        print(f"  art: not an image, refused: {url}", file=sys.stderr)
+        return False
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    tmp = dest + ".part"
+    with open(tmp, "wb") as fh:
+        fh.write(data)
+    os.replace(tmp, dest)
+    return True
+
+
+def _art_name(entry, fallback):
+    """The cover's file name in the art folder: the recorded `artwork`, else `fallback` plus the
+    URL's image extension. A recorded name with a directory in it is not trusted."""
+    name = entry.get("artwork")
+    if name:
+        return name if os.path.basename(name) == name and name not in (".", "..") else None
+    url = entry.get("artwork_hires") or entry.get("artwork_url") or ""
+    ext = os.path.splitext(urllib.parse.urlsplit(url).path)[1].lower()
+    return fallback + (ext if ext in ART_EXTS else ".jpg")
+
+
+def entry_cover(entry, fallback, art_dir=None, fetch=True, opener=None, resolve=None):
+    """The cover file for one track or album entry, fetching it if allowed; None if none."""
+    if not entry:
+        return None
+    url = entry.get("artwork_hires") or entry.get("artwork_url")
+    if not entry.get("artwork") and not url:
+        return None
+    name = _art_name(entry, fallback)
+    if not name:
+        return None
+    path = os.path.join(art_dir or ART_DIR, name)
+    if os.path.exists(path):
+        return path
+    if fetch and url and fetch_art(url, path, opener=opener, resolve=resolve):
+        return path
+    return None
+
+
+def album_cover(albums, album_id, art_dir=None, fetch=True, opener=None, resolve=None):
+    p = entry_cover(albums.get(album_id or "") or {}, "album-%s" % album_id, art_dir, fetch,
+                    opener, resolve)
+    return p or LOGO
+
+
+def track_cover(tr, albums, n, art_dir=None, fetch=True, opener=None, resolve=None):
+    """The track's own cover, else its album's, else the logo (the station promos say so)."""
+    t = tr[str(n)]
+    if t.get("use_logo"):
+        return LOGO
+    p = entry_cover(t, "track-%s" % n, art_dir, fetch, opener, resolve)
+    return p or album_cover(albums, t.get("album"), art_dir, fetch, opener, resolve)
 
 
 # --- audio plan (stitch primaries by master time, seams on track boundaries) -
@@ -172,7 +351,7 @@ def describe_plan(segs):
 
 def assemble_audio(segs, workdir):
     if not MP3_DIR:
-        raise SystemExit("NETRADIO_MP3_DIR not set (player/.env or env)")
+        raise SystemExit("NETRADIO_MP3_DIR not set (this repo's .env, or the environment)")
     describe_plan(segs)
     parts = []
     for i, s in enumerate(segs):
@@ -223,7 +402,7 @@ def squarify(items, x, y, w, h):
     return out
 
 
-def render_background(tr, albums, start, end):
+def render_background(tr, albums, start, end, fetch=True):
     weight = OrderedDict()
     order = {}
     for n in range(start, end + 1):
@@ -236,8 +415,7 @@ def render_background(tr, albums, start, end):
     bg = Image.new("RGB", (W, H), (10, 10, 12))
     for album, rx, ry, rw, rh in rects:
         iw, ih = max(1, round(rw)), max(1, round(rh))
-        alb = albums.get(album, {})
-        im = Image.open(cover_path(albums, album, alb.get("artwork"))).convert("RGB")
+        im = Image.open(album_cover(albums, album, fetch=fetch)).convert("RGB")
         sc = max(iw / im.width, ih / im.height)
         im = im.resize((round(im.width * sc), round(im.height * sc)), Image.LANCZOS)
         L, T = (im.width - iw) // 2, (im.height - ih) // 2
@@ -252,20 +430,18 @@ def render_background(tr, albums, start, end):
 
 
 # --- per-track foreground card (baked over a copy of the dimmed mosaic) ------
-F_TRACK = font("Futura.ttc", 30)
-F_ARTIST = font("Futura.ttc", 44)
-F_REL = font("Futura.ttc", 32)
-F_YEAR = font("Georgia Italic.ttf", 32)
-F_HEAD = font("Futura.ttc", 34)
-
-
-def render_card(bg, tr, albums, n, idx, count, header):
+def render_card(bg, tr, albums, n, idx, count, header, fetch=True):
+    F_TRACK = font("Futura.ttc", 30)
+    F_ARTIST = font("Futura.ttc", 44)
+    F_REL = font("Futura.ttc", 32)
+    F_YEAR = font("Georgia Italic.ttf", 32)
+    F_HEAD = font("Futura.ttc", 34)
     m = merged(tr, albums, n)
     img = bg.copy().convert("RGBA")
     draw = ImageDraw.Draw(img)
 
     CX, CY, COV = 90, 545, 360
-    cov = Image.open(cover_path(albums, m["album_id"], m["artwork"])).convert("RGB")
+    cov = Image.open(track_cover(tr, albums, n, fetch=fetch)).convert("RGB")
     cov = cov.resize((COV, COV), Image.LANCZOS)
     sh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     ImageDraw.Draw(sh).rectangle([CX + 10, CY + 14, CX + COV + 10, CY + COV + 14],
@@ -330,12 +506,18 @@ def bars_filter(ain):
 
 
 def main():
-    if len(sys.argv) < 3:
-        raise SystemExit("usage: streamvideo.py <start> <end> [outdir]")
-    start, end = int(sys.argv[1]), int(sys.argv[2])
-    outdir = sys.argv[3] if len(sys.argv) > 3 else os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "stream-uploads")                  # stream-uploads beside the repo
+    ap = argparse.ArgumentParser(description="Render a stream video for tracks START..END.")
+    ap.add_argument("start", type=int)
+    ap.add_argument("end", type=int)
+    ap.add_argument("outdir", nargs="?",
+                    default=os.path.join(os.path.dirname(REPO), "stream-uploads"),
+                    help="where the mp4 and chapters go (default: stream-uploads beside the repo)")
+    ap.add_argument("--no-fetch", action="store_true",
+                    help="never download a missing cover; use the logo instead")
+    args = ap.parse_args()
+    if Image is None:
+        raise SystemExit("need Pillow (brew install pillow)")
+    start, end, outdir, fetch = args.start, args.end, args.outdir, not args.no_fetch
     os.makedirs(outdir, exist_ok=True)
     tr, albums, sf = load_meta()
     count = end - start + 1
@@ -349,7 +531,7 @@ def main():
         audio = assemble_audio(segs, work)
 
         print("rendering background treemap…")
-        bg = render_background(tr, albums, start, end)
+        bg = render_background(tr, albums, start, end, fetch=fetch)
 
         print(f"rendering {count} track cards…")
         begins = [merged(tr, albums, n)["begin"] for n in range(start, end + 1)]
@@ -357,7 +539,7 @@ def main():
         cards = []
         for i, n in enumerate(range(start, end + 1)):
             card = os.path.join(work, f"card{n:03d}.png")
-            render_card(bg, tr, albums, n, i + 1, count, header).save(card)
+            render_card(bg, tr, albums, n, i + 1, count, header, fetch=fetch).save(card)
             cards.append(card)
 
         # Foreground = the cards dissolved into each other. Each card input is padded by
