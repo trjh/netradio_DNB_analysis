@@ -5,7 +5,7 @@ neighbour's local timeline as a seed `<other>.starter.labels.tsv`, with the anch
 derived from `groundtruth.resolve_starts`. Starter files must be excluded everywhere the
 pipeline reads labels (groundtruth/solve, track_mix, build_track_metadata, Code.js).
 
-These run anywhere — pure file I/O, no audio/ffmpeg (the captures live on Tim's disk).
+These run anywhere — pure file I/O, no audio/ffmpeg (the captures live on a local disk).
 """
 
 import os

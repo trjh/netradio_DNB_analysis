@@ -16,7 +16,7 @@
       labeled offset — worst first, resid_ms = how far off), or adjacent (labels
       place the pair end-to-end, no overlap — listed apart, not an error). Ends with
       a graded / confirmed / suspect / adjacent / skipped summary. The headline
-      "does the audio confirm Tim's hand labels" check.
+      "does the audio confirm the hand labels" check.
 
   python3 -m streamalign track-mix --meta track-metadata.json --sources sources_local
       G2 1st pass: chroma+DTW-align every synced original to its mix region, grade
@@ -41,7 +41,7 @@
       Align-tool Pass 2: JSON slices (or --refine snap-to-best, --refine --engine
       match for the MATCH-path snap target, --context SECONDS for the zoomed-out
       context strip, --overview --point A:B ... for the whole-capture overview)
-      for the player's /align inspector; all DSP happens here.
+      for the /align inspector; all DSP happens here.
 
   .venv/bin/python -m streamalign inspect-worker --sources sources_local
       DP-07 keep-warm worker: JSON-lines requests on stdin (op: slice|refine|
@@ -293,7 +293,7 @@ def _cmd_inspect_slice(args):
             points = [tuple(float(v) for v in p.split(":", 1))
                       for p in (args.point or [])]
             out = _isl.build_overview(stem, orig_path, points, args.rate, args.invert)
-        except Exception as exc:   # stdout must stay JSON: the player relays it
+        except Exception as exc:   # stdout must stay JSON: the caller relays it
             out = {"error": "%s: %s" % (type(exc).__name__, str(exc)[:200])}
     elif out is None:
         if args.refine:
@@ -306,7 +306,7 @@ def _cmd_inspect_slice(args):
         try:
             out = fn(stem, orig_path, args.stream_t, args.orig_t, args.rate,
                      args.invert, args.win, **kwargs)
-        except Exception as exc:   # stdout must stay JSON: the player relays it
+        except Exception as exc:   # stdout must stay JSON: the caller relays it
             out = {"error": "%s: %s" % (type(exc).__name__, str(exc)[:200])}
     print(json.dumps(out))
     if "error" in out:
@@ -617,7 +617,7 @@ def main(argv=None):
 
     pi = sub.add_parser("inspect-slice",
                         help="align-tool Pass 2: emit JSON slices (or --refine snap-to-best) "
-                             "for the player's /align inspector; all DSP happens here")
+                             "for the /align inspector; all DSP happens here")
     pi.add_argument("stem", help="capture stem, e.g. d376-395")
     pi.add_argument("orig", type=int, help="original track number (NNN)")
     pi.add_argument("--stream-t", type=float, required=True, help="capture-local seconds")
@@ -635,7 +635,7 @@ def main(argv=None):
     pi.add_argument("--context", type=float, default=None,
                     help="DP-09: emit the zoomed-out context strip instead -- decimated "
                          "min/max columns over +/-SECONDS around the point (default "
-                         "45 when the player asks, cap 60); not full audio")
+                         "45 when the inspector asks, cap 60); not full audio")
     pi.add_argument("--overview", action="store_true",
                     help="DP-10: emit the whole-capture overview instead -- one coarse "
                          "envelope for the full stream plus the original's envelope "

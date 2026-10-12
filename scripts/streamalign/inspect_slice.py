@@ -1,6 +1,6 @@
-"""Slice provider for the player's /align sample inspector (align-tool Pass 2).
+"""Slice provider for the /align sample inspector (align-tool Pass 2).
 
-The player's server is stdlib-only by design, so every piece of DSP the inspector
+The inspector's server is stdlib-only by design, so every piece of DSP the inspector
 needs -- decode, rate-correction, alignment slicing, RMS matching, polarity, and the
 snap-to-best refine -- happens HERE, in the analysis venv, invoked as a subprocess
 (`python -m streamalign inspect-slice ... --json`). The browser only draws, nudges
@@ -32,7 +32,7 @@ globally mis-seated path (the Phase-B gross-median case) is an error, never a sn
 
 With --context (DP-09) it emits the zoomed-out CONTEXT strip instead: decimated
 min/max column pairs (COLS_PER_S per second, mono) for the stream and the
-rate-corrected original around the point -- a small payload for the player's context
+rate-corrected original around the point -- a small payload for the inspector's context
 lane, NOT full audio (playback slices are fetched separately on click).
 
 With --overview (DP-10) it emits the WHOLE-CAPTURE overview instead: one coarse
@@ -61,10 +61,10 @@ from . import matchconv as _mc
 
 SR = _audio.SR
 MARGIN_S = 0.5            # nudge headroom shipped with every slice (client-side shifts)
-MAX_WIN_S = 30.0          # hard cap; the player's endpoint enforces it too
+MAX_WIN_S = 30.0          # hard cap; the inspector's endpoint enforces it too
 MAX_REFINE_RADIUS_S = 2.0
 DEFAULT_CONTEXT_S = 45.0  # DP-09: context strip half-width (± seconds around the point)
-MAX_CONTEXT_S = 60.0      # hard cap; the player's endpoint enforces it too
+MAX_CONTEXT_S = 60.0      # hard cap; the inspector's endpoint enforces it too
 CONTEXT_COLS_PER_S = 50   # min/max column pairs per second in the context payload
 OVERVIEW_COLS_PER_S = 6.0     # DP-10: whole-capture envelope resolution (coarse)
 MAX_OVERVIEW_COLS = 20000     # DP-10: hard cap on the overview payload's columns
@@ -75,7 +75,7 @@ ENGINES = ("phat", "match")   # DP-08: refine_seat's snap engines
 def _check_params(stream_t, orig_t, rate, win_s, radius_s=0.05):
     """Finite-and-in-range guard: this runs as a subprocess whose stdout must stay
     JSON, so a nonsense parameter raises ValueError (caught at the CLI boundary into
-    an {"error": ...}) rather than surfacing as a numpy traceback. The player
+    an {"error": ...}) rather than surfacing as a numpy traceback. The inspector
     validates first; this is the provider's own belt."""
     # upper bounds on win/radius CLAMP (documented behaviour, tested); everything
     # non-finite, below its floor, or outside a sane absolute range is rejected
@@ -208,7 +208,7 @@ def compute_match_pairs(stream_mono, orig2_mono, around_s, rate):
     wrong: a badly wrong seat trims badly, MATCH lands off, and the snap refuses
     rather than compounding the error. Needs sonic-annotator on PATH;
     FileNotFoundError otherwise (the CLI/worker turn that into an error string the
-    player shows).
+    inspector shows).
     """
     import tempfile
     import os as _os
@@ -374,8 +374,8 @@ def build_context(stream_src, orig_src, stream_t, orig_t, rate, invert,
 
     Emits DECIMATED min/max column pairs (CONTEXT_COLS_PER_S per second, mono) for
     the stream and the rate-corrected, polarity-applied, RMS-matched original over
-    ±`context_s` around the point -- a small payload for the player's context lane,
-    NOT full audio (the player fetches playback slices on click via the slice
+    ±`context_s` around the point -- a small payload for the inspector's context lane,
+    NOT full audio (the inspector fetches playback slices on click via the slice
     endpoint). `start_s` (capture-local) and `stream_len_s` let the client bound
     clicks to real audio; `win_s` is echoed so the analysis window can be marked.
     """
@@ -460,7 +460,7 @@ def build_overview(stream_src, orig_src, points, rate, invert, pair=None):
     ends, clamped to the capture. The original is polarity-applied and RMS-matched
     (whole-file, mono) so the two envelopes read on one scale.
 
-    NOT audio, NOT per-point: the player fetches this once per pair and draws sync
+    NOT audio, NOT per-point: the inspector fetches this once per pair and draws sync
     flags itself (it owns the per-point residual state the flag colors encode).
     """
     _check_params(0.0, 0.0, rate, 6.0)

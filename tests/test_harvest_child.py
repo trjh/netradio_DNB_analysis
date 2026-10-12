@@ -7,9 +7,9 @@ every decode child is a fake `Popen`, and the two things worth being careful abo
     never decoded again, so a truncated or wrong-length one is not a transient error -- it is a
     permanently wrong answer, cached locally and uploaded to the pool. Several tests exist only
     to show that each way a decode can end badly produces no signature at all.
-  * **The child must not look like the harvester.** The supervisor discovers a live harvester by
-    looking for a `harvest.py` command line containing `--run`. If a decode child's argv ever
-    gained that flag, the supervisor would adopt a child that lives for one file.
+  * **The child must not look like the harvester.** A process manager can find a live harvester
+    by looking for a `harvest.py` command line containing `--run`. If a decode child's argv ever
+    gained that flag, such a manager would adopt a child that lives for one file.
 """
 
 import contextlib
@@ -201,7 +201,7 @@ class ChildBoundary(unittest.TestCase):
         self.assertEqual(seen["handoff"]["expect_s"], 60.0)
         self.assertEqual(seen["kwargs"]["cwd"], harvest.HOME)
         self.assertEqual(seen["kwargs"]["env"]["MallocLargeCache"], "0")
-        # Same process group as the parent, so the supervisor's killpg reaches the whole family.
+        # Same process group as the parent, so a killpg that stops the run reaches the whole family.
         self.assertNotIn("start_new_session", seen["kwargs"])
 
     def _spawned_command_line(self, path):
@@ -221,7 +221,7 @@ class ChildBoundary(unittest.TestCase):
         return " ".join(seen["argv"])
 
     def test_the_child_command_line_never_says_run(self):
-        """The supervisor matches `--run` as a SUBSTRING of the whole ps line, so that is how
+        """A process manager matches `--run` as a SUBSTRING of the whole ps line, so that is how
         this has to be checked. Asserting `"--run" not in argv` on the LIST tests element
         membership, which no command line ever satisfies -- it passes while the invariant it
         claims to protect is broken."""
@@ -230,7 +230,7 @@ class ChildBoundary(unittest.TestCase):
     def test_a_path_that_contains_the_flag_cannot_be_read_as_it(self):
         """A key is 20 hex characters with a `u` in front, but the PATH around it is not ours
         to promise: a directory named to contain `--run` would put the flag on the command
-        line, and the supervisor would adopt a process that lives for one file."""
+        line, and a process manager would adopt a process that lives for one file."""
         hostile_dir = os.path.join(self.tmp, "dir--runXY9z")
         os.makedirs(hostile_dir)
         harvest.HARVEST_DIRS = hostile_dir
@@ -350,7 +350,7 @@ class ChildBoundary(unittest.TestCase):
 
     def test_a_child_signalled_ALONE_still_raises_the_parents_flag(self):
         """The flag and the exit code are two routes for the same event, and the callers' guards
-        read the flag. The supervisor signals the whole group, so normally both fire -- but a
+        read the flag. A stop is usually sent to the whole group, so normally both fire -- but a
         `kill` aimed at the child alone, or our own handler not having run yet, would leave the
         flag down and the stop looking like an ordinary failure."""
         self.assertFalse(harvest._stop_requested())
@@ -792,7 +792,7 @@ class Footprint(unittest.TestCase):
         self.assertLess(abs(current - cli) / max(cli, 1.0), 0.10)
 
     def test_a_broken_probe_returns_nothing_rather_than_raising(self):
-        """A watchdog is optional; the run is not.
+        """A memory probe is optional; the run is not.
 
         Both platform probes are broken here, and the platform is pinned for each -- the suite
         runs on Linux in CI and on macOS on the development machine, and a test that only breaks

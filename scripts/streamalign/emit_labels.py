@@ -4,8 +4,8 @@ Turns a solve's `{stem: master_start}` (plus file durations) into Audacity-style
 label files, using the grammar from `data/sheet/analysis notes.csv` (`file start
 sync`, `file end`, and skip `file note`s). Two hard rules:
 
-  * **Every emitted label line ends with " AUTO GENERATED"** so Tim can tell mine
-    from his hand labels and correct them.
+  * **Every emitted label line ends with " AUTO GENERATED"** so a reader can tell
+    machine labels from hand labels and correct them.
   * **Programmatic output is ALWAYS `<stem>.auto.labels.tsv`.** The plain
     `<stem>.labels.tsv` name is reserved for hand-generated/confirmed labels and is
     never written here — so auto files can safely sit alongside hand labels and a
@@ -68,7 +68,7 @@ def emit_labels(positions, out_dir, durations=None, skip_maps=None,
     alongside hand labels without ever overwriting them. `durations`/`skip_maps` are
     {stem: ...} (optional). Returns {stem: written_path}.
 
-    When `exclude_rejected` (default), skips Tim has by-ear rejected
+    When `exclude_rejected` (default), skips rejected by ear
     (`labels/skip-rejections.tsv`, read from `labels_dir`) are dropped before emit, so
     a wrong auto-detected skip never reaches the auto labels (F1's "solve consumes
     rejections"). Confirmed skips already live in the hand labels and take precedence
