@@ -298,5 +298,168 @@ class AddressesAreChecked(Base):
         self.assertEqual(nxt.full_url, "https://cover.test/b.jpg")
 
 
+class TrackCoverWinsOverAlbum(Base):
+    """A track's value overrides its album's, as everywhere in track-metadata.json."""
+
+    def setUp(self):
+        super().setUp()
+        self.tracks["5"] = {"title": "Single", "artist": "D", "album": "alb-a",
+                            "artwork_url": "https://example.invalid/single.png",
+                            "master_begin_seconds": 420.0, "master_end_seconds": 500.0}
+        self.tracks["6"] = {"title": "Loose", "artist": "E",
+                            "artwork_url": "https://example.invalid/loose.jpg",
+                            "master_begin_seconds": 500.0, "master_end_seconds": 560.0}
+        os.makedirs(self.art)
+        with open(os.path.join(self.art, "album-a.jpg"), "wb") as fh:
+            fh.write(JPEG)
+
+    def _cover(self, n, fetch=True, opener=None):
+        return streamvideo.track_cover(self.tracks, self.albums, n, art_dir=self.art,
+                                       fetch=fetch, opener=opener)
+
+    def test_a_track_url_wins_over_the_album_cover_already_in_the_folder(self):
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+        opener = FakeOpener(data=png)
+        self.assertEqual(self._cover(5, opener=opener), os.path.join(self.art, "track-5.png"))
+        self.assertEqual([c[0] for c in opener.calls], ["https://example.invalid/single.png"])
+
+    def test_a_track_with_no_album_and_a_url_shows_the_downloaded_cover(self):
+        self.assertEqual(self._cover(6, opener=FakeOpener()),
+                         os.path.join(self.art, "track-6.jpg"))
+
+    def test_no_fetch_shows_the_album_cover_as_before(self):
+        opener = FakeOpener()
+        self.assertEqual(self._cover(5, fetch=False, opener=opener),
+                         os.path.join(self.art, "album-a.jpg"))
+        self.assertEqual(self._cover(6, fetch=False, opener=opener), streamvideo.LOGO)
+        self.assertEqual(opener.calls, [])
+
+
+class CoverNamesStayInTheFolder(Base):
+    def test_an_album_id_with_a_directory_is_refused_and_shows_the_logo(self):
+        for album_id in ("../../escaped", "a/b", "a\\b", "x\0y"):
+            albums = {album_id: {"artwork_url": "https://example.invalid/e.jpg"}}
+            opener = FakeOpener()
+            self.assertEqual(streamvideo.album_cover(albums, album_id, art_dir=self.art,
+                                                     opener=opener), streamvideo.LOGO,
+                             album_id)
+            self.assertEqual(opener.calls, [], album_id)
+        self.assertFalse(os.path.exists(self.art))       # nothing created, inside or out
+        self.assertEqual(sorted(os.listdir(self.tmp)), [])
+
+    def test_a_recorded_name_with_a_nul_is_refused_without_an_error(self):
+        entry = {"artwork": "cover\0.jpg", "artwork_url": "https://example.invalid/e.jpg"}
+        opener = FakeOpener()
+        self.assertIsNone(streamvideo.entry_cover(entry, "x", art_dir=self.art, opener=opener))
+        self.assertEqual(opener.calls, [])
+
+
+class EmbeddedIPv4IsChecked(unittest.TestCase):
+    def test_ipv6_forms_carrying_a_private_ipv4_address_are_refused(self):
+        for addr in ("64:ff9b::a00:1", "64:ff9b::7f00:1", "::127.0.0.1", "::10.0.0.1",
+                     "::ffff:10.0.0.1", "2002:a00:1::1", "2002:7f00:1::1"):
+            self.assertFalse(streamvideo._public_ip(addr), addr)
+
+    def test_public_addresses_pass(self):
+        for addr in (PUBLIC, "2606:4700:4700::1111", "64:ff9b::5db8:d822"):
+            self.assertTrue(streamvideo._public_ip(addr), addr)
+
+
+class FakeSock:
+    def __init__(self, peer):
+        self.peer, self.closed = peer, False
+
+    def getpeername(self):
+        return (self.peer, 443)
+
+    def close(self):
+        self.closed = True
+
+
+class ThePeerIsChecked(Base):
+    """The connection resolves the host again; the address it reached is checked too."""
+
+    def test_a_connection_that_reached_a_private_address_is_closed_and_refused(self):
+        for peer in ("10.0.0.5", "127.0.0.1", "::1", "169.254.169.254"):
+            sock = FakeSock(peer)
+            with self.assertRaises(OSError):
+                streamvideo._check_peer(sock)
+            self.assertTrue(sock.closed, peer)
+
+    def test_a_public_peer_is_kept(self):
+        sock = FakeSock(PUBLIC)
+        streamvideo._check_peer(sock)
+        self.assertFalse(sock.closed)
+
+    def test_both_connection_classes_check_the_peer_after_connecting(self):
+        for cls, base in ((streamvideo._CheckedHTTPConnection, streamvideo.http.client.HTTPConnection),
+                          (streamvideo._CheckedHTTPSConnection, streamvideo.http.client.HTTPSConnection)):
+            conn = cls("cover.test")
+
+            def fake_connect(self):
+                self.sock = FakeSock("10.0.0.5")
+            with mock.patch.object(base, "connect", fake_connect):
+                with self.assertRaises(OSError):
+                    conn.connect()
+            self.assertTrue(conn.sock.closed, cls.__name__)
+
+    def test_the_default_opener_uses_no_proxy_and_the_checked_handlers(self):
+        with mock.patch.dict(os.environ, {"https_proxy": "http://proxy.test:3128",
+                                          "http_proxy": "http://proxy.test:3128"}):
+            opener = streamvideo._default_opener().__self__
+        kinds = {type(h) for h in opener.handlers}
+        self.assertIn(streamvideo._CheckedHTTPHandler, kinds)
+        self.assertIn(streamvideo._CheckedHTTPSHandler, kinds)
+        self.assertIn(streamvideo._CheckedRedirect, kinds)
+        proxies = [h for h in opener.handlers
+                   if isinstance(h, streamvideo.urllib.request.ProxyHandler)]
+        # With the environment's proxies, the default ProxyHandler would be installed; the
+        # empty one installs no proxy at all.
+        self.assertFalse(any(h.proxies for h in proxies))
+        self.assertFalse(any(type(h) is streamvideo.urllib.request.HTTPHandler
+                             for h in opener.handlers))
+
+
+class SlowResponse(FakeResponse):
+    """Hands back one small chunk per read, while the fake clock moves 10 s per read."""
+
+    def __init__(self, data, url, clock):
+        super().__init__(data, url)
+        self.clock = clock
+
+    def read(self, n=-1):
+        self.clock.now += 10
+        return super().read(min(n, 4) if n and n > 0 else 4)
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+
+class TheWholeDownloadHasADeadline(Base):
+    def test_a_trickling_server_is_given_up_on_at_the_deadline(self):
+        clock = FakeClock()
+
+        def opener(req, timeout=None):
+            return SlowResponse(JPEG, req.full_url, clock)
+        dest = os.path.join(self.art, "c.jpg")
+        ok = streamvideo.fetch_art("https://example.invalid/a.jpg", dest, opener=opener,
+                                   deadline_s=60, clock=clock)
+        self.assertFalse(ok)
+        self.assertFalse(os.path.exists(dest))
+        self.assertLessEqual(clock.now, 80)
+
+    def test_a_download_inside_the_deadline_is_kept(self):
+        clock = FakeClock()
+        ok = streamvideo.fetch_art("https://example.invalid/a.jpg",
+                                   os.path.join(self.art, "c.jpg"), opener=FakeOpener(),
+                                   deadline_s=60, clock=clock)
+        self.assertTrue(ok)
+
+
 if __name__ == "__main__":
     unittest.main()

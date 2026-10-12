@@ -63,6 +63,8 @@ labels/tmp/
 labels/*.starter.labels.tsv
 logo-tmp/
 sources_local
+# Local environment notes (`<name>-ENV.md`): machine-specific, never committed.
+*-ENV.md
 tmp_o
 tmp_t
 tmp/

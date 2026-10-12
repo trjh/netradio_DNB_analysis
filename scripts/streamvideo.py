@@ -31,10 +31,13 @@ Album art: each track's cover is `<art folder>/<artwork>`, the file name `track-
 records (the track's own, else its album's). The art folder is NETRADIO_ART_DIR, default `art/`
 in this repo (gitignored). A cover that is not in the folder is downloaded from the artwork URL
 the same entry records (`artwork_hires`, else `artwork_url`) and kept there; `--no-fetch` turns
-that off. Only http/https URLs whose host resolves to public addresses are fetched (each
-redirect is checked the same way), with a timeout and a size cap, and only a response that is
-an image is kept. Nothing is ever generated: a track with no cover file and no URL, or
-whose download fails, shows the netradio.com logo.
+that off. A track's own cover wins over its album's (the metadata's inheritance rule), so a
+track that records only an artwork URL shows that image rather than the album cover. Only
+http/https URLs whose host resolves to public addresses are fetched: each redirect and the
+address each connection reached are checked the same way, and no proxy is used. A download has
+a per-read timeout, an overall deadline and a size cap, and only a response that is an image is
+kept. Nothing is ever generated: a track with no cover file and no URL, or whose download
+fails, shows the netradio.com logo.
 
 Settings come from the environment, else from this repo's `.env` (see `.env.example`).
 
@@ -42,6 +45,7 @@ Deps: python3 + Pillow (brew install pillow) for the stills, ffmpeg for audio+en
 This Homebrew ffmpeg has no libfreetype (no drawtext) -- all text is drawn with Pillow.
 """
 import argparse
+import http.client
 import ipaddress
 import json
 import os
@@ -50,6 +54,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -130,7 +135,9 @@ def merged(tr, albums, n):
 
 # --- album art ---------------------------------------------------------------
 ART_MAX_BYTES = 10 * 1024 * 1024        # a cover is a few hundred KB; anything near this is not one
-ART_TIMEOUT_S = 20
+ART_TIMEOUT_S = 20                      # each connect and each read
+ART_DEADLINE_S = 60                     # the whole download, however the bytes arrive
+ART_CHUNK = 64 * 1024
 ART_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".gif")
 UA = "netradio-streamvideo/1.0 (+album art for a stream video)"
 
@@ -150,6 +157,28 @@ def _http_url(url):
     return u.scheme in ("http", "https") and bool(u.hostname)
 
 
+_NAT64 = ipaddress.ip_network("64:ff9b::/96")
+_IPV4_COMPAT = ipaddress.ip_network("::/96")
+
+
+def _public_ip(addr):
+    """True when `addr` (a string) is a public unicast address. An IPv6 address that carries
+    an IPv4 address (mapped, compatible, NAT64 or 6to4) is judged by the IPv4 address too."""
+    try:
+        ip = ipaddress.ip_address(str(addr).split("%", 1)[0])
+    except ValueError:
+        return False
+    if not ip.is_global or ip.is_multicast:
+        return False
+    if ip.version == 6:
+        inner = ip.ipv4_mapped or ip.sixtofour
+        if inner is None and (ip in _NAT64 or ip in _IPV4_COMPAT):
+            inner = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+        if inner is not None and (not inner.is_global or inner.is_multicast):
+            return False
+    return True
+
+
 def _public_host(host, resolve=None):
     """True when every address `host` resolves to is a public one. A private, loopback,
     link-local, multicast, reserved or unspecified address -- or a name that does not
@@ -159,19 +188,8 @@ def _public_host(host, resolve=None):
         infos = resolve(host, None)
     except (OSError, UnicodeError, ValueError):
         return False
-    addrs = {info[4][0].split("%", 1)[0] for info in infos}
-    if not addrs:
-        return False
-    for a in addrs:
-        try:
-            ip = ipaddress.ip_address(a)
-        except ValueError:
-            return False
-        if getattr(ip, "ipv4_mapped", None):
-            ip = ip.ipv4_mapped
-        if not ip.is_global or ip.is_multicast:
-            return False
-    return True
+    addrs = {info[4][0] for info in infos}
+    return bool(addrs) and all(_public_ip(a) for a in addrs)
 
 
 def _safe_url(url, resolve=None):
@@ -192,17 +210,66 @@ class _CheckedRedirect(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+def _check_peer(sock):
+    """The address the socket really connected to must be public too: the connection resolves
+    the host again, and that answer may differ from the one `_public_host` checked."""
+    peer = sock.getpeername()[0]
+    if not _public_ip(peer):
+        sock.close()
+        raise OSError("connected to a non-public address: %s" % peer)
+
+
+class _CheckedHTTPConnection(http.client.HTTPConnection):
+    def connect(self):
+        super().connect()
+        _check_peer(self.sock)
+
+
+class _CheckedHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):
+        super().connect()
+        _check_peer(self.sock)
+
+
+class _CheckedHTTPHandler(urllib.request.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(_CheckedHTTPConnection, req)
+
+
+class _CheckedHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_CheckedHTTPSConnection, req, context=self._context)
+
+
 def _default_opener(resolve=None):
-    return urllib.request.build_opener(_CheckedRedirect(resolve)).open
+    """No proxy (a proxy would resolve the host itself), the peer checked on every connection,
+    and every redirect hop checked before it is followed."""
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), _CheckedHTTPHandler(),
+                                       _CheckedHTTPSHandler(), _CheckedRedirect(resolve)).open
+
+
+def _read_capped(resp, max_bytes, deadline_s, clock):
+    """Read at most `max_bytes` + 1 bytes, giving up once `deadline_s` has passed."""
+    end = clock() + deadline_s
+    buf = bytearray()
+    while len(buf) <= max_bytes:
+        if clock() > end:
+            raise TimeoutError("download took over %s s" % deadline_s)
+        chunk = resp.read(min(ART_CHUNK, max_bytes + 1 - len(buf)))
+        if not chunk:
+            break
+        buf += chunk
+    return bytes(buf)
 
 
 def fetch_art(url, dest, opener=None, max_bytes=ART_MAX_BYTES, timeout=ART_TIMEOUT_S,
-              resolve=None):
+              resolve=None, deadline_s=ART_DEADLINE_S, clock=time.monotonic):
     """Download one cover to `dest`. Returns True when `dest` now holds an image.
 
-    http/https only, to a host whose addresses are all public (checked after resolution, and
-    again at every redirect hop), `timeout` seconds, at most `max_bytes`, and the bytes must be
-    an image. The file is written beside `dest` and renamed into place, so a failed download
+    http/https only, to a host whose addresses are all public (checked after resolution, at
+    every redirect hop, and on the address each connection reached; no proxy), `timeout`
+    seconds per connect or read and `deadline_s` for the whole download, at most `max_bytes`,
+    and the bytes must be an image. The file is written beside `dest` and renamed into place, so a failed download
     never leaves a half file to be read later."""
     if not _http_url(url):
         print(f"  art: not an http(s) URL, not fetched: {url!r}", file=sys.stderr)
@@ -218,7 +285,7 @@ def fetch_art(url, dest, opener=None, max_bytes=ART_MAX_BYTES, timeout=ART_TIMEO
             if final != url and not _safe_url(final, resolve):
                 print(f"  art: redirected to a refused URL: {url}", file=sys.stderr)
                 return False
-            data = resp.read(max_bytes + 1)
+            data = _read_capped(resp, max_bytes, deadline_s, clock)
     except Exception as exc:                       # network, HTTP status, timeout: no cover
         print(f"  art: download failed ({exc.__class__.__name__}): {url}", file=sys.stderr)
         return False
@@ -236,15 +303,22 @@ def fetch_art(url, dest, opener=None, max_bytes=ART_MAX_BYTES, timeout=ART_TIMEO
     return True
 
 
+def _plain_name(name):
+    """A bare file name: no directory part, not `.` or `..`, no NUL. Anything else is refused,
+    so a cover is never read or written outside the art folder."""
+    return (isinstance(name, str) and name not in ("", ".", "..") and "\0" not in name
+            and "/" not in name and "\\" not in name and os.path.basename(name) == name)
+
+
 def _art_name(entry, fallback):
     """The cover's file name in the art folder: the recorded `artwork`, else `fallback` plus the
-    URL's image extension. A recorded name with a directory in it is not trusted."""
+    URL's image extension. Either way the name must be a bare file name, or there is none."""
     name = entry.get("artwork")
-    if name:
-        return name if os.path.basename(name) == name and name not in (".", "..") else None
-    url = entry.get("artwork_hires") or entry.get("artwork_url") or ""
-    ext = os.path.splitext(urllib.parse.urlsplit(url).path)[1].lower()
-    return fallback + (ext if ext in ART_EXTS else ".jpg")
+    if not name:
+        url = entry.get("artwork_hires") or entry.get("artwork_url") or ""
+        ext = os.path.splitext(urllib.parse.urlsplit(url).path)[1].lower()
+        name = fallback + (ext if ext in ART_EXTS else ".jpg")
+    return name if _plain_name(name) else None
 
 
 def entry_cover(entry, fallback, art_dir=None, fetch=True, opener=None, resolve=None):
@@ -272,7 +346,12 @@ def album_cover(albums, album_id, art_dir=None, fetch=True, opener=None, resolve
 
 
 def track_cover(tr, albums, n, art_dir=None, fetch=True, opener=None, resolve=None):
-    """The track's own cover, else its album's, else the logo (the station promos say so)."""
+    """The track's own cover, else its album's, else the logo (the station promos say so).
+
+    A track's value wins over its album's, as everywhere in `track-metadata.json`: a track that
+    records its own artwork URL shows that image (downloaded when missing), even when its album
+    has a cover. With `--no-fetch` a track cover that is not already in the folder is skipped
+    and the album's is used."""
     t = tr[str(n)]
     if t.get("use_logo"):
         return LOGO

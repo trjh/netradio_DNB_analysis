@@ -15,8 +15,8 @@
 # environment, else this repo's .env). Extra arguments (e.g. --no-fetch) pass through.
 set -euo pipefail
 
-START="${1:?usage: mkstreamvideo.sh <start> <end> [outdir]}"
-END="${2:?usage: mkstreamvideo.sh <start> <end> [outdir]}"
+START="${1:?usage: mkstreamvideo.sh <start> <end> [outdir] [--no-fetch]}"
+END="${2:?usage: mkstreamvideo.sh <start> <end> [outdir] [--no-fetch]}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 command -v ffmpeg >/dev/null || { echo "need ffmpeg (brew install ffmpeg)"; exit 1; }
