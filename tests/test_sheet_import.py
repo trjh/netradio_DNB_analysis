@@ -75,7 +75,7 @@ class CodeJsStillHasTheRule(unittest.TestCase):
             "Code.js import filter no longer matches tests/test_sheet_import.sheet_imports")
 
 
-# AP-04: the sheet's Verified column keys on the same rule as labels/sort_tsv.sync_verified
+# DP-01: the sheet's Verified column keys on the same rule as labels/sort_tsv.sync_verified
 # -- `verified` immediately after a track/orig sync marker, NEVER a file-sync row's
 # `verified <neighbour>` keyword. Code.js is Apps Script with no test harness, so (same
 # pattern as above) the Python side is the mirror and the JS source is pinned against it.

@@ -116,7 +116,7 @@ verification.
   `STEM` and emit paired hint labels — `<stem>.origNNN.match.hints.tsv` (`track sync:`
   rows at capture-local times, proposed `origNNN start:`/`end:`) and
   `origNNN.<stem>.match.hints.tsv` (`origNNN sync:` rows at original-local seconds; the stem keeps runs against different captures from colliding). Anchor rows
-  (sync/start/end) carry **no trailing ` HINT`** (RC-1: they arrive on their own
+  (sync/start/end) carry **no trailing ` HINT`** (DP-26: they arrive on their own
   imported hints track, so the suffix was redundant there — readers still accept the
   old suffixed form found in files in the wild): sync rows read
   `track sync: 1 verified confidence 5.9/10` (the ` verified` token is the
@@ -158,7 +158,7 @@ verification.
   SECONDS` emits the zoomed-out **context strip** instead: decimated min/max
   columns (50/s, mono) over ±SECONDS (cap 60) — a small payload, not audio.
   `--overview --point STREAM_S:ORIG_S …` emits the **whole-capture overview**
-  instead (AP-10): one coarse envelope (6 cols/s, capped) for the full stream plus
+  instead (DP-10): one coarse envelope (6 cols/s, capped) for the full stream plus
   the original's envelope piecewise-linearly stretched between the given sync
   points (head/tail extrapolated along `--rate`, clamped to the capture).
 - **`inspect-worker`** — the keep-warm form of `inspect-slice`: a long-lived
@@ -169,7 +169,7 @@ verification.
   decode/resample cost (`placed` is label bookkeeping only — it touches no audio
   and leaves the pair cache alone). The player spawns it and falls back to
   one-shot subprocesses when it can't start.
-- **`placed [STEM]`** — AP-26 review-tool data source: the hand-placed
+- **`placed [STEM]`** — DP-22 review-tool data source: the hand-placed
   `origNNN sync:`/`track sync:` marker pairs as JSON, per capture stem ×
   original — marker key, capture-local stream instant, original-native instant
   reconstructed from the `origNNN start:` bookkeeping (exactly `sync-audit`'s

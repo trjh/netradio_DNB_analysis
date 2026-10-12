@@ -187,7 +187,7 @@ span, rebuild the JSON afterwards.
 
 **What you get:** a paired hints file per track in `labels/automated/` —
 `<stem>.origNNN.match.hints.tsv` + `origNNN.<stem>.match.hints.tsv` (committed machine
-output since AP-30, freely overwritten on re-run — hints, **never** labels): `track sync:` /
+output since DP-24, freely overwritten on re-run — hints, **never** labels): `track sync:` /
 `origNNN sync:` anchor pairs carrying ` verified confidence n/10`, proposed
 `origNNN start:`/`end:` rows — one pair per sync point, each naming its point's marker
 number plus `confidence n/10`. These are **native clip seats** (where the unstretched
@@ -197,8 +197,8 @@ stream and original signals at any chosen point. A start before the capture's fi
 is omitted; **end rows always emit**, even past the last sample — the end is what seats
 the record's continuation in the next capture — and `note QUESTION:` rows wherever
 the engine cannot tell. **What to do next (Pass 2):** verify/hand-tune every point in the
-companion player project's **/align** inspector (live subtraction null test, snap-to-best,
-PHAT|MATCH engines) — snap after any hand move (the snap *is* the machine check) and its
+align server's **/align** inspector (live subtraction null test, snap-to-best, PHAT|MATCH
+engines; see Align tools below) — snap after any hand move (the snap *is* the machine check) and its
 export writes the adjusted rows; import them into Audacity as their own label track, fold
 what you accept into your hand labels, `sort_tsv.py` as usual, then
 `streamalign sync-audit` to re-grade every folded-in point against the audio.
@@ -221,7 +221,7 @@ optional manual cross-check.
 `--json <path>` to dump the full results to a file). It **reads** `track-metadata.json` and your
 labels but writes **neither** — emitting a confirmed alignment is gated behind your by-ear
 confirm. (The rate axis is still a research line — plain correlation doesn't lock; see
-`docs/PLAN_track_mix.md` in the player.) Needs `.venv/bin/python` for librosa.
+`docs/PLAN_track_mix.md`.) Needs `.venv/bin/python` for librosa.
 
 ---
 
@@ -294,6 +294,105 @@ runs `GithubImport()`), else it prints the **Reload Data** reminder.
 
 ---
 
+## Align tools — the server, the review app and the align flow
+
+The align server (`align_server.py`) is its own process, on port `8766` unless `.env` says
+otherwise. It serves the Pass 2 inspector and the whole-song review, and the Mac review app is a
+thin client of it. Every command below runs from this checkout.
+
+**Q:** How do I start, check and stop the align server?
+
+**A:**
+
+```bash
+scripts/run_align.sh start
+scripts/run_align.sh status     # prints the URL it is bound on + whether the DSP is live
+scripts/run_align.sh restart
+scripts/run_align.sh stop
+scripts/run_align.sh help       # the Pass 1 converter command with your paths filled in
+```
+
+Pages: `/align` (Pass 2 inspector) · `/align/review` (whole-song L/R review, phone-first).
+The server binds **`NETRADIO_ALIGN_HOST`** from `.env` (loopback when unset). Everything that
+talks to it — the Mac app below, `curl`, the phone — must use **that** host, not `127.0.0.1`,
+when it is set to a LAN address.
+**What to do next:** open the `/align` URL that `status` prints.
+
+**Q:** How do I run the Mac review app?
+
+**A:**
+
+```bash
+scripts/run_align.sh status     # 1. the server must be UP and say "DSP: enabled"
+make review-app-run             # 2. build (swiftc, no Xcode) + selftest + launch
+make review-app                 # build + selftest only, no launch
+```
+
+`make review-app-run` points the app at `NETRADIO_ALIGN_URL` from `.env`, or — when that is
+unset — derives it from `NETRADIO_ALIGN_HOST` + `NETRADIO_ALIGN_PORT` (so a LAN-bound server
+is found without any extra step). To aim it elsewhere for one run:
+
+```bash
+NETRADIO_ALIGN_URL=http://<server-host>:8766 make review-app-run
+```
+
+**What you get:** the app opens on the server's lists of captures and originals. If they are
+empty, see the next question.
+
+**Q:** The app shows "No data" or empty source lists. What is wrong?
+
+**A:** The app is not reaching the server. Check in this order: `scripts/run_align.sh status`
+is UP; the URL the app uses matches the host in `status`;
+`curl -s <that-url>/api/align/sources | head -c 200` returns `"enabled": true` with non-empty
+`streams`/`originals`.
+
+**Q:** What is the align flow, end to end?
+
+**A:** Pass 1 and Pass 2 are the "Seat an original track inside a capture" answer above, which
+says what each hints row means. Here is the whole flow on one page:
+
+```bash
+# Pass 1 — propose sync points (`scripts/run_align.sh help` prints this with paths filled in)
+. .venv/bin/activate && python -m streamalign match-hints <stem> <NNN>   # Pass 1: propose
+. .venv/bin/activate && python -m streamalign match-hints <stem> --all   # batch: every overlapping track with an original
+
+# Pass 2 — verify / hand-tune in the browser, at the /align URL the server prints
+open "$(scripts/run_align.sh status | grep -o 'http://[^ ]*/align' | head -1)"
+
+# Export — compile labels/automated + labels/review -> labels/summary (one label set per audio file)
+make compile-summary ARGS=--dry-run     # preview
+make compile-summary                    # write (or press "⟳ compile summaries" on /align)
+
+# Fold — Audacity: File ▸ Import ▸ Labels on <stem>.summary.tsv (track 3) + origNNN.summary.tsv (track 6)
+```
+
+**What you get:** one importable label set per audio file in `labels/summary/`: a
+`<stem>.summary.tsv` on the capture's clock and an `origNNN.summary.tsv` on the original's.
+**What to do next:** fold what you accept into your hand labels, run `sort_tsv.py` as usual,
+then `streamalign sync-audit` to re-grade every folded-in point against the audio.
+
+Detail:
+[RUNBOOK_align_workflow.md](./docs/RUNBOOK_align_workflow.md)
+§1–§6.
+
+**Q:** How do the review notes and summaries reach `main`?
+
+**A:** The server commits them to the standing `align-review-data` branch and pushes hourly.
+Nothing reaches `main` until you open the PR with `make review-sync` and merge it yourself:
+
+```bash
+make review-sync                # open the ONE squash PR from the align-review-data branch
+                                #   (review notes, summaries, data/rulings.json). ARGS=--dry-run
+make review-sync-postmerge      # AFTER you merge that PR by hand: recreate ITS branch from
+                                #   the new main so the hourly commits resume. ARGS=--dry-run
+```
+
+**What you get:** one open PR against `main` carrying everything the server has committed since
+the last merge. **What to do next:** review and merge it, then run `make review-sync-postmerge`
+so the hourly commits start again on a fresh branch.
+
+---
+
 ## Quick reference
 
 | I want to… | Run | Stage | Writes |
@@ -305,7 +404,7 @@ runs `GithubImport()`), else it prints the **Reload Data** reminder.
 | re-place captures / score the engine | `streamalign groundtruth \| validate \| align` | notate | — (read-only) |
 | place the unlabelled tail (loop-wrap anchor) | `streamalign tail-solve` (`--emit` to write labels) | notate | — (read-only; `--emit` → `<stem>.auto.labels.tsv`) |
 | resolve skips | `streamalign skip-clips \| skip-confirm \| skip-reject` | notate | clips / hand `.labels.tsv` / rejections |
-| seat an original in a capture (paired sync points) | `streamalign match-hints` → verify in the player's `/align` | notate | `labels/automated/*.match.hints.tsv` |
+| seat an original in a capture (paired sync points) | `streamalign match-hints` → verify in `/align` | notate | `labels/automated/*.match.hints.tsv` |
 | original↔mix rate | `streamalign track-mix` | notate | — (read-only) |
 | **rebuild `track-metadata.json`** | `build_track_metadata.py` | **build** | **`track-metadata.json`** |
 | refresh missing-originals inventory | `g4_missing_sources.py` | build/sourcing | inventory |

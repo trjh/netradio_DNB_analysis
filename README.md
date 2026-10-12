@@ -42,6 +42,20 @@ help in summarizing and cross-referencing the information.
 * [PROCESS.md](./PROCESS.md) -- **how the analysis is actually done**: the per-recording loop (manual + engine), the by-ear technique for seating an original against the mix, and what the engine can/cannot do
 * [HOWTO.md](./HOWTO.md) -- howto / FAQ: **which tool to run, when, and why** (notate → build → serve → publish)
 
+### Reference
+
+The design records behind the align tools and the label workflow, and the log of the decisions
+they cite:
+
+* [docs/DECISIONS.md](./docs/DECISIONS.md) -- **the decision-point log**: one row per `DP-nn` number the code, the tests and these documents cite, with where each decision was first written down
+* [docs/RUNBOOK_align_workflow.md](./docs/RUNBOOK_align_workflow.md) -- the align workflow step by step: a capture and an original on disk, through Pass 1, the `/align` inspector, the summary compile and Audacity, to verified label rows
+* [docs/PLAN_align_tool.md](./docs/PLAN_align_tool.md) -- the align tool's design and build record: the match-hints converter (Pass 1), the `/align` inspector (Pass 2) and the whole-song review mode
+* [docs/PLAN_labels_layout.md](./docs/PLAN_labels_layout.md) -- the `labels/automated/`, `labels/review/` and `labels/summary/` layout, and the summary compile
+* [docs/PLAN_align_export_writeback.md](./docs/PLAN_align_export_writeback.md) -- the export step: the summary compile's build record, and the inspector's write path (not built yet)
+* [docs/PLAN_labelling_process.md](./docs/PLAN_labelling_process.md) -- the reasoning behind `labels/sort_tsv.py`, the starters and `publish`
+* [docs/PLAN_track_mix.md](./docs/PLAN_track_mix.md) -- finding where an original sits in the DJ's mix: offset and rate
+* [docs/mockups/align_tool_inspector.html](./docs/mockups/align_tool_inspector.html) -- the static mockup of the inspector the align plan's §5.3 links to
+
 ## Identifying the mystery tracks — what works, and what doesn't
 
 The full playbook is in [FINDING_MYSTERY_TRACKS.md](./FINDING_MYSTERY_TRACKS.md); the short version:

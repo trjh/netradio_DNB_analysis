@@ -20,8 +20,8 @@
 "recovers the mix/original rate **where waveform correlation cannot**" — the engine adopted DTW
 precisely because correlation did not lock.
 
-The underlying experiment lives in the **player repo** (the planning hub, *not* this repo):
-`docs/PLAN_track_mix.md` §"2026-06-12 — T1 proof-of-concept" records a rate+offset+polarity
+The underlying experiment,
+`docs/PLAN_track_mix.md` §"2026-06-12 — T1 proof-of-concept", records a rate+offset+polarity
 sweep using raw and PHAT cross-correlation of `010-Odyssey - Artificial Life` against its mix
 region failing to lock — it reports best ncc ≈ 0.11 vs a ≈0.03 noise floor. The reason: the mix
 is the DJ's EQ'd / level-ridden version captured as lossy 16 kHz RealAudio, spectrally far from

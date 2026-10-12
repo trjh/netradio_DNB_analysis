@@ -158,7 +158,7 @@ class TestOutlierMarking(unittest.TestCase):
 
 class TestEmission(unittest.TestCase):
     """Rows are existing grammar and can never masquerade as labels. Anchor rows
-    (sync/start/end) carry NO trailing ` HINT` (RC-1) but keep their in-row machine
+    (sync/start/end) carry NO trailing ` HINT` (DP-26) but keep their in-row machine
     marks -- ` verified confidence` on sync rows; per-point start/end rows naming
     their anchor with `confidence n/10`; prose rows keep the `note HINT:`/`note QUESTION:`
     row-type grammar and stay suffix-marked."""
@@ -184,7 +184,7 @@ class TestEmission(unittest.TestCase):
             self.assertEqual(m.group(5), "072")
 
     def test_anchor_rows_carry_no_hint_suffix_and_syncs_their_confidence(self):
-        # RC-1: sync/start/end anchor rows end at the confidence (or MATCH delta) --
+        # DP-26: sync/start/end anchor rows end at the confidence (or MATCH delta) --
         # never at ` HINT`; every other emitted row is a marked note row, unchanged.
         for rows in self._rows():
             for _, _, text in rows:
@@ -344,7 +344,7 @@ class TestHintFilenames(unittest.TestCase):
     hints (review finding, 2026-07-31)."""
 
     def test_default_out_dir_is_labels_automated(self):
-        # AP-30: script emissions land in labels/automated/ (committed); the
+        # DP-24: script emissions land in labels/automated/ (committed); the
         # labels/ root stays hand-authoritative. --labels moves the whole
         # root and automated/ rides along; --out still overrides outright.
         self.assertEqual(gt.automated_dir("/x/labels"),
@@ -366,7 +366,7 @@ class TestHintFilenames(unittest.TestCase):
 
 
 class TestTrim(unittest.TestCase):
-    """AP-02: the pre-MATCH trim -- window math and the path shift back."""
+    """DP-02: the pre-MATCH trim -- window math and the path shift back."""
 
     def test_window_spans_the_expected_overlap_with_margins(self):
         lo, hi = mc.trim_window(around_s=300.0, orig_len_s=369.31, stream_len_s=2400.0)
@@ -402,7 +402,7 @@ class TestTrim(unittest.TestCase):
 
 
 class TestBatchWorklist(unittest.TestCase):
-    """AP-16: which tracks a capture's master span covers."""
+    """DP-05: which tracks a capture's master span covers."""
 
     META = {
         "70": {"master_begin_seconds": 21500.0, "master_end_seconds": 21900.0},
@@ -427,7 +427,7 @@ class TestBatchWorklist(unittest.TestCase):
 
 
 class TestReferee(unittest.TestCase):
-    """AP-03: the (trimmed) MATCH path referees the PHAT anchors."""
+    """DP-03: the (trimmed) MATCH path referees the PHAT anchors."""
 
     PAIRS = [(a * 1.0, 14.0 + a * 1.02) for a in range(0, 100, 2)]   # b = 14 + 1.02*a
 
@@ -500,7 +500,7 @@ class TestReferee(unittest.TestCase):
 
 
 class TestVerifiedToken(unittest.TestCase):
-    """AP-04: every emitted sync row carries ` verified` right after its marker, and the
+    """DP-01: every emitted sync row carries ` verified` right after its marker, and the
     token is exactly what the Python-side rule (labels/sort_tsv.sync_verified) and the
     audit (track_mix.sync_row_verified) recognise -- while the FILE-sync `verified`
     keyword family stays a stranger to it in both directions."""
@@ -518,7 +518,7 @@ class TestVerifiedToken(unittest.TestCase):
         self.assertRegex(o, r"^orig072 sync: 1 verified confidence \d")
 
     def test_emitted_rows_satisfy_both_recognisers(self):
-        # RC-1: the anchor rows go out suffix-free, so they satisfy the recognisers
+        # DP-26: the anchor rows go out suffix-free, so they satisfy the recognisers
         # exactly as emitted -- no strip needed before folding into a hand file.
         for rows in self._rows():
             for _, _, text in rows:
@@ -543,7 +543,7 @@ class TestVerifiedToken(unittest.TestCase):
 
 
 class TestSoloProbeSeeding(unittest.TestCase):
-    """AP-13: solo-anchor moments become preferred rate-sweep probe positions."""
+    """DP-04: solo-anchor moments become preferred rate-sweep probe positions."""
 
     def test_positions_come_from_solo_anchors_sorted(self):
         real = tm.solo_anchors
@@ -604,8 +604,8 @@ class TestSoloProbeSeeding(unittest.TestCase):
 
 
 class TestBothAnchorFormsParse(unittest.TestCase):
-    """RC-1 back-compat: every reader accepts anchor rows WITH and WITHOUT the trailing
-    ` HINT`. Label files in the wild still carry suffixed rows (pasted from pre-RC-1
+    """DP-26 back-compat: every reader accepts anchor rows WITH and WITHOUT the trailing
+    ` HINT`. Label files in the wild still carry suffixed rows (pasted from pre-DP-26
     hints), so the old form must keep parsing exactly like the new one."""
 
     BARE = ["track sync: 1 verified confidence 5.9/10",
@@ -628,7 +628,7 @@ class TestBothAnchorFormsParse(unittest.TestCase):
                 self.assertTrue(tm.sync_row_verified(text), text)
 
     def test_sync_pairing_accepts_both_forms(self):
-        # A hand label file holding one pre-RC-1 (suffixed) pair and one new (bare)
+        # A hand label file holding one pre-DP-26 (suffixed) pair and one new (bare)
         # pair: track_mix must pair and mark BOTH as machine-checked.
         with tempfile.TemporaryDirectory() as tmp:
             with open(os.path.join(tmp, "d376-395.labels.tsv"), "w",

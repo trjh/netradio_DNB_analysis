@@ -1,4 +1,4 @@
-"""Keep-warm DSP worker for the player's /align inspector (AP-08).
+"""Keep-warm DSP worker for the /align inspector (DP-07).
 
 Every one-shot `inspect-slice` subprocess pays the decode + rate-correction cost
 (seconds) before doing milliseconds of actual work. This worker is the long-lived
@@ -15,17 +15,17 @@ Protocol (JSON lines):
      "stem": ..., "orig": N, "stream_t": ..., "orig_t": ...,
      "rate": ..., "invert": ..., "win": ...,
      "radius": ...,               # refine only
-     "engine": "phat"|"match",    # refine only (AP-14)
-     "context": ...,              # context only (AP-05)
+     "engine": "phat"|"match",    # refine only (DP-08)
+     "context": ...,              # context only (DP-09)
      "id": anything}              -> the same dict inspect_slice returns
                                      (or {"error": ...}), "id" echoed when present
     {"op": "overview",
      "stem": ..., "orig": N, "rate": ..., "invert": ...,
-     "points": [[stream_s, orig_s], ...],              # AP-10 (capped list)
+     "points": [[stream_s, orig_s], ...],              # DP-10 (capped list)
      "id": anything}              -> the build_overview dict (or {"error": ...})
     {"op": "placed",
      "stem": optional capture stem (omit for every capture),
-     "id": anything}              -> placed.list_placed's dict (AP-26; label
+     "id": anything}              -> placed.list_placed's dict (DP-22; label
                                      bookkeeping only -- touches no audio and
                                      leaves the pair cache alone)
 
@@ -92,7 +92,7 @@ def handle(req, cache, sources_dir):
         return {"error": "unknown op %r" % (op,)}
     try:
         if op == "placed":
-            # AP-26: pure label bookkeeping -- no audio, no pair cache, and the
+            # DP-22: pure label bookkeeping -- no audio, no pair cache, and the
             # grades come from the server-side default report (never a client path)
             from . import placed as _placed
             return _placed.list_placed(req.get("stem"),
@@ -105,7 +105,7 @@ def handle(req, cache, sources_dir):
         # as the one-shot CLI's per-mode argument handling (review iteration 3 P2)
         rate = float(req.get("rate", 1.0))
         if op == "overview":
-            # AP-10: no per-point times/window -- guard the rate + the points
+            # DP-10: no per-point times/window -- guard the rate + the points
             # list (count cap + finiteness) before the pair loads, then hand off
             points = _isl._check_points(req.get("points"))
             _isl._check_params(0.0, 0.0, rate, 6.0)

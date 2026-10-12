@@ -16,7 +16,7 @@ Three hard rules
 2. **Every row is marked.** Each line this module emits ends in ``HINT`` (mirroring the
    engine's existing ``AUTO GENERATED`` convention), so a hint is obvious in Audacity and
    stays obvious if a row is ever pasted into a hand file by accident. One deliberate
-   exception (RC-1): the match-hints converter's ANCHOR rows (``track sync:`` /
+   exception (DP-26): the match-hints converter's ANCHOR rows (``track sync:`` /
    ``origNNN sync:`` / ``origNNN start:``/``end:``, built via ``_anchor``) carry no
    trailing ``HINT`` -- they arrive on their own imported hints track anyway, and each
    still carries an in-row machine mark: sync rows the `` verified confidence n/10``
@@ -81,7 +81,7 @@ def _row(start, end, text):
 
 
 def _anchor(start, end, text):
-    """An anchor row (sync/start/end) -- emitted WITHOUT the trailing ``HINT`` (RC-1).
+    """An anchor row (sync/start/end) -- emitted WITHOUT the trailing ``HINT`` (DP-26).
 
     Anchor rows arrive on their own imported hints track, and each kind already carries
     its machine mark in-row -- sync rows the `` verified confidence n/10`` token,

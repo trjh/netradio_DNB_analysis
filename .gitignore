@@ -59,7 +59,7 @@ labels/tmp/
 
 # Regenerable label scratch: the neighbour seeds (streamalign starter / sort_tsv),
 # derived from the committed *.labels.tsv and kept local. (The hints files moved to
-# the COMMITTED labels/automated/ in the AP-30 layout -- their rule is retired;
+# the COMMITTED labels/automated/ in the DP-24 layout -- their rule is retired;
 # a loose labels/*.hints.tsv at the root is now visible dirt to clean up.)
 labels/*.starter.labels.tsv
 logo-tmp/

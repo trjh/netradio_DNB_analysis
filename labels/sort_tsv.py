@@ -49,7 +49,7 @@ keyword_patterns = [
 # Compile regular expressions
 keyword_regexes = [re.compile(pattern, flags=re.IGNORECASE) for pattern in keyword_patterns]
 
-# AP-04: the machine-checked `verified` token on a mix<->original sync row -- it sits
+# DP-01: the machine-checked `verified` token on a mix<->original sync row -- it sits
 # IMMEDIATELY after the sync marker (`track sync: 1 verified confidence 5.9/10`), where
 # it is free text to the sync-row grammar above (marker then free text), so it parses and
 # survives LABELTRACK expansion untouched. Deliberately anchored on the track/orig sync
@@ -63,7 +63,7 @@ sync_verified_regex = re.compile(r"^(?:orig|track)\d*\s+sync:\s*\S+\s+verified\b
 
 
 def sync_verified(label):
-    """True if a track/orig sync row carries the AP-04 `verified` token (never file sync)."""
+    """True if a track/orig sync row carries the DP-01 `verified` token (never file sync)."""
     return bool(sync_verified_regex.match((label or "").strip()))
 
 

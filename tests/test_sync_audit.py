@@ -112,7 +112,7 @@ class TestAuditEndToEnd(unittest.TestCase):
 
 
 class TestVerifiedFlag(unittest.TestCase):
-    """AP-04: the audit reports whether a point's row text carries the token, and the
+    """DP-01: the audit reports whether a point's row text carries the token, and the
     token never leaks into (or out of) the FILE-sync `verified` family."""
 
     def setUp(self):
@@ -163,7 +163,7 @@ class TestVerifiedFlag(unittest.TestCase):
 
 
 class TestDeriveSeat(unittest.TestCase):
-    """AP-17 seat derivation: the pure master-timeline shift + neighbour-correction math."""
+    """DP-06 seat derivation: the pure master-timeline shift + neighbour-correction math."""
 
     STARTS = {("dA-000", 42): [("A", 20.0), ("B", 20.03)]}
     MASTERS = {"dA-000": 0.0, "dB-001": 40.0}
@@ -209,7 +209,7 @@ class TestDeriveSeat(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg not on PATH")
 class TestSeatDerivationEndToEnd(unittest.TestCase):
-    """AP-17 end to end: a capture whose sync points have NO `origNNN start:` row is
+    """DP-06 end to end: a capture whose sync points have NO `origNNN start:` row is
     graded anyway, its seat derived from the STRONG-audited neighbour capture that
     shares the clip seating -- marked, never silently equal to a bookkept seat."""
 

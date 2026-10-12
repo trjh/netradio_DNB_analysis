@@ -21,7 +21,7 @@ AUTOMATED_DIRNAME = "automated"
 
 
 def automated_dir(labels_dir=None):
-    """AP-30: where script-emitted label files land — labels/automated/.
+    """DP-24: where script-emitted label files land — labels/automated/.
 
     The labels/ root keeps only the hand-authoritative *.labels.tsv (plus the
     two human tools); machine emissions live one level down where they may be
