@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>/align — sample inspector (MOCKUP v3)</title>
+<style>
+  :root { --bg:#14161a; --panel:#1d2127; --ink:#d8dee6; --dim:#8a93a0; --accent:#5ec2ff;
+          --stream:#6fd08c; --orig:#e0b452; --diff:#c98cf0; --line:#2c323b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:14px/1.45 -apple-system, "Segoe UI", sans-serif; padding:14px 18px 40px; }
+  h1 { font-size:17px; margin:0 0 2px; } h1 .tag { color:#e66; font-size:12px; letter-spacing:1px; }
+  .sub { color:var(--dim); font-size:12px; margin-bottom:14px; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+            padding:10px 14px; margin-bottom:14px; }
+  section h2 { font-size:12px; text-transform:uppercase; letter-spacing:1px;
+               color:var(--dim); margin:0 0 8px; }
+  .lane { position:relative; margin:8px 0 4px; }
+  .lane .label { position:absolute; left:8px; top:4px; font-size:11px; color:var(--dim); z-index:2;
+                 background:rgba(20,22,26,0.7); padding:0 4px; border-radius:3px; }
+  canvas.ov   { display:block; width:100%; height:120px; background:#171a1f;
+                border:1px solid var(--line); border-radius:4px; }
+  canvas.insp { display:block; width:100%; height:180px; background:#171a1f;
+                border:1px solid var(--line); border-radius:4px; }
+  .legend { display:flex; flex-wrap:wrap; gap:10px; font-size:12px; color:var(--dim); margin-top:8px; }
+  .legend .pt { display:flex; align-items:center; gap:5px; }
+  .flag { display:inline-block; min-width:17px; text-align:center; border-radius:3px;
+          font-size:11px; padding:0 3px; color:#111; font-weight:600; }
+  .q { display:inline-block; width:34px; height:9px; border-radius:2px; }
+  .controls { display:flex; flex-wrap:wrap; gap:10px 22px; align-items:center; font-size:13px; }
+  .controls label { color:var(--dim); margin-right:5px; }
+  .controls select { background:#12151a; color:var(--ink);
+      border:1px solid var(--line); border-radius:4px; padding:3px 6px; }
+  .seg { display:inline-flex; align-items:center; border:1px solid var(--line); border-radius:5px; overflow:hidden; }
+  .seg .seglabel { color:var(--dim); font-size:12px; padding:0 8px; }
+  .seg button { background:#12151a; color:var(--dim); border:0; padding:4px 10px; cursor:pointer; }
+  .seg button.on { background:var(--accent); color:#08222f; font-weight:600; }
+  .toggle { accent-color:var(--accent); }
+  kbd { background:#12151a; border:1px solid var(--line); border-bottom-width:2px; border-radius:4px;
+        padding:0 5px; font:11px/1.6 ui-monospace,monospace; color:var(--dim); }
+  .nudge { display:inline-flex; gap:4px; align-items:center; }
+  .nudge button { background:#12151a; border:1px solid var(--line); color:var(--ink);
+                  border-radius:4px; padding:3px 8px; cursor:pointer; font-size:12px; }
+  .nudge .snap { border-color:var(--accent); color:var(--accent); }
+  .blocks { display:flex; gap:10px; margin-top:10px; }
+  .block { width:calc(50% - 5px); height:90px; border-radius:5px; border:1px solid var(--line);
+           display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+           color:#101317; font-weight:700; font-size:16px; text-shadow:0 1px 0 rgba(255,255,255,0.25); }
+  .block small { font-weight:600; font-size:12px; opacity:0.85; }
+  .play { display:flex; gap:12px; margin-top:12px; align-items:center; }
+  .play button { background:#12151a; border:1px solid var(--accent); color:var(--accent);
+                 border-radius:6px; padding:6px 14px; font-size:13px; cursor:pointer; }
+  .play button.diff { border-color:var(--diff); color:var(--diff); }
+  .play button.flash { background:var(--accent); color:#08222f; }
+  .play button.diff.flash { background:var(--diff); color:#1d1030; }
+  .readout { color:var(--dim); font-size:12px; margin-top:8px; }
+  .readout b { color:var(--ink); font-weight:600; }
+</style>
+</head>
+<body>
+<h1>/align — sample inspector <span class="tag">MOCKUP v3 — no audio, fake data</span></h1>
+<div class="sub">Static mockup for <code>docs/PLAN_align_tool.md</code> §5c. Working here: the
+<b>show L/R/both</b> channel toggle, the <b>residual display</b> toggle, and the <b>keyboard
+shortcuts</b> (<kbd>space</kbd> combined · <kbd>s</kbd> subtraction · <kbd>[</kbd>/<kbd>]</kbd> speed ·
+<kbd>←</kbd>/<kbd>→</kbd> ±1 smp, <kbd>shift</kbd> = coarser). Everything else is drawn only.</div>
+
+<!-- ============ TOP: overview ============ -->
+<section>
+  <h2>Overview — d189-211 (stream) vs orig067 “Renegade — Terrorist” (piecewise-warped)</h2>
+  <div class="lane"><span class="label" id="ovStreamLbl">stream @16k</span><canvas class="ov" id="ovStream"></canvas></div>
+  <div class="lane"><span class="label" id="ovOrigLbl">original @44.1k, warped to sync points</span><canvas class="ov" id="ovOrig"></canvas></div>
+  <div class="legend" id="ovLegend"></div>
+</section>
+
+<!-- ============ MIDDLE: controls ============ -->
+<section>
+  <h2>Controls</h2>
+  <div class="controls">
+    <span><label>sync point</label>
+      <select><option>N=3 — 12:41.605 (residual 2.1%)</option><option>N=1</option><option>N=2</option><option>N=4</option><option>N=5 (skipped)</option></select></span>
+    <span><label>window</label><select><option>2 s</option><option>0.5 s</option><option>1 s</option><option>5 s</option></select></span>
+    <span><label>speed <kbd>[</kbd><kbd>]</kbd></label><select id="speedSel"><option>1.0×</option><option>0.5×</option><option>0.25×</option></select></span>
+    <span><label>zoom</label><select><option>4×</option><option>1×</option><option>16×</option><option>64×</option></select></span>
+    <span><label>invert orig</label><input class="toggle" type="checkbox" checked></span>
+    <span><label>include in results</label><input class="toggle" type="checkbox" checked></span>
+    <span class="seg"><span class="seglabel">route</span><button class="on">stream L / orig R</button><button>both stereo</button></span>
+    <span class="seg" id="chanSeg"><span class="seglabel">show</span>
+      <button data-ch="L">L only</button><button data-ch="R">R only</button><button data-ch="both" class="on">both</button></span>
+    <span class="seg" id="resSeg"><span class="seglabel">residual</span>
+      <button data-res="sum" class="on">colored sum graph</button><button data-res="blocks">separate boxes</button></span>
+  </div>
+</section>
+
+<!-- ============ BOTTOM: inspector ============ -->
+<section>
+  <h2>Inspector — sync point N=3</h2>
+  <div class="lane"><span class="label" id="inStreamLbl">stream (fixed)</span><canvas class="insp" id="inStream"></canvas></div>
+  <div class="lane"><span class="label" id="inOrigLbl">original (drag to shift · RMS-matched over window)</span><canvas class="insp" id="inOrig"></canvas></div>
+  <div style="margin:6px 0 2px" class="nudge">
+    <button>−1 ms</button><button>−1 smp <kbd>←</kbd></button>
+    <button class="snap">⌖ snap-to-best</button>
+    <button><kbd>→</kbd> +1 smp</button><button>+1 ms</button>
+    <span class="readout" style="margin:0 0 0 10px">shift: <b id="shiftTxt">−3 smp</b> (−0.188 ms) from converter value</span>
+  </div>
+  <div class="lane"><span class="label" id="diffLabel">subtraction (stream − orig)</span><canvas class="insp" id="inDiff"></canvas></div>
+
+  <div class="blocks" id="blocks" style="display:none">
+    <div class="block" id="blkSample"><span>sample alignment</span><small id="blkSampleTxt"></small></div>
+    <div class="block" id="blkPoint"><span>point alignment</span><small id="blkPointTxt"></small></div>
+  </div>
+
+  <div class="play">
+    <button id="btnComb">▶ play combined <kbd>space</kbd></button>
+    <button id="btnDiff" class="diff">▶ play subtraction <kbd>s</kbd></button>
+  </div>
+  <div class="readout">RMS(diff)/RMS(stream): whole-sample <b>11.4%</b> · ±5% point window <b>1.8%</b> ·
+    xcorr peak <b>0.93</b> · all comparison DSP at 16 kHz band</div>
+</section>
+
+<script>
+"use strict";
+// ---------------- fake-but-plausible DnB audio, TWO CHANNELS per signal ----------------
+function rng(seed){ let s=seed>>>0; return ()=>((s=Math.imul(s^s>>>15,s|1)^s^Math.imul(s^s>>>7,s|61))>>>0)/4294967296; }
+// Same beat grid + envelope per signal; per-channel noise differs -> reads as real stereo.
+function makeChan(seed,chan,n){
+  const r=rng(seed*7919+chan*104729), lo=new Float32Array(n), hi=new Float32Array(n);
+  const beat=Math.max(24,Math.floor(n/38));
+  for(let i=0;i<n;i++){
+    const ph=i%beat, tr=Math.exp(-ph/(beat*0.11));
+    const swell=0.42+0.30*Math.sin(i/n*Math.PI*4.6+seed)+0.12*Math.sin(i*0.05+seed*3);
+    const amp=Math.max(0.03,Math.min(1,(0.16+0.84*tr)*swell*(chan?0.93:1)+0.05*r()));
+    hi[i]= amp*(0.82+0.18*r());
+    lo[i]=-amp*(0.82+0.18*r());
+  }
+  return {lo,hi};
+}
+function qcol(p){ if(p<5){ const t=Math.max(0,Math.log10(Math.max(p,0.05))/Math.log10(5));
+                    return {h:130,s:60,l:62-28*t}; }
+                  if(p<20) return {h:52-(p-5)*1.4,s:80,l:55}; return {h:4,s:75,l:52}; }
+const css=c=>`hsl(${c.h},${c.s}%,${c.l}%)`;
+const contrastLine=c=>(c.l>50?"#0b0d10":"#f4f6f8");     // black ink on light bg, white on dark
+const CORE=0.10;                                        // the 10% window around the point
+function drawTrace(g,data,w,y0,y1,color,sc){
+  const mid=(y0+y1)/2, A=(y1-y0)*0.46;
+  g.strokeStyle="#2c323b"; g.beginPath(); g.moveTo(0,mid); g.lineTo(w,mid); g.stroke();
+  g.strokeStyle=color; g.globalAlpha=0.92;
+  for(let i=0;i<w;i++){ g.beginPath();
+    g.moveTo(i+0.5,mid-data.hi[i]*A*sc); g.lineTo(i+0.5,mid-data.lo[i]*A*sc); g.stroke(); }
+  g.globalAlpha=1;
+}
+function paint(id,seed,color,opt={}){
+  const c=document.getElementById(id), dpr=window.devicePixelRatio||1;
+  const cw=c.clientWidth||900, ch=c.clientHeight||160;
+  c.width=cw*dpr; c.height=ch*dpr;
+  const g=c.getContext("2d"); g.setTransform(dpr,0,0,dpr,0,0);
+  const coreA=(0.5-CORE/2)*cw, coreW=CORE*cw;
+  // colored-sum mode: the residual colors are the BACKGROUND; the trace takes max-contrast ink
+  if(opt.sumBg){ g.fillStyle=css(opt.sumBg.whole); g.fillRect(0,0,cw,ch);
+    g.fillStyle=css(opt.sumBg.core); g.fillRect(coreA,0,coreW,ch); }
+  else if(opt.core){ g.fillStyle="rgba(94,194,255,0.10)"; g.fillRect(coreA,0,coreW,ch); }
+  // channel semantics: L = left channel of the SIGNAL, R = right, both = two lines stacked
+  const chans=(opt.chan==="both")?[0,1]:[opt.chan==="R"?1:0];
+  chans.forEach((cn,k)=>{
+    const band=ch/chans.length, y0=k*band;
+    const data=opt.data?opt.data(cn,cw):makeChan(seed,cn,cw);
+    if(opt.sumBg){
+      const inkW=contrastLine(opt.sumBg.whole), inkC=contrastLine(opt.sumBg.core);
+      const mid=y0+band/2, A=band*0.46, sc=opt.scale||1;
+      for(let i=0;i<cw;i++){ g.strokeStyle=(i>=coreA&&i<=coreA+coreW)?inkC:inkW;
+        g.beginPath(); g.moveTo(i+0.5,mid-data.hi[i]*A*sc); g.lineTo(i+0.5,mid-data.lo[i]*A*sc); g.stroke(); }
+    } else {
+      drawTrace(g,data,cw,y0,y0+band,color,opt.scale||1);
+    }
+    if(chans.length===2&&k===0){ g.strokeStyle="#232830"; g.beginPath(); g.moveTo(0,y0+band); g.lineTo(cw,y0+band); g.stroke(); }
+  });
+  (opt.flags||[]).forEach(f=>{ const x=f.x*cw;
+    g.fillStyle=css(f.c); g.fillRect(x-1,0,3,ch);
+    g.fillRect(x-13,2,26,18); g.fillStyle="#111"; g.font="600 13px sans-serif";
+    g.textAlign="center"; g.fillText(f.n,x,16); });
+  if(opt.core&&!opt.sumBg){ g.strokeStyle="rgba(94,194,255,0.7)"; g.strokeRect(coreA,1,coreW,ch-2); }
+  if(opt.sumBg){ g.strokeStyle="rgba(20,22,26,0.55)"; g.strokeRect(coreA,1,coreW,ch-2); }
+}
+// the subtraction lane is DERIVED from the two displayed signals, per channel: the original
+// is the same audio at 0.97 gain with slightly different noise (codec smear stand-in), so the
+// residual is genuinely stream - orig -- small everywhere, smallest where they agree.
+function diffChan(cn,n){
+  const a=makeChan(7,cn,n), b=makeChan(7,cn+2,n), out={lo:new Float32Array(n),hi:new Float32Array(n)};
+  for(let i=0;i<n;i++){ out.hi[i]=(a.hi[i]-0.97*b.hi[i]); out.lo[i]=(a.lo[i]-0.97*b.lo[i]); }
+  return out;
+}
+// ---------------- state + draw ----------------
+const pts=[{n:1,x:0.09,q:0.8},{n:2,x:0.27,q:3.9},{n:3,x:0.52,q:2.1},{n:4,x:0.74,q:14},{n:5,x:0.91,q:26}];
+const flags=pts.map(p=>({n:p.n,x:p.x,c:qcol(p.q)}));
+const WHOLE=11.4, POINT=1.8;
+let chan="both", resMode="sum";
+function chTag(){ return chan==="both"?" — L+R":(chan==="L"?" — L":" — R"); }
+function drawAll(){
+  paint("ovStream",41,"#6fd08c",{flags,chan});
+  paint("ovOrig",  42,"#e0b452",{flags,chan});
+  document.getElementById("ovStreamLbl").textContent="stream @16k"+chTag();
+  document.getElementById("ovOrigLbl").textContent="original @44.1k, warped to sync points"+chTag();
+  document.getElementById("inStreamLbl").textContent="stream (fixed)"+chTag();
+  document.getElementById("inOrigLbl").textContent="original (drag to shift · RMS-matched over window)"+chTag();
+  paint("inStream",7,"#6fd08c",{core:true,chan});
+  paint("inOrig",  7,"#e0b452",{core:true,chan,scale:0.97});
+  if(resMode==="sum"){
+    paint("inDiff",0,null,{chan,scale:1.4,data:diffChan,sumBg:{whole:qcol(WHOLE),core:qcol(POINT)}});
+    document.getElementById("diffLabel").textContent =
+      "subtraction (stream − orig)"+chTag()+" — background: point-alignment color inside the 10% window, sample-alignment outside";
+    document.getElementById("blocks").style.display="none";
+  } else {
+    paint("inDiff",0,"#c98cf0",{core:true,chan,scale:1.4,data:diffChan});
+    document.getElementById("diffLabel").textContent="subtraction (stream − orig)"+chTag();
+    document.getElementById("blocks").style.display="";
+    document.getElementById("blkSample").style.background=css(qcol(WHOLE));
+    document.getElementById("blkPoint").style.background=css(qcol(POINT));
+    document.getElementById("blkSampleTxt").textContent=WHOLE+"% residual — whole sample";
+    document.getElementById("blkPointTxt").textContent=POINT+"% residual — 10% window around the point";
+  }
+}
+document.getElementById("ovLegend").innerHTML =
+  pts.map(p=>`<span class="pt"><span class="flag" style="background:${css(qcol(p.q))}">${p.n}</span>
+    residual ${p.q}%<span class="q" style="background:linear-gradient(90deg,${css(qcol(p.q))},#12151a)"></span></span>`).join("")
+  + `<span class="pt" style="margin-left:auto">quality strip = refine residual over the measurement window (greener = deeper null)</span>`;
+document.getElementById("chanSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return;
+  chan=b.dataset.ch; [...e.currentTarget.querySelectorAll("button")].forEach(x=>x.classList.toggle("on",x===b)); drawAll(); });
+document.getElementById("resSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return;
+  resMode=b.dataset.res; [...e.currentTarget.querySelectorAll("button")].forEach(x=>x.classList.toggle("on",x===b)); drawAll(); });
+// ---------------- keyboard shortcuts (mockup: flash / step the controls) ----------------
+let shiftSmp=-3;
+function flash(id){ const b=document.getElementById(id); b.classList.add("flash"); setTimeout(()=>b.classList.remove("flash"),350); }
+addEventListener("keydown",e=>{
+  if(e.target.tagName==="SELECT"||e.target.tagName==="INPUT") return;
+  const sp=document.getElementById("speedSel");
+  if(e.code==="Space"){ e.preventDefault(); flash("btnComb"); }
+  else if(e.key==="s"||e.key==="S"){ flash("btnDiff"); }
+  else if(e.key==="["){ sp.selectedIndex=Math.min(sp.length-1,sp.selectedIndex+1); }   // slower
+  else if(e.key==="]"){ sp.selectedIndex=Math.max(0,sp.selectedIndex-1); }             // faster
+  else if(e.key==="ArrowLeft"){ e.preventDefault(); shiftSmp-=e.shiftKey?16:1; upd(); }
+  else if(e.key==="ArrowRight"){ e.preventDefault(); shiftSmp+=e.shiftKey?16:1; upd(); }
+  function upd(){ document.getElementById("shiftTxt").textContent=(shiftSmp>0?"+":"")+shiftSmp+" smp"; }
+});
+requestAnimationFrame(drawAll);
+addEventListener("resize",()=>requestAnimationFrame(drawAll));
+</script>
+</body>
+</html>

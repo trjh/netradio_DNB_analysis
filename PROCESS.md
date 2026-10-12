@@ -218,8 +218,7 @@ Two passes: the engine **proposes** the paired sync points; you **verify** every
 
 > **End-to-end walkthrough.** This step is the analysis half. For the whole loop in one
 > place — prerequisites, opening the inspector, verifying and exporting, folding back into
-> Audacity, and returning here for the audit — see `docs/RUNBOOK_align_workflow.md` in the
-> player repo, which is where the inspector lives.
+> Audacity, and returning here for the audit — see `docs/RUNBOOK_align_workflow.md`.
 
 **Pass 1 — propose (`match-hints`):**
 
@@ -640,7 +639,8 @@ mention any original; put genuine cross-references in the primary track.
 
 ## File-naming: who owns what
 
-The `labels/` tree is layered by **who may write where** (the DP-24 layout):
+The `labels/` tree is layered by **who may write where** (the DP-24 layout; every `DP-` number
+is listed in the [decision-point log](./docs/DECISIONS.md)):
 
 | Path | Holds | Written by | Regenerable? |
 |---|---|---|---|
