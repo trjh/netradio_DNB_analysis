@@ -1,6 +1,6 @@
-"""Original-track ↔ mix ground truth from Tim's sync points (G2 / T0).
+"""Original-track ↔ mix ground truth from the hand-marked sync points (G2 / T0).
 
-Tim hand-marked where each original source track lines up with the mix using paired
+Each original source track was hand-marked where it lines up with the mix, using paired
 labels: `origNNN sync: <label>` (a moment in original track NNN) and
 `track sync: <label>` (the same moment in the mix), both in the owning label file's
 Audacity timeline. This module parses those pairs and, per track, fits the **rate**
@@ -17,7 +17,7 @@ Note on chroma: the `chroma_cqt` calls below are NOT the canonical signature rec
 (`chroma_recipe.compute_chroma`) and are deliberately kept separate. This is the alignment
 engine's DTW rate/offset estimation — configurable `sr`/`hop`, and some passes intentionally do
 NOT add epsilon or L2-normalise — a different computation from the comparable pool signature.
-It is the documented exception to the "one recipe" guard (see `tests/test_bucket_tooling.py`).
+It is the documented exception to the "one recipe" guard (see `tests/test_chroma_recipe.py`).
 """
 
 import os

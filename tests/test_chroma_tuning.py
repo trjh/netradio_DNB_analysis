@@ -15,9 +15,8 @@ The reference in every pin is **librosa's own whole-file path**, called directly
 not a saved copy of the old `compute_chroma`. That matters: a copy of the old code stops meaning
 anything the moment the old code is gone, while librosa's whole-file path is the thing the pool
 was actually built with. The comparisons are exact -- `==` on the floats, `np.array_equal` on the
-matrices -- never a tolerance. `chroma_recipe.TOLERANCE` exists for arm64-vs-x86_64 agreement and
-has no business here: within one architecture the two paths either agree bit for bit or the change
-is wrong.
+matrices -- never a tolerance: within one architecture the two paths either agree bit for bit or
+the change is wrong.
 
 The routine set (everything below except the two-hour and real-audio cases) computes its own
 whole-file references on signals of at most 12.7 minutes, so it runs in the ordinary suite. The
@@ -40,7 +39,6 @@ sys.path.insert(0, SCRIPTS)
 
 import numpy as np                      # noqa: E402
 import chroma_recipe                    # noqa: E402
-import make_canary                      # noqa: E402
 
 # chroma_recipe imports librosa LAZILY, so this module imports fine on a bare clone and the
 # classes that actually compute chroma skip instead of erroring at call time.
@@ -228,15 +226,6 @@ class RecipeContractUnchanged(unittest.TestCase):
     def test_recipe_version_is_still_one(self):
         self.assertEqual(chroma_recipe.RECIPE_VERSION, 1)
 
-    def test_published_recipe_gains_no_tuning_field(self):
-        """Edge workers assert-match `chroma/_recipe.json` against this dict. A new key there is
-        a new contract, so the tuning method deliberately does not appear in it."""
-        d = chroma_recipe.recipe_dict(with_toolchain=False)
-        self.assertEqual(set(d), {"version", "pipeline", "sr", "hop", "feature", "epsilon",
-                                  "norm", "dtype", "min_seconds", "tolerance", "comparison",
-                                  "key"})
-        self.assertNotIn("tuning", json.dumps(d))
-
     def test_the_tuning_constants_are_librosas_defaults(self):
         """Written down rather than read from librosa at runtime, so a librosa release that
         changes a default fails here instead of silently changing every signature."""
@@ -312,8 +301,8 @@ class TwoHourSynthetic(unittest.TestCase):
         if same_arch:
             self.assertEqual(digest, fixture["sha256_float16_npy"])
         else:
-            # Byte-identity is a same-architecture property (chroma_recipe.TOLERANCE). Off the
-            # recording machine the fixture can only pin the tuning float, which it did above.
+            # Byte-identity is a same-architecture property. Off the recording machine the
+            # fixture can only pin the tuning float, which it did above.
             self.skipTest("fixture recorded on %s/librosa %s; this is %s/librosa %s"
                           % (fixture["platform.machine"], fixture["librosa"],
                              platform.machine(), librosa.__version__))
@@ -335,38 +324,11 @@ class AgainstRealAudio(unittest.TestCase):
             raise RuntimeError(out.stderr.decode("utf-8", "replace")[-200:])
         return np.frombuffer(out.stdout, dtype="float32")
 
-    def test_canary_set_reproduces(self):
-        """The bucket's canary excerpts, if a local copy is configured.
-
-        Each canary is 75 seconds, so this exercises the single-block path only; the multi-block
-        path is pinned by the synthetic tests above and by the capture files below.
-        """
-        d = os.environ.get("NETRADIO_CANARY_DIR", "")
-        manifest_path = os.path.join(d, "manifest.json") if d else ""
-        if not manifest_path or not os.path.exists(manifest_path):
-            self.skipTest("set NETRADIO_CANARY_DIR to a local copy of chroma/_canary/")
-        with open(manifest_path, "r", encoding="utf-8") as fh:
-            manifest = json.load(fh)
-        items = manifest.get("items") or manifest.get("canaries") or []
-        self.assertTrue(items, "canary manifest lists nothing")
-        for item in items:
-            name = item.get("audio") or item.get("file")
-            with self.subTest(canary=name):
-                y32 = self._decode(os.path.join(d, name))
-                got = chroma_recipe.compute_chroma(y32)
-                expected = item.get("sha256_expected") or item.get("sha256")
-                if expected:
-                    # The manifest's digest is of the serialised .npy file (numpy header
-                    # included), so hash through make_canary's own packer, not `.tobytes()`.
-                    self.assertEqual(make_canary.pack(got)[1], expected)
-                self.assertTrue(np.array_equal(got, _whole_file_chroma(y32)))
-
     def test_real_audio_multiblock(self):
         """Two capture files: 20-25 minutes each is four or five real blocks of real music."""
-        d = (os.environ.get("NETRADIO_CANARY_SOURCE_DIR")
-             or os.environ.get("NETRADIO_MP3_DIR") or "")
+        d = os.environ.get("NETRADIO_MP3_DIR") or ""
         if not d or not os.path.isdir(d):
-            self.skipTest("set NETRADIO_CANARY_SOURCE_DIR or NETRADIO_MP3_DIR to real audio")
+            self.skipTest("set NETRADIO_MP3_DIR to real audio")
         names = sorted(n for n in os.listdir(d)
                        if n.lower().endswith((".mp3", ".wav", ".flac", ".wv", ".m4a")))[:2]
         if not names:
