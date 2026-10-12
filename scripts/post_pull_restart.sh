@@ -9,7 +9,8 @@
 # Does nothing in a linked worktree (hooks are shared across worktrees) or off `main`. Only a
 # change under scripts/ or public/ (the code the server and its DSP child load, and the pages it
 # serves) restarts it; a pull of labels, data or documentation alone says so and does nothing.
-# A server that is down is left down.
+# A server that is down is left down, and so is a server on the port that another checkout
+# started (`run_align.sh running-here`): this hook restarts only its own checkout's server.
 #
 # NETRADIO_PULL_RESTART=0 skips it (read from the environment, not .env). Output goes to stderr;
 # never interactive. A failed restart exits non-zero (git ignores the status of post-merge, so
@@ -52,9 +53,16 @@ else
   say "could not tell what changed; treating it as a code change."
 fi
 
-# A server started from here must not inherit git's hook environment (git-core first on PATH,
-# GIT_EXEC_PATH, GIT_EDITOR, GIT_REFLOG_ACTION, GITHEAD_* ...).
-for v in $(compgen -e | grep '^GIT'); do unset "$v"; done
+# A server started from here must not inherit what git puts into a hook's environment: git-core
+# first on PATH, and the variables below. The user's own GIT_AUTHOR_*, GIT_COMMITTER_*,
+# GIT_SSH_COMMAND and the like stay, so the server's review sync commits and pushes as it would
+# after a restart by hand.
+for v in GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_EXEC_PATH GIT_PREFIX GIT_REFLOG_ACTION \
+         GIT_EDITOR GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_QUARANTINE_PATH \
+         GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES \
+         $(compgen -e | grep -E '^(GITHEAD_|GIT_CONFIG_KEY_|GIT_CONFIG_VALUE_)'); do
+  unset "$v"
+done
 gitcore="$(git --exec-path 2>/dev/null)"
 if [ -n "$gitcore" ]; then
   newpath=""
@@ -66,7 +74,12 @@ fi
 
 script="$ROOT/scripts/run_align.sh"
 [ -x "$script" ] || exit 0
-"$script" running >/dev/null 2>&1 || exit 0
+if ! "$script" running-here >/dev/null 2>&1; then
+  if "$script" running >/dev/null 2>&1; then
+    say "the align server on the port was not started from this checkout; left alone."
+  fi
+  exit 0
+fi
 say "pull changed code; restarting the align server (it was running)."
 if ! "$script" restart >&2; then
   say "FAILED: the align server did not restart. Run scripts/run_align.sh restart and read its output."

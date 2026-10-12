@@ -785,6 +785,25 @@ class TestEnabledGating(ReviewSyncBase):
         self.assertEqual(review_sync.postmerge_command(),
                          "make -C %s review-sync-postmerge" % review_sync.repo_dir())
 
+    def test_with_no_override_it_commits_into_its_own_checkout(self):
+        # the module copied into the scratch checkout's scripts/ and run there with no
+        # override: the commit lands on that checkout's branch
+        os.makedirs(os.path.join(self.work, "scripts"))
+        import shutil
+        shutil.copy2(os.path.join(REPO, "scripts", "review_sync.py"),
+                     os.path.join(self.work, "scripts", "review_sync.py"))
+        self._seed_review()
+        env = {k: v for k, v in os.environ.items() if not k.startswith("NETRADIO_REVIEW_SYNC")}
+        code = ("import sys; sys.path.insert(0, %r); import review_sync; "
+                "sys.exit(review_sync.main(['commit']))" % os.path.join(self.work, "scripts"))
+        r = subprocess.run([sys.executable, "-c", code], cwd=self.root, env=env,
+                           capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("labels/review/d376-395.orig072.review.tsv",
+                      _tree_files(self.work, "align-review-data"))
+        self.assertEqual(_git(self.work, "status", "--porcelain", "--", "labels/").stdout.strip(),
+                         "?? labels/review/", "the working tree is left as it was")
+
     def test_a_linked_worktree_is_dark_and_write_free(self):
         # a worktree shares the branch refs: a commit from it would put its own copies of the
         # review files and the rulings onto the standing branch

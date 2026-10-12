@@ -17,9 +17,10 @@ BASH = "/bin/bash" if os.path.exists("/bin/bash") else "bash"
 
 STUB = """#!/bin/bash
 echo "{name} $*" >> "$STUB_LOG"
-env | grep -E '^GIT|git-core' >> "$STUB_ENV"
+env | grep -E '^GIT|git-core' | sort >> "$STUB_ENV"
 case "$1" in
-  running) [ -e "$STUB_STATE/{name}.up" ] ;;
+  running) [ -e "$STUB_STATE/{name}.up" ] || [ -e "$STUB_STATE/{name}.foreign" ] ;;
+  running-here) [ -e "$STUB_STATE/{name}.up" ] ;;
   restart) [ ! -e "$STUB_STATE/{name}.fail" ] ;;
 esac
 """
@@ -120,15 +121,22 @@ class RestartTests(HookCase):
         self.pull()
         self.assertEqual(self.restarts(), ["run_align restart"])
 
-    def test_launcher_sees_no_git_hook_environment(self):
+    def test_launcher_sees_no_git_hook_environment_but_keeps_the_users(self):
         self.up("run_align")
         self.upstream("scripts/align_server.py")
         envlog = os.path.join(self.tmp, "env.log")
         open(envlog, "w").close()
-        self.pull()
+        self.pull(GIT_AUTHOR_NAME="Someone", GIT_COMMITTER_EMAIL="c@example.com",
+                  GIT_SSH_COMMAND="ssh -o BatchMode=yes")
         self.assertEqual(self.restarts(), ["run_align restart"])
         with open(envlog) as f:
-            self.assertEqual(f.read(), "")
+            seen = f.read()
+        for hook_var in ("GIT_EXEC_PATH=", "GIT_PREFIX=", "GIT_REFLOG_ACTION=", "GIT_EDITOR=",
+                         "GITHEAD_", "GIT_DIR=", "GIT_INDEX_FILE=", "git-core"):
+            self.assertNotIn(hook_var, seen)
+        for user_var in ("GIT_AUTHOR_NAME=Someone", "GIT_COMMITTER_EMAIL=c@example.com",
+                         "GIT_SSH_COMMAND=ssh -o BatchMode=yes"):
+            self.assertIn(user_var, seen)
 
     def test_docs_labels_and_data_alone_do_nothing(self):
         for rel in ("README.md", "docs/notes.md", "labels/review/a.orig001.review.tsv",
@@ -139,6 +147,21 @@ class RestartTests(HookCase):
                 r = self.pull()
                 self.assertEqual(self.restarts(), [])
                 self.assertIn("no change under scripts/ or public/", r.stderr)
+
+    def test_another_checkouts_server_on_the_port_is_left_alone(self):
+        open(os.path.join(self.state, "run_align.foreign"), "w").close()
+        self.upstream("scripts/align_server.py")
+        r = self.pull()
+        self.assertEqual(self.restarts(), [])
+        self.assertIn("not started from this checkout; left alone", r.stderr)
+
+    def test_could_not_tell_what_changed_counts_as_code(self):
+        # a fresh clone: no ORIG_HEAD, and HEAD@{1} does not exist yet
+        self.up("run_align")
+        r = self.run_script()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("could not tell what changed", r.stderr)
+        self.assertEqual(self.restarts(), ["run_align restart"])
 
     def test_server_down_does_nothing(self):
         self.upstream("scripts/align_server.py")
@@ -219,7 +242,7 @@ class ChainTests(HookCase):
         self.up("run_align")
         self.upstream("scripts/align_server.py")
         self.pull()
-        self.assertEqual(self.calls(), ["run_align running", "run_align restart",
+        self.assertEqual(self.calls(), ["run_align running-here", "run_align restart",
                                         "global-post-merge"])
 
 

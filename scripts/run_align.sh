@@ -11,6 +11,7 @@
 #   scripts/run_align.sh restart
 #   scripts/run_align.sh status     # is it up, on which URL, and is the DSP configured
 #   scripts/run_align.sh running    # quiet: exit 0 up, 1 down (for a caller that only needs to know)
+#   scripts/run_align.sh running-here  # quiet: exit 0 when the listener is THIS checkout's server
 #   scripts/run_align.sh help       # usage + the where-does-the-data-come-from primer
 #
 # Exposure stays scripts/align_server.py's own: loopback unless NETRADIO_ALIGN_HOST says
@@ -30,10 +31,25 @@ PYTHON="${NETRADIO_PYTHON:-$(command -v python3.14 || command -v python3)}"
 # the port: real env wins, else .env (align_server.py reads the same chain), else 8766
 NETRADIO_ALIGN_PORT="$(env_get "$ROOT/.env" NETRADIO_ALIGN_PORT)"
 PORT="${NETRADIO_ALIGN_PORT:-8766}"
+# the log: real env wins, else .env, else logs/align.log in this checkout
+NETRADIO_ALIGN_LOG="$(env_get "$ROOT/.env" NETRADIO_ALIGN_LOG)"
 LOG="${NETRADIO_ALIGN_LOG:-$ROOT/logs/align.log}"
 PIDFILE="$ROOT/.align.pid"
 
 port_pids() { lsof -nP -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true; }
+
+# Is the listener on $PORT this checkout's server? `launch` starts it with this checkout as its
+# working directory, so a listening pid whose cwd is $ROOT is ours; one started from another
+# checkout on the same port is not.
+running_here() {
+  local here pid cwd
+  here="$(cd "$ROOT" && pwd -P)"
+  for pid in $(port_pids); do
+    cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
+    [ -n "$cwd" ] && [ "$(cd "$cwd" 2>/dev/null && pwd -P)" = "$here" ] && return 0
+  done
+  return 1
+}
 
 clear_port() {   # a stale process from an earlier run may still hold the port: clear it first
   local pids; pids="$(port_pids)"
@@ -147,6 +163,7 @@ case "${1:-start}" in
   stop)          clear_port; echo "stopped" ;;
   status)        status ;;
   running)       [ -n "$(port_pids)" ] ;;   # quiet predicate: 0 = listening on $PORT, 1 = not
-  help|-h|--help) echo "usage: $0 {start|stop|restart|status|running|help}"; data_primer ;;
-  *) echo "usage: $0 {start|stop|restart|status|running|help}" >&2; exit 1 ;;
+  running-here)  running_here ;;            # quiet predicate: 0 = the listener is this checkout's
+  help|-h|--help) echo "usage: $0 {start|stop|restart|status|running|running-here|help}"; data_primer ;;
+  *) echo "usage: $0 {start|stop|restart|status|running|running-here|help}" >&2; exit 1 ;;
 esac

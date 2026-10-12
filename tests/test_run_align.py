@@ -36,9 +36,9 @@ class TheStatusProbeBehaves(unittest.TestCase):
         return out.stdout
 
     def test_a_lan_bind_is_printed_and_flagged(self):
-        out = self._host("192.168.1.57")
-        self.assertIn("http://192.168.1.57:8766/align", out)
-        self.assertIn("bound to 192.168.1.57", out)
+        out = self._host("192.0.2.10")
+        self.assertIn("http://192.0.2.10:8766/align", out)
+        self.assertIn("bound to 192.0.2.10", out)
 
     def test_unset_and_wildcard_binds_print_loopback_unflagged(self):
         for bound in ("", "0.0.0.0"):
@@ -61,6 +61,68 @@ def _free_port():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
+
+
+class TheRunningHereVerb(unittest.TestCase):
+    """`running-here` answers yes only for a listener this checkout started: one whose working
+    directory is the checkout. A listener another checkout started on the same port is not
+    ours, and `running` alone cannot tell the two apart."""
+
+    def setUp(self):
+        if not shutil.which("lsof"):
+            self.skipTest("lsof is not installed: the launcher cannot see listeners")
+        self.root = os.path.realpath(tempfile.mkdtemp(prefix="run-align-here-"))
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        os.makedirs(os.path.join(self.root, "scripts", "lib"))
+        os.makedirs(os.path.join(self.root, ".git"))
+        for rel in ("scripts/run_align.sh", "scripts/lib/env.sh", "scripts/lib/checkout.sh"):
+            shutil.copy2(os.path.join(HERE, rel), os.path.join(self.root, rel))
+        self.other = os.path.realpath(tempfile.mkdtemp(prefix="run-align-other-"))
+        self.addCleanup(shutil.rmtree, self.other, ignore_errors=True)
+        self.port = str(_free_port())
+
+    def _listen(self, cwd):
+        import sys
+        import time
+        p = subprocess.Popen([sys.executable, "-m", "http.server", self.port,
+                              "--bind", "127.0.0.1"], cwd=cwd,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(p.wait)
+        self.addCleanup(p.kill)
+        for _ in range(50):
+            with socket.socket() as s:
+                if s.connect_ex(("127.0.0.1", int(self.port))) == 0:
+                    return
+            time.sleep(0.1)
+        self.fail("listener did not come up")
+
+    def _verb(self, verb):
+        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": self.root,
+               "NETRADIO_ALIGN_PORT": self.port}
+        return subprocess.run(["bash", os.path.join(self.root, "scripts", "run_align.sh"), verb],
+                              capture_output=True, text=True, env=env, timeout=60).returncode
+
+    def test_nothing_listening_is_neither(self):
+        self.assertEqual(self._verb("running"), 1)
+        self.assertEqual(self._verb("running-here"), 1)
+
+    def test_this_checkouts_listener_is_here(self):
+        self._listen(self.root)
+        self.assertEqual(self._verb("running"), 0)
+        self.assertEqual(self._verb("running-here"), 0)
+
+    def test_another_checkouts_listener_is_running_but_not_here(self):
+        self._listen(self.other)
+        self.assertEqual(self._verb("running"), 0)
+        self.assertEqual(self._verb("running-here"), 1)
+
+
+class TheLogSetting(unittest.TestCase):
+    def test_the_log_path_is_read_through_the_env_chain(self):
+        sh = _read("scripts", "run_align.sh")
+        self.assertIn('NETRADIO_ALIGN_LOG="$(env_get "$ROOT/.env" NETRADIO_ALIGN_LOG)"', sh)
+        self.assertLess(sh.index("env_get \"$ROOT/.env\" NETRADIO_ALIGN_LOG"),
+                        sh.index('LOG="${NETRADIO_ALIGN_LOG:-'))
 
 
 class TheCheckoutGuard(unittest.TestCase):

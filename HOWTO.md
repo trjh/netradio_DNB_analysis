@@ -406,8 +406,11 @@ make hooks                      # core.hooksPath -> this checkout's .githooks/
 **What you get:** after a `git pull` that changes anything under `scripts/` or `public/`, a
 running align server restarts on the new code (`scripts/post_pull_restart.sh`). A pull of labels,
 data or documentation alone restarts nothing, and a server that is down stays down. Set
-`NETRADIO_PULL_RESTART=0` in the environment to skip it for one pull. Your global git hooks
-still run: each hook here calls the global hook of the same name and keeps its verdict.
+`NETRADIO_PULL_RESTART=0` in the environment to skip it for one pull. A server on the port
+that another checkout started is left alone. Of your global git hooks, `pre-commit` and
+`post-merge` still run (each hook here calls the global one of the same name and keeps its
+verdict); any other global hook, such as `pre-push`, does not run in this repository once
+`make hooks` has set `core.hooksPath`.
 
 ---
 
