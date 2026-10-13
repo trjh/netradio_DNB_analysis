@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# scripts/lib/checkout.sh — the checkout guard the launchers share. Source it; it defines functions
+# scripts/lib/checkout.sh — the checkout guard and the listener check the launchers share. Source it; it defines functions
 # and sets nothing.
 #
 #   . "$ROOT/scripts/lib/checkout.sh"
@@ -11,8 +11,11 @@
 #                                     # exit 2 when ROOT's HEAD is not refs/heads/main; HINT is the
 #                                     # line that says how to start anyway (default: this launcher's
 #                                     # own `start`, with the opt-out set)
+#   checkout_listener_here ROOT PORT  # exit 0 when a listener on PORT has ROOT as its working
+#                                     # directory, 1 when none does (or nothing listens), 2 when
+#                                     # a listener's working directory cannot be read
 #
-# Both refusals run before a launcher takes a lock or touches a port, so a refusal changes nothing.
+# The two refusals run before a launcher takes a lock or touches a port, so a refusal changes nothing.
 # Only the explicit "1" in NETRADIO_ALLOW_OFF_MAIN opts out of either; a misconfigured value never
 # disarms the guard.
 
@@ -56,4 +59,20 @@ checkout_refuse_off_main() {
   echo "root, which stays on main. Off main on purpose?" >&2
   echo "  ${2:-NETRADIO_ALLOW_OFF_MAIN=1 $0 start}" >&2
   exit 2
+}
+
+# Is the listener on PORT a server started from ROOT? A launcher starts its server with its checkout
+# as the working directory, so a listening pid whose cwd resolves to ROOT is that checkout's; one
+# started from another checkout on the same port is not. lsof gives both the pids and the cwd.
+checkout_listener_here() {
+  local here pid cwd resolved unknown=0
+  here="$(cd "$1" && pwd -P)" || return 2
+  for pid in $(lsof -nP -tiTCP:"$2" -sTCP:LISTEN 2>/dev/null || true); do
+    cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1 || true)"
+    resolved=""
+    if [ -n "$cwd" ]; then resolved="$(cd "$cwd" 2>/dev/null && pwd -P)" || resolved=""; fi
+    if [ -z "$resolved" ]; then unknown=1; continue; fi
+    [ "$resolved" = "$here" ] && return 0
+  done
+  return $((1 + unknown))
 }

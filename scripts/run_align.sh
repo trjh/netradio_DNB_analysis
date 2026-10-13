@@ -38,23 +38,6 @@ PIDFILE="$ROOT/.align.pid"
 
 port_pids() { lsof -nP -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true; }
 
-# Is the listener on $PORT this checkout's server? `launch` starts it with this checkout as its
-# working directory, so a listening pid whose cwd is $ROOT is ours; one started from another
-# checkout on the same port is not. Exit status: 0 ours, 1 not ours (or nothing listening),
-# 2 cannot tell (lsof gave no working directory for a listening pid, or it is unreadable).
-running_here() {
-  local here pid cwd resolved unknown=0
-  here="$(cd "$ROOT" && pwd -P)"
-  for pid in $(port_pids); do
-    cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1 || true)"
-    resolved=""
-    if [ -n "$cwd" ]; then resolved="$(cd "$cwd" 2>/dev/null && pwd -P)" || resolved=""; fi
-    if [ -z "$resolved" ]; then unknown=1; continue; fi
-    [ "$resolved" = "$here" ] && return 0
-  done
-  return $((1 + unknown))
-}
-
 clear_port() {   # a stale process from an earlier run may still hold the port: clear it first
   local pids; pids="$(port_pids)"
   if [ -n "$pids" ]; then
@@ -167,7 +150,7 @@ case "${1:-start}" in
   stop)          clear_port; echo "stopped" ;;
   status)        status ;;
   running)       [ -n "$(port_pids)" ] ;;   # quiet predicate: 0 = listening on $PORT, 1 = not
-  running-here)  running_here ;;            # quiet: 0 = the listener is THIS checkout's server
+  running-here)  checkout_listener_here "$ROOT" "$PORT" ;;   # quiet: 0 = the listener is THIS checkout's server
   help|-h|--help) echo "usage: $0 {start|stop|restart|status|running|running-here|help}"; data_primer ;;
   *) echo "usage: $0 {start|stop|restart|status|running|running-here|help}" >&2; exit 1 ;;
 esac
