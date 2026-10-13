@@ -1,4 +1,5 @@
 """Tests for the label-timeline parser and the stream-files.json generator."""
+import io
 import json
 import os
 import shutil
@@ -197,19 +198,51 @@ class BuildTests(LabelDirCase):
                 fh.write(b"x" * 7)
         return audio
 
-    def test_duration_and_size_from_the_audio(self):
-        data = sf.build(previous={"da.mp3": {"duration": 1.0, "size": 1}},
+    def test_recorded_duration_is_reused_not_remeasured(self):
+        # Measured once and committed: a recorded duration wins over the audio, so ffprobe's
+        # last-digit drift never reaches the file. The size still comes from the audio.
+        data = sf.build(previous={"da.mp3": {"duration_seconds": 1.0, "size": 1}},
                         audio_dir=self._audio("da.mp3"), ffprobe=self._stub("echo 12.5"),
                         **self._inputs())
         row = data["files"][0]
-        self.assertEqual((row["duration_seconds"], row["size"]), (12.5, 7))
+        self.assertEqual((row["duration_seconds"], row["size"]), (1.0, 7))
+
+    def test_capture_with_no_duration_is_measured(self):
+        data = sf.build(previous={"da.mp3": {"size": 1}},
+                        audio_dir=self._audio("da.mp3"), ffprobe=self._stub("echo 12.5"),
+                        **self._inputs())
+        row = data["files"][0]
+        self.assertEqual((row["duration_seconds"], row["duration"], row["size"]), (12.5, 12.5, 7))
+
+    def test_remeasure_measures_a_recorded_capture_again(self):
+        data = sf.build(previous={"da.mp3": {"duration_seconds": 1.0}},
+                        audio_dir=self._audio("da.mp3"), ffprobe=self._stub("echo 12.5"),
+                        remeasure=True, **self._inputs())
+        self.assertEqual(data["files"][0]["duration_seconds"], 12.5)
 
     def test_failing_probe_falls_back_to_the_recorded_duration(self):
         data = sf.build(previous={"da.mp3": {"duration": 1.0, "size": 1}},
                         audio_dir=self._audio("da.mp3"), ffprobe=self._stub("exit 1"),
-                        **self._inputs())
+                        remeasure=True, **self._inputs())
         row = data["files"][0]
         self.assertEqual((row["duration_seconds"], row["size"]), (1.0, 7))
+
+    def test_no_duration_and_no_audio_writes_null_and_names_it_on_stderr(self):
+        out = os.path.join(self.tmp, "stream-files.json")
+        with open(out, "w", encoding="utf-8") as fh:
+            json.dump({"files": [{"filename": "da.mp3", "size": 1}]}, fh)
+        inputs = self._inputs()
+        err = io.StringIO()
+        with unittest.mock.patch.dict(os.environ, {"NETRADIO_MP3_DIR": os.path.join(self.tmp, "none")}), \
+                unittest.mock.patch("sys.stdout"), unittest.mock.patch("sys.stderr", err):
+            rc = sf.main(["--out", out, "--labels-dir", inputs["labels_dir"],
+                          "--tracklist", inputs["tracklist_path"],
+                          "--metadata", inputs["metadata_path"]])
+        self.assertEqual(rc, 0)
+        with open(out, encoding="utf-8") as fh:
+            row = json.load(fh)["files"][0]
+        self.assertIsNone(row["duration_seconds"])
+        self.assertIn("da.mp3", err.getvalue())
 
     def test_unreadable_previous_file_is_refused(self):
         path = os.path.join(self.tmp, "stream-files.json")

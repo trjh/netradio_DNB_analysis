@@ -26,9 +26,13 @@ Label grammar that places a file:
     sync row.
   - `file end: <file>` (or `file end <file>`): the file's master end; the latest wins.
 
-Durations are measured with ffprobe from the audio in NETRADIO_MP3_DIR when it is there; a
-capture whose audio is absent keeps the duration (and size) already recorded in
-`stream-files.json`. The recordings never change, so a duration measured once stays right.
+Durations are measured once and committed. A capture that already has a duration in
+`stream-files.json` keeps it; only a capture with none is measured, with ffprobe, from its
+audio in NETRADIO_MP3_DIR. `--remeasure` measures every capture whose audio is there again. The
+recordings never change, so a duration measured once stays right, and never re-measuring keeps
+ffprobe's last-digit drift out of the file. A capture with no duration and no audio is written
+with a null duration and named on stderr. Sizes come from the audio when it is there, else from
+the recorded value.
 
 The committed `stream-files.json` is the capture list: every capture it records is kept, and an
 MP3 that appears in NETRADIO_MP3_DIR is added. A capture leaves the list only with `--prune`,
@@ -42,6 +46,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -397,12 +402,13 @@ def load_previous(path):
 
 
 def build(labels_dir=LABELS_DIR, tracklist_path=TRACKLIST_PATH, metadata_path=METADATA_PATH,
-          previous=None, audio_dir=None, ffprobe=None, prune=False):
+          previous=None, audio_dir=None, ffprobe=None, prune=False, remeasure=False):
     """The stream-files document.
 
     The capture set is every capture already recorded (`previous`) plus every MP3 in
-    `audio_dir`; with `prune`, only the MP3s in `audio_dir`. Each capture's duration and size
-    come from its audio when present, else from `previous`. Raises BuildRefused for an empty
+    `audio_dir`; with `prune`, only the MP3s in `audio_dir`. A capture's duration is the one
+    recorded in `previous`; only a capture with none (or every capture, with `remeasure`) is
+    measured from its audio. Its size comes from its audio when present, else `previous`. Raises BuildRefused for an empty
     capture set, a prune with no audio directory, and a shorter set without `prune`."""
     previous = previous or {}
     local = set()
@@ -430,13 +436,15 @@ def build(labels_dir=LABELS_DIR, tracklist_path=TRACKLIST_PATH, metadata_path=ME
         info = timeline.get(filename) or {}
         start, end = info.get("master_start_seconds"), info.get("master_end_seconds")
         prev = previous.get(filename) or {}
+        recorded = prev.get("duration_seconds", prev.get("duration"))
         duration, size = None, None
         if filename in local:
             path = os.path.join(audio_dir, filename)
             size = os.path.getsize(path)
-            duration = probe_duration(ffprobe, path)
+            if recorded is None or remeasure:
+                duration = probe_duration(ffprobe, path)
         if duration is None:
-            duration = prev.get("duration_seconds", prev.get("duration"))
+            duration = recorded
         if size is None:
             size = prev.get("size")
         spec = spec_by_name.get(filename)
@@ -484,6 +492,8 @@ def main(argv=None):
     parser.add_argument("--metadata", default=str(METADATA_PATH))
     parser.add_argument("--prune", action="store_true",
                         help="drop recorded captures whose audio is not in NETRADIO_MP3_DIR")
+    parser.add_argument("--remeasure", action="store_true",
+                        help="measure every capture whose audio is present again, recorded or not")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -494,7 +504,8 @@ def main(argv=None):
         previous = load_previous(args.out)
         data = build(labels_dir=args.labels_dir, tracklist_path=args.tracklist,
                      metadata_path=args.metadata, previous=previous, audio_dir=audio_dir,
-                     ffprobe=ffprobe, prune=args.prune)
+                     ffprobe=ffprobe, prune=args.prune,
+                     remeasure=args.remeasure)
     except BuildRefused as exc:
         print("REFUSING TO WRITE: %s" % exc)
         return 1
@@ -506,7 +517,8 @@ def main(argv=None):
     print("%d captures, %d placed on the timeline, %d primary"
           % (len(data["files"]), placed, len(data["primary_files"])))
     if missing:
-        print("no duration (audio absent, none recorded): %s" % ", ".join(missing))
+        print("no duration (none recorded, and no audio measured): %s" % ", ".join(missing),
+              file=sys.stderr)
     if args.dry_run:
         print("dry-run: nothing written")
         return 0
