@@ -10,13 +10,14 @@ Curated metadata that is NOT in the labels (year, artwork filename, Discogs/
 AllMusic links, blurb, and any manual title/artist override) is carried forward
 from an optional `--seed` JSON (same schema), so re-generating never loses it.
 
-Self-contained (stdlib only). Run from anywhere:
+Stdlib only; the label timeline comes from `stream_files.py` beside it. Run from anywhere:
     python3 scripts/build_track_metadata.py [--seed path] [--dry-run]
 """
 import argparse
 import json
 import os
 import re
+import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -25,107 +26,14 @@ OUT_PATH = REPO / "track-metadata.json"
 SCHEMA = "netradio.track-metadata.v2"
 
 
-def parse_float(value, default=None):
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def normalize_audio_filename(name):
-    name = os.path.basename((name or "").strip())
-    if not name:
-        return None
-    stem, ext = os.path.splitext(name)
-    if ext.lower() in (".wav", ".au", ".mp3"):
-        return stem + ".mp3"
-    return name + ".mp3"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from stream_files import normalize_audio_filename, parse_file_timeline, parse_float  # noqa: E402,F401
+import stream_files  # noqa: E402
 
 
 def read_label_rows():
-    rows = []
-    if not LABELS_DIR.is_dir():
-        return rows
-    # Skip seed-only `<stem>.starter.labels.tsv` (Proposal B): they pre-position labels
-    # in Audacity and must never reach the build.
-    for path in sorted(p for p in LABELS_DIR.glob("*.labels.tsv")
-                       if not p.name.endswith(".starter.labels.tsv")):
-        with open(path, "r", encoding="utf-8", errors="replace") as handle:
-            for line in handle:
-                parts = line.rstrip("\n").split("\t", 2)
-                if len(parts) < 3:
-                    continue
-                seconds = parse_float(parts[0], None)
-                if seconds is None:
-                    continue
-                # parts[1] is the Audacity region END column; for point labels it
-                # equals parts[0], for region labels (e.g. a `startNNN:` whose span
-                # runs to the track's mix-end) it is later.
-                rows.append({"path": str(path), "seconds": seconds,
-                             "end": parse_float(parts[1], None), "text": parts[2].strip()})
-    return rows
-
-
-def parse_file_timeline(label_rows):
-    """File master windows from the label sync chain."""
-    starts, ends, current_by_path = {}, {}, {}
-    for row in label_rows:
-        m = re.search(r"\bfile(?:\s+start)?\s+sync:\s*([^\s]+)\s+(-?\d+(?:\.\d+)?)", row["text"], re.I)
-        if not m or abs(row["seconds"]) > 0.01:
-            continue
-        filename = normalize_audio_filename(m.group(1))
-        master_start = parse_float(m.group(2), None)
-        if filename and master_start is not None:
-            starts[filename] = master_start
-            current_by_path.setdefault(row["path"], filename)
-
-    for row in label_rows:
-        m = re.search(r"\bfile start\s+([^\s]+\.(?:wav|au|mp3))\b", row["text"], re.I)
-        if not m or "file start sync" in row["text"].lower():
-            continue
-        filename = normalize_audio_filename(m.group(1))
-        if not filename or filename in starts:
-            continue
-        owner = current_by_path.get(row["path"])
-        if owner and owner in starts:
-            starts[filename] = starts[owner] + row["seconds"]
-
-    for _ in range(6):
-        changed = False
-        for row in label_rows:
-            current = current_by_path.get(row["path"])
-            if not current or current not in starts:
-                continue
-            current_master = starts[current]
-            text = row["text"]
-            m = re.search(r"\bfile start sync:\s*([^\s]+)\s+(?:-?\d+(?:\.\d+)?|MARK|NEEDMARKINOWNFILE)", text, re.I)
-            if m:
-                filename = normalize_audio_filename(m.group(1))
-                if filename != current:
-                    master_start = current_master + row["seconds"]
-                    old = starts.get(filename)
-                    if filename and (old is None or abs(old - master_start) > 0.001):
-                        starts[filename] = master_start
-                        changed = True
-            m = re.search(r"\bfile end:?\s+([^\s]+\.(?:wav|au|mp3))\b", text, re.I)
-            if m:
-                filename = normalize_audio_filename(m.group(1))
-                master_end = current_master + row["seconds"]
-                old = ends.get(filename)
-                if filename and (old is None or master_end > old):
-                    ends[filename] = master_end
-                    changed = True
-            elif re.search(r"\bfile end:\s*%s\b" % re.escape(current[:-4]), text, re.I):
-                master_end = current_master + row["seconds"]
-                old = ends.get(current)
-                if old is None or master_end > old:
-                    ends[current] = master_end
-                    changed = True
-        if not changed:
-            break
-    timeline = {name: {"master_start_seconds": starts[name], "master_end_seconds": ends.get(name)}
-                for name in starts}
-    return timeline, current_by_path
+    """Every pipeline label row under LABELS_DIR (stream_files.read_label_rows)."""
+    return stream_files.read_label_rows(LABELS_DIR)
 
 
 LABEL_ID_RE = re.compile(r"\bstart0*(\d+)\s*:\s*ID:\s*(.+)$", re.I)

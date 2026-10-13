@@ -238,6 +238,9 @@ python3 scripts/build_track_metadata.py --dry-run  # preview without writing
 **This is the one tool that writes `track-metadata.json`.** Run it after any label change that
 affects track identity, position, or span. Curated fields (year, artwork, links, manual
 overrides) are carried forward from the previous JSON, so re-generating never loses them.
+
+A label change that moves a capture (a `file start sync`, `file sync` or `file end` row) also
+changes `stream-files.json`: `make stream-data` rebuilds both files together.
 `*.auto.labels.tsv` are read; `*.starter.labels.tsv` are not. **What to do next:** nothing;
 the new JSON is read directly.
 

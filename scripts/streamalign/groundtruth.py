@@ -6,14 +6,15 @@ master-start values are the ground truth the engine is graded against, and the
 ``verified [by] X`` annotations record which neighbour each file was aligned
 *against* — i.e. the edges of the alignment graph built by hand.
 
-The resolution logic here is a port of an earlier timeline parser
-(``parse_file_timeline``, not in this repo; passes 1-3, starts only), so the engine
-stands alone in this repo. A test checks it against known hand values
+The resolution is ``stream_files.resolve_timeline`` (the one label-timeline parser in
+this repo), keyed by file stem here. A test checks it against known hand values
 (``tests/test_streamalign.py`` ``SMOKE``).
 """
 
 import os
 import re
+
+import stream_files
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 LABELS_DIR = os.environ.get("NETRADIO_LABELS_DIR", os.path.join(REPO_ROOT, "labels"))
@@ -29,15 +30,11 @@ def automated_dir(labels_dir=None):
     """
     return os.path.join(labels_dir or LABELS_DIR, AUTOMATED_DIRNAME)
 
-# A file-start sync row: `file [start] sync: NAME MASTER_OR_OFFSET [verified ...]`.
-# The trailing number after a row that sits at local 0.0 in its own file IS that
-# file's master start; embedded in another file at a non-zero timestamp it is a
-# reference anchor and the real start is owner_master + row_seconds (resolved in
-# the iterative pass). MARK / NEEDMARKINOWNFILE stand in for "offset is 0 here".
-_SYNC_SEED = re.compile(r"\bfile(?:\s+start)?\s+sync:\s*([^\s]+)\s+(-?\d+(?:\.\d+)?)", re.I)
-_SYNC_REF = re.compile(
-    r"\bfile start sync:\s*([^\s]+)\s+(?:-?\d+(?:\.\d+)?|MARK|NEEDMARKINOWNFILE)", re.I)
-_FILE_START = re.compile(r"\bfile start\s+([^\s]+\.(?:wav|au|mp3))\b", re.I)
+# The label grammar and its resolution live in stream_files.py (scripts/, on sys.path wherever
+# this package imports): seeds at local 0.0, `file start` fallbacks, and cross-file syncs whose
+# trailing number is a verification anchor, never an offset.
+_SYNC_SEED = stream_files.SYNC_SEED_RE
+_SYNC_REF = stream_files.SYNC_REF_RE
 _VERIFIED = re.compile(r"\bverified(?:\s+by)?\s+(.+)$", re.I)
 _STEMISH = re.compile(r"[A-Za-z0-9][\w.\-]*")
 
@@ -46,34 +43,11 @@ def _stem(name):
     return os.path.splitext(os.path.basename((name or "").strip()))[0]
 
 
-def is_pipeline_label_file(name):
-    """True for label files the pipeline consumes: hand `<stem>.labels.tsv` and engine
-    `<stem>.auto.labels.tsv` (both end `.labels.tsv`). Excludes seed-only
-    `<stem>.starter.labels.tsv` (Proposal B), which only pre-positions labels in
-    Audacity and is kept out of import/solve/build."""
-    return name.endswith(".labels.tsv") and not name.endswith(".starter.labels.tsv")
+is_pipeline_label_file = stream_files.is_pipeline_label_file
 
 
 def _read_label_rows(labels_dir):
-    rows = []
-    if not os.path.isdir(labels_dir):
-        return rows
-    for fn in sorted(n for n in os.listdir(labels_dir) if is_pipeline_label_file(n)):
-        path = os.path.join(labels_dir, fn)
-        try:
-            with open(path, "r", encoding="utf-8", errors="replace") as handle:
-                for line in handle:
-                    parts = line.rstrip("\n").split("\t", 2)
-                    if len(parts) < 3:
-                        continue
-                    try:
-                        seconds = float(parts[0])
-                    except ValueError:
-                        continue
-                    rows.append({"path": path, "seconds": seconds, "text": parts[2].strip()})
-        except OSError:
-            pass
-    return rows
+    return stream_files.read_label_rows(labels_dir)
 
 
 def _verified_refs(text):
@@ -92,59 +66,11 @@ def _verified_refs(text):
 def resolve_starts(labels_dir=None):
     """Return {stem: master_start_seconds} from the hand `file start sync` rows.
 
-    Port of the earlier parse_file_timeline passes 1-3 (starts only), keyed by file
-    stem (no extension) so it maps directly onto audio files.
+    stream_files.resolve_timeline's starts, keyed by file stem (no extension) so it maps
+    directly onto audio files.
     """
     labels_dir = labels_dir or LABELS_DIR
-    rows = _read_label_rows(labels_dir)
-    starts = {}
-    current_by_path = {}
-
-    # Pass 1: authoritative seeds — `file [start] sync: NAME MASTER` at local 0.0.
-    for row in rows:
-        m = _SYNC_SEED.search(row["text"])
-        if not m or abs(row["seconds"]) > 0.01:
-            continue
-        name = _stem(m.group(1))
-        try:
-            master = float(m.group(2))
-        except ValueError:
-            continue
-        starts[name] = master
-        current_by_path.setdefault(row["path"], name)
-
-    # Pass 2: plain `file start NAME` as a fallback for files with no sync seed.
-    for row in rows:
-        m = _FILE_START.search(row["text"])
-        if not m or "file start sync" in row["text"].lower():
-            continue
-        name = _stem(m.group(1))
-        if name in starts:
-            continue
-        owner = current_by_path.get(row["path"])
-        if owner and owner in starts:
-            starts[name] = starts[owner] + row["seconds"]
-
-    # Pass 3: resolve cross-file syncs expressed in another file's coordinates.
-    for _ in range(6):
-        changed = False
-        for row in rows:
-            current = current_by_path.get(row["path"])
-            if not current or current not in starts:
-                continue
-            m = _SYNC_REF.search(row["text"])
-            if not m:
-                continue
-            name = _stem(m.group(1))
-            if name == current:
-                continue
-            master = starts[current] + row["seconds"]
-            old = starts.get(name)
-            if old is None or abs(old - master) > 0.001:
-                starts[name] = master
-                changed = True
-        if not changed:
-            break
+    starts, _ends, _owners = stream_files.resolve_timeline(_read_label_rows(labels_dir), key=_stem)
     return starts
 
 

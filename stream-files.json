@@ -3,6 +3,7 @@
     {
       "duration": 1102.848,
       "duration_label": "18:23",
+      "duration_seconds": 1102.848,
       "filename": "d000-018.mp3",
       "is_primary": true,
       "listing_order": 1,
@@ -11,11 +12,14 @@
       "mp3_filename": "d000-018.mp3",
       "original_filename": "d000-018.wav",
       "size": 13722608,
+      "timing_range_end_seconds": 1080.0,
+      "timing_range_start_seconds": 0.0,
       "track_count": 8
     },
     {
       "duration": 1317.632,
       "duration_label": "21:58",
+      "duration_seconds": 1317.632,
       "filename": "d019-040.mp3",
       "is_primary": true,
       "listing_order": 2,
@@ -24,11 +28,14 @@
       "mp3_filename": "d019-040.mp3",
       "original_filename": "d019-040.wav",
       "size": 16364001,
+      "timing_range_end_seconds": 2400.0,
+      "timing_range_start_seconds": 1140.0,
       "track_count": 5
     },
     {
       "duration": 2847.168,
       "duration_label": "47:27",
+      "duration_seconds": 2847.168,
       "filename": "d026-073b.mp3",
       "is_primary": true,
       "listing_order": 3,
@@ -37,11 +44,14 @@
       "mp3_filename": "d026-073b.mp3",
       "original_filename": "d026-073b.wav",
       "size": 34309285,
+      "timing_range_end_seconds": 4380.0,
+      "timing_range_start_seconds": 1560.0,
       "track_count": 9
     },
     {
       "duration": 1380.352,
       "duration_label": "23:00",
+      "duration_seconds": 1380.352,
       "filename": "d065-087.mp3",
       "is_primary": true,
       "listing_order": 4,
@@ -50,11 +60,14 @@
       "mp3_filename": "d065-087.mp3",
       "original_filename": "d065-087.wav",
       "size": 16414581,
+      "timing_range_end_seconds": 5220.0,
+      "timing_range_start_seconds": 3900.0,
       "track_count": 6
     },
     {
       "duration": 1223.8315,
       "duration_label": "20:24",
+      "duration_seconds": 1223.8315,
       "filename": "d088-107.mp3",
       "is_primary": true,
       "listing_order": 5,
@@ -63,11 +76,14 @@
       "mp3_filename": "d088-107.mp3",
       "original_filename": "d088-107.wav",
       "size": 14750301,
+      "timing_range_end_seconds": 6480.0,
+      "timing_range_start_seconds": 5220.0,
       "track_count": 5
     },
     {
       "duration": 1036.928,
       "duration_label": "17:17",
+      "duration_seconds": 1036.928,
       "filename": "d107-121b.mp3",
       "is_primary": true,
       "listing_order": 6,
@@ -76,11 +92,14 @@
       "mp3_filename": "d107-121b.mp3",
       "original_filename": "d107-121b.wav",
       "size": 12433274,
+      "timing_range_end_seconds": 7140.0,
+      "timing_range_start_seconds": 6300.0,
       "track_count": 4
     },
     {
       "duration": 1319.296,
       "duration_label": "21:59",
+      "duration_seconds": 1319.296,
       "filename": "d122-144.mp3",
       "is_primary": true,
       "listing_order": 7,
@@ -89,11 +108,14 @@
       "mp3_filename": "d122-144.mp3",
       "original_filename": "d122-144.wav",
       "size": 15747754,
+      "timing_range_end_seconds": 8640.0,
+      "timing_range_start_seconds": 7320.0,
       "track_count": 6
     },
     {
       "duration": 1219.968,
       "duration_label": "20:20",
+      "duration_seconds": 1219.968,
       "filename": "d145-164.mp3",
       "is_primary": true,
       "listing_order": 8,
@@ -102,11 +124,14 @@
       "mp3_filename": "d145-164.mp3",
       "original_filename": "d145-164.wav",
       "size": 14123794,
+      "timing_range_end_seconds": 9840.0,
+      "timing_range_start_seconds": 8700.0,
       "track_count": 5
     },
     {
       "duration": 1300.416,
       "duration_label": "21:40",
+      "duration_seconds": 1300.416,
       "filename": "d165-186.mp3",
       "is_primary": true,
       "listing_order": 9,
@@ -115,11 +140,14 @@
       "mp3_filename": "d165-186.mp3",
       "original_filename": "d165-186.wav",
       "size": 15120130,
+      "timing_range_end_seconds": 11160.0,
+      "timing_range_start_seconds": 9900.0,
       "track_count": 3
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d-14Nov10-b.mp3",
       "is_primary": true,
       "listing_order": 10,
@@ -128,11 +156,14 @@
       "mp3_filename": "d-14Nov10-b.mp3",
       "original_filename": "d-14Nov10-b.au",
       "size": 24002685,
+      "timing_range_end_seconds": 13200.0,
+      "timing_range_start_seconds": 12000.0,
       "track_count": 4
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d-14Nov10-c.mp3",
       "is_primary": true,
       "listing_order": 11,
@@ -141,11 +172,14 @@
       "mp3_filename": "d-14Nov10-c.mp3",
       "original_filename": "d-14Nov10-c.au",
       "size": 24002685,
+      "timing_range_end_seconds": 14400.0,
+      "timing_range_start_seconds": 13200.0,
       "track_count": 4
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d-14Nov10-d.mp3",
       "is_primary": true,
       "listing_order": 12,
@@ -154,11 +188,14 @@
       "mp3_filename": "d-14Nov10-d.mp3",
       "original_filename": "d-14Nov10-d.au",
       "size": 24002685,
+      "timing_range_end_seconds": 15600.0,
+      "timing_range_start_seconds": 14400.0,
       "track_count": 5
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d-14Nov10-e.mp3",
       "is_primary": true,
       "listing_order": 13,
@@ -167,11 +204,14 @@
       "mp3_filename": "d-14Nov10-e.mp3",
       "original_filename": "d-14Nov10-e.au",
       "size": 24002685,
+      "timing_range_end_seconds": 16800.0,
+      "timing_range_start_seconds": 15600.0,
       "track_count": 5
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d-14Nov10-f.mp3",
       "is_primary": true,
       "listing_order": 14,
@@ -180,11 +220,14 @@
       "mp3_filename": "d-14Nov10-f.mp3",
       "original_filename": "d-14Nov10-f.au",
       "size": 24002685,
+      "timing_range_end_seconds": 18000.0,
+      "timing_range_start_seconds": 16800.0,
       "track_count": 4
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d288-307.mp3",
       "is_primary": true,
       "listing_order": 15,
@@ -193,11 +236,14 @@
       "mp3_filename": "d288-307.mp3",
       "original_filename": "d288-307.wav",
       "size": 12051634,
+      "timing_range_end_seconds": 18420.0,
+      "timing_range_start_seconds": 17280.0,
       "track_count": 4
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d308-327.mp3",
       "is_primary": true,
       "listing_order": 16,
@@ -206,11 +252,14 @@
       "mp3_filename": "d308-327.mp3",
       "original_filename": "d308-327.wav",
       "size": 11862238,
+      "timing_range_end_seconds": 19620.0,
+      "timing_range_start_seconds": 18480.0,
       "track_count": 4
     },
     {
       "duration": 878.112,
       "duration_label": "14:38",
+      "duration_seconds": 878.112,
       "filename": "d328-342.mp3",
       "is_primary": true,
       "listing_order": 17,
@@ -219,11 +268,14 @@
       "mp3_filename": "d328-342.mp3",
       "original_filename": "d328-342.wav",
       "size": 9584373,
+      "timing_range_end_seconds": 20520.0,
+      "timing_range_start_seconds": 19680.0,
       "track_count": 4
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d336-355.mp3",
       "is_primary": true,
       "listing_order": 18,
@@ -232,11 +284,14 @@
       "mp3_filename": "d336-355.mp3",
       "original_filename": "d336-355.wav",
       "size": 13712350,
+      "timing_range_end_seconds": 21300.0,
+      "timing_range_start_seconds": 20160.0,
       "track_count": 5
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d356-375.mp3",
       "is_primary": true,
       "listing_order": 19,
@@ -245,11 +300,14 @@
       "mp3_filename": "d356-375.mp3",
       "original_filename": "d356-375.wav",
       "size": 14691982,
+      "timing_range_end_seconds": 22500.0,
+      "timing_range_start_seconds": 21360.0,
       "track_count": 5
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d376-395.mp3",
       "is_primary": true,
       "listing_order": 20,
@@ -258,11 +316,14 @@
       "mp3_filename": "d376-395.mp3",
       "original_filename": "d376-395.wav",
       "size": 14689534,
+      "timing_range_end_seconds": 23700.0,
+      "timing_range_start_seconds": 22560.0,
       "track_count": 21
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d396-415.mp3",
       "is_primary": true,
       "listing_order": 21,
@@ -271,11 +332,14 @@
       "mp3_filename": "d396-415.mp3",
       "original_filename": "d396-415.wav",
       "size": 14777230,
+      "timing_range_end_seconds": 24900.0,
+      "timing_range_start_seconds": 23760.0,
       "track_count": 3
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d416-435.mp3",
       "is_primary": true,
       "listing_order": 22,
@@ -284,11 +348,14 @@
       "mp3_filename": "d416-435.mp3",
       "original_filename": "d416-435.wav",
       "size": 14835046,
+      "timing_range_end_seconds": 26100.0,
+      "timing_range_start_seconds": 24960.0,
       "track_count": 5
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d436-455.mp3",
       "is_primary": true,
       "listing_order": 23,
@@ -297,11 +364,14 @@
       "mp3_filename": "d436-455.mp3",
       "original_filename": "d436-455.wav",
       "size": 15350295,
+      "timing_range_end_seconds": 27300.0,
+      "timing_range_start_seconds": 26160.0,
       "track_count": 4
     },
     {
       "duration": 875.9035,
       "duration_label": "14:36",
+      "duration_seconds": 875.9035,
       "filename": "d456-470.mp3",
       "is_primary": true,
       "listing_order": 24,
@@ -310,11 +380,14 @@
       "mp3_filename": "d456-470.mp3",
       "original_filename": "d456-470.wav",
       "size": 10645293,
+      "timing_range_end_seconds": 28200.0,
+      "timing_range_start_seconds": 27360.0,
       "track_count": 3
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d472-491.mp3",
       "is_primary": true,
       "listing_order": 25,
@@ -323,11 +396,14 @@
       "mp3_filename": "d472-491.mp3",
       "original_filename": "d472-491.wav",
       "size": 14952406,
+      "timing_range_end_seconds": 29460.0,
+      "timing_range_start_seconds": 28320.0,
       "track_count": 0
     },
     {
       "duration": 1530.528,
       "duration_label": "25:31",
+      "duration_seconds": 1530.528,
       "filename": "d-25-000b.mp3",
       "is_primary": false,
       "listing_order": 26,
@@ -336,11 +412,14 @@
       "mp3_filename": "d-25-000b.mp3",
       "original_filename": "d-25-000b.wav",
       "size": 30613005,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 1
     },
     {
       "duration": 1853.088,
       "duration_label": "30:53",
+      "duration_seconds": 1853.088,
       "filename": "d-25-005b.mp3",
       "is_primary": false,
       "listing_order": 27,
@@ -349,11 +428,14 @@
       "mp3_filename": "d-25-005b.mp3",
       "original_filename": "d-25-005b.wav",
       "size": 37064205,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 4
     },
     {
       "duration": 1574.688,
       "duration_label": "26:15",
+      "duration_seconds": 1574.688,
       "filename": "d001-026b.mp3",
       "is_primary": false,
       "listing_order": 28,
@@ -362,11 +444,14 @@
       "mp3_filename": "d001-026b.mp3",
       "original_filename": "d001-026b.wav",
       "size": 19543164,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 9
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d006-025.mp3",
       "is_primary": false,
       "listing_order": 29,
@@ -375,11 +460,14 @@
       "mp3_filename": "d006-025.mp3",
       "original_filename": "d006-025.wav",
       "size": 14793212,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 5
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d026-045.mp3",
       "is_primary": false,
       "listing_order": 30,
@@ -388,11 +476,14 @@
       "mp3_filename": "d026-045.mp3",
       "original_filename": "d026-045.wav",
       "size": 14731509,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 5
     },
     {
       "duration": 1465.728,
       "duration_label": "24:26",
+      "duration_seconds": 1465.728,
       "filename": "d041-064.mp3",
       "is_primary": false,
       "listing_order": 31,
@@ -401,11 +492,14 @@
       "mp3_filename": "d041-064.mp3",
       "original_filename": "d041-064.wav",
       "size": 17461497,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 4
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d046-065.mp3",
       "is_primary": false,
       "listing_order": 32,
@@ -414,11 +508,14 @@
       "mp3_filename": "d046-065.mp3",
       "original_filename": "d046-065.wav",
       "size": 14341485,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 4
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d064-083b.mp3",
       "is_primary": false,
       "listing_order": 33,
@@ -427,11 +524,14 @@
       "mp3_filename": "d064-083b.mp3",
       "original_filename": "d064-083b.wav",
       "size": 14274745,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 77
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d066-085.mp3",
       "is_primary": false,
       "listing_order": 34,
@@ -440,11 +540,14 @@
       "mp3_filename": "d066-085.mp3",
       "original_filename": "d066-085.wav",
       "size": 14323341,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 5
     },
     {
       "duration": 1073.408,
       "duration_label": "17:53",
+      "duration_seconds": 1073.408,
       "filename": "d069-086.mp3",
       "is_primary": false,
       "listing_order": 35,
@@ -453,11 +556,14 @@
       "mp3_filename": "d069-086.mp3",
       "original_filename": "d069-086.wav",
       "size": 12890217,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 4
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d084-103b.mp3",
       "is_primary": false,
       "listing_order": 36,
@@ -466,11 +572,14 @@
       "mp3_filename": "d084-103b.mp3",
       "original_filename": "d084-103b.wav",
       "size": 14518609,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 6
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d086-105.mp3",
       "is_primary": false,
       "listing_order": 37,
@@ -479,11 +588,14 @@
       "mp3_filename": "d086-105.mp3",
       "original_filename": "d086-105.wav",
       "size": 14524365,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 5
     },
     {
       "duration": 2005.248,
       "duration_label": "33:25",
+      "duration_seconds": 2005.248,
       "filename": "d087-121.mp3",
       "is_primary": false,
       "listing_order": 38,
@@ -492,11 +604,14 @@
       "mp3_filename": "d087-121.mp3",
       "original_filename": "d087-121.wav",
       "size": 24188853,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 73
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d106-125.mp3",
       "is_primary": false,
       "listing_order": 39,
@@ -505,11 +620,14 @@
       "mp3_filename": "d106-125.mp3",
       "original_filename": "d106-125.wav",
       "size": 14422558,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 5
     },
     {
       "duration": 281.856,
       "duration_label": "4:42",
+      "duration_seconds": 281.856,
       "filename": "d104-108b.mp3",
       "is_primary": false,
       "listing_order": 40,
@@ -518,11 +636,14 @@
       "mp3_filename": "d104-108b.mp3",
       "original_filename": "d104-108b.wav",
       "size": 3417505,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 2
     },
     {
       "duration": 1318.784,
       "duration_label": "21:59",
+      "duration_seconds": 1318.784,
       "filename": "d122-144b.mp3",
       "is_primary": false,
       "listing_order": 41,
@@ -531,11 +652,14 @@
       "mp3_filename": "d122-144b.mp3",
       "original_filename": "d122-144b.wav",
       "size": 15737210,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 5
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d126-145.mp3",
       "is_primary": false,
       "listing_order": 42,
@@ -544,11 +668,14 @@
       "mp3_filename": "d126-145.mp3",
       "original_filename": "d126-145.wav",
       "size": 14283094,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 6
     },
     {
       "duration": 1220.352,
       "duration_label": "20:20",
+      "duration_seconds": 1220.352,
       "filename": "d145-164b.mp3",
       "is_primary": false,
       "listing_order": 43,
@@ -557,11 +684,14 @@
       "mp3_filename": "d145-164b.mp3",
       "original_filename": "d145-164b.wav",
       "size": 14136362,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 5
     },
     {
       "duration": 9.0875,
       "duration_label": "0:09",
+      "duration_seconds": 9.0875,
       "filename": "d146.mp3",
       "is_primary": false,
       "listing_order": 44,
@@ -570,11 +700,14 @@
       "mp3_filename": "d146.mp3",
       "original_filename": "d146.wav",
       "size": 140041,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 1
     },
     {
       "duration": 1300.48,
       "duration_label": "21:40",
+      "duration_seconds": 1300.48,
       "filename": "d165-186b.mp3",
       "is_primary": false,
       "listing_order": 45,
@@ -583,11 +716,14 @@
       "mp3_filename": "d165-186b.mp3",
       "original_filename": "d165-186b.wav",
       "size": 15120746,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 5
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d-14Nov10-a.mp3",
       "is_primary": false,
       "listing_order": 46,
@@ -596,11 +732,14 @@
       "mp3_filename": "d-14Nov10-a.mp3",
       "original_filename": "d-14Nov10-a.au",
       "size": 24002685,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 5
     },
     {
       "duration": 399.359313,
       "duration_label": "6:39",
+      "duration_seconds": 399.359313,
       "filename": "d187-200.mp3",
       "is_primary": false,
       "listing_order": 47,
@@ -609,11 +748,14 @@
       "mp3_filename": "d187-200.mp3",
       "original_filename": "d187-200.wav",
       "size": 5322549,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 2
     },
     {
       "duration": 1268.544,
       "duration_label": "21:09",
+      "duration_seconds": 1268.544,
       "filename": "d187-216b.mp3",
       "is_primary": false,
       "listing_order": 48,
@@ -622,11 +764,14 @@
       "mp3_filename": "d187-216b.mp3",
       "original_filename": "d187-216b.wav",
       "size": 15965342,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 7
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "dnb-14Nov02-a.mp3",
       "is_primary": false,
       "listing_order": 49,
@@ -635,11 +780,14 @@
       "mp3_filename": "dnb-14Nov02-a.mp3",
       "original_filename": "dnb-14Nov02-a.au",
       "size": 24002685,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 53
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "dnb-14Nov02-b.mp3",
       "is_primary": false,
       "listing_order": 50,
@@ -648,11 +796,14 @@
       "mp3_filename": "dnb-14Nov02-b.mp3",
       "original_filename": "dnb-14Nov02-b.au",
       "size": 24002685,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 5
     },
     {
       "duration": 1539.456,
       "duration_label": "25:39",
+      "duration_seconds": 1539.456,
       "filename": "d217-242.mp3",
       "is_primary": false,
       "listing_order": 51,
@@ -661,11 +812,14 @@
       "mp3_filename": "d217-242.mp3",
       "original_filename": "d217-242.wav",
       "size": 17669290,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 5
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d228-247.mp3",
       "is_primary": false,
       "listing_order": 52,
@@ -674,11 +828,14 @@
       "mp3_filename": "d228-247.mp3",
       "original_filename": "d228-247.wav",
       "size": 13713286,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 5
     },
     {
       "duration": 66.9435,
       "duration_label": "1:07",
+      "duration_seconds": 66.9435,
       "filename": "dnb-14Nov02-c.mp3",
       "is_primary": false,
       "listing_order": 53,
@@ -687,11 +844,14 @@
       "mp3_filename": "dnb-14Nov02-c.mp3",
       "original_filename": "dnb-14Nov02-c.au",
       "size": 1341405,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 1
     },
     {
       "duration": 1539.52,
       "duration_label": "25:40",
+      "duration_seconds": 1539.52,
       "filename": "d242-268.mp3",
       "is_primary": false,
       "listing_order": 54,
@@ -700,11 +860,14 @@
       "mp3_filename": "d242-268.mp3",
       "original_filename": "d242-268.wav",
       "size": 18409126,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 5
     },
     {
       "duration": 682.560063,
       "duration_label": "11:23",
+      "duration_seconds": 682.560063,
       "filename": "d248-258.mp3",
       "is_primary": false,
       "listing_order": 55,
@@ -713,11 +876,14 @@
       "mp3_filename": "d248-258.mp3",
       "original_filename": "d248-258.wav",
       "size": 8391909,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 3
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d268-287.mp3",
       "is_primary": false,
       "listing_order": 56,
@@ -726,11 +892,14 @@
       "mp3_filename": "d268-287.mp3",
       "original_filename": "d268-287.wav",
       "size": 12632890,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 5
     },
     {
       "duration": 175.8345,
       "duration_label": "2:56",
+      "duration_seconds": 175.8345,
       "filename": "d269-271b.mp3",
       "is_primary": false,
       "listing_order": 57,
@@ -739,11 +908,14 @@
       "mp3_filename": "d269-271b.mp3",
       "original_filename": "d269-271b.wav",
       "size": 1847291,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 3
     },
     {
       "duration": 1139.069375,
       "duration_label": "18:59",
+      "duration_seconds": 1139.069375,
       "filename": "d276-293b.mp3",
       "is_primary": false,
       "listing_order": 58,
@@ -752,11 +924,14 @@
       "mp3_filename": "d276-293b.mp3",
       "original_filename": "d276-293b.wav",
       "size": 11980286,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 4
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d316-335.mp3",
       "is_primary": false,
       "listing_order": 59,
@@ -765,11 +940,14 @@
       "mp3_filename": "d316-335.mp3",
       "original_filename": "d316-335.wav",
       "size": 11973802,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 4
     },
     {
       "duration": 785.9195,
       "duration_label": "13:06",
+      "duration_seconds": 785.9195,
       "filename": "d-14Nov10-h.mp3",
       "is_primary": false,
       "listing_order": 60,
@@ -778,11 +956,14 @@
       "mp3_filename": "d-14Nov10-h.mp3",
       "original_filename": "d-14Nov10-h.au",
       "size": 15721245,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 3
     },
     {
       "duration": 1200.096,
       "duration_label": "20:00",
+      "duration_seconds": 1200.096,
       "filename": "d181-201.14Nov10-a.mp3",
       "is_primary": false,
       "listing_order": 61,
@@ -791,11 +972,14 @@
       "mp3_filename": "d181-201.14Nov10-a.mp3",
       "original_filename": "d-14Nov10-a.au",
       "size": 7200576,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1200.096,
       "duration_label": "20:00",
+      "duration_seconds": 1200.096,
       "filename": "d198-218.14Nov02-a.mp3",
       "is_primary": false,
       "listing_order": 62,
@@ -804,11 +988,14 @@
       "mp3_filename": "d198-218.14Nov02-a.mp3",
       "original_filename": "d-14Nov02-a.au",
       "size": 7224018,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1200.096,
       "duration_label": "20:00",
+      "duration_seconds": 1200.096,
       "filename": "d201-221.14Nov10-b.mp3",
       "is_primary": false,
       "listing_order": 63,
@@ -817,11 +1004,14 @@
       "mp3_filename": "d201-221.14Nov10-b.mp3",
       "original_filename": "d-14Nov10-b.au",
       "size": 7224018,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1200.096,
       "duration_label": "20:00",
+      "duration_seconds": 1200.096,
       "filename": "d218-238.14Nov02-b.mp3",
       "is_primary": false,
       "listing_order": 64,
@@ -830,11 +1020,14 @@
       "mp3_filename": "d218-238.14Nov02-b.mp3",
       "original_filename": "d-14Nov02-b.au",
       "size": 7224018,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1200.096,
       "duration_label": "20:00",
+      "duration_seconds": 1200.096,
       "filename": "d221-241.14Nov10-c.mp3",
       "is_primary": false,
       "listing_order": 65,
@@ -843,11 +1036,14 @@
       "mp3_filename": "d221-241.14Nov10-c.mp3",
       "original_filename": "d-14Nov10-c.au",
       "size": 7224018,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 67.032,
       "duration_label": "1:07",
+      "duration_seconds": 67.032,
       "filename": "d239.14Nov02-c.mp3",
       "is_primary": false,
       "listing_order": 66,
@@ -856,11 +1052,14 @@
       "mp3_filename": "d239.14Nov02-c.mp3",
       "original_filename": "d-14Nov02-c.au",
       "size": 425632,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1200.096,
       "duration_label": "20:00",
+      "duration_seconds": 1200.096,
       "filename": "d241-261.14Nov10-d.mp3",
       "is_primary": false,
       "listing_order": 67,
@@ -869,11 +1068,14 @@
       "mp3_filename": "d241-261.14Nov10-d.mp3",
       "original_filename": "d-14Nov10-d.au",
       "size": 7224018,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1200.096,
       "duration_label": "20:00",
+      "duration_seconds": 1200.096,
       "filename": "d261-281.14Nov10-e.mp3",
       "is_primary": false,
       "listing_order": 68,
@@ -882,11 +1084,14 @@
       "mp3_filename": "d261-281.14Nov10-e.mp3",
       "original_filename": "d-14Nov10-e.au",
       "size": 7224018,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1200.096,
       "duration_label": "20:00",
+      "duration_seconds": 1200.096,
       "filename": "d281-301.14Nov10-f.mp3",
       "is_primary": false,
       "listing_order": 69,
@@ -895,11 +1100,14 @@
       "mp3_filename": "d281-301.14Nov10-f.mp3",
       "original_filename": "d-14Nov10-f.au",
       "size": 7224018,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 786.024,
       "duration_label": "13:06",
+      "duration_seconds": 786.024,
       "filename": "d301-314.14Nov10-h.mp3",
       "is_primary": false,
       "listing_order": 70,
@@ -908,11 +1116,14 @@
       "mp3_filename": "d301-314.14Nov10-h.mp3",
       "original_filename": "d-14Nov10-h.au",
       "size": 4739586,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 802.944,
       "duration_label": "13:23",
+      "duration_seconds": 802.944,
       "filename": "d425-438b.mp3",
       "is_primary": false,
       "listing_order": 71,
@@ -921,11 +1132,14 @@
       "mp3_filename": "d425-438b.mp3",
       "original_filename": "d425-438b.wav",
       "size": 10160089,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d425-444.mp3",
       "is_primary": false,
       "listing_order": 72,
@@ -934,11 +1148,14 @@
       "mp3_filename": "d425-444.mp3",
       "original_filename": "d425-444.wav",
       "size": 15365902,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d445-464.mp3",
       "is_primary": false,
       "listing_order": 73,
@@ -947,11 +1164,14 @@
       "mp3_filename": "d445-464.mp3",
       "original_filename": "d445-464.wav",
       "size": 14858158,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d465-484.mp3",
       "is_primary": false,
       "listing_order": 74,
@@ -960,11 +1180,14 @@
       "mp3_filename": "d465-484.mp3",
       "original_filename": "d465-484.wav",
       "size": 14939230,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d485-504.mp3",
       "is_primary": false,
       "listing_order": 75,
@@ -973,11 +1196,14 @@
       "mp3_filename": "d485-504.mp3",
       "original_filename": "d485-504.wav",
       "size": 15224998,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d492-511.mp3",
       "is_primary": false,
       "listing_order": 76,
@@ -986,11 +1212,14 @@
       "mp3_filename": "d492-511.mp3",
       "original_filename": "d492-511.wav",
       "size": 15119734,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d505-524.mp3",
       "is_primary": false,
       "listing_order": 77,
@@ -999,11 +1228,14 @@
       "mp3_filename": "d505-524.mp3",
       "original_filename": "d505-524.wav",
       "size": 14935486,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1698.048,
       "duration_label": "28:18",
+      "duration_seconds": 1698.048,
       "filename": "d505-531b.mp3",
       "is_primary": false,
       "listing_order": 78,
@@ -1012,11 +1244,14 @@
       "mp3_filename": "d505-531b.mp3",
       "original_filename": "d505-531b.wav",
       "size": 20984750,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1530.528,
       "duration_label": "25:31",
+      "duration_seconds": 1530.528,
       "filename": "d507-000b.mp3",
       "is_primary": false,
       "listing_order": 79,
@@ -1025,11 +1260,14 @@
       "mp3_filename": "d507-000b.mp3",
       "original_filename": "d507-000b.wav",
       "size": 18972710,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1853.088,
       "duration_label": "30:53",
+      "duration_seconds": 1853.088,
       "filename": "d507-005b.mp3",
       "is_primary": false,
       "listing_order": 80,
@@ -1038,11 +1276,14 @@
       "mp3_filename": "d507-005b.mp3",
       "original_filename": "d507-005b.wav",
       "size": 23003486,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 1200.0,
       "duration_label": "20:00",
+      "duration_seconds": 1200.0,
       "filename": "d512-005.mp3",
       "is_primary": false,
       "listing_order": 81,
@@ -1051,11 +1292,14 @@
       "mp3_filename": "d512-005.mp3",
       "original_filename": "d512-005.wav",
       "size": 14860966,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     },
     {
       "duration": 447.552,
       "duration_label": "7:28",
+      "duration_seconds": 447.552,
       "filename": "d525-532.mp3",
       "is_primary": false,
       "listing_order": 82,
@@ -1064,6 +1308,8 @@
       "mp3_filename": "d525-532.mp3",
       "original_filename": "d525-532.wav",
       "size": 5444985,
+      "timing_range_end_seconds": null,
+      "timing_range_start_seconds": null,
       "track_count": 0
     }
   ],
