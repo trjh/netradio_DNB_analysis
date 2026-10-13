@@ -9,6 +9,7 @@ minute ranges), plus `track-metadata.json` (to count the tracks in each capture)
 
     python3 scripts/stream_files.py              # writes stream-files.json
     python3 scripts/stream_files.py --dry-run    # prints a summary, writes nothing
+    python3 scripts/stream_files.py --prune      # also drop captures whose audio is gone
     make stream-data                             # track-metadata.json, then this
 
 It is also the one label-timeline parser in this repo: `build_track_metadata.py` and
@@ -16,10 +17,11 @@ It is also the one label-timeline parser in this repo: `build_track_metadata.py`
 
 Label grammar that places a file:
   - `file start sync: <file> <n>` / `file sync: <file> <n>` at local 0.0 of a label file: the
-    named file's offset 0 is master <n>. These seeds always win.
+    named file's offset 0 is master <n>. These seeds win over `file start` rows.
   - `file start sync: <file> <n>` anywhere else: the named file starts at the owning file's
     master start plus this row's timestamp. The trailing <n> is a verification anchor from the
-    file it was checked against, NEVER an offset to subtract.
+    file it was checked against, NEVER an offset to subtract. Once its owner is placed, such a
+    row overrides the named file's own seed when the two disagree.
   - `file start <file>`: the physical start (pre-roll included). Only seeds a file that has no
     sync row.
   - `file end: <file>` (or `file end <file>`): the file's master end; the latest wins.
@@ -27,6 +29,12 @@ Label grammar that places a file:
 Durations are measured with ffprobe from the audio in NETRADIO_MP3_DIR when it is there; a
 capture whose audio is absent keeps the duration (and size) already recorded in
 `stream-files.json`. The recordings never change, so a duration measured once stays right.
+
+The committed `stream-files.json` is the capture list: every capture it records is kept, and an
+MP3 that appears in NETRADIO_MP3_DIR is added. A capture leaves the list only with `--prune`,
+which drops the recorded captures whose audio is not in NETRADIO_MP3_DIR. The build refuses to
+write an empty list, or a shorter one without `--prune`, and stops when an existing
+`stream-files.json` cannot be read.
 """
 import argparse
 import json
@@ -179,7 +187,9 @@ def resolve_timeline(label_rows, key=normalize_audio_filename):
             text = row["text"]
 
             # The trailing number is a verification anchor, not an offset: the named file
-            # starts at this row's own master time.
+            # starts at this row's own master time, overriding its own seed if they disagree.
+            # A self row (`file start sync: <own file> <n>`) is the seed itself and places
+            # nothing, but the row still goes on to the `file end` checks below.
             m = SYNC_REF_RE.search(text)
             if m:
                 name = key(m.group(1))
@@ -332,21 +342,27 @@ def track_count(tracks, start, end, filename):
     return count
 
 
-def read_setting(name):
-    """The environment wins; this repo's `.env` fills a gap (never executed, names only)."""
-    if os.environ.get(name):
-        return os.environ[name]
+def read_env(path):
+    """KEY -> value from a `.env` file, never executed: blank lines and `#` lines skipped, each
+    line split on its first `=`, both sides trimmed, then double and single quotes stripped
+    from the value's ends. The first line for a key wins. A missing file reads as empty."""
+    env = {}
     try:
-        with open(REPO / ".env", encoding="utf-8") as handle:
+        with open(path, encoding="utf-8") as handle:
             for line in handle:
                 line = line.strip()
                 if line and not line.startswith("#") and "=" in line:
                     k, v = line.split("=", 1)
-                    if k.strip() == name:
-                        return v.strip().strip('"').strip("'") or None
+                    env.setdefault(k.strip(), v.strip().strip('"').strip("'"))
     except OSError:
         pass
-    return None
+    return env
+
+
+def read_setting(name, env=None):
+    """The environment wins; this repo's `.env` fills a gap."""
+    env = read_env(REPO / ".env") if env is None else env
+    return os.environ.get(name) or env.get(name) or None
 
 
 def probe_duration(ffprobe, path):
@@ -362,26 +378,45 @@ def probe_duration(ffprobe, path):
         return None
 
 
+class BuildRefused(Exception):
+    """The build would lose recorded captures, or cannot read what is recorded."""
+
+
 def load_previous(path):
+    """{filename: row} from an existing stream-files.json; {} when there is none.
+
+    A file that exists but cannot be read is an error, not an empty list: treating it as empty
+    would write an empty capture list over every recorded duration."""
+    if not os.path.exists(path):
+        return {}
     try:
         with open(path, "r", encoding="utf-8") as handle:
-            return {row["filename"]: row for row in json.load(handle).get("files") or []}
-    except (OSError, ValueError, KeyError, TypeError):
-        return {}
+            return {row["filename"]: row for row in json.load(handle)["files"]}
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise BuildRefused("cannot read %s (%s): fix or restore it first" % (path, exc))
 
 
 def build(labels_dir=LABELS_DIR, tracklist_path=TRACKLIST_PATH, metadata_path=METADATA_PATH,
-          previous=None, audio_dir=None, ffprobe=None):
+          previous=None, audio_dir=None, ffprobe=None, prune=False):
     """The stream-files document.
 
     The capture set is every capture already recorded (`previous`) plus every MP3 in
-    `audio_dir`. Each capture's duration and size come from its audio when present, else
-    from `previous`."""
+    `audio_dir`; with `prune`, only the MP3s in `audio_dir`. Each capture's duration and size
+    come from its audio when present, else from `previous`. Raises BuildRefused for an empty
+    capture set, a prune with no audio directory, and a shorter set without `prune`."""
     previous = previous or {}
     local = set()
     if audio_dir and os.path.isdir(audio_dir):
         local = {f for f in os.listdir(audio_dir) if f.lower().endswith(".mp3")}
-    files = sorted(set(previous) | local)
+    elif prune:
+        raise BuildRefused("--prune needs NETRADIO_MP3_DIR to name a directory of the audio")
+    files = sorted(local if prune else set(previous) | local)
+    if not files:
+        raise BuildRefused("no captures: nothing recorded and no audio in NETRADIO_MP3_DIR")
+    dropped = sorted(set(previous) - set(files))
+    if dropped and not prune:
+        raise BuildRefused("would drop %d recorded capture(s) without --prune: %s"
+                           % (len(dropped), ", ".join(dropped)))
 
     timeline, _ = parse_file_timeline(read_label_rows(labels_dir))
     specs = [dict(s, filename=resolve_capture_name(s["filename"], files))
@@ -445,14 +480,27 @@ def main(argv=None):
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", default=str(OUT_PATH))
     parser.add_argument("--labels-dir", default=str(LABELS_DIR))
+    parser.add_argument("--tracklist", default=str(TRACKLIST_PATH))
+    parser.add_argument("--metadata", default=str(METADATA_PATH))
+    parser.add_argument("--prune", action="store_true",
+                        help="drop recorded captures whose audio is not in NETRADIO_MP3_DIR")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
     audio_dir = read_setting("NETRADIO_MP3_DIR")
     audio_dir = os.path.expanduser(audio_dir) if audio_dir else None
     ffprobe = read_setting("NETRADIO_FFPROBE") or shutil.which("ffprobe")
-    data = build(labels_dir=args.labels_dir, previous=load_previous(args.out),
-                 audio_dir=audio_dir, ffprobe=ffprobe)
+    try:
+        previous = load_previous(args.out)
+        data = build(labels_dir=args.labels_dir, tracklist_path=args.tracklist,
+                     metadata_path=args.metadata, previous=previous, audio_dir=audio_dir,
+                     ffprobe=ffprobe, prune=args.prune)
+    except BuildRefused as exc:
+        print("REFUSING TO WRITE: %s" % exc)
+        return 1
+    dropped = sorted(set(previous) - {r["filename"] for r in data["files"]})
+    if dropped:
+        print("pruned %d capture(s) with no audio: %s" % (len(dropped), ", ".join(dropped)))
     placed = sum(1 for r in data["files"] if r["master_start_seconds"] is not None)
     missing = [r["filename"] for r in data["files"] if r["duration_seconds"] is None]
     print("%d captures, %d placed on the timeline, %d primary"

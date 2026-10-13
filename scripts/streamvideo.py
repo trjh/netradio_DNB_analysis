@@ -73,17 +73,8 @@ LOGO = os.path.join(REPO, "logo", "logo.jpg")
 FONTDIR = "/System/Library/Fonts/Supplemental"
 
 
-def read_env(path):
-    env = {}
-    try:
-        for line in open(path):
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                env[k.strip()] = v.strip()
-    except FileNotFoundError:
-        pass
-    return env
+sys.path.insert(0, SELF)
+from stream_files import read_env  # noqa: E402  (the one .env reader for these scripts)
 
 
 def setting(name, env=None):
