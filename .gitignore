@@ -93,5 +93,8 @@ clips_out/
 .venv
 # An in-progress atomic write of data/rulings.json (`rulings.json.<pid>.tmp`), renamed into place when done.
 data/rulings.json.*.tmp
+# The align server's launcher: its pidfile and its log (scripts/run_align.sh).
+.align.pid
+/logs/
 # The stream video's album-art folder (scripts/streamvideo.py; NETRADIO_ART_DIR moves it).
 /art/

@@ -138,3 +138,36 @@ harvest-run:          ## start the harvester (runs for weeks), under its own pid
 
 tracklist:            ## resolve artwork into track-metadata.json + render TRACKLIST.md (network)
 	$(PYTHON) scripts/render_tracklist.py
+
+#########################################
+#####         ALIGN TOOLS           #####
+#########################################
+# The align server (scripts/align_server.py) runs under its own launcher, scripts/run_align.sh
+# (start|stop|status|restart). These targets are its data verbs. Each script reads this
+# checkout's .env itself, so nothing here exports it.
+
+review-sync:          ## DP-22: the align-review-data branch -> ONE squash PR (review notes, summaries, data/rulings.json). ARGS=--dry-run
+	$(PYTHON) scripts/review_sync.py sync $(ARGS)
+
+# The one merge that does not wait for a person: an align-review-data PR that changes only
+# data/rulings.json (keys and flags, no free text) is squash-merged, pinned to the head GitHub
+# reported, and the branch recreated (decision made 2026-10-08). Any other PR is left to merge
+# by hand, and this says so. A sync that runs every data step of the checkout runs this after
+# `review-sync`.
+review-sync-automerge: ## merge the align-review-data PR when it changes only data/rulings.json, then recreate the branch; otherwise say it is left to merge by hand. ARGS=--dry-run
+	$(PYTHON) scripts/review_sync.py auto-merge $(ARGS)
+
+review-sync-postmerge: ## AFTER you merge the align-review-data PR by hand: delete + recreate it from the new main. ARGS=--dry-run
+	$(PYTHON) scripts/review_sync.py post-merge $(ARGS)
+
+compile-summary:      ## DP-24 §3: labels/automated + labels/review -> labels/summary (one importable label set per audio file; idempotent). ARGS=--dry-run
+	$(PYTHON) scripts/summary_compile.py $(ARGS)
+
+# A pull that changes scripts/ or public/ restarts a running align server
+# (scripts/post_pull_restart.sh, run by .githooks/post-merge). A repo core.hooksPath replaces the
+# global one, so the hooks here run the same-named global hook too and keep its verdict.
+hooks:                ## once per machine: point core.hooksPath at the main checkout's .githooks (pulling then restarts a running align server; commits still chain to your global hooks). Safe to repeat; works from a worktree.
+	@common="$$(cd "$$(git rev-parse --git-common-dir)" && pwd -P)"; \
+	dir="$$(dirname "$$common")/.githooks"; \
+	[ -d "$$dir" ] || { echo "no .githooks at $$dir" >&2; exit 1; }; \
+	git config core.hooksPath "$$dir" && echo "core.hooksPath = $$dir"
