@@ -456,7 +456,8 @@ def read_sidecar(d, name, issues=None, said=None):
     elif audio != os.path.basename(audio) or "/" in audio or "\\" in audio:
         why = ("its audio %r is a path -- it must name a file in the sidecar's own "
                "directory" % audio)
-    elif audio.rpartition(".")[0] != stem or audio == name:
+    elif (audio.rpartition(".")[0] != stem or not audio.rpartition(".")[2]
+          or audio == name):
         why = "its audio %r is not named <key>.<ext> for its key" % audio
     else:
         audio_path = os.path.join(d, audio)
@@ -3069,6 +3070,8 @@ def main():
             print("# no file for key %s in the configured directories -- the scan wants %d "
                   "file(s): %s" % (args.sign_one, len(todo),
                                    ", ".join(r["key"] for r in todo[:5]) or "none"))
+            if state.get("issues"):
+                _save(STATE, state)          # the scan's refusal rows, the operator's answer
             return
         sign_file(path, issues=state.setdefault("issues", []))
         row = load_ledger().get(args.sign_one) or {}

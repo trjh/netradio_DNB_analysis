@@ -665,6 +665,7 @@ class TheScan(_SignerCase):
             "another key's file": ({"audio": "u" + "0" * 20 + ".mp3"}, "not named <key>.<ext>"),
             "itself": ({"audio": "{k}.json"}, "not named <key>.<ext>"),
             "a missing file": ({"audio": "{k}.flac"}, "is not there"),
+            "no extension": ({"audio": "{k}."}, "not named <key>.<ext>"),
         }
         for label, (change, words) in cases.items():
             with self.subTest(flaw=label):
@@ -2098,6 +2099,22 @@ class SignOneIsTheHandTool(_SignerCase):
         self.assertEqual(calls[0], "reconcile", "the hand tool reconciles first, like a run")
         self.assertEqual(harvest._load(harvest.LEDGER, {}), {},
                          "the patched sign_file wrote nothing; the lock was the point")
+
+    def test_a_hand_sign_of_a_refused_sidecar_saves_the_refusal(self):
+        """--sign-one on a key whose sidecar the scan refuses finds no file, and the refusal
+        row reaches the state file, so the operator's issues list says why."""
+        key = _key("https://y/hand-refused")
+        self._feed(key, sidecar={"sidecar": None})
+        with mock.patch.object(harvest, "reconcile_ledger",
+                               lambda state=None, **_kw:
+                               {"seeded": 0, "dropped": 0, "restored": 0, "reported": False,
+                                "cleared": False, "why": ""}), \
+                mock.patch.object(sys, "argv", ["harvest.py", "--sign-one", key]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            harvest.main()
+        issues = harvest._load(harvest.STATE, {}).get("issues") or []
+        self.assertTrue(any(r.get("key") == key and "marker" in r["issue"] for r in issues),
+                        issues)
 
     def test_a_hand_sign_persists_the_alert_it_raises(self):
         """A hand sign reconciles like a run, and the alert a reconcile raises is standing
