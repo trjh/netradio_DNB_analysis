@@ -1330,16 +1330,19 @@ def scan_directories(ledger, issues=None, said=None):
     whichever copy changes -- until only one copy remains, and an issues row names the
     copies once.
 
-    THE COMPLETENESS RULE: a file with no sidecar beside it is not finished, and is neither
-    read nor logged. The sidecar is how the harvester knows the feeder is done with the file;
-    a torn or unreadable one is a transient state, not a refusal, and is simply retried next
-    pass. Two things ARE refused, loudly, because a feeder must hear about its own bugs: a
-    sidecar whose `key` differs from the file's stem, and a stem that is not a key's shape
-    (`u` + 20 hex). Both land in `issues` (deduped per run through `said`) -- a silent refusal
-    of a file the feeder thinks it delivered is a wall the feeder cannot see.
+    THE COMPLETENESS RULE, checked first: a file with no `<stem>.json` beside it has not been
+    handed over, and is neither read nor logged, whatever its name -- a download's
+    temporaries carry names of every shape, and none of them is the feeder's to answer for.
+    The sidecar is how the harvester knows the feeder is done with the file; a torn or
+    unreadable one is a transient state, not a refusal, and is simply retried next pass.
+    Of a file that HAS a sidecar beside it, three things are refused, loudly, because a
+    feeder must hear about its own bugs: a stem that is not a key's shape (`u` + 20 hex), a
+    sidecar whose `key` differs from the file's stem, and a sidecar with no `fed_at`. Each
+    lands in `issues` (deduped per run through `said`) -- a silent refusal of a file the
+    feeder thinks it delivered is a wall the feeder cannot see.
 
-    A name ending in `.part` is skipped without a row, whatever its stem: it is a download
-    still in progress, feeder state rather than a feeder bug.
+    A name ending in `.part` is skipped without a row even with a sidecar beside it: it is a
+    replacement still being written next to a finished pair.
 
     The TOP LEVEL only: a subdirectory is never read, whatever it holds.
     """
@@ -1365,8 +1368,11 @@ def scan_directories(ledger, issues=None, said=None):
             if name.endswith(".json"):
                 continue                     # a sidecar is not audio
             if name.endswith(".part"):
-                continue                     # a download in progress: feeder state, not a bug
+                continue                     # a write in progress beside a finished pair
             stem = name.rsplit(".", 1)[0]
+            sidecar_path = os.path.join(d, stem + ".json")
+            if not os.path.isfile(sidecar_path):
+                continue                     # not handed over: not read, not signed, not logged
             if not _KEY.fullmatch(stem):
                 if path not in said and issues is not None:
                     said.add(path)
@@ -1375,9 +1381,6 @@ def scan_directories(ledger, issues=None, said=None):
                                             "(u + 20 hex) -- a signature filed under it would "
                                             "be invisible to the pool's own listing" % name})
                 continue
-            sidecar_path = os.path.join(d, stem + ".json")
-            if not os.path.isfile(sidecar_path):
-                continue                     # incomplete: not read, not signed, not logged
             sidecar = _load(sidecar_path, None)
             if not isinstance(sidecar, dict):
                 continue                     # torn or mid-write: retried next pass
@@ -1607,7 +1610,7 @@ def find_file(key):
     sidecar beside it, or None. The hand tool's finder -- the scan answers "what wants a
     sign", while --sign-one answers "where is this key's file", which a row that already
     covers it must not hide. It admits only what the scan admits: a key of the pool's
-    shape (u + 20 hex) and a finished file, never an in-progress `*.part`."""
+    shape (u + 20 hex) and a file with a complete sidecar beside it, never a `*.part`."""
     if not _KEY.fullmatch(key or ""):
         return None
     for d in _dirs():

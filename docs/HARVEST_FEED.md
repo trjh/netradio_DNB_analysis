@@ -38,11 +38,14 @@ every object already in the signature bucket is this rule, and it never changes.
 * **The file is `<key>.<ext>`.** The harvester takes the stem as the key. It never computes a
   key from anything and never parses a fragment; a `url` in the sidecar is data it carries,
   never something it reads for meaning.
-* The key's shape is checked: `u` followed by 20 hex characters. A file whose stem is not a
-  key's shape is refused, because a signature filed under any other name is invisible to the
-  pool's own listing.
-* A name ending in `.part` is skipped, whatever its stem, with no row: it is the usual mark
-  of a download still in progress — feeder state, not a feeder bug.
+* A file with no sidecar beside it is never looked at, whatever its name (see
+  [The sidecar](#the-sidecar)). A download's temporaries can sit in the directory under
+  any name and earn no row.
+* The key's shape is checked once the sidecar is there: `u` followed by 20 hex characters.
+  A file whose stem is not a key's shape is refused, because a signature filed under any
+  other name is invisible to the pool's own listing.
+* A name ending in `.part` is skipped with no row, even beside a sidecar: it is a
+  replacement still being written next to a finished pair.
 * One key belongs in one directory. When the same key sits in more than one, copies that
   agree in size and modification time are one file. Copies that differ are signed once,
   oldest first, and then the key is held: it is not signed again, whichever copy changes,
@@ -65,11 +68,13 @@ take the file for unfinished).
 | `fed_at` | yes | when the sidecar was written; a sidecar without it is refused, with a row in the issues list |
 
 **No sidecar, no signature.** A file without a sidecar is not complete, and the harvester
-does not read it, sign it, or record it — the sidecar is how the harvester knows the feed is
-finished. Two sidecar errors are refused outright, so a feeder bug is visible rather than
-silent — no ledger row, one row in the issues list: one whose `key` differs from the audio
-file's stem, and one missing its required `fed_at`. A torn or unreadable sidecar is neither —
-it is the mid-write state again, retried on the next pass.
+does not read it, sign it, check its name, or record it — the sidecar is how the harvester
+knows the feed is finished, and it is checked before anything else. Once a sidecar is there,
+three errors are refused outright, so a feeder bug is visible rather than silent — no ledger
+row, one row in the issues list: an audio file whose stem is not a key's shape, a sidecar
+whose `key` differs from the audio file's stem, and one missing its required `fed_at`. A
+torn or unreadable sidecar is neither — it is the mid-write state again, retried on the next
+pass.
 
 ## What the harvester does with a file
 

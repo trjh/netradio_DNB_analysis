@@ -517,6 +517,30 @@ class TheScan(_SignerCase):
         self.assertEqual((todo, covered), ([], []))
         self.assertEqual(issues, [], "an unfinished download earns no refusal")
 
+    def test_a_download_temporary_with_no_sidecar_earns_no_row(self):
+        """The sidecar is checked before the name. A download's temporaries carry stems of
+        every shape (`<key>.m4a` for `<key>.m4a.ytdl`, `<key>.temp` for `<key>.temp.m4a`), and
+        none has a sidecar of its own, so none is read, proposed or refused."""
+        key = _key("https://y/downloading")
+        for name in (key + ".m4a.ytdl", key + ".m4a.part", key + ".m4a.part-Frag3",
+                     key + ".temp.m4a"):
+            with open(os.path.join(self.audio, name), "wb") as fh:
+                fh.write(_pcm(SR))
+        issues = []
+        todo, covered = harvest.scan_directories({}, issues=issues)
+        self.assertEqual((todo, covered), ([], []))
+        self.assertEqual(issues, [], "a file nobody handed over earns no refusal")
+
+    def test_a_stem_that_is_not_a_key_is_refused_once_its_sidecar_is_there(self):
+        """A pair the feeder handed over under a name the pool cannot list is a feeder bug,
+        and the feeder hears about it."""
+        self._feed("not-a-key", name="not-a-key.m4a", sidecar={"key": "not-a-key"})
+        issues = []
+        todo, _ = harvest.scan_directories({}, issues=issues)
+        self.assertEqual(todo, [])
+        self.assertTrue(any("is not a key" in r["issue"] for r in issues))
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
+
     def test_a_subdirectory_file_is_never_read(self):
         key = _key("https://y/buried")
         sub = os.path.join(self.audio, "scratch")
