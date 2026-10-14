@@ -505,8 +505,8 @@ class TheScan(_SignerCase):
 
     def test_a_part_file_is_skipped_silently(self):
         """A `<key>.mp3.part` is a download still in progress -- routine feeder state, not a
-        feeder bug. The stem-shape check would otherwise refuse it by name, once per run,
-        for as long as the download takes."""
+        feeder bug. It is not audio (`AUDIO_EXTS`), so it is ignored even with the key's
+        sidecar beside it, and earns no row."""
         key = _key("https://y/in-progress")
         with open(os.path.join(self.audio, key + ".mp3.part"), "wb") as fh:
             fh.write(_pcm(SR))
@@ -540,6 +540,24 @@ class TheScan(_SignerCase):
         self.assertEqual(todo, [])
         self.assertTrue(any("is not a key" in r["issue"] for r in issues))
         self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
+
+    def test_only_the_audio_beside_a_finished_pair_is_seen(self):
+        """A temporary, a thumbnail or a description named `<key>.<ext>` shares the finished
+        pair's sidecar name. Only the audio file is proposed -- never the other file, and
+        never a held key with a "differing copies" row."""
+        key = _key("https://y/finished-with-company")
+        path = self._feed(key)
+        for ext in ("part", "ytdl", "tmp", "description", "webp"):
+            with open(os.path.join(self.audio, key + "." + ext), "wb") as fh:
+                fh.write(b"not audio, and not the same size as the audio")
+        issues = []
+        todo, covered = harvest.scan_directories({}, issues=issues)
+        self.assertEqual(todo, [{"key": key, "path": path}])
+        self.assertEqual((covered, issues), ([], []))
+        st = os.stat(path)
+        ledger = {key: {"status": "signed", "size": st.st_size, "mtime": st.st_mtime}}
+        todo, covered = harvest.scan_directories(ledger, issues=issues)
+        self.assertEqual((todo, covered, issues), ([], [key], []))
 
     def test_a_subdirectory_file_is_never_read(self):
         key = _key("https://y/buried")
@@ -608,6 +626,10 @@ class TheScan(_SignerCase):
         key = _key("https://y/in-progress")
         self._feed(key, name=key + ".part")
         self.assertIsNone(harvest.find_file(key))
+        self._feed(key, name=key + ".description")
+        self.assertIsNone(harvest.find_file(key), "a description is not audio")
+        path = self._feed(key, name=key + ".m4a")
+        self.assertEqual(harvest.find_file(key), path, "the audio beside them is found")
         self._feed("not-a-key", name="not-a-key.mp3")
         self.assertIsNone(harvest.find_file("not-a-key"))
 
@@ -624,8 +646,9 @@ class TheScan(_SignerCase):
 
     def test_a_stem_that_is_not_a_keys_shape_is_refused(self):
         """The pool's own listing admits only `u` + 20 hex, so a signature filed under any
-        other stem would be invisible to the pool -- refused where the refusal can name it."""
-        for name in ("notes.txt", "u123.mp3", "u" + "g" * 20 + ".mp3"):
+        other stem would be invisible to the pool -- refused where the refusal can name it.
+        (Audio only: a `notes.txt` with a sidecar is not audio, and is ignored with no row.)"""
+        for name in ("notes.m4a", "u123.mp3", "u" + "g" * 20 + ".mp3", "notes2.txt"):
             with self.subTest(name=name):
                 with open(os.path.join(self.audio, name), "wb") as fh:
                     fh.write(_pcm(SR))

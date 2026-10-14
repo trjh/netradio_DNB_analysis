@@ -38,14 +38,14 @@ every object already in the signature bucket is this rule, and it never changes.
 * **The file is `<key>.<ext>`.** The harvester takes the stem as the key. It never computes a
   key from anything and never parses a fragment; a `url` in the sidecar is data it carries,
   never something it reads for meaning.
-* A file with no sidecar beside it is never looked at, whatever its name (see
-  [The sidecar](#the-sidecar)). A download's temporaries can sit in the directory under
-  any name and earn no row.
+* Only an audio file with its sidecar is ever looked at. An audio file is one whose
+  extension is `m4a`, `mp3`, `opus`, `ogg`, `webm`, `flac`, `wav`, `aif`, `aiff`, `aac` or
+  `mp4`; any other file (a temporary, a thumbnail, a description) is ignored with no row,
+  even beside a sidecar. An audio file with no sidecar beside it is ignored too, whatever
+  its name (see [The sidecar](#the-sidecar)).
 * The key's shape is checked once the sidecar is there: `u` followed by 20 hex characters.
   A file whose stem is not a key's shape is refused, because a signature filed under any
   other name is invisible to the pool's own listing.
-* A name ending in `.part` is skipped with no row, even beside a sidecar: it is a
-  replacement still being written next to a finished pair.
 * One key belongs in one directory. When the same key sits in more than one, copies that
   agree in size and modification time are one file. Copies that differ are signed once,
   oldest first, and then the key is held: it is not signed again, whichever copy changes,

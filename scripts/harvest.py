@@ -373,6 +373,10 @@ register_caches()                 # at import: the wrapper sources .env before a
 # way (sigstore filters on it) -- a stem of any other shape would file a signature where the
 # pool cannot see it, and a signature nobody can list is a signature nobody can score.
 _KEY = re.compile(r"u[0-9a-f]{20}", re.ASCII)
+# The extensions the scan and the hand tool's finder take for audio: what the decode (ffmpeg,
+# reading the whole file) is asked to read. Anything else in a directory -- a temporary, a
+# thumbnail, a description -- is never looked at, sidecar or not.
+AUDIO_EXTS = ("m4a", "mp3", "opus", "ogg", "webm", "flac", "wav", "aif", "aiff", "aac", "mp4")
 
 
 def file_key(path):
@@ -1330,19 +1334,21 @@ def scan_directories(ledger, issues=None, said=None):
     whichever copy changes -- until only one copy remains, and an issues row names the
     copies once.
 
-    THE COMPLETENESS RULE, checked first: a file with no `<stem>.json` beside it has not been
-    handed over, and is neither read nor logged, whatever its name -- a download's
-    temporaries carry names of every shape, and none of them is the feeder's to answer for.
+    THE COMPLETENESS RULE, checked before the name: an audio file with no `<stem>.json`
+    beside it has not been handed over, and is neither read nor logged, whatever its stem --
+    a download's temporaries carry names of every shape, and none of them is the feeder's to
+    answer for.
     The sidecar is how the harvester knows the feeder is done with the file; a torn or
     unreadable one is a transient state, not a refusal, and is simply retried next pass.
-    Of a file that HAS a sidecar beside it, three things are refused, loudly, because a
+    Of an audio file that HAS a sidecar beside it, three things are refused, loudly, because a
     feeder must hear about its own bugs: a stem that is not a key's shape (`u` + 20 hex), a
     sidecar whose `key` differs from the file's stem, and a sidecar with no `fed_at`. Each
     lands in `issues` (deduped per run through `said`) -- a silent refusal of a file the
     feeder thinks it delivered is a wall the feeder cannot see.
 
-    A name ending in `.part` is skipped without a row even with a sidecar beside it: it is a
-    replacement still being written next to a finished pair.
+    Only an audio file (an extension in `AUDIO_EXTS`) is considered at all: a `<key>.part`, a
+    `<key>.ytdl` or a `<key>.webp` beside a finished pair shares the pair's sidecar name, and
+    would otherwise be proposed as a second, differing copy of the key.
 
     The TOP LEVEL only: a subdirectory is never read, whatever it holds.
     """
@@ -1365,11 +1371,9 @@ def scan_directories(ledger, issues=None, said=None):
             path = os.path.join(d, name)
             if not os.path.isfile(path):
                 continue                     # never a subdirectory, however tempting
-            if name.endswith(".json"):
-                continue                     # a sidecar is not audio
-            if name.endswith(".part"):
-                continue                     # a write in progress beside a finished pair
-            stem = name.rsplit(".", 1)[0]
+            stem, _, ext = name.rpartition(".")
+            if not stem or ext.lower() not in AUDIO_EXTS:
+                continue                     # not audio: a sidecar, a temporary, a thumbnail
             sidecar_path = os.path.join(d, stem + ".json")
             if not os.path.isfile(sidecar_path):
                 continue                     # not handed over: not read, not signed, not logged
@@ -1610,7 +1614,7 @@ def find_file(key):
     sidecar beside it, or None. The hand tool's finder -- the scan answers "what wants a
     sign", while --sign-one answers "where is this key's file", which a row that already
     covers it must not hide. It admits only what the scan admits: a key of the pool's
-    shape (u + 20 hex) and a file with a complete sidecar beside it, never a `*.part`."""
+    shape (u + 20 hex) and an audio file (`AUDIO_EXTS`) with a complete sidecar beside it."""
     if not _KEY.fullmatch(key or ""):
         return None
     for d in _dirs():
@@ -1619,8 +1623,8 @@ def find_file(key):
         except OSError:
             continue
         for name in names:
-            if (name.endswith(".json") or name.endswith(".part")
-                    or name.rsplit(".", 1)[0] != key):
+            stem, _, ext = name.rpartition(".")
+            if stem != key or ext.lower() not in AUDIO_EXTS:
                 continue
             path = os.path.join(d, name)
             sidecar = os.path.join(d, key + ".json")
