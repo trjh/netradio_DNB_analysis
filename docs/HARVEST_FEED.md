@@ -9,7 +9,7 @@ directories is assumed. The harvester itself knows only what is written here.
 
 The harvester is a signer and a scorer. It loops over one or more directories of audio named
 in its `.env` (`NETRADIO_HARVEST_DIRS`, absolute paths, `:`-separated); it signs any audio it
-has not already signed, and only audio with a complete sidecar; it marks each file in its
+has not already signed, and only the audio a complete sidecar names; it marks each file in its
 ledger, `signed` or `delayed` with a reason; and it uploads the signature, with the sidecar
 beside it, to the signature bucket. It is not responsible for moving audio into or out of the
 directories. It never deletes, renames, or writes anything in them.
@@ -38,14 +38,11 @@ every object already in the signature bucket is this rule, and it never changes.
 * **The file is `<key>.<ext>`.** The harvester takes the stem as the key. It never computes a
   key from anything and never parses a fragment; a `url` in the sidecar is data it carries,
   never something it reads for meaning.
-* Only an audio file with its sidecar is ever looked at. An audio file is one whose
-  extension is `m4a`, `mp3`, `opus`, `ogg`, `webm`, `flac`, `wav`, `aif`, `aiff`, `aac` or
-  `mp4`; any other file (a temporary, a thumbnail, a description) is ignored with no row,
-  even beside a sidecar. An audio file with no sidecar beside it is ignored too, whatever
-  its name (see [The sidecar](#the-sidecar)).
-* The key's shape is checked once the sidecar is there: `u` followed by 20 hex characters.
-  A file whose stem is not a key's shape is refused, because a signature filed under any
-  other name is invisible to the pool's own listing.
+* The harvester reads only sidecars, and signs only the file each one names. A sidecar is a
+  `<key>.json` whose stem has the key's shape, `u` followed by 20 hex characters; any other
+  JSON (`notes.json`, another tool's `<key>.info.json`) is not a sidecar and is ignored
+  with no row. Nothing else in a directory is ever looked at, whatever its name: a
+  temporary, a thumbnail, a description, an audio file no sidecar names.
 * One key belongs in one directory. When the same key sits in more than one, copies that
   agree in size and modification time are one file. Copies that differ are signed once,
   oldest first, and then the key is held: it is not signed again, whichever copy changes,
@@ -60,21 +57,23 @@ take the file for unfinished).
 
 | Field | Required | Meaning |
 |---|---|---|
-| `key` | yes | `u<sha1(url)[:20]>`, equal to the audio file's stem |
+| `sidecar` | yes | the number `1`: the format of this sidecar. A JSON named like a sidecar without it is refused, so a stray file is never guessed at; a later format changes the number |
+| `key` | yes | `u<sha1(url)[:20]>`, equal to the sidecar's own stem |
+| `audio` | yes | the audio file's name, `<key>.<ext>`, in the sidecar's own directory (a name, never a path) |
 | `url` | no | a string: the source URL, fragment included; carried to the ledger and the bucket, never parsed |
 | `title` | no | a string, as the source names it |
 | `artist` | no | a string: the uploader or channel |
 | `duration_s` | no | a finite number: the file's length in seconds, for the length check |
-| `fed_at` | yes | when the sidecar was written; a sidecar without it is refused, with a row in the issues list |
+| `fed_at` | yes | when the sidecar was written |
 
-**No sidecar, no signature.** A file without a sidecar is not complete, and the harvester
+**No sidecar, no signature.** A file no sidecar names is not complete, and the harvester
 does not read it, sign it, check its name, or record it — the sidecar is how the harvester
-knows the feed is finished, and it is checked before anything else. Once a sidecar is there,
-three errors are refused outright, so a feeder bug is visible rather than silent — no ledger
-row, one row in the issues list: an audio file whose stem is not a key's shape, a sidecar
-whose `key` differs from the audio file's stem, and one missing its required `fed_at`. A
-torn or unreadable sidecar is neither — it is the mid-write state again, retried on the next
-pass.
+knows the feed is finished, and the file it names is the one signed. A sidecar the feeder got
+wrong is refused outright, so a feeder bug is visible rather than silent — no ledger row, one
+row in the issues list: a `sidecar` other than `1`, a `key` that differs from the sidecar's
+own stem, a missing `fed_at`, a missing `audio`, an `audio` that is a path or not
+`<key>.<ext>`, and an `audio` file that is not there. A torn or unreadable sidecar is none of
+these — it is the mid-write state again, retried on the next pass.
 
 ## What the harvester does with a file
 
@@ -261,7 +260,7 @@ set -a && . ./.env && set +a        # the settings live in .env: the directories
 .venv/bin/python scripts/harvest.py --sign-one <key>
 ```
 
-Signs the one file whose stem is this key, in the configured directories, through the same
+Signs the one file this key's sidecar names, in the configured directories, through the same
 path the loop uses — including the ledger row. It reconciles the ledger first, and it does
 not score. Useful for reproducing one sign by hand, or for forcing a re-sign after a file
 has been replaced. Like every other mode, it needs its settings from `.env`

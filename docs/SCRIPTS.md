@@ -128,7 +128,7 @@ MallocLargeCache=0 .venv/bin/python scripts/harvest.py --run
 **The harvester knows directories, and nothing else.** `NETRADIO_HARVEST_DIRS` (in `.env`)
 names one or more absolute directories, `:`-separated; the loop reads the **top level** of
 each and writes nothing into any of them. An audio file is `<key>.<ext>` with a `<key>.json`
-sidecar beside it — no sidecar, no signature — and the ledger `.harvest/ledger.json` is the
+sidecar beside it that names it — no sidecar, no signature — and the ledger `.harvest/ledger.json` is the
 mark: one row per key, `signed` or `delayed` with a reason. The full contract, written for
 whatever fills the directories (the key encoding, the sidecar schema, the completeness rule,
 the ledger and what a feed reads from it), is

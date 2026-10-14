@@ -208,8 +208,8 @@ class _SignerCase(unittest.TestCase):
         path = os.path.join(self.audio, name or (key + ".mp3"))
         with open(path, "wb") as fh:
             fh.write(pcm if isinstance(pcm, bytes) else b"")
-        sc = {"key": key, "url": url, "title": "a set", "artist": "someone",
-              "duration_s": len(pcm) / 4.0 / SR, "fed_at": "2026-09-19T00:00:00+00:00"}
+        sc = {"key": key, "sidecar": 1, "audio": os.path.basename(path), "url": url,
+              "title": "a set", "artist": "someone", "duration_s": len(pcm) / 4.0 / SR, "fed_at": "2026-09-19T00:00:00+00:00"}
         sc.update(sidecar or {})
         with open(os.path.join(self.audio, key + ".json"), "w") as fh:
             json.dump(sc, fh)
@@ -503,24 +503,25 @@ class TheScan(_SignerCase):
         self.assertEqual(covered, [])
         self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
 
-    def test_a_part_file_is_skipped_silently(self):
-        """A `<key>.mp3.part` is a download still in progress -- routine feeder state, not a
-        feeder bug. It is not audio (`AUDIO_EXTS`), so it is ignored even with the key's
-        sidecar beside it, and earns no row."""
+    def test_a_sidecar_whose_audio_is_not_there_is_refused(self):
+        """A sidecar vouches for the file it names; with that file absent (a download still in
+        progress under another name, a file taken away and its sidecar left) the hand-over is
+        broken, and the feeder hears of it."""
         key = _key("https://y/in-progress")
         with open(os.path.join(self.audio, key + ".mp3.part"), "wb") as fh:
             fh.write(_pcm(SR))
         with open(os.path.join(self.audio, key + ".json"), "w") as fh:
-            json.dump({"key": key, "fed_at": "now"}, fh)
+            json.dump({"key": key, "sidecar": 1, "audio": key + ".mp3", "fed_at": "now"}, fh)
         issues = []
         todo, covered = harvest.scan_directories({}, issues=issues)
         self.assertEqual((todo, covered), ([], []))
-        self.assertEqual(issues, [], "an unfinished download earns no refusal")
+        self.assertEqual(len(issues), 1)
+        self.assertIn("is not there", issues[0]["issue"])
 
     def test_a_download_temporary_with_no_sidecar_earns_no_row(self):
-        """The sidecar is checked before the name. A download's temporaries carry stems of
-        every shape (`<key>.m4a` for `<key>.m4a.ytdl`, `<key>.temp` for `<key>.temp.m4a`), and
-        none has a sidecar of its own, so none is read, proposed or refused."""
+        """Only sidecars are read. A download's temporaries carry names of every shape
+        (`<key>.m4a.ytdl`, `<key>.temp.m4a`), and no sidecar names any of them, so none is
+        read, proposed or refused."""
         key = _key("https://y/downloading")
         for name in (key + ".m4a.ytdl", key + ".m4a.part", key + ".m4a.part-Frag3",
                      key + ".temp.m4a"):
@@ -531,20 +532,10 @@ class TheScan(_SignerCase):
         self.assertEqual((todo, covered), ([], []))
         self.assertEqual(issues, [], "a file nobody handed over earns no refusal")
 
-    def test_a_stem_that_is_not_a_key_is_refused_once_its_sidecar_is_there(self):
-        """A pair the feeder handed over under a name the pool cannot list is a feeder bug,
-        and the feeder hears about it."""
-        self._feed("not-a-key", name="not-a-key.m4a", sidecar={"key": "not-a-key"})
-        issues = []
-        todo, _ = harvest.scan_directories({}, issues=issues)
-        self.assertEqual(todo, [])
-        self.assertTrue(any("is not a key" in r["issue"] for r in issues))
-        self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
-
     def test_only_the_audio_beside_a_finished_pair_is_seen(self):
-        """A temporary, a thumbnail or a description named `<key>.<ext>` shares the finished
-        pair's sidecar name. Only the audio file is proposed -- never the other file, and
-        never a held key with a "differing copies" row."""
+        """A temporary, a thumbnail or a description named `<key>.<ext>` sits beside the
+        finished pair. Only the file the sidecar names is proposed -- never the other file,
+        and never a held key with a "differing copies" row."""
         key = _key("https://y/finished-with-company")
         path = self._feed(key)
         for ext in ("part", "ytdl", "tmp", "description", "webp"):
@@ -566,7 +557,7 @@ class TheScan(_SignerCase):
         with open(os.path.join(sub, key + ".mp3"), "wb") as fh:
             fh.write(_pcm(SR))
         with open(os.path.join(self.audio, key + ".json"), "w") as fh:
-            json.dump({"key": key}, fh)
+            json.dump({"key": key, "sidecar": 1, "audio": key + ".mp3", "fed_at": "now"}, fh)
         todo, _ = harvest.scan_directories({})
         self.assertEqual(todo, [], "a sidecar beside the DIRECTORY is not a sidecar beside "
                                    "the file, and no subdirectory is ever read")
@@ -620,16 +611,18 @@ class TheScan(_SignerCase):
         self.assertIsNone(harvest.find_file(key))
 
     def test_find_file_admits_only_what_the_scan_admits(self):
-        """--sign-one's finder refuses what the scan refuses: a stem that is not a key's
-        shape (the pool's listing would never see its signature) and an in-progress
-        `*.part` (feeder state, not a finished file)."""
+        """--sign-one's finder refuses what the scan refuses, and finds the file the sidecar
+        names, never another file under the key: a sidecar naming a missing file finds
+        nothing, a key-named temporary is never taken for the audio, and a name that is not
+        a key's shape is never looked up."""
         key = _key("https://y/in-progress")
-        self._feed(key, name=key + ".part")
-        self.assertIsNone(harvest.find_file(key))
-        self._feed(key, name=key + ".description")
-        self.assertIsNone(harvest.find_file(key), "a description is not audio")
+        path = self._feed(key, name=key + ".m4a", sidecar={"audio": key + ".flac"})
+        self.assertIsNone(harvest.find_file(key), "the file it names is not there")
+        for other in (key + ".part", key + ".description"):
+            with open(os.path.join(self.audio, other), "wb") as fh:
+                fh.write(b"x")
         path = self._feed(key, name=key + ".m4a")
-        self.assertEqual(harvest.find_file(key), path, "the audio beside them is found")
+        self.assertEqual(harvest.find_file(key), path, "the audio the sidecar names")
         self._feed("not-a-key", name="not-a-key.mp3")
         self.assertIsNone(harvest.find_file("not-a-key"))
 
@@ -644,21 +637,64 @@ class TheScan(_SignerCase):
         self.assertEqual((todo, covered), ([], []))
         self.assertTrue(any("not an absolute path" in r["issue"] for r in issues))
 
-    def test_a_stem_that_is_not_a_keys_shape_is_refused(self):
-        """The pool's own listing admits only `u` + 20 hex, so a signature filed under any
-        other stem would be invisible to the pool -- refused where the refusal can name it.
-        (Audio only: a `notes.txt` with a sidecar is not audio, and is ignored with no row.)"""
-        for name in ("notes.m4a", "u123.mp3", "u" + "g" * 20 + ".mp3", "notes2.txt"):
-            with self.subTest(name=name):
-                with open(os.path.join(self.audio, name), "wb") as fh:
+    def test_a_json_not_named_like_a_sidecar_is_never_looked_at(self):
+        """Only `<key>.json` of the key's shape (`u` + 20 hex) is a sidecar. Another tool's
+        `<key>.info.json`, a `notes.json`, a near-miss stem: none is read, and none earns a
+        row, whatever it holds -- nor is the audio beside it ever looked at."""
+        key = _key("https://y/other-json")
+        for stem in ("notes", "u123", "u" + "g" * 20, key + ".info"):
+            with self.subTest(stem=stem):
+                with open(os.path.join(self.audio, stem + ".m4a"), "wb") as fh:
                     fh.write(_pcm(SR))
-                stem = name.rsplit(".", 1)[0]
                 with open(os.path.join(self.audio, stem + ".json"), "w") as fh:
-                    json.dump({"key": stem, "fed_at": "now"}, fh)
+                    json.dump({"key": stem, "sidecar": 1, "audio": stem + ".m4a",
+                               "fed_at": "now"}, fh)
         issues = []
-        todo, _ = harvest.scan_directories({}, issues=issues)
-        self.assertEqual(todo, [])
-        self.assertEqual(len(issues), 3, "each bad stem is refused, and named")
+        todo, covered = harvest.scan_directories({}, issues=issues)
+        self.assertEqual((todo, covered), ([], []))
+        self.assertEqual(issues, [])
+
+    def test_each_flaw_in_a_sidecar_is_refused_with_one_row(self):
+        """A key-named sidecar the feeder got wrong is refused loudly, once per flaw, and its
+        audio is not signed."""
+        cases = {
+            "no marker": ({"sidecar": None}, "marker"),
+            "a later format": ({"sidecar": 2}, "marker"),
+            "no audio": ({"audio": None}, "names no audio"),
+            "a path": ({"audio": "sub/{k}.mp3"}, "is a path"),
+            "another key's file": ({"audio": "u" + "0" * 20 + ".mp3"}, "not named <key>.<ext>"),
+            "itself": ({"audio": "{k}.json"}, "not named <key>.<ext>"),
+            "a missing file": ({"audio": "{k}.flac"}, "is not there"),
+        }
+        for label, (change, words) in cases.items():
+            with self.subTest(flaw=label):
+                key = _key("https://y/flaw/" + label)
+                change = {f: (v.format(k=key) if isinstance(v, str) else v)
+                          for f, v in change.items()}
+                self._feed(key, sidecar=change)
+                issues = []
+                todo, _covered = harvest.scan_directories({}, issues=issues)
+                self.assertNotIn(key, [r["key"] for r in todo])
+                rows = [r for r in issues if r.get("key") == key]
+                self.assertEqual(len(rows), 1, rows)
+                self.assertIn(words, rows[0]["issue"])
+
+    def test_the_file_the_sidecar_names_is_the_one_signed(self):
+        """The sidecar, not the listing, says which file is the hand-over: a key-named
+        temporary beside it is never proposed."""
+        key = _key("https://y/named")
+        path = self._feed(key, name=key + ".opus")
+        for other in (key + ".mp3", key + ".part", key + ".tmp"):
+            with open(os.path.join(self.audio, other), "wb") as fh:
+                fh.write(_pcm(SR))
+        issues = []
+        todo, _covered = harvest.scan_directories({}, issues=issues)
+        self.assertEqual([r["path"] for r in todo], [path])
+        self.assertEqual(issues, [])
+        self.assertEqual(harvest.find_file(key), path)
+        self.assertEqual(harvest.sign_file(os.path.join(self.audio, key + ".mp3")),
+                         (None, None), "a file its key's sidecar does not name is not signed")
+        self.assertEqual(harvest._load(harvest.LEDGER, {}), {})
 
     def test_a_missing_directory_is_skipped_with_an_issue_row(self):
         harvest.HARVEST_DIRS = os.path.join(self.audio, "not-there")
@@ -690,7 +726,7 @@ class TheScan(_SignerCase):
             fh.write(_pcm(SR))
         os.utime(new, (2000, 2000))
         with open(os.path.join(other, key + ".json"), "w") as fh:
-            json.dump({"key": key, "fed_at": "now"}, fh)
+            json.dump({"key": key, "sidecar": 1, "audio": key + ".mp3", "fed_at": "now"}, fh)
         todo, covered = harvest.scan_directories({})
         self.assertEqual([r["key"] for r in todo], [key])
         self.assertEqual(todo[0]["path"], old)
@@ -765,7 +801,8 @@ class TheScan(_SignerCase):
         with open(os.path.join(other, key_b + ".mp3"), "wb") as fh:
             fh.write(_pcm(SR))
         with open(os.path.join(other, key_b + ".json"), "w") as fh:
-            json.dump({"key": key_b, "fed_at": "now"}, fh)
+            json.dump({"key": key_b, "sidecar": 1, "audio": key_b + ".mp3", "fed_at": "now"},
+                      fh)
         todo, _ = harvest.scan_directories({})
         self.assertEqual(sorted(r["key"] for r in todo),
                          sorted([_key("https://y/a"), key_b]))
@@ -780,7 +817,7 @@ class TheScan(_SignerCase):
             fh.write(_pcm(size))
         os.utime(path, (mtime, mtime))
         with open(os.path.join(other, key + ".json"), "w") as fh:
-            json.dump({"key": key, "fed_at": "now"}, fh)
+            json.dump({"key": key, "sidecar": 1, "audio": key + ".mp3", "fed_at": "now"}, fh)
         return path
 
     def test_two_differing_copies_are_signed_once_then_held_until_one_remains(self):
@@ -2201,7 +2238,8 @@ class TheLoopSignsAndScores(_SignerCase):
         def _scan_then_the_new_sidecar_lands(ledger, issues=None, said=None):
             todo, covered = real_scan(ledger, issues=issues, said=said)
             with open(os.path.join(self.audio, key + ".json"), "w") as fh:
-                json.dump({"key": key, "url": "https://y/x", "title": "a set",
+                json.dump({"key": key, "sidecar": 1, "audio": key + ".mp3",
+                           "url": "https://y/x", "title": "a set",
                            "artist": "someone", "duration_s": 60.0,
                            "fed_at": "2026-09-19T00:00:00+00:00"}, fh)
             return todo, covered
