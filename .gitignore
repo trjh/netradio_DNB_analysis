@@ -98,3 +98,7 @@ data/rulings.json.*.tmp
 /logs/
 # The stream video's album-art folder (scripts/streamvideo.py; NETRADIO_ART_DIR moves it).
 /art/
+# The Mac review app (make review-app): the compiled binary and local screenshots. The .swift
+# source and the math fixture are committed.
+/native/align_review_app
+/native/screenshots/

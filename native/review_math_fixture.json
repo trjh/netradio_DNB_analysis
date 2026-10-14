@@ -1,0 +1,61 @@
+{
+  "_comment": "DP-22 §6.9-b shared math fixture: reference vectors for the §6.2 LSQ fit + §6.3 mapping, generated FROM review_notes.py (the server's authority). Consumed twice: tests/test_review_mac.py asserts these values equal review_notes' recomputation (so the fixture can never drift from the server), and `align_review_app --selftest` asserts the Swift port reproduces them (so the app can never drift from the fixture). make review-app runs the selftest after every build.",
+  "pairs": [
+    {"k": "1", "stream_s": 69.472, "orig_s": 99.134},
+    {"k": "2", "stream_s": 194.315, "orig_s": 226.699},
+    {"k": "3", "stream_s": 401.22, "orig_s": 438.183}
+  ],
+  "rate_6dp": 1.02202,
+  "intercept": 28.121848620000012,
+  "devs_ms": [10.37793999999792, -16.66491999998243, 6.286979999970299],
+  "constant_rate": [
+    {"t": 0.0, "orig_t": 28.121848620000012},
+    {"t": 69.472, "orig_t": 99.12362206},
+    {"t": 150.0, "orig_t": 181.42484862},
+    {"t": 250.0, "orig_t": 283.62684862000003},
+    {"t": 401.22, "orig_t": 438.17671302},
+    {"t": 500.0, "orig_t": 539.13184862},
+    {"t": 900.0, "orig_t": 947.93984862}
+  ],
+  "re_anchor": [
+    {"t": 0.0, "orig_t": 28.132226560000007},
+    {"t": 69.472, "orig_t": 99.134},
+    {"t": 150.0, "orig_t": 181.43522656},
+    {"t": 250.0, "orig_t": 283.6101837},
+    {"t": 401.22, "orig_t": 438.183},
+    {"t": 500.0, "orig_t": 539.1381355999999},
+    {"t": 900.0, "orig_t": 947.9461355999999}
+  ],
+  "assumed_rate": {
+    "pair": {"k": "1", "stream_s": 69.472, "orig_s": 99.134},
+    "rate": 1.0218,
+    "points": [
+      {"t": 0.0, "orig_t": 28.1475104},
+      {"t": 69.472, "orig_t": 99.134},
+      {"t": 250.0, "orig_t": 283.59751040000003}
+    ]
+  },
+  "max_t_s": 86400.0,
+  "margin_s": 20.0,
+  "segment_plan": {
+    "_comment": "the up-front original-lane planner (re-anchor mode), incl. anchors 50 ms and 10 ms apart (the whole lane is scheduled before playback, so closely spaced anchors must plan correctly — no timer ever arms a segment late), a pre-roll clip at the original's zero and a tail clip at its length",
+    "mode": "re-anchor",
+    "rate_6dp": 1.019825,
+    "t0": 0.0,
+    "win_t1": 60.0,
+    "orig_len": 40.0,
+    "pairs": [
+      {"k": "c1", "stream_s": 10.0, "orig_s": 5.0},
+      {"k": "c2", "stream_s": 10.05, "orig_s": 5.06},
+      {"k": "c3", "stream_s": 10.06, "orig_s": 5.068},
+      {"k": "c4", "stream_s": 40.0, "orig_s": 35.6}
+    ],
+    "segments": [
+      {"start_stream_t": 5.097198048684823, "end_stream_t": 10.0, "start_file_s": 0.0, "end_file_s": 5.0},
+      {"start_stream_t": 10.0, "end_stream_t": 10.05, "start_file_s": 5.0, "end_file_s": 5.050991250000001},
+      {"start_stream_t": 10.05, "end_stream_t": 10.06, "start_file_s": 5.06, "end_file_s": 5.07019825},
+      {"start_stream_t": 10.06, "end_stream_t": 40.0, "start_file_s": 5.068, "end_file_s": 35.6015605},
+      {"start_stream_t": 40.0, "end_stream_t": 44.314465717157354, "start_file_s": 35.6, "end_file_s": 40.0}
+    ]
+  }
+}

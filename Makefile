@@ -163,6 +163,27 @@ review-sync-postmerge: ## AFTER you merge the align-review-data PR by hand: dele
 compile-summary:      ## DP-24 §3: labels/automated + labels/review -> labels/summary (one importable label set per audio file; idempotent). ARGS=--dry-run
 	$(PYTHON) scripts/summary_compile.py $(ARGS)
 
+# The Mac review app (native/align_review_app.swift): a SwiftUI thin client of the align server.
+# It builds with swiftc and the Command Line Tools alone, no Xcode, and CI does not build it.
+# `review-app` builds it and runs its math selftest against native/review_math_fixture.json,
+# the same vectors tests/test_review_mac.py checks against scripts/review_notes.py.
+review-app:           ## DP-22 §6.9-b: build the Mac review app (swiftc + Command Line Tools; not in CI) and run its math selftest against the shared fixture
+	swiftc -parse-as-library -O -o native/align_review_app native/align_review_app.swift
+	./native/align_review_app --selftest native/review_math_fixture.json
+
+# The app reads its settings from the environment. The recipe loads this checkout's .env first
+# (scripts/lib/env.sh: read, never executed; a variable already set wins), then points the app
+# at NETRADIO_ALIGN_URL, else at the host and port the server binds (a wildcard bind is reached
+# on loopback).
+review-app-run: review-app ## build + launch the Mac review app (align server from NETRADIO_ALIGN_URL, else derived from NETRADIO_ALIGN_HOST:NETRADIO_ALIGN_PORT, else http://127.0.0.1:8766; Basic Auth from NETRADIO_AUTH_* when set)
+	@. scripts/lib/env.sh; env_load .env; \
+	if [ -z "$$NETRADIO_ALIGN_URL" ]; then \
+	  h="$${NETRADIO_ALIGN_HOST:-127.0.0.1}"; [ "$$h" = "0.0.0.0" ] && h=127.0.0.1; \
+	  export NETRADIO_ALIGN_URL="http://$$h:$${NETRADIO_ALIGN_PORT:-8766}"; \
+	fi; \
+	echo "review app -> $$NETRADIO_ALIGN_URL"; \
+	./native/align_review_app
+
 # A pull that changes scripts/ or public/ restarts a running align server
 # (scripts/post_pull_restart.sh, run by .githooks/post-merge). A repo core.hooksPath replaces the
 # global one, so the hooks here run the same-named global hook too and keep its verdict.
