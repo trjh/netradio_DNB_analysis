@@ -327,7 +327,7 @@ interactively — but nothing downstream needs it, and no step of the loop asks 
 ### 10. Build + validate
 
 ```bash
-python3 scripts/build_track_metadata.py --seed track-metadata.json     # labels + remainder.tsv → JSON
+make stream-data    # labels → track-metadata.json (seeded from itself) + stream-files.json
 . .venv/bin/activate && python -m streamalign validate            # audio vs hand labels
 ```
 
@@ -339,6 +339,8 @@ Warnings:
   to override; adding/filling is always waved through).
 
 Need-to-know:
+- `make stream-data` is `build_track_metadata.py --seed track-metadata.json`, then
+  `stream_files.py` (each capture's place on the master timeline → `stream-files.json`).
 - `build_track_metadata.py` is the **only** writer of `track-metadata.json`; it also reads
   `labels/remainder.tsv`, so changes there (or in `tracklist-2017.txt`) land via this build.
 - `validate` grades **overlapping capture pairs only** (confirmed/suspect/adjacent). Pairs

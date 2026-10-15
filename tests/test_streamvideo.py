@@ -122,7 +122,7 @@ class ReadsThisReposData(Base):
         self.assertAlmostEqual(segs[0]["m_start"], t0)
         self.assertAlmostEqual(segs[-1]["m_end"], t1)
 
-    def test_the_mirrored_stream_files_carry_no_machine_paths(self):
+    def test_the_generated_stream_files_carry_no_machine_paths(self):
         with open(os.path.join(REPO, "stream-files.json"), encoding="utf-8") as fh:
             sf = json.load(fh)
         for key in ("mp3_dir", "source_labels_dir", "source_tracklist"):

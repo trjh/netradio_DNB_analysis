@@ -238,8 +238,23 @@ python3 scripts/build_track_metadata.py --dry-run  # preview without writing
 **This is the one tool that writes `track-metadata.json`.** Run it after any label change that
 affects track identity, position, or span. Curated fields (year, artwork, links, manual
 overrides) are carried forward from the previous JSON, so re-generating never loses them.
-`*.auto.labels.tsv` are read; `*.starter.labels.tsv` are not. **What to do next:** nothing;
-the new JSON is read directly.
+`*.auto.labels.tsv` are read; `*.starter.labels.tsv` are not. **What to do next:** run
+`make stream-data` so `stream-files.json` follows.
+
+A label change that moves a capture (a `file start sync`, `file sync` or `file end` row) also
+changes `stream-files.json`: `make stream-data` rebuilds both files together.
+
+Each capture's duration is the length of its original `.wav` or `.au` (in
+`NETRADIO_CAPTURES_DIR`, by default the parent of `NETRADIO_MP3_DIR`), never its MP3, and it is
+measured once: a recorded duration is kept. To measure every capture again from its original,
+run `python3 scripts/stream_files.py --remeasure`. It refuses, and writes nothing, when no working
+`ffprobe` is found, and names every capture whose original `ffprobe` could not measure.
+
+A capture's place comes only from its labels. Where another capture's labels place it at one
+master time and its own start label says another, the other capture's placement wins. Each run
+prints one line per capture whose own start label was overridden, so a new disagreement shows. The
+Timing section of `tracklist-2017.txt` only marks the primary captures and gives each one's
+approximate minute range, which the file carries beside the label placement, never in its place.
 
 **Q:** Refresh the missing-originals / sourcing inventory.
 

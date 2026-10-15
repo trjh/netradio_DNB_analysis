@@ -136,6 +136,15 @@ harvest-run:          ## start the harvester (runs for weeks), under its own pid
 # This repo is CANONICAL for `track-metadata.json`. `make tracklist` enriches each linked track
 # with artwork_url/full_page_url and renders the public TRACKLIST.md.
 
+# The two generated data files, together: the labels give the tracks (track-metadata.json,
+# curated fields carried forward from the committed copy) and the capture files' places on the
+# master timeline (stream-files.json). A recorded duration is kept; a capture with none is
+# measured from its original .wav/.au in NETRADIO_CAPTURES_DIR (default: the parent of
+# NETRADIO_MP3_DIR), never its MP3, and keeps no duration when its original is not there.
+stream-data:          ## rebuild track-metadata.json and stream-files.json from the labels
+	$(PYTHON) scripts/build_track_metadata.py --seed track-metadata.json
+	$(PYTHON) scripts/stream_files.py
+
 tracklist:            ## resolve artwork into track-metadata.json + render TRACKLIST.md (network)
 	$(PYTHON) scripts/render_tracklist.py
 
