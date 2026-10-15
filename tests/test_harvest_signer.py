@@ -680,6 +680,19 @@ class TheScan(_SignerCase):
                 self.assertEqual(len(rows), 1, rows)
                 self.assertIn(words, rows[0]["issue"])
 
+    def test_a_sidecar_spoiled_between_scan_and_sign_is_refused_once_a_run(self):
+        """The run's scan and its sign share one dedupe set: a sidecar that turns bad after the
+        scan saw it is refused by the sign, and the next scan in the run says nothing more."""
+        key = _key("https://y/spoiled")
+        path = self._feed(key)
+        issues, said = [], set()
+        todo, _covered = harvest.scan_directories({}, issues=issues, said=said)
+        self.assertEqual([r["path"] for r in todo], [path])
+        self._feed(key, sidecar={"sidecar": None})
+        self.assertEqual(harvest.sign_file(path, issues=issues, said=said), (None, None))
+        harvest.scan_directories({}, issues=issues, said=said)
+        self.assertEqual(len([r for r in issues if r.get("key") == key]), 1, issues)
+
     def test_the_file_the_sidecar_names_is_the_one_signed(self):
         """The sidecar, not the listing, says which file is the hand-over: a key-named
         temporary beside it is never proposed."""
@@ -1283,7 +1296,7 @@ class TheLedgerRebuild(_SignerCase):
         self.assertEqual(harvest._load(harvest.STATE, {})["sig_alert"]["kind"], "ledger")
 
     def test_a_run_with_the_override_starts(self):
-        def sign(path, issues=None):
+        def sign(path, issues=None, said=None):
             harvest._STOP["signum"] = signal.SIGTERM     # one sign attempt, then a clean stop
             return None, None
         code, sf, _out = self._run_main("--accept-ledger-rebuild", sign=sign)

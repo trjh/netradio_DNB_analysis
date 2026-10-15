@@ -1476,7 +1476,7 @@ def _note_copies(key, found, issues, said):
 
 # --- signing ------------------------------------------------------------------------------------
 
-def sign_file(path, issues=None, publish=True):
+def sign_file(path, issues=None, publish=True, said=None):
     """Sign one audio file: decode it (in the child), upload the signature and the sidecar
     beside it in the bucket, and write the ledger row. Returns `(chroma, samples)` when the
     file is signed -- the chroma to score, the decoded samples as a memory map so the caller
@@ -1518,8 +1518,11 @@ def sign_file(path, issues=None, publish=True):
     sidecar_path = os.path.join(os.path.dirname(path), key + ".json")
     # The same checks the scan makes, on the sidecar as it reads NOW; a refusal is written to
     # `issues` from this path too -- the hand tool must not tell the operator to consult an
-    # issues list it never wrote to. A sidecar that names another file is not this file's.
-    named, sidecar = read_sidecar(os.path.dirname(path), key + ".json", issues=issues)
+    # issues list it never wrote to. `said` is the run's dedupe set, shared with its scan, so a
+    # sidecar spoiled between the scan and the sign is still refused once a run. A sidecar that
+    # names another file is not this file's.
+    named, sidecar = read_sidecar(os.path.dirname(path), key + ".json", issues=issues,
+                                  said=said)
     if named is None or os.path.basename(named) != os.path.basename(path):
         return None, None
     # Not the scan's copy: the sidecar as it reads now, validated by `_expect_s` (a claim that
@@ -2885,7 +2888,7 @@ def run(args):
             continue
         # The signature the key had before this sign, for the rulings check below.
         before_etag = (load_ledger().get(rec_file["key"]) or {}).get("uploaded_etag")
-        c, samples = sign_file(rec_file["path"], issues=state["issues"])
+        c, samples = sign_file(rec_file["path"], issues=state["issues"], said=said)
         # A stop is never a verdict, and it arrives by either route: this process was signalled
         # (the flag), or only the decode child was (the sentinel error). Checking one and not
         # the other is not a guard -- the row's writer is right below.
