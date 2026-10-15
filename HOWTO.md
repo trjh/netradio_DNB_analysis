@@ -385,13 +385,34 @@ Nothing reaches `main` until you open the PR with `make review-sync` and merge i
 ```bash
 make review-sync                # open the ONE squash PR from the align-review-data branch
                                 #   (review notes, summaries, data/rulings.json). ARGS=--dry-run
+make review-sync-automerge      # merge that PR when it changes only data/rulings.json, then
+                                #   recreate its branch; otherwise say it waits for you. ARGS=--dry-run
 make review-sync-postmerge      # AFTER you merge that PR by hand: recreate ITS branch from
                                 #   the new main so the hourly commits resume. ARGS=--dry-run
 ```
 
 **What you get:** one open PR against `main` carrying everything the server has committed since
-the last merge. **What to do next:** review and merge it, then run `make review-sync-postmerge`
-so the hourly commits start again on a fresh branch.
+the last merge. A PR that changes only `data/rulings.json` holds no free text, so
+`make review-sync-automerge` merges it for you. **What to do next:** review and merge any other
+PR by hand, then run `make review-sync-postmerge` (the scripts print it with this checkout's
+path) so the hourly commits start again on a fresh branch.
+
+**Q:** How do I keep the align server on the code I just pulled?
+
+**A:** Switch on the repository's git hooks once per machine:
+
+```bash
+make hooks                      # core.hooksPath -> this checkout's .githooks/
+```
+
+**What you get:** after a `git pull` that changes anything under `scripts/` or `public/`, a
+running align server restarts on the new code (`scripts/post_pull_restart.sh`). A pull of labels,
+data or documentation alone restarts nothing, and a server that is down stays down. Set
+`NETRADIO_PULL_RESTART=0` in the environment to skip it for one pull. A server on the port
+that another checkout started is left alone. Of your global git hooks, `pre-commit` and
+`post-merge` still run (each hook here calls the global one of the same name and keeps its
+verdict); any other global hook, such as `pre-push`, does not run in this repository once
+`make hooks` has set `core.hooksPath`.
 
 ---
 

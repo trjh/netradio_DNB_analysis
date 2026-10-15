@@ -1,0 +1,12 @@
+#!/bin/bash
+# post-merge: restart the align server after a pull (scripts/post_pull_restart.sh), then run the
+# global post-merge hook, if any (this repo's core.hooksPath replaces the global one).
+top="$(git rev-parse --show-toplevel)" || exit 0
+rc=0
+if [ -x "$top/scripts/post_pull_restart.sh" ]; then
+  "$top/scripts/post_pull_restart.sh" || rc=$?
+fi
+# shellcheck source=.githooks/chain-global.sh
+. "$(dirname "${BASH_SOURCE[0]}")/chain-global.sh"
+chain_global post-merge "$@" || rc=$?
+exit "$rc"

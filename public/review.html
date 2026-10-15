@@ -1,0 +1,1556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>/align/review — whole-song L/R review</title>
+<style>
+  /* the /align inspector's dark vocabulary, phone-first: big touch targets, one column */
+  :root { --bg:#14161a; --panel:#1d2127; --ink:#d8dee6; --dim:#8a93a0; --accent:#5ec2ff;
+          --stream:#6fd08c; --orig:#e0b452; --note:#c98cf0; --warn:#e6b352; --line:#2c323b; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:15px/1.45 -apple-system, "Segoe UI", sans-serif; padding:10px 10px 60px;
+         max-width:760px; margin-left:auto; margin-right:auto; }
+  h1 { font-size:17px; margin:0 0 2px; }
+  .sub { color:var(--dim); font-size:12px; margin-bottom:10px; }
+  a { color:var(--accent); }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+            padding:10px 12px; margin-bottom:10px; }
+  section h2 { font-size:12px; text-transform:uppercase; letter-spacing:1px;
+               color:var(--dim); margin:0 0 8px; }
+  button { background:#12151a; border:1px solid var(--line); color:var(--ink);
+           border-radius:6px; padding:10px 14px; font-size:15px; cursor:pointer;
+           min-height:44px; }                       /* phone-first: 44 px touch targets */
+  button:disabled { opacity:0.4; }
+  button.primary { border-color:var(--accent); color:var(--accent); font-weight:600; }
+  button.on { background:var(--accent); color:#08222f; font-weight:600; }
+  button.hold.on, button.latch.on { background:var(--warn); border-color:var(--warn); color:#241a05; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:6px 0; }
+  .grow { flex:1 1 auto; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; min-height:44px; }
+  /* DP-37: doubled lanes are the DEFAULT; .compact restores the pre-DP-37
+     height for small phone screens (the toggle keeps the transport above the
+     fold in portrait — doubled + toggle rather than doubled-only) */
+  canvas#wave { display:block; width:100%; height:380px; background:#171a1f;
+                border:1px solid var(--line); border-radius:4px; touch-action:none; }
+  canvas#wave.compact { height:190px; }
+  #seek { width:100%; height:34px; accent-color:var(--accent); }
+  .readout { color:var(--dim); font-size:13px; margin-top:4px; }
+  .readout b { color:var(--ink); font-weight:600; }
+  #driftOut { font:14px ui-monospace, monospace; }
+  #driftOut.bad { color:#e66; }
+  #driftInfo { border:0; background:none; min-height:0; padding:0 4px;
+               color:var(--dim); font-size:14px; cursor:pointer; }
+  #driftTip { display:none; border:1px solid var(--line); border-radius:6px;
+              background:#171a1f; color:var(--dim); font-size:12px;
+              padding:8px 10px; margin:4px 0; }
+  .banner { border:1px solid var(--warn); color:var(--warn); border-radius:6px;
+            padding:6px 10px; font-size:13px; margin:6px 0; }
+  /* DP-36 per-source volume sliders */
+  .vol { flex:1 1 auto; height:34px; accent-color:var(--accent); min-width:120px; }
+  .volLab { min-width:52px; text-align:right; }
+  .volOut { min-width:64px; font:13px ui-monospace, monospace; }
+  .volOut.hot { color:var(--warn); border-color:var(--warn); }
+  .err { color:#e66; }
+  .warn { color:var(--warn); }
+  /* the pair picker */
+  #pickList { list-style:none; margin:0; padding:0; }
+  #pickList .stemHead { color:var(--dim); font-size:12px; text-transform:uppercase;
+                        letter-spacing:1px; margin:10px 0 4px; }
+  #pickList li.pairRow { display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+      padding:10px 8px; border:1px solid var(--line); border-radius:6px; margin:4px 0;
+      cursor:pointer; min-height:44px; }
+  #pickList .rateNote { flex-basis:100%; color:var(--warn); font-size:11px;
+      font-family:ui-monospace, monospace; }
+  #pickList li.pairRow.disabled { opacity:0.5; cursor:default; }
+  #pickList li.pairRow.cur { border-color:var(--accent); }
+  .badge { font:11px ui-monospace, monospace; border-radius:4px; padding:1px 6px; }
+  .badge.hints  { background:#173325; color:var(--stream); }   /* hints pairs green */
+  .badge.placed { background:#332a14; color:var(--orig); }     /* placed pairs amber */
+  .badge.nf { background:#3a1a1a; color:#e66; }
+  /* the §6.2 anchor selection list */
+  #anchorList { list-style:none; margin:0; padding:0; font:13px ui-monospace, monospace; }
+  #anchorList li { display:flex; gap:8px; align-items:center; padding:8px 6px;
+                   border-bottom:1px solid var(--line); min-height:44px; }
+  #anchorList input[type=checkbox] { width:24px; height:24px; accent-color:var(--accent); }
+  #anchorList .dev { margin-left:auto; }
+  #anchorList li.disabled { opacity:0.45; }
+  input[type=text] { background:#12151a; color:var(--ink); border:1px solid var(--line);
+                     border-radius:6px; padding:10px; font-size:15px; width:100%; }
+  .jump { min-width:56px; }
+</style>
+</head>
+<body>
+<h1>/align/review — whole-song L/R review</h1>
+<div class="sub">DP-22 web POC: the capture in the LEFT ear, the rate-corrected original in the
+RIGHT — whole-pair listening for broadcast annotation + alignment QA
+(<code>docs/PLAN_align_tool.md</code> §6). Notes land server-side in the checkout's
+<code>labels/review/</code> (a PUBLIC repo — no paths/secrets in notes).
+Per-point work stays in the <a href="/align">/align inspector</a>.
+<span class="warn">Known iOS limitation: locking the screen (or backgrounding Safari) SUSPENDS
+this page's audio — keep the screen on; the planned Mac/iOS native surface is the
+remedy (§6.9).</span></div>
+
+<section id="pickerSec">
+  <h2>Pair</h2>
+  <details id="pickBox" open>
+    <summary id="pickSummary" style="cursor:pointer;min-height:32px">choose a capture ↔ original pair</summary>
+    <ul id="pickList"></ul>
+    <div class="readout" id="pickInfo">loading sources…</div>
+  </details>
+</section>
+
+<div id="tool" style="display:none">
+
+<section>
+  <h2>Waveform</h2>
+  <div class="readout" id="waveTitle"></div>
+  <!-- DP-37: time-axis zoom (×1 / ×2 / max — the max label is what the envelope
+       DATA honestly resolves to on this screen, never interpolation) + the lane
+       height toggle (doubled default, compact for small screens) -->
+  <div class="row">
+    <span class="seg" id="zoomSeg">
+      <button id="zoom1" class="on">×1</button>
+      <button id="zoom2">×2</button>
+      <button id="zoomMax">max</button>
+    </span>
+    <button id="btnWaveH">lanes: tall</button>
+    <span class="readout grow" id="zoomInfo"></span>
+  </div>
+  <canvas id="wave"></canvas>
+  <div class="readout" id="waveInfo"></div>
+  <div class="readout" id="fineInfo"></div>
+  <div class="readout" id="markerOut"></div>
+  <!-- §6.6 notation: pause, tap the waveform to place the crosshair, type, save -->
+  <div id="noteBox" style="display:none">
+    <div class="row">
+      <span class="readout">note at <b id="notePosOut"></b></span>
+      <button id="noteM1">−1s</button><button id="noteMs">−0.1s</button>
+      <button id="notePs">+0.1s</button><button id="noteP1">+1s</button>
+    </div>
+    <div class="row">
+      <input type="text" id="noteText" placeholder="free text — published to this PUBLIC repo" maxlength="500">
+    </div>
+    <div class="row">
+      <button id="btnNote" class="primary">save note</button>
+      <button id="btnNoteCancel">cancel</button>
+      <span class="readout" id="noteStatus"></span>
+    </div>
+  </div>
+  <div class="readout" id="noteHint">pause, then tap the waveform to place a note (drag or nudge to fine-tune)</div>
+</section>
+
+<section>
+  <h2>Transport</h2>
+  <div class="row">
+    <button id="btnPlay" class="primary grow">▶ play</button>
+    <button id="btnJumpB30" class="jump">−30s</button>
+    <button id="btnJumpB5" class="jump">−5s</button>
+    <button id="btnJumpF5" class="jump">+5s</button>
+    <button id="btnJumpF30" class="jump">+30s</button>
+  </div>
+  <input type="range" id="seek" min="0" max="1000" value="0">
+  <div class="row">
+    <span class="readout"><b id="timeOut">0:00.0</b> <span id="origTimeOut"></span></span>
+    <span class="readout grow" style="text-align:right">drift <b id="driftOut">— ms</b>
+      <span id="corrOut"></span>
+      <button id="driftInfo" aria-label="what the drift number means">ⓘ</button></span>
+  </div>
+  <div id="driftTip">How far the record's playback is from where the fitted mapping says
+    it should be right now — <b>0 ms = perfectly on target</b>. The corrector re-seats the
+    original when it wanders past 15 ms; a persistent large drift means a bad anchor or a
+    rate change. See <code>docs/PLAN_align_tool.md</code> §6.3.</div>
+  <div class="row">
+    <button id="btnSwap">⇄ swap L/R</button>
+    <button id="btnHold" class="hold grow">🎙 hold: stream solo</button>
+    <button id="btnLatch" class="latch">solo latch</button>
+  </div>
+  <!-- DP-36: per-source volume, 0–200 % (100 % = unmodified). Double-tap the
+       readout (or the slider) to reset to 100 %. Above 100 % the readout goes
+       amber: clipping is possible again, by user choice — no limiter. -->
+  <div class="row">
+    <span class="readout volLab">stream</span>
+    <input type="range" id="volS" class="vol" min="0" max="200" value="100" step="1">
+    <button id="volSOut" class="volOut">100%</button>
+  </div>
+  <div class="row">
+    <span class="readout volLab">original</span>
+    <input type="range" id="volO" class="vol" min="0" max="200" value="100" step="1">
+    <button id="volOOut" class="volOut">100%</button>
+  </div>
+  <div class="readout" id="panOut"></div>
+  <div class="readout" id="audioStatus"></div>
+</section>
+
+<section>
+  <h2>Mapping — §6.2/§6.3</h2>
+  <div class="row">
+    <span class="seg" id="modeSeg">
+      <button id="modeConst">constant-rate</button>
+      <button id="modeRe" class="on">re-anchor</button>
+    </span>
+    <span class="readout">mode + selection are frozen while playing</span>
+  </div>
+  <div class="readout" id="rateOut"></div>
+  <div class="readout" id="verdictOut"></div>
+  <div class="banner" id="assumedBanner" style="display:none"></div>
+  <ul id="anchorList"></ul>
+  <div class="readout" id="selInfo"></div>
+</section>
+
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+
+// ---------- constants (mirrored by tests/test_review_page.py) ----------
+const PREFS_KEY = "netradio.review.prefs";   // persistence-light: last pair + mode + selection
+const MARGIN_S = 20;          // §6.4: stream-solo pre/post-roll past the original's span
+const VIEW_S = 30;            // scrolling viewport width at ×1 (seconds of stream time)
+const ZOOM_LEVELS = ["1", "2", "max"];  // DP-37 time-axis zoom states
+const MAX_PX_PER_COL = 2.5;   // DP-37 MAX honesty: device px one envelope column may span
+const FINE_CTX_S = 60;        // DP-37 fine strips: the context op's ± half-width (its cap)
+const MAX_FINE_TILES = 10;    // DP-37: hard cap on fine strips fetched per pair
+const DRIFT_NUDGE_MS = 15;    // corrector: adjust currentTime only when off by more than this
+const DRIFT_CHECK_MS = 2000;  // corrector cadence (~every 2 s)
+const MAX_T_S = 24 * 3600;    // the server's time cap (review_notes mirrors align_inspect)
+const ANCHOR_K_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,15}$/;  // review_notes._ANCHOR_K_RE
+
+// ---------- state ----------
+let sources = null;    // /api/align/sources payload
+let entries = [];      // merged picker entries: {stem, orig, origName, rate, sources:[..], points, usable, nf}
+let cur = null;        // the open entry
+let sel = new Set();   // selected anchor ids ("source:k") — §6.2: frozen while playing
+let mode = "re-anchor";          // the §6.3 switch (effective mode may be "assumed-rate")
+let fit = null;        // {r, a, anchors:[points], assumed, devs:{id:ms}}
+let playing = false;
+let win = { t0: 0, t1: 0 };      // §6.4 playable window, stream seconds
+let streamLen = null, origLen = null;   // durations (overview first, media metadata fallback)
+let ov = null;                   // overview payload (envelopes) or null when the DSP is dark
+const ovCache = new Map();
+let notes = [];                  // this session's saved notes: {stream_t, orig_t, text}
+let usedAnchors = new Set();     // §6.3 re-anchor mode: anchors actually crossed this run
+let notePos = null;              // pending note position (stream s) while paused
+let lastCross = 0;               // anchors crossed so far (re-anchor crossing detector)
+let corrections = 0;             // drift-corrector interventions this run
+let swap = false, holdSolo = false, latchSolo = false;
+let volS = 1, volO = 1;          // DP-36 per-source volume: 1 = unity (unmodified), range 0–2
+let ctx = null, srcS = null, srcO = null, panS = null, panO = null, gainS = null, gainO = null;
+let driftTimer = null, raf = 0;
+let markerBoxes = [];            // tap targets on the waveform (notes + anchors)
+let dragNote = false;
+let zoom = "1";                  // DP-37: "1" | "2" | "max" (time-axis magnification)
+let waveTall = true;             // DP-37: doubled lanes default; false = the compact 190 px
+let fine = null;                 // DP-37 fine strips for the open pair: {cps, tiles:[..], failed}
+const fineCache = new Map();
+let fineFetching = false;
+let lastMaxZoom = null;          // DP-37: re-render the truthful label when max moves
+
+// ---------- audio elements ----------
+const aS = new Audio(); aS.preload = "auto"; aS.crossOrigin = "anonymous";
+const aO = new Audio(); aO.preload = "auto"; aO.crossOrigin = "anonymous";
+for (const el of [aS, aO]) el.setAttribute("playsinline", "");
+// §6.9: varispeed ON PURPOSE — the DJ's pitch fader shifted pitch too, so the
+// pitch-true correction is what makes the two ears comparable (all vendor spellings)
+aO.preservesPitch = false;
+aO.mozPreservesPitch = false;
+aO.webkitPreservesPitch = false;
+
+function ensureGraph() {
+  // stream hard LEFT, original hard RIGHT: MediaElementSource → gain (forced
+  // MONO — the DP-36 downmix) → StereoPannerNode. Swap, solo and the volume
+  // sliders are pure graph changes — playback never stops across them.
+  if (ctx) { if (ctx.state === "suspended") ctx.resume(); return; }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  ctx = new AC();
+  srcS = ctx.createMediaElementSource(aS);
+  srcO = ctx.createMediaElementSource(aO);
+  gainS = ctx.createGain(); gainO = ctx.createGain();
+  // DP-36 overload fix: StereoPannerNode with a STEREO input at pan = ±1 SUMS
+  // L+R into the one output channel (Web Audio spec stereo-pan equations) — up
+  // to 2× full scale; the gate pair measured +5.4 dBFS (stream) / +5.9 dBFS
+  // (original) pre-fix, the reported "clipped/mashed". Forcing each gain node
+  // to MONO makes the spec's standard down-mix — 0.5·(L+R) — happen BEFORE the
+  // pan, so the hard pan is a unity router and the ear's peak can never exceed
+  // the source's own. "Unmodified" (100 %) for a stereo source therefore means
+  // 0.5·(L+R) in the assigned ear; a mono source passes at unity.
+  for (const g of [gainS, gainO]) {
+    g.channelCount = 1;
+    g.channelCountMode = "explicit";
+    g.channelInterpretation = "speakers";
+  }
+  panS = ctx.createStereoPanner(); panO = ctx.createStereoPanner();
+  srcS.connect(gainS).connect(panS).connect(ctx.destination);
+  srcO.connect(gainO).connect(panO).connect(ctx.destination);
+  setPans(); applySolo();
+}
+
+function setPans() {
+  // §6.1: hard pans at ±1; one-tap swap flips BOTH
+  if (!panS) return;
+  panS.pan.value = swap ? 1 : -1;
+  panO.pan.value = swap ? -1 : 1;
+  $("panOut").textContent = swap ? "stream RIGHT · original LEFT (swapped)"
+                                 : "stream LEFT · original RIGHT";
+}
+
+function applySolo() {
+  // solo = original level 0 (momentary hold OR latch) — a gain change on a running
+  // graph, glitch-free; returning to stereo is one action and playback never stops.
+  // DP-36: the same two gain nodes carry the per-source volumes (0–2, unity
+  // default) — solo zeroes the original WITHOUT touching its stored volume
+  if (!gainS) return;
+  gainS.gain.value = volS;
+  gainO.gain.value = (holdSolo || latchSolo) ? 0 : volO;
+}
+
+// ---------- DP-36 per-source volume (0–200 %, 100 % = unmodified) ----------
+function volPct(v) { return Math.round(v * 100); }
+
+function setVol(which, pct) {
+  // NOTE: saves prefs (below) unless a restore is mid-flight
+  // mirrored by tests/test_review_page.py::_js_vol — clamp, then percent → gain
+  const v = Math.min(Math.max(pct, 0), 200) / 100;
+  if (which === "S") volS = v; else volO = v;
+  applySolo();
+  renderVol();
+  if (!restoringPrefs) savePrefs();
+}
+
+function renderVol() {
+  $("volS").value = String(volPct(volS));
+  $("volO").value = String(volPct(volO));
+  $("volSOut").textContent = volPct(volS) + "%";
+  $("volOOut").textContent = volPct(volO) + "%";
+  // above 100 % clipping is possible again — BY USER CHOICE; the amber readout
+  // is the honest cue, and there is deliberately no limiter behind it
+  $("volSOut").classList.toggle("hot", volS > 1);
+  $("volOOut").classList.toggle("hot", volO > 1);
+}
+
+function dblReset(el, fn) {
+  // double-tap OR double-click (pointerup twice inside 350 ms) → reset to 100 %
+  let last = 0;
+  el.addEventListener("pointerup", () => {
+    const now = performance.now();
+    if (now - last < 350) fn();
+    last = now;
+  });
+}
+
+// ---------- §6.2: the fitted effective rate ----------
+function lsqSlope(pts) {
+  // least-squares slope of orig_s over stream_s — MIRRORS review_notes._lsq_slope
+  // (the server recomputes this and rejects a divergent fitted rate)
+  const n = pts.length;
+  const sm = pts.reduce((s, p) => s + p.stream_s, 0) / n;
+  const om = pts.reduce((s, p) => s + p.orig_s, 0) / n;
+  let den = 0, num = 0;
+  for (const p of pts) {
+    den += (p.stream_s - sm) * (p.stream_s - sm);
+    num += (p.stream_s - sm) * (p.orig_s - om);
+  }
+  if (den <= 1e-9) return null;
+  return num / den;
+}
+
+function selectedPoints() {
+  if (!cur) return [];
+  return cur.usable.filter(p => sel.has(p.id))
+                   .slice().sort((x, y) => x.stream_s - y.stream_s);
+}
+
+function effMode() {
+  // §6.2: exactly one selected pair = the flagged assumed-rate mode (the DP-20
+  // single-hand-sync case) — the §6.3 switch is moot there, both mappings coincide
+  return (fit && fit.assumed) ? "assumed-rate" : mode;
+}
+
+function recomputeFit() {
+  const pts = selectedPoints();
+  fit = null;
+  if (!pts.length) return;
+  let r, assumed = false;
+  if (pts.length === 1) {
+    assumed = true;
+    // §6.2: r = the pair's Pass-1 summary rate when a hints file exists, else 1.000
+    r = (cur.rate != null) ? Number(cur.rate.toFixed(6)) : 1.0;
+  } else {
+    const slope = lsqSlope(pts);
+    if (slope === null) { $("rateOut").innerHTML =
+      '<span class="err">degenerate anchor span — deselect one of the equal-time anchors</span>';
+      return; }
+    // the server's canonical 6 dp representation (review_notes: float("%.6f" % slope))
+    r = Number(slope.toFixed(6));
+  }
+  // LSQ intercept given slope r — review_notes.expected_orig_t's constant-rate line
+  const a = pts.reduce((s, p) => s + (p.orig_s - r * p.stream_s), 0) / pts.length;
+  const devs = {};
+  if (!assumed)
+    for (const p of pts) devs[p.id] = (p.orig_s - (a + r * p.stream_s)) * 1000;
+  fit = { r, a, anchors: pts, assumed, devs };
+  recomputeWindow();
+  renderFit();
+}
+
+function renderFit() {
+  if (!fit) return;
+  $("rateOut").innerHTML = "effective rate <b>" + fit.r.toFixed(6) + "</b>" +
+    (fit.assumed ? ' <span class="err">(assumed)</span>'
+                 : " · least-squares over " + fit.anchors.length + " pairs, intercept " +
+                   fit.a.toFixed(3) + " s");
+  $("assumedBanner").style.display = fit.assumed ? "" : "none";
+  if (fit.assumed)
+    $("assumedBanner").textContent = "assumed-rate mode: only one anchor is selected, so " +
+      "there is nothing to fit — the rate readout is " +
+      (cur.rate != null ? "the pair's Pass-1 rate" : "1.000") +
+      ", taken on faith. A second anchor seated in the /align inspector buys a measured rate.";
+  // §6.2 verdict line: deviations from the single-rate line, and the multi-rate hand-off
+  let verdict = "";
+  if (!fit.assumed) {
+    const ds = fit.anchors.map(p => fit.devs[p.id]);
+    const maxAbs = Math.max(...ds.map(Math.abs));
+    // curvature, not trend (LSQ residuals are trend-free by construction): ends one
+    // sign, middle the other = the DJ rode the pitch mid-record
+    const curved = ds.length >= 3 && ds[0] * ds[ds.length - 1] > 0 &&
+      ds.slice(1, -1).some(d => d * ds[0] < 0 && Math.abs(d) > 10);
+    verdict = (curved && maxAbs > 25)
+      ? "systematic drift " + maxAbs.toFixed(0) + " ms across the span — multi-rate suspected"
+      : "scattered ±" + maxAbs.toFixed(1) + " ms — the single rate looks honest";
+  }
+  $("verdictOut").textContent = verdict;
+  renderAnchorList();
+}
+
+// ---------- §6.3: the playback mapping ----------
+function mapOrig(t) {
+  // MIRRORS review_notes.expected_orig_t (unclamped): constant-rate = the fitted
+  // line; re-anchor/assumed = governed by the last selected anchor at or before t
+  if (!fit) return 0;
+  if (effMode() === "constant-rate") return fit.a + fit.r * t;
+  const pts = fit.anchors;
+  let gov = pts[0];
+  for (const p of pts) if (p.stream_s <= t) gov = p;
+  return gov.orig_s + fit.r * (t - gov.stream_s);
+}
+
+function mapOrigClamped(t) {
+  // what the note POST carries — the server clamps expected_orig_t to [0, MAX_T_S]
+  return Math.min(Math.max(mapOrig(t), 0), MAX_T_S);
+}
+
+function crossCount(t) {
+  // how many selected anchors playback has passed — the crossing detector. NOT the
+  // governing index: before the first anchor the mapping is governed by anchor 0
+  // already, but the anchor still counts as UNcrossed until playback reaches it
+  // (else the first anchor could never be marked used)
+  if (!fit) return 0;
+  return fit.anchors.filter(p => p.stream_s <= t).length;
+}
+
+function recomputeWindow() {
+  // §6.4: the original's span + MARGIN_S pre/post-roll, clamped to the capture edges.
+  // The span is read off the fitted line (re-anchor deviates by ms — invisible here).
+  if (!fit) return;
+  const sLen = streamLen != null ? streamLen : (isFinite(aS.duration) ? aS.duration : null);
+  const oLen = origLen != null ? origLen : (isFinite(aO.duration) ? aO.duration : null);
+  const start = (0 - fit.a) / fit.r;
+  const end = oLen != null ? (oLen - fit.a) / fit.r : (sLen != null ? sLen : start + 300);
+  win.t0 = Math.max(0, start - MARGIN_S);
+  win.t1 = sLen != null ? Math.min(sLen, end + MARGIN_S) : end + MARGIN_S;
+  const clampL = start < 0, clampR = sLen != null && end > sLen;
+  $("waveInfo").textContent =
+    "window " + fmtT(win.t0) + " – " + fmtT(win.t1) + " (original's span + " + MARGIN_S +
+    " s margins" +
+    (clampL || clampR ? "; the original overhangs the capture " +
+      (clampL && clampR ? "at both edges" : clampL ? "at the start" : "at the end") +
+      " — clamped, the overhang is unavailable" : "") + ")";
+}
+
+// ---------- playback ----------
+function resetPlayback() {
+  // §6.2 (A4): any selection/mode/pair change RESETS playback to the window start
+  stopPlayback();
+  usedAnchors.clear();
+  corrections = 0;
+  $("corrOut").textContent = "";
+  if (fit) { aS.currentTime = win.t0; lastCross = crossCount(win.t0); }
+  updateTransport();
+  drawWave();
+}
+
+function stopPlayback() {
+  playing = false;
+  aS.pause(); aO.pause();
+  if (driftTimer) { clearInterval(driftTimer); driftTimer = null; }
+  $("btnPlay").textContent = "▶ play";
+  setEditEnabled(true);
+}
+
+async function startPlayback() {
+  if (!fit) return;
+  ensureGraph();
+  setEditEnabled(false);       // §6.2: the anchor set is frozen for the playback run
+  playing = true;
+  $("btnPlay").textContent = "❚❚ pause";
+  lastCross = crossCount(aS.currentTime);
+  try {
+    await aS.play();
+    syncOrig(true);
+  } catch (e) {
+    $("audioStatus").innerHTML = '<span class="err">playback failed: ' + e + "</span>";
+    stopPlayback();
+    return;
+  }
+  if (!driftTimer) driftTimer = setInterval(() => correctDrift(false), DRIFT_CHECK_MS);
+  tick();
+}
+
+function syncOrig(force) {
+  // seat the original at the mapping's target; §6.4 margins = right ear silent
+  const target = mapOrig(aS.currentTime);
+  const oLen = origLen != null ? origLen : (isFinite(aO.duration) ? aO.duration : null);
+  const inRange = target >= 0 && (oLen == null || target <= oLen);
+  if (!inRange) { if (!aO.paused) aO.pause(); return; }
+  aO.playbackRate = fit.r;
+  if (force || aO.paused) aO.currentTime = target;
+  if (playing && aO.paused) aO.play().catch(() => {});
+}
+
+function correctDrift(force) {
+  // the §6.9 corrector, POC shape: compare the two media clocks against the mapping
+  // ~every 2 s and adjust the original's currentTime only when off by more than
+  // DRIFT_NUDGE_MS; every correction is logged to the console
+  if (!fit) return;
+  const t = aS.currentTime;
+  const target = mapOrig(t);
+  const oLen = origLen != null ? origLen : (isFinite(aO.duration) ? aO.duration : null);
+  if (target < 0 || (oLen != null && target > oLen)) {
+    if (!aO.paused) aO.pause();
+    $("driftOut").textContent = "margin";
+    $("driftOut").className = "";
+    return;
+  }
+  if (playing && aO.paused) { syncOrig(true); return; }
+  const driftMs = (aO.currentTime - target) * 1000;
+  $("driftOut").textContent = driftMs.toFixed(1) + " ms";
+  $("driftOut").className = Math.abs(driftMs) > 30 ? "bad" : "";
+  if (force || Math.abs(driftMs) > DRIFT_NUDGE_MS) {
+    aO.currentTime = target;
+    if (!force) {
+      corrections++;
+      console.log("drift corrector: " + driftMs.toFixed(1) + " ms at stream " +
+                  t.toFixed(2) + " s -> re-seated (correction #" + corrections + ")");
+      $("corrOut").textContent = "(" + corrections + " corrections)";
+    }
+  }
+}
+
+function tick() {
+  cancelAnimationFrame(raf);
+  const step = () => {
+    const t = aS.currentTime;
+    if (playing && effMode() === "re-anchor") {
+      // §6.3 re-anchor mode: exact re-sync clicks in at every selected anchor as
+      // playback crosses it; the crossed anchor is marked used on the waveform
+      const cc = crossCount(t);
+      if (cc > lastCross) {
+        const p = fit.anchors[cc - 1];
+        usedAnchors.add(p.id);
+        correctDrift(true);
+        console.log("re-anchor at " + p.id + " (stream " +
+                    p.stream_s.toFixed(2) + " s)");
+      }
+      if (cc !== lastCross) lastCross = cc;
+    }
+    // §6.4 edge transitions run PER-FRAME (review iteration 1 P1): syncOrig
+    // pauses the original outside its coverage and re-seats + restarts it the
+    // frame coverage begins — waiting for the 2 s corrector timer would start
+    // the original up to 2 s late and skip its opening audio
+    if (playing) syncOrig(false);
+    if (playing && t >= win.t1) stopPlayback();      // the window end is the end
+    updateTransport();
+    drawWave();
+    if (playing) raf = requestAnimationFrame(step);
+  };
+  raf = requestAnimationFrame(step);
+}
+
+function seekTo(t, fromSlider) {
+  // §6.2: scrubbing is ALWAYS allowed, during playback too — it moves the position,
+  // never the model; both sides move together per the mapping (re-anchor mode
+  // re-seats from the nearest prior anchor via the forced correction)
+  if (!fit) return;
+  t = Math.min(Math.max(t, win.t0), win.t1);
+  aS.currentTime = t;
+  lastCross = crossCount(t);   // crossings behind the new position never re-mark
+  syncOrig(true);
+  if (!fromSlider) $("seek").value = String(Math.round(
+    (t - win.t0) / Math.max(win.t1 - win.t0, 1e-9) * 1000));
+  updateTransport();
+  drawWave();
+}
+
+function updateTransport() {
+  const t = aS.currentTime;
+  $("timeOut").textContent = fmtT(t);
+  const o = mapOrig(t);
+  $("origTimeOut").textContent = fit ?
+    (o >= 0 && (origLen == null || o <= origLen)
+      ? "· orig " + fmtT(o) + " native" : "· stream solo (margin)") : "";
+  if (!playing) return;
+  $("seek").value = String(Math.round(
+    (t - win.t0) / Math.max(win.t1 - win.t0, 1e-9) * 1000));
+}
+
+function fmtT(t) {
+  const neg = t < 0; t = Math.abs(t);
+  const m = Math.floor(t / 60), s = t - m * 60;
+  return (neg ? "−" : "") + m + ":" + (s < 10 ? "0" : "") + s.toFixed(1);
+}
+
+// ---------- DP-37: time-axis zoom (×1 / ×2 / max) + lane height ----------
+function zoomFactor() {
+  if (zoom === "2") return 2;
+  if (zoom === "max") return maxZoom();
+  return 1;
+}
+
+function viewSpanS() { return VIEW_S / zoomFactor(); }
+
+function fineCoveredRange(a, b) {
+  // geometric coverage: does the tile union cover [a, b]? Tiles can arrive in
+  // any order (viewport-priority fetching below), so merge-walk them sorted.
+  if (!fine || !fine.tiles.length) return false;
+  const tiles = fine.tiles.slice().sort((x, y) => x.t0 - y.t0);
+  let at = a;
+  for (const tl of tiles) {
+    if (tl.t0 > at + 1e-3) break;
+    if (tl.t1 > at) at = tl.t1;
+    if (at >= b - 1e-3) return true;
+  }
+  return at >= b - 1e-3;
+}
+
+function viewportFine() {
+  // is the VISIBLE window portion drawn from fine strips end-to-end?
+  // Recursion break (viewSpanS → zoomFactor → maxZoom → here): judge coverage
+  // against the span the CURRENT zoom would show IF the fine claim held — the
+  // narrowest candidate. Covered → the real span IS that span, so the claim
+  // matches the drawing exactly; uncovered → the wider overview-span viewport
+  // (a superset around the same centre) is uncovered too, so the fallback is
+  // consistent — and conservative: the claim never overstates.
+  if (!fine || !fine.cps || !fit) return false;
+  const z = zoom === "2" ? 2 : zoom === "max" ? maxZoomFor(fine.cps) : 1;
+  const span = VIEW_S / z, t = aS.currentTime;
+  const a = Math.max(t - span / 2, win.t0), b = Math.min(t + span / 2, win.t1);
+  if (b <= a) return false;
+  return fineCoveredRange(a, b);
+}
+
+function viewportCps() {
+  // the column rate of what the CURRENT viewport actually draws, MEASURED from
+  // the payloads — never assumed. The label and max may claim fine resolution
+  // ONLY while fine tiles really cover the visible span; outside coverage the
+  // draw falls back to the overview, so the claim must too (review iteration 1
+  // P1: a seek past the fetched tiles must not keep the 50 cols/s max).
+  if (viewportFine()) return fine.cps;
+  if (ov) return ov.n_cols / ov.stream_len_s;
+  return null;
+}
+
+function maxZoom() {
+  // DP-37 MAX honesty: magnification can only reveal detail the envelope data
+  // actually carries — nothing is ever interpolated. With a column rate of
+  // `cps` (envelope columns per stream second, measured from the payload) and
+  // a viewport of `devW` device pixels spanning VIEW_S/z seconds, one column
+  // occupies devW·z/(VIEW_S·cps) device pixels. MAX is the zoom at which a
+  // column reaches MAX_PX_PER_COL (~2–3) device pixels — past it there is no
+  // more data, only wider blocks:
+  //     zMax = round(MAX_PX_PER_COL · VIEW_S · cps / devW), clamped to [2, 16]
+  // The DP-10 overview op's ~6 cols/s puts zMax below ×2 on any real screen
+  // (the low clamp is the "data limit" case), which is why zoomed views fetch
+  // the §5 context op's 50 cols/s fine strips (ensureFineStrips) — they lift
+  // zMax to ×3–×4 on real devices.
+  return maxZoomFor(viewportCps());
+}
+
+function maxZoomFor(cps) {
+  // the pure formula (no viewport dependence — viewportFine's recursion break
+  // relies on that)
+  if (!cps) return 4;   // DSP dark: no envelopes to be honest about — markers only
+  const devW = ($("wave").clientWidth || 360) * (window.devicePixelRatio || 1);
+  return Math.min(Math.max(Math.round(MAX_PX_PER_COL * VIEW_S * cps / devW), 2), 16);
+}
+
+function setZoom(z) {
+  if (!ZOOM_LEVELS.includes(z)) return;
+  zoom = z;
+  if (zoom !== "1") ensureFineStrips();
+  renderZoom();
+  if (!restoringPrefs) savePrefs();
+  drawWave();
+}
+
+function renderZoom() {
+  $("zoom1").className = zoom === "1" ? "on" : "";
+  $("zoom2").className = zoom === "2" ? "on" : "";
+  $("zoomMax").className = zoom === "max" ? "on" : "";
+  // the truthful label: what max actually resolves to on THIS data + screen —
+  // for the viewport actually shown (fine only while fine covers it)
+  $("zoomMax").textContent = "max (×" + maxZoom() + ")";
+  const fineNow = viewportFine();
+  const cps = viewportCps();
+  $("zoomInfo").textContent = cps
+    ? cps.toFixed(cps < 10 ? 1 : 0) + " cols/s " +
+      (fineNow ? "fine strips" : "overview") +
+      " · view " + viewSpanS().toFixed(0) + " s"
+    : "";
+}
+
+function setWaveH(tall) {
+  waveTall = !!tall;
+  $("wave").classList.toggle("compact", !waveTall);
+  $("btnWaveH").textContent = waveTall ? "lanes: tall" : "lanes: compact";
+  if (!restoringPrefs) savePrefs();
+  drawWave();
+}
+
+// DP-37 fine strips: the DP-10 overview op is FIXED at ~6 cols/s — coarser
+// than one CSS pixel at ×1 already — so zoomed views fetch the inspector's §5
+// context strips instead: ±FINE_CTX_S decimated slices at 50 cols/s, tiled to
+// cover the §6.4 window, through the SAME DSP boundary (no new op). Tiles are
+// fetched lazily the first time zoom leaves ×1, sequentially (the DSP lock is
+// one-at-a-time — 429 waits its turn), cached per pair, and never refetched on
+// selection changes (the mapping moves by ms — invisible at 20 ms columns).
+function fineCentres() {
+  // the slot grid: 120 s slots anchored at win.t0 — re-read from `win` on
+  // EVERY call, so a window that grows mid-fetch (the overview arriving with
+  // the real orig_len) extends the very loop already running. Viewport slots
+  // first: a seek or playback into an uncovered region gets its fine detail
+  // before the far ends fill in.
+  const step = 2 * FINE_CTX_S;
+  const list = [];
+  for (let tc = win.t0 + FINE_CTX_S; tc - FINE_CTX_S < win.t1; tc += step)
+    list.push(tc);
+  const vc = aS.currentTime;
+  return list.sort((x, y) => Math.abs(x - vc) - Math.abs(y - vc));
+}
+
+function nextFineCentre(f) {
+  for (const tc of fineCentres())
+    if (!f.tiles.some(tl => Math.abs(tl.tc - tc) < 0.5)) return tc;
+  return null;
+}
+
+function rearmFineStrips() {
+  // the GUARDED re-arm (parity with the Mac's rearmFineStrips): every
+  // AUTOMATIC trigger — the per-frame draw hook, the overview arriving, a
+  // stale run's finally — comes through here, and the current pair's failed
+  // park survives all of them (review iteration 3 P2): only an explicit user
+  // action (the zoom control, opening a pair) calls ensureFineStrips
+  // directly and clears the park.
+  if (zoom === "1" || !sources || !sources.enabled) return;
+  if (fine && fine.failed) return;      // parked until re-engaged
+  if (viewportFine()) return;
+  ensureFineStrips();
+}
+
+async function ensureFineStrips() {
+  if (!cur || !fit || !sources || !sources.enabled || fineFetching) return;
+  const key = cur.stem + "|" + cur.orig;
+  let f = fineCache.get(key);
+  if (!f) { f = { cps: null, tiles: [], failed: false }; fineCache.set(key, f); }
+  f.failed = false;    // an explicit (re-)engage clears the auto-retry park
+  $("fineInfo").textContent = "";
+  fine = f;
+  fineFetching = true;
+  try {
+    const hintSet = (sources.hints || []).find(h => h.stem === cur.stem && h.orig === cur.orig);
+    for (let guard = 0; guard < MAX_FINE_TILES; guard++) {
+      const tc = nextFineCentre(f);
+      if (tc == null) break;
+      const want = mapOrig(tc);
+      const body = {
+        stem: cur.stem, orig: cur.orig,
+        stream_t: Number(tc.toFixed(6)),
+        orig_t: Number(mapOrigClamped(tc).toFixed(6)),
+        rate: fit.r,
+        invert: !!(hintSet && hintSet.inverted),
+        context: FINE_CTX_S,
+      };
+      let r = null, j = null;
+      for (let tries = 0; ; tries++) {
+        try {
+          r = await fetch("/api/align/context", { method: "POST",
+            headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+          j = await r.json();
+        } catch (e) { j = { error: String(e) }; }
+        if (r && r.status === 429 && tries < 5) {   // the one-at-a-time DSP lock
+          await new Promise(res => setTimeout(res, 1200));
+          continue;
+        }
+        break;
+      }
+      if (!cur || key !== cur.stem + "|" + cur.orig) return;  // pair changed mid-fetch
+      if (!j || j.error || !j.n_cols) {
+        $("fineInfo").textContent = "fine strips unavailable" +
+          (j && j.error ? ": " + j.error : "") + " — overview resolution";
+        // park auto-retry (the drawWave re-arm would hammer the server every
+        // frame otherwise); re-engaging the zoom control tries again
+        f.failed = true;
+        return;
+      }
+      // the column rate is MEASURED from the payload — never assumed
+      f.cps = j.n_cols / (2 * j.context_s);
+      // a tile's orig lane is only mapping-true when the requested centre
+      // orig_t IS the mapping's own (an out-of-coverage centre was clamped):
+      // margin tiles keep their fine STREAM lane and the orig lane falls back
+      const origOk = want >= 0 && (origLen == null || want <= origLen) &&
+        Math.abs(body.orig_t - want) < 1e-5;
+      if (f.tiles.length >= MAX_FINE_TILES) {
+        // the explicit cache policy: MAX_FINE_TILES is the KEPT-tiles cap per
+        // pair; on a window longer than the cap covers, evict the tile
+        // FARTHEST from the viewport so fine detail follows the operator
+        const vc = aS.currentTime;
+        let far = 0;
+        for (let i = 1; i < f.tiles.length; i++)
+          if (Math.abs(f.tiles[i].tc - vc) > Math.abs(f.tiles[far].tc - vc))
+            far = i;
+        f.tiles.splice(far, 1);
+      }
+      f.tiles.push({ tc: tc, t0: j.start_s, t1: j.start_s + 2 * j.context_s,
+                     stream: j.stream, orig: j.orig,
+                     rmsGain: j.rms_gain, origOk: origOk });
+      renderZoom();
+      drawWave();
+    }
+  } finally {
+    fineFetching = false;
+    // the request lock is global: if the pair changed while this run owned it,
+    // the new pair's own fetch was turned away at the guard — re-arm it now
+    // (review iteration 2 P2), THROUGH the guard so an already-parked pair
+    // stays parked (review iteration 3 P2)
+    if (cur && cur.stem + "|" + cur.orig !== key) rearmFineStrips();
+  }
+}
+
+// ---------- the scrolling waveform (A2) ----------
+function drawWave() {
+  const c = $("wave"), dpr = window.devicePixelRatio || 1;
+  const cw = c.clientWidth || 360, chh = c.clientHeight || 380;
+  if (c.width !== cw * dpr || c.height !== chh * dpr) {   // DP-37: height can toggle
+    c.width = cw * dpr; c.height = chh * dpr;
+  }
+  const g = c.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, cw, chh);
+  markerBoxes = [];
+  if (!cur || !fit) return;
+  const t = aS.currentTime;
+  const span = viewSpanS();                        // DP-37: VIEW_S / zoom factor
+  const tL = t - span / 2;                         // playhead-centred viewport
+  const x0 = tt => (tt - tL) / span * cw;
+  const laneH = (chh - 24) / 2, midS = 4 + laneH / 2, midO = 20 + laneH + laneH / 2;
+
+  // window bounds + §6.4 margins (right ear silent there)
+  g.fillStyle = "rgba(138,147,160,0.10)";
+  const spanL = (0 - fit.a) / fit.r, spanR = origLen != null ? (origLen - fit.a) / fit.r : null;
+  if (spanL > tL) g.fillRect(0, 20 + laneH, Math.min(cw, x0(spanL)), laneH + 4);
+  if (spanR != null && spanR < tL + span)
+    g.fillRect(Math.max(0, x0(spanR)), 20 + laneH, cw, laneH + 4);
+  g.fillStyle = "rgba(0,0,0,0.35)";
+  if (win.t0 > tL) g.fillRect(0, 0, Math.min(cw, x0(win.t0)), chh);
+  if (win.t1 < tL + span) g.fillRect(Math.max(0, x0(win.t1)), 0, cw, chh);
+
+  // DP-37: each lane draws from an ORDERED source list — the 50 cols/s fine
+  // strips first where loaded, the ~6 cols/s overview beneath; per pixel the
+  // FIRST source covering the pixel's time wins, so zoomed views show real
+  // fine data wherever it exists and the coarse envelope elsewhere — never an
+  // interpolation of either.
+  const streamSrcs = [], origSrcs = [];
+  if (fine) {
+    for (const tl of fine.tiles) {
+      streamSrcs.push({ env: tl.stream, t0: tl.t0, t1: tl.t1,
+                        clip0: tl.t0, clip1: tl.t1, scale: 1 });
+      if (!tl.origOk) continue;      // margin tile: overview fallback for the orig lane
+      origSrcs.push({ env: tl.orig, t0: tl.t0, t1: tl.t1,
+                      clip0: Math.max(tl.t0, spanL),
+                      clip1: spanR != null ? Math.min(tl.t1, spanR) : tl.t1,
+                      // one amplitude scale: the overview is whole-file
+                      // RMS-matched, each tile only over its own ±60 s
+                      scale: (ov && tl.rmsGain > 1e-9) ? ov.rms_gain / tl.rmsGain : 1 });
+    }
+  }
+  if (ov) {
+    // stream lane from the whole-capture overview envelope (~6 cols/s — the DP-10
+    // provider; coarse on purpose: fetched once per pair, drawn cheap every frame)
+    streamSrcs.push({ env: ov.stream, t0: 0, t1: ov.stream_len_s,
+                      clip0: 0, clip1: ov.stream_len_s, scale: 1 });
+    // original lane: the piecewise-stretched segments, already in stream time
+    for (const seg of ov.segments)
+      if (seg.min.length)
+        origSrcs.push({ env: seg, t0: seg.a0, t1: seg.a1,
+                        clip0: seg.a0, clip1: seg.a1, scale: 1 });
+  }
+  if (streamSrcs.length || origSrcs.length) {
+    drawLane(g, streamSrcs, cw, tL, span, midS, laneH * 0.46, "#6fd08c");
+    drawLane(g, origSrcs, cw, tL, span, midO, laneH * 0.46, "#e0b452");
+  } else {
+    // DSP dark: degrade honestly to a position bar — no envelopes, markers still live
+    g.strokeStyle = "#2c323b";
+    g.beginPath(); g.moveTo(0, midS); g.lineTo(cw, midS);
+    g.moveTo(0, midO); g.lineTo(cw, midO); g.stroke();
+  }
+  g.fillStyle = "rgba(138,147,160,0.8)"; g.font = "10px ui-monospace, monospace";
+  g.fillText("stream L", 4, 12);
+  g.fillText("orig" + String(cur.orig).padStart(3, "0") + " R (rate " +
+             fit.r.toFixed(4) + ")", 4, 20 + laneH + 12);
+
+  drawAnchorFlags(g, x0, cw, chh);
+  drawNoteMarkers(g, x0, cw, chh, laneH, midO);
+
+  // playhead, centre
+  g.strokeStyle = "rgba(244,246,248,0.9)";
+  g.beginPath(); g.moveTo(cw / 2 + 0.5, 0); g.lineTo(cw / 2 + 0.5, chh); g.stroke();
+
+  // pending note crosshair (§6.6 placement: paused tap; draggable)
+  if (notePos != null) {
+    const x = x0(notePos);
+    g.strokeStyle = "rgba(201,140,240,0.95)";
+    g.setLineDash([4, 3]);
+    g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, chh); g.stroke();
+    g.setLineDash([]);
+    g.fillStyle = "#c98cf0";
+    g.fillText(notePos.toFixed(3) + " s", Math.min(x + 4, cw - 70), chh - 6);
+  }
+
+  // DP-37 (review iteration 1 P1): keep the label/max truthful AND the data
+  // coming — the max label re-renders whenever the honest ceiling moves (a
+  // seek out of / into fine coverage), and entering an uncovered region while
+  // zoomed re-arms the fetcher (viewport slots first) through the guard that
+  // preserves a failed pair's park.
+  const mz = maxZoom();
+  if (mz !== lastMaxZoom) { lastMaxZoom = mz; renderZoom(); }
+  rearmFineStrips();
+}
+
+function drawLane(g, srcs, cw, tL, span, mid, A, color) {
+  // min/max envelope over the visible window: per pixel, min/max over the
+  // columns that pixel's time span covers (the align page's envBand,
+  // time-windowed), taken from the FIRST source whose clip window contains the
+  // pixel centre — fine strips are listed before the overview (DP-37), so real
+  // detail wins wherever it exists and nothing is ever interpolated
+  if (!srcs.length) return;
+  g.strokeStyle = color;
+  g.beginPath();
+  for (let x = 0; x < cw; x++) {
+    const ta = tL + x / cw * span, tb = tL + (x + 1) / cw * span;
+    const tm = (ta + tb) / 2;
+    const s = srcs.find(q => tm >= q.clip0 && tm <= q.clip1);
+    if (!s) continue;
+    const n = s.env.min.length;
+    if (!n || s.t1 <= s.t0) continue;
+    const colOfTime = tt => (tt - s.t0) / (s.t1 - s.t0) * n;
+    let i0 = Math.floor(colOfTime(ta)), i1 = Math.ceil(colOfTime(tb));
+    if (i1 <= 0 || i0 >= n) continue;
+    i0 = Math.max(0, i0); i1 = Math.min(n, Math.max(i1, i0 + 1));
+    let lo = 1e9, hi = -1e9;
+    for (let i = i0; i < i1; i++) {
+      if (s.env.min[i] < lo) lo = s.env.min[i];
+      if (s.env.max[i] > hi) hi = s.env.max[i];
+    }
+    if (lo > hi) continue;
+    lo *= s.scale; hi *= s.scale;
+    g.moveTo(x + 0.5, mid - Math.min(1, Math.max(-1, hi)) * A);
+    g.lineTo(x + 0.5, mid - Math.min(1, Math.max(-1, lo)) * A + 0.001);
+  }
+  g.stroke();
+}
+
+function drawAnchorFlags(g, x0, cw, chh) {
+  // every candidate anchor: dim when unselected, bright when selected, accent + ✓
+  // once USED by a re-anchor crossing this run (§6.3's used-anchor marking)
+  for (const p of cur.usable) {
+    const x = x0(p.stream_s);
+    if (x < -30 || x > cw + 30) continue;
+    const selOn = sel.has(p.id), used = usedAnchors.has(p.id);
+    g.strokeStyle = used ? "rgba(94,194,255,0.9)"
+                  : selOn ? "rgba(216,222,230,0.7)" : "rgba(138,147,160,0.25)";
+    g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, chh); g.stroke();
+    const w = 22, h = 14, y = 2;
+    g.fillStyle = used ? "#5ec2ff" : selOn ? "#3a414c" : "#232830";
+    g.fillRect(x + 1.5, y, w, h);
+    g.fillStyle = used ? "#08222f" : selOn ? "#d8dee6" : "#8a93a0";
+    g.font = "10px ui-monospace, monospace"; g.textBaseline = "middle";
+    g.fillText(String(p.k).slice(0, 2) + (used ? "✓" : ""), x + 4.5, y + h / 2 + 0.5);
+    markerBoxes.push({ x: x + 1.5, y, w, h, kind: "anchor", p });
+  }
+}
+
+function drawNoteMarkers(g, x0, cw, chh, laneH, midO) {
+  // §6.6: saved notes render as markers immediately; tap one to see its text
+  notes.forEach((nt, i) => {
+    const x = x0(nt.stream_t);
+    if (x < -20 || x > cw + 20) return;
+    g.strokeStyle = "rgba(201,140,240,0.7)";
+    g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, chh); g.stroke();
+    g.fillStyle = "#c98cf0";
+    g.beginPath();
+    g.moveTo(x + 0.5, chh - 18); g.lineTo(x + 6, chh - 11);
+    g.lineTo(x + 0.5, chh - 4); g.lineTo(x - 5, chh - 11); g.closePath();
+    g.fill();
+    markerBoxes.push({ x: x - 8, y: chh - 22, w: 16, h: 20, kind: "note", note: nt });
+  });
+}
+
+// waveform pointer handling: tap a marker any time; tap empty waveform while PAUSED
+// to place (or drag to fine-tune) the pending note crosshair — §6.6's flow
+const waveEl = $("wave");
+waveEl.addEventListener("pointerdown", e => {
+  const rect = waveEl.getBoundingClientRect();
+  const ex = e.clientX - rect.left, ey = e.clientY - rect.top;
+  const hit = markerBoxes.find(b => ex >= b.x && ex <= b.x + b.w &&
+                                    ey >= b.y && ey <= b.y + b.h);
+  if (hit) {
+    $("markerOut").innerHTML = hit.kind === "note"
+      ? "note @ " + hit.note.stream_t.toFixed(3) + " s: <b>" + escapeHtml(hit.note.text) + "</b>"
+      : "anchor " + hit.p.k + " (" + hit.p.source + ") — stream " +
+        hit.p.stream_s.toFixed(3) + " s · orig " + hit.p.orig_s.toFixed(3) + " s" +
+        (usedAnchors.has(hit.p.id) ? " · used this run" : "");
+    return;
+  }
+  if (playing || !fit) return;                 // §6.6: placement happens while PAUSED
+  const span = viewSpanS();                    // DP-37: taps map through the zoomed span
+  const t = aS.currentTime - span / 2 + ex / rect.width * span;
+  notePos = Math.min(Math.max(t, win.t0), win.t1);
+  dragNote = true;
+  waveEl.setPointerCapture(e.pointerId);
+  showNoteBox();
+  drawWave();
+});
+waveEl.addEventListener("pointermove", e => {
+  if (!dragNote || notePos == null) return;
+  const rect = waveEl.getBoundingClientRect();
+  const span = viewSpanS();
+  const t = aS.currentTime - span / 2 + (e.clientX - rect.left) / rect.width * span;
+  notePos = Math.min(Math.max(t, win.t0), win.t1);
+  showNoteBox();
+  drawWave();
+});
+waveEl.addEventListener("pointerup", () => { dragNote = false; });
+
+function showNoteBox() {
+  $("noteBox").style.display = "";
+  $("noteHint").style.display = "none";
+  $("notePosOut").textContent = notePos.toFixed(3) + " s (orig " +
+    mapOrigClamped(notePos).toFixed(3) + " s native)";
+}
+
+function hideNoteBox() {
+  notePos = null;
+  $("noteBox").style.display = "none";
+  $("noteHint").style.display = "";
+  $("noteStatus").textContent = "";
+  drawWave();
+}
+
+function nudgeNote(d) {
+  if (notePos == null) return;
+  notePos = Math.min(Math.max(notePos + d, win.t0), win.t1);
+  showNoteBox(); drawWave();
+}
+$("noteM1").onclick = () => nudgeNote(-1);
+$("noteMs").onclick = () => nudgeNote(-0.1);
+$("notePs").onclick = () => nudgeNote(0.1);
+$("noteP1").onclick = () => nudgeNote(1);
+$("btnNoteCancel").onclick = hideNoteBox;
+
+async function saveNote() {
+  // §6.6/§6.7: POST the note with its FULL session context — mode, the canonical
+  // fitted rate, and the selected anchor set — exactly what the writer's session +
+  // anchor rows persist (the server re-derives orig_t and rejects a mismatch)
+  if (notePos == null || !fit) return;
+  const text = $("noteText").value.trim();
+  if (!text) { $("noteStatus").innerHTML = '<span class="err">type the note first</span>'; return; }
+  const body = {
+    stem: cur.stem,
+    orig: cur.orig,
+    stream_t: Number(notePos.toFixed(6)),
+    orig_t: Number(mapOrigClamped(notePos).toFixed(6)),
+    text: text,
+    rate: fit.r,
+    mode: effMode(),
+    pairs: fit.anchors.map(p => ({ k: p.k, stream_s: p.stream_s, orig_s: p.orig_s })),
+  };
+  $("noteStatus").textContent = "saving…";
+  let r, j;
+  try {
+    r = await fetch("/api/align/review-note", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    j = await r.json();
+  } catch (e) {
+    $("noteStatus").innerHTML = '<span class="err">save failed: ' + e + "</span>";
+    return;
+  }
+  if (!r.ok) {
+    // errors surface honestly — incl. the 404 when review-sync/notes are dark
+    $("noteStatus").innerHTML = '<span class="err">HTTP ' + r.status + ": " +
+      escapeHtml(j.error || "save failed") + "</span>";
+    return;
+  }
+  notes.push({ stream_t: body.stream_t, orig_t: body.orig_t, text });
+  $("noteText").value = "";
+  hideNoteBox();
+  // the confirmation lives OUTSIDE the (now hidden) note box, or it would vanish
+  $("markerOut").textContent = "saved — session " + j.session + " → " + j.file;
+  drawWave();
+}
+$("btnNote").onclick = saveNote;
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, ch => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+}
+
+// ---------- the §6.2 anchor selection list ----------
+function setEditEnabled(on) {
+  // §6.2 (A4): selection + mode edits only while playback is STOPPED
+  for (const cb of document.querySelectorAll("#anchorList input[type=checkbox]"))
+    cb.disabled = !on || cb.dataset.locked === "1";
+  $("modeConst").disabled = !on;
+  $("modeRe").disabled = !on;
+}
+
+function renderAnchorList() {
+  const ul = $("anchorList");
+  ul.innerHTML = "";
+  if (!cur) return;
+  const lastSelected = sel.size === 1;
+  for (const p of cur.pointsAll) {
+    const li = document.createElement("li");
+    const usableP = cur.usable.includes(p);
+    if (!usableP) li.className = "disabled";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = usableP && sel.has(p.id);
+    // §6.2: the list refuses to deselect the LAST remaining pair — the selection
+    // can never reach zero while the pair is open
+    cb.dataset.locked = (!usableP || (lastSelected && cb.checked)) ? "1" : "0";
+    cb.disabled = cb.dataset.locked === "1" || playing;
+    cb.onchange = () => toggleAnchor(p, cb);
+    li.appendChild(cb);
+    const lab = document.createElement("span");
+    lab.textContent = p.k + "  s " + (p.stream_s != null ? p.stream_s.toFixed(3) : "—") +
+                      "  o " + (p.orig_s != null ? p.orig_s.toFixed(3) : "—");
+    li.appendChild(lab);
+    const badge = document.createElement("span");
+    badge.className = "badge " + p.source;
+    badge.textContent = p.source;
+    li.appendChild(badge);
+    if (p.grade) {
+      const gb = document.createElement("span");
+      gb.className = "badge" + (/not.?found/i.test(p.grade) ? " nf" : "");
+      gb.textContent = p.grade;
+      li.appendChild(gb);
+    }
+    if (p.confidence != null) {
+      const cs = document.createElement("span");
+      cs.className = "badge";
+      cs.textContent = "conf " + p.confidence.toFixed(1);
+      li.appendChild(cs);
+    }
+    if (!usableP && p.why) {
+      const wb = document.createElement("span");
+      wb.className = "badge"; wb.textContent = p.why;
+      li.appendChild(wb);
+    }
+    const dev = document.createElement("span");
+    dev.className = "dev";
+    // §6.2: per-point deviation from the single-rate fit, in ms, live
+    dev.textContent = (fit && !fit.assumed && fit.devs[p.id] !== undefined)
+      ? fit.devs[p.id].toFixed(1) + " ms" : "";
+    li.appendChild(dev);
+    ul.appendChild(li);
+  }
+  $("selInfo").textContent = sel.size + " of " + cur.usable.length +
+    " anchors selected — deviations are from the fitted single-rate line";
+}
+
+function toggleAnchor(p, cb) {
+  if (playing) { cb.checked = sel.has(p.id); return; }   // frozen during playback
+  if (cb.checked) {
+    // the server refuses duplicate anchor stream_s at 6 dp (re-anchor order would
+    // be undefined after sort_tsv) — mirror that here rather than fail on POST
+    const key6 = p.stream_s.toFixed(6);
+    if (selectedPoints().some(q => q.stream_s.toFixed(6) === key6)) {
+      cb.checked = false;
+      $("selInfo").textContent = "anchor " + p.k +
+        " shares its stream instant with a selected anchor — pick one of the two";
+      return;
+    }
+    sel.add(p.id);
+  } else {
+    sel.delete(p.id);
+  }
+  recomputeFit();
+  savePrefs();
+  resetPlayback();     // §6.2 (A4): a selection change resets playback to the window start
+}
+
+// ---------- mode switch ----------
+function setMode(m) {
+  if (playing) return;              // frozen during a playback run
+  mode = m;
+  $("modeConst").className = m === "constant-rate" ? "on" : "";
+  $("modeRe").className = m === "re-anchor" ? "on" : "";
+  savePrefs();
+  resetPlayback();
+}
+$("modeConst").onclick = () => setMode("constant-rate");
+$("modeRe").onclick = () => setMode("re-anchor");
+$("driftInfo").onclick = () => {
+  const t = $("driftTip");
+  t.style.display = t.style.display === "none" || !t.style.display ? "block" : "none";
+};
+
+// ---------- the pair picker ----------
+function pointId(source, k, i) { return source + ":" + k + ":" + i; }
+
+function buildEntries() {
+  // one picker entry per (stem, orig); §6.2's ONE MIXED LIST interleaves, in stream
+  // order, every candidate point from both §6.5 sources (hints + placed), each row
+  // tagged with its source and confidence/grade
+  const map = new Map();
+  const origNames = new Map((sources.originals || []).map(o => [o.num, o.name]));
+  const ingest = (set, source) => {
+    const key = set.stem + "|" + set.orig;
+    if (!map.has(key))
+      map.set(key, { stem: set.stem, orig: set.orig,
+                     origName: origNames.get(set.orig) || "",
+                     rate: null, sources: new Set(), pointsAll: [] });
+    const e = map.get(key);
+    e.sources.add(source);
+    if (e.rate == null && set.rate != null) e.rate = set.rate;
+    if (!e.rateNote && set.rate_note) e.rateNote = set.rate_note;
+    (set.points || []).forEach((p, i) => {
+      e.pointsAll.push({
+        id: pointId(source, p.k, i), source,
+        k: String(p.k), stream_s: p.stream_s,
+        orig_s: p.orig_s != null ? p.orig_s : null,
+        confidence: p.confidence != null ? p.confidence :
+                    (p.seat_conf != null ? p.seat_conf : null),
+        grade: p.grade || null, verified: !!p.verified, why: p.why || null,
+      });
+    });
+  };
+  for (const h of sources.hints || []) ingest(h, "hints");
+  for (const pl of sources.placed || []) ingest(pl, "placed");
+  entries = [...map.values()];
+  for (const e of entries) {
+    e.pointsAll.sort((a, b) => (a.stream_s || 0) - (b.stream_s || 0));
+    // usable = §6.2's candidates: both instants known, key POST-able
+    e.usable = e.pointsAll.filter(p =>
+      p.stream_s != null && p.orig_s != null && ANCHOR_K_RE.test(p.k));
+    e.nf = e.pointsAll.filter(p => p.grade && /not.?found/i.test(p.grade)).length;
+  }
+  entries.sort((a, b) => a.stem === b.stem
+    ? (firstS(a) - firstS(b)) : (a.stem < b.stem ? -1 : 1));
+}
+function firstS(e) { return e.usable.length ? e.usable[0].stream_s : 1e12; }
+
+function buildPicker() {
+  const ul = $("pickList");
+  ul.innerHTML = "";
+  let lastStem = null;
+  entries.forEach((e, i) => {
+    if (e.stem !== lastStem) {
+      lastStem = e.stem;
+      const head = document.createElement("li");
+      head.className = "stemHead";
+      head.textContent = e.stem;
+      ul.appendChild(head);
+    }
+    const li = document.createElement("li");
+    li.className = "pairRow" + (e.usable.length ? "" : " disabled") +
+                   (cur === e ? " cur" : "");
+    const name = document.createElement("span");
+    name.className = "grow";
+    name.textContent = "orig" + String(e.orig).padStart(3, "0") +
+                       (e.origName ? " · " + e.origName : "");
+    li.appendChild(name);
+    for (const s of ["hints", "placed"]) {
+      if (!e.sources.has(s)) continue;
+      const b = document.createElement("span");
+      b.className = "badge " + s; b.textContent = s;
+      li.appendChild(b);
+    }
+    if (e.nf) {
+      const b = document.createElement("span");
+      b.className = "badge nf"; b.textContent = e.nf + " NOT-FOUND";
+      li.appendChild(b);
+    }
+    if (e.rateNote) {
+      // the placed op's rate rules (#130): AB-first multiplicity
+      // + duplicate-letter warnings — surfaced, never silently applied
+      const n = document.createElement("span");
+      n.className = "rateNote"; n.textContent = "rate: " + e.rateNote;
+      li.appendChild(n);
+    }
+    const pts = document.createElement("span");
+    pts.className = "badge";
+    pts.textContent = e.usable.length + " pt";
+    li.appendChild(pts);
+    if (!e.usable.length) {
+      const g = document.createElement("span");
+      g.className = "badge";
+      // §6.2's 0-pair gate: no rate is ever invented from nothing
+      g.textContent = "seat a point in /align (or run match-hints) first";
+      li.appendChild(g);
+    } else {
+      li.onclick = () => openPair(i);
+    }
+    ul.appendChild(li);
+  });
+  $("pickInfo").textContent = entries.length
+    ? entries.length + " pairs (hints + placed, grouped by capture)" +
+      (sources.enabled ? "" : " — DSP dark: hints only, no waveform envelopes")
+    : "no pairs found — run streamalign match-hints, or check NETRADIO_LABELS_DIR";
+}
+
+function dedupInstants(ids, usable) {
+  // the server refuses duplicate anchor stream_s at 6 dp, and hints + placed
+  // routinely carry the SAME instant for one anchor — keep the first point at
+  // each instant (stream order), mirroring the manual-toggle guard
+  const seen = new Set(), out = [];
+  for (const id of ids) {
+    const p = usable.find(q => q.id === id);
+    if (!p) continue;
+    const key6 = p.stream_s.toFixed(6);
+    if (seen.has(key6)) continue;
+    seen.add(key6); out.push(id);
+  }
+  return out;
+}
+function openPair(idx, restoredSel) {
+  const e = entries[idx];
+  if (!e || !e.usable.length) return;
+  stopPlayback();
+  cur = e;
+  notes = [];
+  usedAnchors.clear();
+  hideNoteBox();
+  sel = new Set(dedupInstants(restoredSel || e.usable.map(p => p.id), e.usable));
+  if (!sel.size) sel = new Set(dedupInstants(e.usable.map(p => p.id), e.usable));
+  streamLen = origLen = null;
+  ov = null;
+  fine = fineCache.get(e.stem + "|" + e.orig) || null;  // DP-37: fine strips ride their cache
+  $("tool").style.display = "";
+  $("pickBox").open = false;
+  $("pickSummary").textContent = cur.stem + " ↔ orig" +
+    String(cur.orig).padStart(3, "0") + (cur.origName ? " · " + cur.origName : "") +
+    " (tap to change pair)";
+  $("waveTitle").textContent = "stream " + cur.stem + " (left) over orig" +
+    String(cur.orig).padStart(3, "0") + " (right) — the viewport scrolls with playback";
+  // audio: the §6.8 whole-file routes (Range-supported; flac-first originals)
+  $("audioStatus").textContent = "loading audio…";
+  aS.src = "/api/align/audio/stream/" + encodeURIComponent(cur.stem);
+  aO.src = "/api/align/audio/orig/" + cur.orig;
+  aS.load(); aO.load();
+  recomputeFit();
+  buildPicker();
+  renderFit();
+  resetPlayback();
+  savePrefs();
+  renderZoom();
+  fetchOverview();
+  if (zoom !== "1") ensureFineStrips();   // DP-37: a restored zoom wants its strips
+}
+
+aO.addEventListener("error", () => {
+  // the route refuses wv-only originals with a 503 JSON naming the fix (the
+  // transcode fallback is gone, §6.8) — fetch the same URL to show that refusal
+  const fallback = "original audio failed to load — if this original is " +
+    "wv-only the route refuses it: run the DP-23 flac sync to make its FLAC sibling";
+  if (cur) {
+    fetch("/api/align/audio/orig/" + cur.orig, {headers: {"Range": "bytes=0-0"}})
+      .then(r => r.ok ? null : r.json())
+      .then(j => { $("audioStatus").innerHTML = '<span class="err">' +
+        escapeHtml((j && j.error) || fallback) + "</span>"; })
+      .catch(() => { $("audioStatus").innerHTML =
+        '<span class="err">' + escapeHtml(fallback) + "</span>"; });
+  } else {
+    $("audioStatus").innerHTML = '<span class="err">' + escapeHtml(fallback) + "</span>";
+  }
+});
+aS.addEventListener("error", () => {
+  $("audioStatus").innerHTML = '<span class="err">stream audio failed to load</span>';
+});
+function metaReady() {
+  if (isFinite(aS.duration)) streamLen = streamLen != null ? streamLen : aS.duration;
+  if (isFinite(aO.duration)) origLen = origLen != null ? origLen : aO.duration;
+  if (isFinite(aS.duration) && isFinite(aO.duration)) {
+    $("audioStatus").textContent = "audio ready — stream " + fmtT(aS.duration) +
+      ", original " + fmtT(aO.duration) + " native";
+  }
+  recomputeWindow();
+  if (!playing && aS.currentTime < win.t0) seekTo(win.t0);
+  drawWave();
+}
+aS.addEventListener("loadedmetadata", metaReady);
+aO.addEventListener("loadedmetadata", metaReady);
+
+async function fetchOverview() {
+  // envelope strips for the scrolling view: ONE overview fetch per pair, through
+  // the existing DSP boundary (DP-10's build_overview). The knots are the richer
+  // source's usable points — selection changes never refetch (the piecewise
+  // stretch differs by ms, invisible at ~6 cols/s). Dark DSP = position-bar mode.
+  if (!cur || !sources.enabled) return;
+  const key = cur.stem + "|" + cur.orig;
+  const cached = ovCache.get(key);
+  if (cached) { ov = cached; drawWave(); return; }
+  const bySrc = { hints: [], placed: [] };
+  for (const p of cur.usable) bySrc[p.source].push(p);
+  const knots = (bySrc.hints.length >= bySrc.placed.length ? bySrc.hints : bySrc.placed)
+    .slice().sort((a, b) => a.stream_s - b.stream_s);
+  if (!knots.length) return;
+  const hintSet = (sources.hints || []).find(h => h.stem === cur.stem && h.orig === cur.orig);
+  const body = {
+    stem: cur.stem, orig: cur.orig,
+    stream_t: knots[0].stream_s, orig_t: knots[0].orig_s,
+    rate: fit ? fit.r : 1.0,
+    invert: !!(hintSet && hintSet.inverted),
+    points: knots.map(p => [p.stream_s, p.orig_s]),
+  };
+  $("waveInfo").textContent = "computing waveform envelopes…";
+  let r, j;
+  try {
+    r = await fetch("/api/align/overview", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    j = await r.json();
+  } catch (e) { $("waveInfo").textContent = "envelopes unavailable (" + e + ")"; return; }
+  if (r.status === 429) { setTimeout(fetchOverview, 1200); return; }
+  if (!cur || key !== cur.stem + "|" + cur.orig) return;
+  if (j.error) {
+    $("waveInfo").textContent = "envelopes unavailable: " + j.error + " — position-bar mode";
+    recomputeWindow();
+    return;
+  }
+  ov = j;
+  ovCache.set(key, j);
+  streamLen = j.stream_len_s;
+  origLen = j.orig_len_s;
+  recomputeWindow();
+  if (!playing && aS.currentTime < win.t0) seekTo(win.t0);
+  renderZoom();          // DP-37: the max label now has a measured cps
+  rearmFineStrips();     // and the final window can grow the tile set (guarded)
+  drawWave();
+}
+
+// ---------- transport wiring ----------
+$("btnPlay").onclick = () => { if (playing) { stopPlayback(); drawWave(); } else startPlayback(); };
+$("btnJumpB30").onclick = () => seekTo(aS.currentTime - 30);
+$("btnJumpB5").onclick = () => seekTo(aS.currentTime - 5);
+$("btnJumpF5").onclick = () => seekTo(aS.currentTime + 5);
+$("btnJumpF30").onclick = () => seekTo(aS.currentTime + 30);
+$("seek").addEventListener("input", () =>
+  seekTo(win.t0 + (+$("seek").value) / 1000 * (win.t1 - win.t0), true));
+$("btnSwap").onclick = () => { swap = !swap; ensureGraph(); setPans(); };
+// §6.1 solo, both forms: a momentary HOLD (pointerdown/pointerup) and a latching
+// TOGGLE — returning to stereo is always one action, playback never interrupted
+const holdBtn = $("btnHold");
+holdBtn.addEventListener("pointerdown", e => {
+  holdSolo = true; ensureGraph(); applySolo(); holdBtn.classList.add("on");
+  holdBtn.setPointerCapture(e.pointerId);
+});
+const holdOff = () => { holdSolo = false; applySolo(); holdBtn.classList.remove("on"); };
+holdBtn.addEventListener("pointerup", holdOff);
+holdBtn.addEventListener("pointercancel", holdOff);
+$("btnLatch").onclick = () => {
+  latchSolo = !latchSolo; ensureGraph(); applySolo();
+  $("btnLatch").classList.toggle("on", latchSolo);
+};
+// DP-36 volume sliders: live during playback (a gain change on the running
+// graph); double-tap/double-click the slider or its % readout → back to 100 %
+$("volS").addEventListener("input", () => setVol("S", +$("volS").value));
+$("volO").addEventListener("input", () => setVol("O", +$("volO").value));
+dblReset($("volS"), () => setVol("S", 100));
+dblReset($("volO"), () => setVol("O", 100));
+dblReset($("volSOut"), () => setVol("S", 100));
+dblReset($("volOOut"), () => setVol("O", 100));
+// DP-37: time-axis zoom + lane height
+$("zoom1").onclick = () => setZoom("1");
+$("zoom2").onclick = () => setZoom("2");
+$("zoomMax").onclick = () => setZoom("max");
+$("btnWaveH").onclick = () => setWaveH(!waveTall);
+
+// ---------- persistence-light (the inspector's prefs idiom) ----------
+function savePrefs() {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({
+      v: 1,
+      pair: cur ? cur.stem + "|" + cur.orig : null,
+      mode: mode,
+      sel: [...sel],
+      volS: volPct(volS),        // DP-36: per-source volumes ride the prefs
+      volO: volPct(volO),
+      zoom: zoom,                // DP-37: time-axis zoom + lane height ride them too
+      waveH: waveTall ? "tall" : "compact",
+    }));
+  } catch (e) {}
+}
+
+let restoringPrefs = false;   // setVol saves prefs; during restore that write
+                              // would clobber the stored pair/sel/mode with the
+                              // not-yet-restored defaults (independent-review
+                              // finding — the Swift side's restoringVols twin)
+function restorePrefs() {
+  let p = null;
+  try { p = JSON.parse(localStorage.getItem(PREFS_KEY) || "null"); } catch (e) {}
+  if (!p || p.v !== 1) return false;
+  // DP-36: restore the per-source volumes through the same clamp as the sliders
+  restoringPrefs = true;
+  try {
+    if (Number.isFinite(p.volS)) setVol("S", p.volS);
+    if (Number.isFinite(p.volO)) setVol("O", p.volO);
+    // DP-37: restore zoom through the same whitelist as setZoom, height likewise
+    if (ZOOM_LEVELS.includes(p.zoom)) { zoom = p.zoom; renderZoom(); }
+    if (p.waveH === "tall" || p.waveH === "compact") setWaveH(p.waveH === "tall");
+  } finally { restoringPrefs = false; }
+  if (p.mode === "constant-rate" || p.mode === "re-anchor") {
+    mode = p.mode;
+    $("modeConst").className = mode === "constant-rate" ? "on" : "";
+    $("modeRe").className = mode === "re-anchor" ? "on" : "";
+  }
+  if (!p.pair) return false;
+  const idx = entries.findIndex(e => e.stem + "|" + e.orig === p.pair && e.usable.length);
+  if (idx < 0) return false;
+  openPair(idx, Array.isArray(p.sel) ? p.sel : null);
+  return true;
+}
+
+// ---------- boot ----------
+async function boot() {
+  let r, j;
+  try {
+    r = await fetch("/api/align/sources");
+    j = await r.json();
+  } catch (e) {
+    $("pickInfo").innerHTML = '<span class="err">sources unavailable: ' + e + "</span>";
+    return;
+  }
+  sources = j;
+  buildEntries();
+  buildPicker();
+  restorePrefs();
+  renderVol();
+  renderZoom();
+}
+window.addEventListener("resize", () => { renderZoom(); drawWave(); });
+boot();
+</script>
+</body>
+</html>

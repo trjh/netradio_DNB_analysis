@@ -146,3 +146,57 @@ stream-data:          ## rebuild track-metadata.json and stream-files.json from 
 
 tracklist:            ## resolve artwork into track-metadata.json + render TRACKLIST.md (network)
 	$(PYTHON) scripts/render_tracklist.py
+
+#########################################
+#####         ALIGN TOOLS           #####
+#########################################
+# The align server (scripts/align_server.py) runs under its own launcher, scripts/run_align.sh
+# (start|stop|status|restart). These targets are its data verbs. Each script reads this
+# checkout's .env itself, so nothing here exports it.
+
+review-sync:          ## DP-22: the align-review-data branch -> ONE squash PR (review notes, summaries, data/rulings.json). ARGS=--dry-run
+	$(PYTHON) scripts/review_sync.py sync $(ARGS)
+
+# The one merge that does not wait for a person: an align-review-data PR that changes only
+# data/rulings.json (keys and flags, no free text) is squash-merged, pinned to the head GitHub
+# reported, and the branch recreated (decision made 2026-10-08). Any other PR is left to merge
+# by hand, and this says so. A sync that runs every data step of the checkout runs this after
+# `review-sync`.
+review-sync-automerge: ## merge the align-review-data PR when it changes only data/rulings.json, then recreate the branch; otherwise say it is left to merge by hand. ARGS=--dry-run
+	$(PYTHON) scripts/review_sync.py auto-merge $(ARGS)
+
+review-sync-postmerge: ## AFTER you merge the align-review-data PR by hand: delete + recreate it from the new main. ARGS=--dry-run
+	$(PYTHON) scripts/review_sync.py post-merge $(ARGS)
+
+compile-summary:      ## DP-24 §3: labels/automated + labels/review -> labels/summary (one importable label set per audio file; idempotent). ARGS=--dry-run
+	$(PYTHON) scripts/summary_compile.py $(ARGS)
+
+# The Mac review app (native/align_review_app.swift): a SwiftUI thin client of the align server.
+# It builds with swiftc and the Command Line Tools alone, no Xcode, and CI does not build it.
+# `review-app` builds it and runs its math selftest against native/review_math_fixture.json,
+# the same vectors tests/test_review_mac.py checks against scripts/review_notes.py.
+review-app:           ## DP-22 §6.9-b: build the Mac review app (swiftc + Command Line Tools; not in CI) and run its math selftest against the shared fixture
+	swiftc -parse-as-library -O -o native/align_review_app native/align_review_app.swift
+	./native/align_review_app --selftest native/review_math_fixture.json
+
+# The app reads its settings from the environment. The recipe loads this checkout's .env first
+# (scripts/lib/env.sh: read, never executed; a variable already set wins), then points the app
+# at NETRADIO_ALIGN_URL, else at the host and port the server binds (a wildcard bind is reached
+# on loopback).
+review-app-run: review-app ## build + launch the Mac review app (align server from NETRADIO_ALIGN_URL, else derived from NETRADIO_ALIGN_HOST:NETRADIO_ALIGN_PORT, else http://127.0.0.1:8766; Basic Auth from NETRADIO_AUTH_* when set)
+	@. scripts/lib/env.sh; env_load .env; \
+	if [ -z "$$NETRADIO_ALIGN_URL" ]; then \
+	  h="$${NETRADIO_ALIGN_HOST:-127.0.0.1}"; [ "$$h" = "0.0.0.0" ] && h=127.0.0.1; \
+	  export NETRADIO_ALIGN_URL="http://$$h:$${NETRADIO_ALIGN_PORT:-8766}"; \
+	fi; \
+	echo "review app -> $$NETRADIO_ALIGN_URL"; \
+	./native/align_review_app
+
+# A pull that changes scripts/ or public/ restarts a running align server
+# (scripts/post_pull_restart.sh, run by .githooks/post-merge). A repo core.hooksPath replaces the
+# global one, so the hooks here run the same-named global hook too and keep its verdict.
+hooks:                ## once per machine: point core.hooksPath at the main checkout's .githooks (pulling then restarts a running align server; commits still chain to your global hooks). Safe to repeat; works from a worktree.
+	@common="$$(cd "$$(git rev-parse --git-common-dir)" && pwd -P)"; \
+	dir="$$(dirname "$$common")/.githooks"; \
+	[ -d "$$dir" ] || { echo "no .githooks at $$dir" >&2; exit 1; }; \
+	git config core.hooksPath "$$dir" && echo "core.hooksPath = $$dir"

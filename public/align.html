@@ -1,0 +1,1472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>/align — sample inspector</title>
+<style>
+  :root { --bg:#14161a; --panel:#1d2127; --ink:#d8dee6; --dim:#8a93a0; --accent:#5ec2ff;
+          --stream:#6fd08c; --orig:#e0b452; --diff:#c98cf0; --line:#2c323b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:14px/1.45 -apple-system, "Segoe UI", sans-serif; padding:14px 18px 40px; }
+  h1 { font-size:17px; margin:0 0 2px; }
+  .sub { color:var(--dim); font-size:12px; margin-bottom:14px; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+            padding:10px 14px; margin-bottom:14px; }
+  section h2 { font-size:12px; text-transform:uppercase; letter-spacing:1px;
+               color:var(--dim); margin:0 0 8px; }
+  .lane { position:relative; margin:2px 0 4px; }
+  .lane .label { position:absolute; left:8px; top:4px; font-size:11px; color:var(--dim); z-index:2;
+                 background:rgba(20,22,26,0.7); padding:0 4px; border-radius:3px; }
+  .lane .cursor { position:absolute; top:0; bottom:0; width:2px; background:rgba(244,246,248,0.85);
+                  z-index:3; display:none; pointer-events:none; }
+  .laneTitle { font-size:12px; color:var(--ink); margin:10px 0 0; }
+  .implied { color:var(--dim); font-size:11px; margin-left:5px; }
+  #metrics { font-size:13px; }
+  #metrics b { font-size:14px; }
+  canvas.insp { display:block; width:100%; height:180px; background:#171a1f;
+                border:1px solid var(--line); border-radius:4px; }
+  #laneOrig canvas { cursor:ew-resize; }
+  /* DP-28: the settings/transport controls read 2 points bigger (13->15, 12->14) */
+  .controls { display:flex; flex-wrap:wrap; gap:10px 22px; align-items:center; font-size:15px; }
+  .controls label { color:var(--dim); margin-right:5px; }
+  .controls select, .controls input[type=number] { background:#12151a; color:var(--ink);
+      border:1px solid var(--line); border-radius:4px; padding:3px 6px; font-size:15px; }
+  .controls input[type=number] { width:95px; }
+  .controls #btnDiscard { background:#12151a; border:1px solid var(--line); color:var(--ink);
+      border-radius:4px; padding:2px 8px; cursor:pointer; font-size:13px; }
+  .seg { display:inline-flex; align-items:center; border:1px solid var(--line); border-radius:5px; overflow:hidden; }
+  .seg .seglabel { color:var(--dim); font-size:14px; padding:0 8px; }
+  .seg button { background:#12151a; color:var(--dim); border:0; padding:4px 10px; cursor:pointer;
+                font-size:14px; }
+  .seg button.on { background:var(--accent); color:#08222f; font-weight:600; }
+  .toggle { accent-color:var(--accent); }
+  kbd { background:#12151a; border:1px solid var(--line); border-bottom-width:2px; border-radius:4px;
+        padding:0 5px; font:11px/1.6 ui-monospace,monospace; color:var(--dim); }
+  .nudge { display:inline-flex; gap:4px; align-items:center; flex-wrap:wrap; }
+  .nudge button { background:#12151a; border:1px solid var(--line); color:var(--ink);
+                  border-radius:4px; padding:3px 8px; cursor:pointer; font-size:12px; }
+  .nudge .snap { border-color:var(--accent); color:var(--accent); }
+  .blocks { display:flex; gap:10px; margin-top:10px; }
+  .block { width:calc(50% - 5px); height:90px; border-radius:5px; border:1px solid var(--line);
+           display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+           color:#101317; font-weight:700; font-size:16px; text-shadow:0 1px 0 rgba(255,255,255,0.25); }
+  .block small { font-weight:600; font-size:12px; opacity:0.85; }
+  .play { display:flex; gap:12px; margin-top:12px; align-items:center; flex-wrap:wrap; }
+  .play button { background:#12151a; border:1px solid var(--accent); color:var(--accent);
+                 border-radius:6px; padding:6px 14px; font-size:13px; cursor:pointer; }
+  .play button.diff { border-color:var(--diff); color:var(--diff); }
+  .play button.flash { background:var(--accent); color:#08222f; }
+  .play button.diff.flash { background:var(--diff); color:#1d1030; }
+  .readout { color:var(--dim); font-size:12px; margin-top:8px; }
+  .readout b { color:var(--ink); font-weight:600; }
+  #status { color:var(--dim); font-size:12px; }
+  #status.err { color:#e66; }
+  #notEnabled { color:#e6b352; }
+</style>
+</head>
+<body>
+<h1>/align — sample inspector</h1>
+<div class="sub">Verify and hand-tune one sync point at a time: stream fixed, original shiftable,
+live subtraction. All DSP runs server-side in the checkout's venv (band-limited at 16&nbsp;kHz);
+this page draws, nudges (<kbd>←</kbd>/<kbd>→</kbd> ±1 smp, <kbd>shift</kbd>=16), and plays
+(<kbd>space</kbd> combined · <kbd>s</kbd> subtraction · <kbd>[</kbd>/<kbd>]</kbd> speed).
+See <code>docs/PLAN_align_tool.md</code> §5.3.
+Whole-pair listening lives on the <a href="/align/review">/align/review</a> page (DP-22).</div>
+
+<div id="notEnabled" style="display:none">
+  <section>The align inspector's DSP is not configured on this server: it needs the
+  checkout's <code>.venv</code> (<code>make venv</code>) and the originals
+  (<code>NETRADIO_SOURCES_DIR</code>, else <code>sources_local/</code>). Hints from Pass&nbsp;1
+  (<code>streamalign match-hints</code>) land in the labels dir and appear here automatically.</section>
+</div>
+
+<div id="tool" style="display:none">
+<section>
+  <h2>Overview</h2>
+  <details id="ovBox">
+    <summary id="ovSummary" style="cursor:pointer;color:var(--dim);font-size:12px">whole-capture
+      overview — numbered sync flags (gray = untouched; residual-colored = examined; ✓ = included
+      in the export; muted rows above = this capture's OTHER pairs — click one of their flags to
+      switch pairs); click anywhere to jump to the nearest sync point</summary>
+    <div class="lane" style="margin-top:8px"><span class="label">stream ↑ · original
+      (piecewise-stretched between sync points) ↓</span>
+      <canvas class="insp" id="inOv" style="height:120px;cursor:pointer"></canvas></div>
+    <div class="readout" id="ovInfo"></div>
+  </details>
+</section>
+
+<!-- DP-28: the context strip and the controls swapped places (a review of the live tool) -->
+<section>
+  <h2>Context</h2>
+  <div class="laneTitle" id="ctxTitle">Context — click anywhere in the strip to play from there
+    (<kbd>esc</kbd>/<kbd>space</kbd> stops)</div>
+  <div class="lane"><span class="label">stream ↑ · original ↓</span><div class="cursor" id="curCtx"></div>
+    <canvas class="insp" id="inCtx" style="height:130px;cursor:pointer"></canvas></div>
+  <div class="readout" id="ctxInfo"></div>
+</section>
+
+<section>
+  <h2>Controls</h2>
+  <div class="controls">
+    <span><label>pair</label><select id="pairSel"></select></span>
+    <span><label>sync point</label><select id="pointSel"></select></span>
+    <span><label>window</label><select id="winSel">
+      <option value="2">2 s</option><option value="0.5">0.5 s</option><option value="1">1 s</option>
+      <option value="6" selected>6 s</option><option value="10">10 s</option></select></span>
+    <span><label>speed <kbd>[</kbd><kbd>]</kbd></label><select id="speedSel">
+      <option value="1">1.0×</option><option value="0.5">0.5×</option><option value="0.25">0.25×</option></select></span>
+    <span><label>loop</label><input class="toggle" type="checkbox" id="loopChk" checked></span>
+    <span><label>invert orig</label><input class="toggle" type="checkbox" id="invChk"></span>
+    <span><label>include in results</label><input class="toggle" type="checkbox" id="incChk"></span>
+    <span><label>rate</label><input type="number" id="rateInp" step="0.0001" min="0.5" max="2"><span
+      class="implied" id="impliedTxt"></span></span>
+    <span class="seg" id="routeSeg"><span class="seglabel">route</span>
+      <button data-route="split">stream L / orig R</button><button data-route="stereo" class="on">both stereo</button></span>
+    <span class="seg" id="chanSeg"><span class="seglabel">show</span>
+      <button data-ch="L">L only</button><button data-ch="R">R only</button><button data-ch="both" class="on">both</button></span>
+    <span class="seg" id="resSeg"><span class="seglabel">residual</span>
+      <button data-res="sum" class="on">colored sum graph</button><button data-res="blocks">separate boxes</button></span>
+    <span class="seg" id="engSeg"><span class="seglabel">snap engine</span>
+      <button data-eng="phat" class="on">PHAT</button><button data-eng="match">MATCH path</button></span>
+    <span class="readout" id="restoreNote" style="display:none"><b id="restoreTxt"></b>
+      <button id="btnDiscard">discard stored adjustments</button></span>
+    <span id="status"></span>
+  </div>
+</section>
+
+<section>
+  <h2 id="inspTitle">Inspector</h2>
+  <div class="laneTitle" id="streamTitle">Stream (fixed)</div>
+  <div class="lane"><span class="label" id="inStreamLbl">L+R</span><div class="cursor" id="curStream"></div><canvas class="insp" id="inStream"></canvas></div>
+  <div class="laneTitle" id="origTitle">Original (drag to shift)</div>
+  <div class="lane" id="laneOrig"><span class="label" id="inOrigLbl">L+R</span><div class="cursor" id="curOrig"></div><canvas class="insp" id="inOrig"></canvas></div>
+  <div style="margin:6px 0 2px" class="nudge">
+    <button data-smp="-16">−1 ms</button><button data-smp="-1">−1 smp <kbd>←</kbd></button>
+    <button class="snap" id="btnSnap">⌖ snap-to-best</button>
+    <button data-smp="1"><kbd>→</kbd> +1 smp</button><button data-smp="16">+1 ms</button>
+    <span class="readout" style="margin:0 0 0 10px">shift: <b id="shiftTxt">0 smp</b> <span id="snapTxt"></span></span>
+  </div>
+  <div class="lane"><span class="label" id="diffLabel">subtraction (stream − orig)</span><div class="cursor" id="curDiff"></div><canvas class="insp" id="inDiff"></canvas></div>
+
+  <div class="blocks" id="blocks" style="display:none">
+    <div class="block" id="blkSample"><span>sample alignment</span><small id="blkSampleTxt"></small></div>
+    <div class="block" id="blkPoint"><span>point alignment</span><small id="blkPointTxt"></small></div>
+  </div>
+
+  <div class="play">
+    <button id="btnComb">▶ play combined <kbd>space</kbd></button>
+    <button id="btnDiff" class="diff">▶ play subtraction <kbd>s</kbd></button>
+    <span class="readout" id="metrics"></span>
+  </div>
+</section>
+
+<section>
+  <h2>Export</h2>
+  <div class="play">
+    <button id="btnCompile">⟳ compile summaries (labels/summary/)</button>
+    <span class="readout" id="compileInfo"></span>
+  </div>
+  <div class="readout">Compiles <code>labels/automated/</code> + <code>labels/review/</code>
+  into <code>labels/summary/</code> in the checkout — one importable label set per
+  audio file: <code>&lt;stem&gt;.summary.tsv</code> (stream-clocked, every automated + review
+  row for the capture, plus an <code>origNNN start:</code> clip-seat row per original) and
+  <code>origNNN.summary.tsv</code> (original-clocked, merged across every capture). Derived
+  output, whole-file writes, idempotent; drops nothing (DP-24 §3). The files ride the
+  <code>align-review-data</code> branch. Unavailable without a <code>labels/</code> directory.
+  <b>Does not include this session's refined seats</b> — those still leave via the download
+  below (whether Pass 2 should write them as review rows is still an open decision).</div>
+  <div class="play">
+    <button id="btnExport">⬇ download hints pair (.match.hints.tsv)</button>
+    <span class="readout" id="exportInfo"></span>
+  </div>
+  <div class="readout">Downloads the two Pass-1-grammar hint files (stream-side +
+  original-side) carrying this session's work: only the <b>ticked</b> points, each at its
+  current seat (snap + hand nudges), marked <code>verified</code> (human-checked here —
+  DP-01's meaning). Refined points carry the refine's confidence (ncc × 10);
+  never-refined points keep the hint's score. The download writes nothing server-side — the
+  only server write in this section is the compile above, into <code>labels/summary/</code>;
+  <code>labels/*.labels.tsv</code> stays hand territory: fold accepted rows in via Audacity
+  as usual.</div>
+</section>
+</div>
+
+<script>
+"use strict";
+const SR = 16000, CORE = 0.10;
+
+// ---------- state ----------
+let sources = null;          // /api/align/sources payload
+let cur = null;              // {stem, orig, rate, invert, point:{k, stream_s, orig_s}, baseOrigT}
+let slice = null;            // decoded arrays {streamL,streamR,origL,origR, n, marginN, winN}
+let shift = 0;               // client-side nudge in samples (+ = orig content later/right)
+let chan = "both", resMode = "sum", route = "stereo";
+let engine = "phat";         // DP-08: the snap engine (PHAT | MATCH path)
+let audioCtx = null, playing = null;
+let reqToken = 0;            // discards stale slice/refine responses after a re-selection
+let lastConf = null;         // DP-11: latest refine confidence for the current point (null = none yet)
+let ctx = null;              // DP-09: /api/align/context payload for the current point
+let ctxKey = null;           // what the current ctx was computed from (skip refetches)
+let ctxPlay = null, ctxRaf = null;   // DP-09: click-to-play state + its cursor loop
+let ov = null, ovKey = null; // DP-10: the DISPLAYED /api/align/overview payload + its key
+const OV_CACHE_MAX = 12;     // DP-18: overview payloads kept this session (per pair scope)
+const ovCache = new Map();   // DP-18: ovKey -> payload — at most ONE DSP fetch per key,
+                             // so flag-click switching between pairs stays cheap
+let ovForeign = [];          // DP-18: foreign-pair flag hit boxes from the last drawOv
+let ptState = {};            // DP-16: per-pair SESSION state, keyed "stem|orig" --
+                             // seats: point k -> the operator's current orig_t seat
+                             // (snap + hand nudges); include: k -> bool (DP-31:
+                             // default OFF -- only ticked points export);
+                             // resid: k -> the last measured 10%-window residual;
+                             // exam: k -> true once the point was opened/refined/
+                             // adjusted (DP-31's examined marker); refined/ncc:
+                             // k -> this session's snap result (DP-32 export)
+
+const $ = id => document.getElementById(id);
+const status = (msg, err) => { const el = $("status"); el.textContent = msg || ""; el.className = err ? "err" : ""; };
+
+function stateFor(h) {
+  const key = h.stem + "|" + h.orig;
+  return ptState[key] || (ptState[key] = { seats: {}, include: {}, resid: {},
+                                           exam: {}, refined: {}, ncc: {} });
+}
+// the current point's seat as adjusted RIGHT NOW: the (possibly snapped) base plus
+// the pending hand nudge, in original-native seconds -- the one number DP-16 exports.
+// (shift counts DISPLAYED samples -- the rate-corrected/stream clock -- so × rate
+// converts it back to the original's own unaltered clock.)
+function seatNow() {
+  const rate = parseFloat($("rateInp").value) || 1.0;
+  return cur.baseOrigT - (shift / SR) * rate;
+}
+
+// DP-29: the inspector title carries BOTH clocks for the seated instant -- the
+// stream-local time (the fixed anchor) and the original-NATIVE time, i.e. seconds
+// into the original at its own unaltered rate. seatNow() IS that number (the hints'
+// orig rows and every slice request's orig_t are original-native seconds), so the
+// title live-updates through drawAll on every snap, nudge, and drag.
+function updateInspTitle() {
+  if (!cur) return;
+  $("inspTitle").textContent =
+    `Inspector — ${cur.stem} ↔ orig${String(cur.orig).padStart(3, "0")}, ` +
+    `sync ${cur.point.k} @ ${fmtT(cur.point.stream_s)} · orig ${fmtT(seatNow())} native`;
+}
+
+// ---------- DP-30: per-pair adjustment persistence ----------
+// Reload used to lose every seat/snap; now each pair's WORK survives in
+// localStorage under one key per pair identity. Only points with real work are
+// stored (seat moved, refined, or ticked for export) -- merely opening a point
+// colors it for the session but never writes storage, so a page load can't
+// manufacture an "adjustment" for the auto-opened first point. Schema v1:
+//   netradio.align.adjust.<stem>|<NNN> = {"v":1, "points": {k: {seat, refined,
+//     ncc, inc, resid}}}   (seat in original-native seconds; ncc/resid nullable)
+const ADJUST_PREFIX = "netradio.align.adjust.";
+const adjustKey = h => ADJUST_PREFIX + h.stem + "|" + String(h.orig).padStart(3, "0");
+
+function saveAdjustments() {
+  if (!sources || !(sources.hints || []).length) return;
+  const h = sources.hints[+$("pairSel").value], st = stateFor(h);
+  const points = {};
+  for (const p of h.points) {
+    const seat = st.seats[p.k] !== undefined ? st.seats[p.k] : p.orig_s;
+    const worked = Math.abs(seat - p.orig_s) > 1e-6
+      || st.refined[p.k] === true || st.include[p.k] === true;
+    if (!worked) continue;
+    points[p.k] = {
+      seat,
+      refined: st.refined[p.k] === true,
+      ncc: typeof st.ncc[p.k] === "number" ? st.ncc[p.k] : null,
+      inc: st.include[p.k] === true,
+      resid: typeof st.resid[p.k] === "number" ? st.resid[p.k] : null,
+    };
+  }
+  try {
+    if (Object.keys(points).length)
+      localStorage.setItem(adjustKey(h), JSON.stringify({ v: 1, points }));
+    else localStorage.removeItem(adjustKey(h));
+  } catch (e) {}               // storage denied: persistence is best-effort
+}
+
+// stored -> session state for one pair; returns how many points were restored
+function restoreAdjustments(h) {
+  let stored = null;
+  try { stored = JSON.parse(localStorage.getItem(adjustKey(h)) || "null"); } catch (e) {}
+  if (!stored || stored.v !== 1 || typeof stored.points !== "object" || !stored.points)
+    return 0;
+  const st = stateFor(h);
+  let n = 0;
+  for (const p of h.points) {
+    const s = stored.points[p.k];
+    if (!s || typeof s !== "object") continue;
+    if (Number.isFinite(s.seat)) st.seats[p.k] = s.seat;
+    st.exam[p.k] = true;                       // restored work = examined (DP-31)
+    st.include[p.k] = s.inc === true;
+    if (s.refined === true && typeof s.ncc === "number") {
+      st.refined[p.k] = true; st.ncc[p.k] = s.ncc;
+    }
+    if (typeof s.resid === "number") st.resid[p.k] = s.resid;
+    n++;
+  }
+  return n;
+}
+
+// ---------- DP-12: settings persistence ----------
+const PREFS_KEY = "netradio.align.prefs";
+let restoredInvert = null;   // consumed once by the first pickPair (later pairs re-seed from hints)
+
+function savePrefs() {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({
+      win: $("winSel").value, speed: $("speedSel").value,
+      loop: $("loopChk").checked, invert: $("invChk").checked,
+      chan, res: resMode, route, eng: engine,
+    }));
+  } catch (e) {}               // private mode / storage denied: persistence is best-effort
+}
+function setSeg(segId, attr, value, setter) {
+  const btns = [...$(segId).querySelectorAll("button")];
+  const b = btns.find(x => x.dataset[attr] === value);
+  if (!b) return;
+  setter(value);
+  btns.forEach(x => x.classList.toggle("on", x === b));
+}
+function loadPrefs() {
+  let p = null;
+  try { p = JSON.parse(localStorage.getItem(PREFS_KEY) || "null"); } catch (e) {}
+  if (!p || typeof p !== "object") return;
+  const setSel = (id, v) => { const el = $(id);
+    if ([...el.options].some(o => o.value === String(v))) el.value = String(v); };
+  if (p.win != null) setSel("winSel", p.win);
+  if (p.speed != null) setSel("speedSel", p.speed);
+  if (typeof p.loop === "boolean") $("loopChk").checked = p.loop;
+  if (typeof p.invert === "boolean") restoredInvert = p.invert;
+  if (typeof p.chan === "string") setSeg("chanSeg", "ch", p.chan, v => chan = v);
+  if (typeof p.res === "string") setSeg("resSeg", "res", p.res, v => resMode = v);
+  if (typeof p.route === "string") setSeg("routeSeg", "route", p.route, v => route = v);
+  if (typeof p.eng === "string") setSeg("engSeg", "eng", p.eng, v => engine = v);
+}
+
+// ---------- data ----------
+function b64ToF32(b64) {
+  const bin = atob(b64), n = bin.length / 2, out = new Float32Array(n);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const i16 = new Int16Array(bytes.buffer);
+  for (let i = 0; i < n; i++) out[i] = i16[i] / 32767;
+  return out;
+}
+
+async function loadSources() {
+  const r = await fetch("/api/align/sources");
+  if (!r.ok) throw new Error("sources: HTTP " + r.status);
+  sources = await r.json();
+  if (!sources.enabled) { $("notEnabled").style.display = ""; return; }
+  $("tool").style.display = "";
+  const sel = $("pairSel");
+  sel.innerHTML = "";
+  (sources.hints || []).forEach((h, i) => {
+    const orig = (sources.originals || []).find(o => o.num === h.orig);
+    const opt = document.createElement("option");
+    opt.value = i;
+    opt.textContent = `${h.stem} ↔ orig${String(h.orig).padStart(3, "0")}` + (orig ? ` (${orig.name})` : "");
+    sel.appendChild(opt);
+  });
+  if (!(sources.hints || []).length) {
+    status("no *.match.hints.tsv sets in the labels dir — run `streamalign match-hints` first", true);
+    return;
+  }
+  pickPair(0);
+}
+
+// DP-31: one visual vocabulary for a point, everywhere it appears (overview flags
+// + the point selector): gray = untouched; residual-gradient color once examined
+// (opened/refined/adjusted); the tick only on points included in the export.
+function ptVisual(st, p) {
+  const exam = st.exam[p.k] === true;
+  const r = st.resid[p.k];
+  return {
+    exam,
+    inc: st.include[p.k] === true,
+    col: exam ? (r !== undefined ? qcol(r) : [94, 194, 255]) : [138, 147, 160],
+  };
+}
+function pointLabel(st, p) {
+  const v = ptVisual(st, p);
+  const mark = v.inc ? "✓ " : (v.exam ? "○ " : "· ");
+  return mark + `${p.k} — stream ${fmtT(p.stream_s)} (conf ${p.confidence.toFixed(1)}/10)`;
+}
+function refreshPointLabels() {
+  const h = sources.hints[+$("pairSel").value], st = stateFor(h);
+  [...$("pointSel").options].forEach((opt, j) => {
+    opt.textContent = pointLabel(st, h.points[j]);
+    opt.style.color = css(ptVisual(st, h.points[j]).col);
+  });
+}
+
+// DP-18: `ptIdx` lets a foreign-flag click land on the CLICKED point rather than
+// the pair's first; every other caller keeps the default.
+function pickPair(i, ptIdx = 0) {
+  const h = sources.hints[i];
+  const st = stateFor(h);
+  ptIdx = Math.max(0, Math.min(ptIdx, h.points.length - 1));
+  // DP-30: first visit to this pair THIS session -> restore the stored adjustments
+  // (a pair already touched this session keeps its live state; no double-restore)
+  const untouched = !Object.keys(st.seats).length && !Object.keys(st.exam).length;
+  const restored = untouched ? restoreAdjustments(h) : 0;
+  if (restored) {
+    $("restoreNote").style.display = "";
+    $("restoreTxt").textContent =
+      `restored ${restored} adjustment${restored === 1 ? "" : "s"}`;
+  } else {
+    $("restoreNote").style.display = "none";
+  }
+  const psel = $("pointSel");
+  psel.innerHTML = "";
+  h.points.forEach((p, j) => {
+    const opt = document.createElement("option");
+    opt.value = j;
+    opt.textContent = pointLabel(st, p);
+    opt.style.color = css(ptVisual(st, p).col);
+    psel.appendChild(opt);
+  });
+  // DP-12: a stored invert (the operator's last explicit toggle) wins once, on the
+  // page's first pair; every later pair change re-seeds from that pair's hints.
+  $("invChk").checked = restoredInvert !== null ? restoredInvert : !!h.inverted;
+  restoredInvert = null;
+  $("rateInp").value = h.rate.toFixed(5);
+  const imp = impliedRate(h.points);
+  $("impliedTxt").textContent = imp
+    ? `(implied ${imp.rate.toFixed(5)} avg of ${imp.n} pair${imp.n === 1 ? "" : "s"})`
+    : "(implied rate n/a — needs 2+ points)";
+  $("pointSel").value = String(ptIdx);
+  pickPoint(i, ptIdx);
+}
+
+// DP-13: the rate implied by the hint set's own sync points — consecutive pairs,
+// Δstream_s/Δorig_s each (the sheet's M6 convention: speed = (trackB−trackA)/(origB−origA)),
+// averaged. A read-out only: the editable rate input always wins for slice requests.
+// One usable pair is enough to show — the label states the evidence base ("avg of
+// 1 pair"); only zero usable pairs (fewer than 2 usable points) reads n/a.
+function impliedRate(points) {
+  const pts = [...points].sort((a, b) => a.stream_s - b.stream_s);
+  const rates = [];
+  for (let i = 1; i < pts.length; i++) {
+    const dS = pts[i].stream_s - pts[i - 1].stream_s;
+    const dO = pts[i].orig_s - pts[i - 1].orig_s;
+    if (dS > 0 && dO > 0) rates.push(dS / dO);
+  }
+  if (!rates.length) return null;
+  return { rate: rates.reduce((a, b) => a + b, 0) / rates.length, n: rates.length };
+}
+
+function pickPoint(pairIdx, ptIdx) {
+  const h = sources.hints[pairIdx], p = h.points[ptIdx];
+  const st = stateFor(h);
+  // DP-16: a point revisited this session reopens at the seat the operator left it
+  const seat = st.seats[p.k] !== undefined ? st.seats[p.k] : p.orig_s;
+  cur = { stem: h.stem, orig: h.orig, point: p, baseOrigT: seat };
+  shift = 0;
+  lastConf = st.refined[p.k] === true && typeof st.ncc[p.k] === "number"
+    ? st.ncc[p.k] : null;                  // DP-32: a restored refine keeps its ncc
+  st.exam[p.k] = true;                     // DP-31: opening a point = examined
+  $("incChk").checked = st.include[p.k] === true;   // DP-31: default NOT included
+  refreshPointLabels();
+  updateExportInfo();
+  $("snapTxt").textContent = "";
+  updateInspTitle();                       // DP-29: stream + original-native clocks
+  fetchSlice();
+}
+
+async function fetchSlice() {
+  if (!cur) return;
+  const tok = ++reqToken;    // any newer selection invalidates this request's result
+  status("computing slices…");
+  laneTitles();
+  stopPlayback();
+  // DP-16 (review iteration 1 P2): a pending hand nudge is part of the SEAT.
+  // Fold it into the base before the reset below, so a slice-reloading control
+  // change (window/invert/rate) reloads at the operator's adjusted seat and the
+  // session/export keep it -- otherwise the nudge would silently vanish. (The
+  // pickPoint/snap paths arrive here with shift already 0.)
+  if (shift) { cur.baseOrigT = seatNow(); stateFor(cur).seats[cur.point.k] = cur.baseOrigT; }
+  // invalidate the displayed slice NOW: every slice-dependent action (draw, nudge,
+  // drag, play, snap) gates on `slice`, so nulling it here makes the old audio
+  // unreachable the moment a replacement request starts -- no listening to, or
+  // snapping against, the previous point under the new point's title
+  slice = null;
+  shift = 0;
+  clearLanes();
+  // DP-09: a stale context strip would map clicks onto the WRONG pair/point --
+  // drop it now when its inputs changed (kept for marker-only redraws, e.g. win)
+  if (cur && ctxKey !== ctxKeyNow()) {
+    ctx = null; ctxKey = null;
+    $("ctxInfo").textContent = "";
+    drawCtx();
+  }
+  // DP-10: same staleness rule for the overview (pair/rate/invert scope) -- a
+  // stale drawing would map clicks and flags onto the WRONG pair
+  if (cur && ov && ovKey !== ovKeyNow()) { ov = null; ovKey = null; drawOv(); }
+  const body = {
+    stem: cur.stem, orig: cur.orig,
+    stream_t: cur.point.stream_s, orig_t: cur.baseOrigT,
+    rate: parseFloat($("rateInp").value) || 1.0,
+    invert: $("invChk").checked,
+    win: parseFloat($("winSel").value),
+  };
+  const r = await fetch("/api/align/slice", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (tok !== reqToken) return;              // a newer selection superseded this response
+  if (r.status === 429) { setTimeout(() => { if (tok === reqToken) fetchSlice(); }, 600);
+                          status("waiting for the previous computation…"); return; }
+  if (j.error) { status(j.error, true); return; }
+  slice = {
+    streamL: b64ToF32(j.stream.L), streamR: b64ToF32(j.stream.R),
+    origL: b64ToF32(j.orig.L), origR: b64ToF32(j.orig.R),
+    n: j.n, marginN: Math.round(j.margin_s * SR), winN: Math.round(j.win_s * SR),
+    rmsGain: j.rms_gain,
+  };
+  status("");
+  drawAll();
+  fetchContext();      // DP-09: sequential (the server computes one thing at a time)
+}
+
+// ---------- DP-09: the context strip ----------
+// Zoomed-out min/max envelopes ±45 s around the point (stream above, rate-corrected
+// original below), the analysis window marked. The strip ships NO audio: clicking
+// anywhere fetches a playback slice at the clicked stream time through the EXISTING
+// /api/align/slice endpoint (window = min(30 s, distance to the strip's end)) and
+// plays combined audio from there, the cursor riding in the strip.
+const CTX_S = 45;      // requested half-width (server caps at 60)
+
+function ctxKeyNow() {
+  return [cur.stem, cur.orig, cur.point.stream_s, cur.baseOrigT,
+          $("rateInp").value, $("invChk").checked].join("|");
+}
+
+async function fetchContext() {
+  if (!cur) return;
+  const key = ctxKeyNow();
+  if (ctx && ctxKey === key) { drawCtx(); fetchOverview(); return; }   // marker redraws are local
+  const tok = reqToken;
+  ctx = null; ctxKey = null;
+  drawCtx();
+  $("ctxInfo").textContent = "computing context…";
+  const body = {
+    stem: cur.stem, orig: cur.orig,
+    stream_t: cur.point.stream_s, orig_t: cur.baseOrigT,
+    rate: parseFloat($("rateInp").value) || 1.0,
+    invert: $("invChk").checked,
+    win: parseFloat($("winSel").value), context: CTX_S,
+  };
+  const r = await fetch("/api/align/context", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (tok !== reqToken) return;
+  if (r.status === 429) { setTimeout(() => { if (tok === reqToken) fetchContext(); }, 700); return; }
+  if (j.error) { $("ctxInfo").textContent = "context: " + j.error; return; }
+  ctx = j; ctxKey = key;
+  $("ctxInfo").textContent = "";
+  drawCtx();
+  fetchOverview();     // DP-10: sequential after the strip (one computation at a time)
+}
+
+function ctxX(t, cw) { return (t - ctx.start_s) / (2 * ctx.context_s) * cw; }
+
+function drawCtx() {
+  const c = $("inCtx"), dpr = window.devicePixelRatio || 1;
+  const cw = c.clientWidth || 900, chh = c.clientHeight || 130;
+  c.width = cw * dpr; c.height = chh * dpr;
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (!ctx) { $("ctxTitle").textContent = "Context — click anywhere in the strip to play " +
+    "from there (esc/space stops)"; return; }
+  const stripHi = Math.min(ctx.start_s + 2 * ctx.context_s, ctx.stream_len_s);
+  // beyond-the-file region, greyed
+  g.fillStyle = "rgba(138,147,160,0.12)";
+  if (ctx.start_s < 0) g.fillRect(0, 0, ctxX(0, cw), chh);
+  if (stripHi < ctx.start_s + 2 * ctx.context_s)
+    g.fillRect(ctxX(stripHi, cw), 0, cw - ctxX(stripHi, cw), chh);
+  // the analysis window marker (current inspector window around the point)
+  const win = parseFloat($("winSel").value);
+  g.fillStyle = "rgba(94,194,255,0.14)";
+  g.fillRect(ctxX(ctx.stream_t - win / 2, cw), 0, (win / (2 * ctx.context_s)) * cw, chh);
+  // two stacked envelope bands: stream above, original below. The original band
+  // follows the CURRENT hand nudge client-side (same convention as the inspector's
+  // visible(): +shift = orig content later = drawn further right) so the strip
+  // always shows the seat a click would play -- no refetch needed for a <=0.5 s
+  // nudge at this zoom (review iteration 1 P2).
+  const bands = [[ctx.stream, "#6fd08c", 0], [ctx.orig, "#e0b452", 1]];
+  const bh = chh / 2;
+  for (const [env, color, k] of bands) {
+    const mid = k * bh + bh / 2, A = bh * 0.46, n = ctx.n_cols;
+    const dx = k === 1 ? ((shift / SR) / (2 * ctx.context_s)) * cw : 0;
+    g.strokeStyle = color;
+    for (let x = 0; x < cw; x++) {
+      const i0 = Math.floor((x - dx) * n / cw),
+            i1 = Math.max(i0 + 1, Math.floor((x - dx + 1) * n / cw));
+      let lo = 1e9, hi = -1e9;
+      for (let i = Math.max(0, i0); i < Math.min(n, i1); i++) {
+        if (env.min[i] < lo) lo = env.min[i];
+        if (env.max[i] > hi) hi = env.max[i];
+      }
+      if (lo > hi) continue;
+      g.beginPath();
+      g.moveTo(x + 0.5, mid - Math.min(1, Math.max(-1, hi)) * A);
+      g.lineTo(x + 0.5, mid - Math.min(1, Math.max(-1, lo)) * A + 0.001);
+      g.stroke();
+    }
+  }
+  g.strokeStyle = "#232830"; g.beginPath(); g.moveTo(0, bh); g.lineTo(cw, bh); g.stroke();
+  g.strokeStyle = "rgba(94,194,255,0.7)";
+  g.strokeRect(ctxX(ctx.stream_t - win / 2, cw), 1, (win / (2 * ctx.context_s)) * cw, chh - 2);
+  $("ctxTitle").textContent =
+    `Context ±${ctx.context_s.toFixed(0)} s around ${fmtT(ctx.stream_t)} ` +
+    `(${fmtT(Math.max(ctx.start_s, 0))} – ${fmtT(stripHi)}) — click anywhere to play ` +
+    `from there (esc/space stops)`;
+}
+
+// click-to-play: fetch a playback slice at the clicked stream time and run the
+// cursor through the strip. Audio is fetched ON CLICK via /api/align/slice (a
+// design choice: the strip payload stays tiny; each click costs one slice fetch).
+$("inCtx").addEventListener("click", e => {
+  if (!ctx || !cur) return;
+  const c = $("inCtx"), rect = c.getBoundingClientRect();
+  const frac = (e.clientX - rect.left) / rect.width;
+  const stripLo = Math.max(ctx.start_s, 0);
+  const stripHi = Math.min(ctx.start_s + 2 * ctx.context_s, ctx.stream_len_s);
+  let t = ctx.start_s + frac * 2 * ctx.context_s;
+  if (t < stripLo) t = stripLo;
+  const len = Math.min(30, stripHi - t);
+  if (len < 0.5) return;
+  playContextFrom(t, len);
+});
+
+async function playContextFrom(t, len, retried) {
+  const tok = reqToken;
+  stopPlayback();
+  $("ctxInfo").textContent = `fetching ${len.toFixed(0)} s from ${fmtT(t)}…`;
+  const rate = parseFloat($("rateInp").value) || 1.0;
+  const centre = t + len / 2;
+  // the original instant tracks the CURRENT seat (baseOrigT + nudge) along the rate line
+  const seatOrigT = cur.baseOrigT - (shift / SR) * rate;
+  const body = {
+    stem: cur.stem, orig: cur.orig,
+    stream_t: centre,
+    orig_t: Math.max(0, seatOrigT + (centre - cur.point.stream_s) * rate),
+    rate, invert: $("invChk").checked, win: len,
+  };
+  const r = await fetch("/api/align/slice", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (tok !== reqToken) return;
+  if (r.status === 429) {
+    if (!retried) { $("ctxInfo").textContent = "waiting for the previous computation…";
+                    setTimeout(() => { if (tok === reqToken) playContextFrom(t, len, true); }, 700); }
+    else $("ctxInfo").textContent = "server busy — try again";
+    return;
+  }
+  if (j.error) { $("ctxInfo").textContent = j.error; return; }
+  $("ctxInfo").textContent = "";
+  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+  const sL = b64ToF32(j.stream.L), sR = b64ToF32(j.stream.R);
+  const oL = b64ToF32(j.orig.L), oR = b64ToF32(j.orig.R);
+  const m = Math.round(j.margin_s * SR), N = Math.round(j.win_s * SR);
+  const buf = audioCtx.createBuffer(2, N, SR);
+  const L = buf.getChannelData(0), R = buf.getChannelData(1);
+  for (let i = 0; i < N; i++) {
+    L[i] = 0.5 * (sL[m + i] + oL[m + i]);
+    R[i] = 0.5 * (sR[m + i] + oR[m + i]);
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = parseFloat($("speedSel").value);
+  src.connect(audioCtx.destination);
+  src.onended = () => { if (ctxPlay && ctxPlay.src === src) stopCtxPlayback(); };
+  src.start();
+  ctxPlay = { src, t0: t, len };
+  startCtxCursor();
+}
+
+function startCtxCursor() {
+  const el = $("curCtx"), c = $("inCtx");
+  let pos = 0, last = audioCtx.currentTime;
+  const step = () => {
+    if (!ctxPlay || !ctx) { stopCtxPlayback(); return; }
+    const now = audioCtx.currentTime;
+    pos += (now - last) * ctxPlay.src.playbackRate.value;
+    last = now;
+    const t = Math.min(ctxPlay.t0 + pos, ctxPlay.t0 + ctxPlay.len);
+    el.style.display = "block";
+    el.style.left = ctxX(t, c.clientWidth || 900) + "px";
+    ctxRaf = requestAnimationFrame(step);
+  };
+  ctxRaf = requestAnimationFrame(step);
+}
+
+function stopCtxPlayback() {
+  if (ctxRaf !== null) { cancelAnimationFrame(ctxRaf); ctxRaf = null; }
+  $("curCtx").style.display = "none";
+  if (ctxPlay) { const p = ctxPlay; ctxPlay = null; try { p.src.stop(); } catch (e) {} }
+}
+
+// ---------- DP-10: the whole-capture overview ----------
+// Collapsed by default; fetched once per (pair, rate, invert) when open. The payload
+// is the DSP side's build_overview: the full stream's coarse envelope plus the
+// original's envelope piecewise-linearly stretched between the HINT sync points
+// (session nudges are milliseconds -- invisible at this zoom, so they never force a
+// refetch). Flags are drawn client-side: color = the point's measured 10%-window
+// residual through the DP-11 gradient, gray until the inspector has measured it.
+function ovKeyNow() {
+  return [cur.stem, cur.orig, $("rateInp").value, $("invChk").checked].join("|");
+}
+
+async function fetchOverview() {
+  if (!cur || !$("ovBox").open) return;
+  const key = ovKeyNow();
+  if (ov && ovKey === key) { drawOv(); return; }
+  // DP-18: at most ONE overview DSP fetch per pair scope — a key fetched this
+  // session redraws from the cache, so switching pairs via a foreign flag (and
+  // back) costs nothing after the first visit
+  const cached = ovCache.get(key);
+  if (cached) { ov = cached; ovKey = key; $("ovInfo").textContent = ""; drawOv(); return; }
+  const h = sources.hints[+$("pairSel").value];
+  ov = null; ovKey = null;
+  drawOv();
+  $("ovInfo").textContent = "computing overview…";
+  const body = {
+    stem: cur.stem, orig: cur.orig,
+    stream_t: cur.point.stream_s, orig_t: cur.baseOrigT,
+    rate: parseFloat($("rateInp").value) || 1.0,
+    invert: $("invChk").checked,
+    points: h.points.map(p => [p.stream_s, p.orig_s]),
+  };
+  const r = await fetch("/api/align/overview", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (!cur || key !== ovKeyNow() || !$("ovBox").open) return;
+  if (r.status === 429) { setTimeout(() => { if (cur && key === ovKeyNow()) fetchOverview(); }, 800);
+                          return; }
+  if (j.error) { $("ovInfo").textContent = "overview: " + j.error; return; }
+  ov = j; ovKey = key;
+  ovCache.set(key, j);                       // DP-18: one fetch per key, ever
+  if (ovCache.size > OV_CACHE_MAX) ovCache.delete(ovCache.keys().next().value);
+  $("ovInfo").textContent = "";
+  drawOv();
+}
+
+function ovX(t, cw) { return t / ov.stream_len_s * cw; }
+
+// one min/max envelope drawn across pixels [xa, xb) around mid with half-height A
+function envBand(g, env, xa, xb, mid, A, color) {
+  const n = env.min.length, w = xb - xa;
+  if (w <= 0 || !n) return;
+  g.strokeStyle = color;
+  for (let x = Math.max(0, Math.ceil(xa)); x < xb; x++) {
+    const i0 = Math.floor((x - xa) * n / w), i1 = Math.max(i0 + 1, Math.floor((x + 1 - xa) * n / w));
+    let lo = 1e9, hi = -1e9;
+    for (let i = Math.max(0, i0); i < Math.min(n, i1); i++) {
+      if (env.min[i] < lo) lo = env.min[i];
+      if (env.max[i] > hi) hi = env.max[i];
+    }
+    if (lo > hi) continue;
+    g.beginPath();
+    g.moveTo(x + 0.5, mid - Math.min(1, Math.max(-1, hi)) * A);
+    g.lineTo(x + 0.5, mid - Math.min(1, Math.max(-1, lo)) * A + 0.001);
+    g.stroke();
+  }
+}
+
+function drawOv() {
+  const c = $("inOv"), dpr = window.devicePixelRatio || 1;
+  // DP-18 (review iteration 1 P2): the lane GROWS to fit every foreign row -- a
+  // fixed 120 px height clipped the seventh-and-later pairs right off the canvas
+  // (and their click hit boxes with them). Up to ~3 foreign rows ride free in
+  // the default height; beyond that the canvas gains 16 px per further pair, so
+  // no pair on this capture is ever undrawable or unclickable.
+  const pairIdx = sources ? +$("pairSel").value : 0;
+  const nF = (cur && sources) ? sources.hints.filter(
+    (h2, i2) => i2 !== pairIdx && h2.stem === cur.stem).length : 0;
+  const cssH = Math.max(120, 55 + 16 * (nF + 1));
+  c.style.height = cssH + "px";
+  const cw = c.clientWidth || 900, chh = cssH;
+  c.width = cw * dpr; c.height = chh * dpr;
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ovForeign = [];                            // DP-18: stale hit boxes never outlive a redraw
+  if (!ov || !cur) return;
+  const bh = chh / 2;
+  envBand(g, ov.stream, 0, cw, bh / 2, bh * 0.44, "#6fd08c");
+  for (const seg of ov.segments)
+    envBand(g, seg, ovX(seg.a0, cw), ovX(seg.a1, cw), bh + bh / 2, bh * 0.44, "#e0b452");
+  g.strokeStyle = "#232830"; g.beginPath(); g.moveTo(0, bh); g.lineTo(cw, bh); g.stroke();
+  // DP-18: EVERY other hints set on this capture, one MUTED row per foreign pair
+  // stacked above the current pair's bottom row — rendered from the sources data
+  // alone (each point's stream_s is already known; NO DSP fetch), numbered, its
+  // orig tag at the row's left edge, click-to-switch via the hit boxes. Only the
+  // CURRENT pair keeps the piecewise warped band and the bright flags.
+  let row = 1;
+  sources.hints.forEach((h2, i2) => {
+    if (i2 === pairIdx || h2.stem !== cur.stem) return;
+    const st2 = stateFor(h2), y = chh - 15 - 16 * row;
+    g.font = "9px ui-monospace, monospace"; g.textBaseline = "middle";
+    g.fillStyle = "rgba(138,147,160,0.6)";
+    g.fillText("orig" + String(h2.orig).padStart(3, "0"), 2, y + 7.5);
+    h2.points.forEach((p, j2) => {
+      const x = ovX(p.stream_s, cw);
+      const v = ptVisual(st2, p);
+      const col = mixCol(v.col, [58, 63, 72], 0.6);   // dimmed/desaturated (muted)
+      const w = v.inc ? 26 : 18;
+      g.strokeStyle = "rgba(138,147,160,0.22)";
+      g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, chh); g.stroke();
+      g.fillStyle = css(col);
+      g.fillRect(x + 1.5, y, w, 14);
+      g.fillStyle = contrastLine(col);
+      g.font = "10px ui-monospace, monospace";
+      g.fillText(String(p.k).slice(0, 2) + (v.inc ? "✓" : ""), x + 4.5, y + 7.5);
+      ovForeign.push({ x: x + 1.5, y, w, h: 14, pairIdx: i2, ptIdx: j2 });
+    });
+    row++;
+  });
+  // numbered sync flags at the BOTTOM edge (DP-27: the top row hid them behind the
+  // legend text), three states (DP-31): gray = untouched, residual-colored once
+  // examined, ✓ appended when the point is ticked for export
+  const h = sources.hints[pairIdx], st = stateFor(h);
+  h.points.forEach(p => {
+    const x = ovX(p.stream_s, cw);
+    const v = ptVisual(st, p);
+    const w = v.inc ? 26 : 18;             // room for the tick on included points
+    g.strokeStyle = css(v.col);
+    g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, chh); g.stroke();
+    g.fillStyle = css(v.col);
+    g.fillRect(x + 1.5, chh - 15, w, 14);
+    g.fillStyle = contrastLine(v.col);
+    g.font = "10px ui-monospace, monospace"; g.textBaseline = "middle";
+    g.fillText(String(p.k).slice(0, 2) + (v.inc ? "✓" : ""), x + 4.5, chh - 8.5);
+    if (p === cur.point) {
+      g.strokeStyle = "rgba(94,194,255,0.9)";
+      g.strokeRect(x - 1.5, chh - 16.5, w + 4, 16);
+    }
+  });
+}
+
+$("inOv").addEventListener("click", e => {
+  if (!ov || !sources || !cur) return;
+  const rect = $("inOv").getBoundingClientRect();
+  const ex = e.clientX - rect.left, ey = e.clientY - rect.top;
+  // DP-18: a foreign pair's flag switches the pair selector to that pair, landing
+  // on the clicked point — the context strip + inspector follow through pickPair's
+  // normal pickPoint → fetchSlice chain, which owns the reqToken staleness.
+  const f = ovForeign.find(b =>
+    ex >= b.x && ex <= b.x + b.w && ey >= b.y && ey <= b.y + b.h);
+  if (f) { $("pairSel").value = String(f.pairIdx); pickPair(f.pairIdx, f.ptIdx); return; }
+  const t = ex / rect.width * ov.stream_len_s;
+  const pairIdx = +$("pairSel").value, h = sources.hints[pairIdx];
+  let best = 0;
+  h.points.forEach((p, j) => {
+    if (Math.abs(p.stream_s - t) < Math.abs(h.points[best].stream_s - t)) best = j;
+  });
+  $("pointSel").value = String(best);
+  pickPoint(pairIdx, best);          // the context strip re-centres via the fetch chain
+});
+$("ovBox").addEventListener("toggle", () => { if ($("ovBox").open) fetchOverview(); });
+
+// ---------- DP-24 §3: the export button's job — the summary compile ----------
+// POST with an empty body: the compile is whole (nothing to name — the §3.3 contract),
+// the server reads the two controlled directories and writes labels/summary/ itself.
+async function compileSummaries() {
+  const btn = $("btnCompile"), info = $("compileInfo");
+  btn.disabled = true; info.textContent = "compiling…";
+  try {
+    const r = await fetch("/api/align/compile-summary", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: "{}" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      info.textContent = "";
+      status(d.error || `compile failed (HTTP ${r.status})`, true);
+      return;
+    }
+    const files = d.files || [], written = files.filter(f => f.changed === true).length;
+    const stems = files.filter(f => f.kind === "stem").length;
+    const origs = files.filter(f => f.kind === "orig").length;
+    info.textContent = `${files.length} file${files.length === 1 ? "" : "s"} ` +
+      `(${stems} capture${stems === 1 ? "" : "s"}, ${origs} original${origs === 1 ? "" : "s"}), ` +
+      `${written} written, ${files.length - written} unchanged` +
+      ((d.removed || []).length ? `, ${d.removed.length} stale removed` : "") +
+      (d.unconverted ? ` · ${d.unconverted} review row(s) stream-side only` : "") +
+      ((d.torn || []).length ? ` · ${d.torn.length} torn line(s) DROPPED` : "");
+    if ((d.torn || []).length)
+      // a torn input lost its last row: the summary is quietly short — warn, name the files
+      status(`torn final line dropped from: ${d.torn.join(", ")} — that row is NOT in the summary`, true);
+    else
+      status(`compiled labels/summary/ — ${files.map(f => f.file).join(", ") || "nothing to compile"}`);
+  } catch (e) {
+    info.textContent = "";
+    status("compile failed: " + e, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+$("btnCompile").addEventListener("click", compileSummaries);
+
+// ---------- DP-16: the inspector -> labels export loop ----------
+// Browser download ONLY -- THIS export never touches the server, the labels dir, or
+// any committed file (that guardrail is law: labels/*.labels.tsv is hand territory;
+// the DP-24 compile above writes only the derived labels/summary/).
+// Two files in the Pass-1 grammar and naming (matchconv build_rows/hint_filenames):
+// `track sync:` rows at capture-local seconds, `origNNN sync:` rows at
+// original-NATIVE seconds, ` verified` after the marker (DP-01: human-checked in
+// the inspector), 6-decimal times, BARE anchor rows (DP-26: the ` verified` token
+// carries provenance; only the summary `note HINT:` rows keep the trailing suffix,
+// matching matchconv's post-#128 output), plus the summary note
+// (rate, polarity, anchor count). Times carry the operator's WORK: only included
+// points, each at its session seat (snap + hand nudges); the stream instant is the
+// anchor and never moves.
+function exportPoints(h) {
+  const st = stateFor(h);
+  return h.points
+    .filter(p => st.include[p.k] === true)   // DP-31: ONLY ticked points export
+    .map(p => {
+      const seat = st.seats[p.k] !== undefined ? st.seats[p.k] : p.orig_s;
+      // DP-32: a point refined this session (or restored with a stored refine)
+      // exports the REFINED confidence, n = ncc × 10 in the same n/10 format;
+      // never-refined points keep the hint's original score
+      const refined = st.refined[p.k] === true && typeof st.ncc[p.k] === "number";
+      return { k: p.k, stream_s: p.stream_s, orig_s: seat,
+               confidence: refined ? st.ncc[p.k] * 10 : p.confidence,
+               adjusted: Math.abs(seat - p.orig_s) > 1e-6 };
+    })
+    .sort((a, b) => a.stream_s - b.stream_s);
+}
+
+function buildExport() {
+  const h = sources.hints[+$("pairSel").value];
+  const pts = exportPoints(h);
+  const rate = parseFloat($("rateInp").value) || 1.0;
+  const tag = "orig" + String(h.orig).padStart(3, "0");
+  const pol = $("invChk").checked
+    ? "INVERTED (flip the original before a null test)" : "not inverted";
+  const pct = (rate - 1.0) * 100.0;
+  const summary = `${tag} via /align inspector: rate ${rate.toFixed(5)} (original runs ` +
+    `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}% vs stream), polarity ${pol}, ${pts.length} anchors`;
+  const sRows = pts.map(p =>
+    [p.stream_s, `track sync: ${p.k} verified confidence ${p.confidence.toFixed(1)}/10`]);
+  const oRows = pts.map(p =>
+    [p.orig_s, `${tag} sync: ${p.k} verified confidence ${p.confidence.toFixed(1)}/10`]);
+  sRows.push([0, `note HINT: ${summary} HINT`]);
+  oRows.push([0, `note HINT: ${summary}; times are original-local seconds HINT`]);
+  const text = rows => rows.sort((a, b) => a[0] - b[0])
+    .map(r => `${r[0].toFixed(6)}\t${r[0].toFixed(6)}\t${r[1]}\n`).join("");
+  return {
+    n: pts.length, adjusted: pts.filter(p => p.adjusted).length, rate,
+    streamName: `${h.stem}.${tag}.match.hints.tsv`,
+    origName: `${tag}.${h.stem}.match.hints.tsv`,
+    streamText: text(sRows), origText: text(oRows),
+  };
+}
+
+function download(name, textContent) {
+  const a = document.createElement("a");
+  const url = URL.createObjectURL(
+    new Blob([textContent], { type: "text/tab-separated-values" }));
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function updateExportInfo() {
+  if (!sources || !(sources.hints || []).length) return;
+  const ex = buildExport();
+  $("exportInfo").textContent = `${ex.n} point${ex.n === 1 ? "" : "s"} included, ` +
+    `${ex.adjusted} adjusted, rate ${ex.rate.toFixed(5)}`;
+}
+
+$("btnExport").addEventListener("click", () => {
+  if (!sources || !(sources.hints || []).length) return;
+  const ex = buildExport();
+  if (!ex.n) { status("no points included — nothing to export", true); return; }
+  download(ex.streamName, ex.streamText);
+  download(ex.origName, ex.origText);
+  status(`exported ${ex.streamName} + ${ex.origName}`);
+});
+
+$("incChk").addEventListener("change", () => {
+  if (!cur) return;
+  const st = stateFor(cur);
+  st.include[cur.point.k] = $("incChk").checked;
+  st.exam[cur.point.k] = true;
+  saveAdjustments();                       // DP-30: the tick is part of the work
+  refreshPointLabels();
+  updateExportInfo();
+  if ($("ovBox").open && ov) drawOv();
+});
+
+// DP-30: the visible way back — clear this pair's stored set and revert the
+// session to the hint seats (the note only shows when something was restored)
+$("btnDiscard").addEventListener("click", () => {
+  if (!sources || !(sources.hints || []).length) return;
+  const i = +$("pairSel").value, h = sources.hints[i];
+  try { localStorage.removeItem(adjustKey(h)); } catch (e) {}
+  delete ptState[h.stem + "|" + h.orig];
+  $("restoreNote").style.display = "none";
+  status("stored adjustments discarded — back to the hint seats");
+  pickPair(i);
+});
+
+// ---------- derived signals ----------
+function visible(sig, sh) {
+  // window region of a slice, shifted by `sh` samples (orig only); clamped to margin
+  const start = slice.marginN - sh;
+  return { sig, start };
+}
+function sampleAt(v, i) { const k = v.start + i; return (k >= 0 && k < v.sig.length) ? v.sig[k] : 0; }
+function chanArrays() {
+  const s = { L: visible(slice.streamL, 0), R: visible(slice.streamR, 0) };
+  const o = { L: visible(slice.origL, shift), R: visible(slice.origR, shift) };
+  return { s, o };
+}
+function metrics() {
+  const { s, o } = chanArrays();
+  const N = slice.winN, c0 = Math.floor(N * (0.5 - CORE / 2)), c1 = Math.ceil(N * (0.5 + CORE / 2));
+  let ds = 0, dd = 0, cs = 0, cd = 0;
+  for (const ch of ["L", "R"]) {
+    for (let i = 0; i < N; i++) {
+      const sv = sampleAt(s[ch], i), dv = sv - sampleAt(o[ch], i);
+      ds += sv * sv; dd += dv * dv;
+      if (i >= c0 && i < c1) { cs += sv * sv; cd += dv * dv; }
+    }
+  }
+  return { whole: 100 * Math.sqrt(dd / (ds || 1)), point: 100 * Math.sqrt(cd / (cs || 1)) };
+}
+
+// ---------- drawing ----------
+// DP-11: the residual gradient (decision made 2026-07-31): pure green below 70,
+// linear RGB fade green→yellow over 70–100, yellow→red over 100–125, pure red
+// at ≥125. The scale is capped at 145 (a residual cannot exceed √2 ≈ 141.4%).
+const GRAD_GREEN = [12, 163, 12];    // #0ca30c
+const GRAD_YELLOW = [237, 161, 0];   // #eda100
+const GRAD_RED = [208, 59, 59];      // #d03b3b
+const GRAD_CAP = 145;
+const mixCol = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+function qcol(p) {
+  p = Math.min(Math.max(p, 0), GRAD_CAP);
+  if (p <= 70) return GRAD_GREEN;
+  if (p <= 100) return mixCol(GRAD_GREEN, GRAD_YELLOW, (p - 70) / 30);
+  if (p <= 125) return mixCol(GRAD_YELLOW, GRAD_RED, (p - 100) / 25);
+  return GRAD_RED;
+}
+const css = c => `rgb(${c[0]},${c[1]},${c[2]})`;
+const luma = c => (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255;
+const contrastLine = c => (luma(c) > 0.55 ? "#0b0d10" : "#f4f6f8");
+
+// ---------- DP-33/DP-34: the MATCH−PHAT jitter window ----------
+// The two snap engines disagree by up to ~80 ms far from the trim anchor (MATCH
+// works in ~20 ms frames). Rather than smoothing that away, DRAW it: at each
+// displayed stream instant t, the gap |b_match(t) − b_line(t)| between the MATCH
+// path and the seat-implied line b_line(t) = seatNow() + (t − stream_t)·rate.
+// The MATCH path is rebuilt PAGE-side from the Pass-1 hints' per-anchor MATCH
+// deltas (matchconv DP-03: `MATCH %+.3fs` after the confidence = MATCH-implied
+// minus PHAT anchor position, original-native seconds — parse_match_hints
+// delivers them as match_delta_s), linearly interpolated between anchors, never
+// extrapolated beyond them. DP-34 (a review of the live DP-33 band): in the
+// overview/context strip the bars "aren't helpful there and reduce the amount
+// of data shown" — those lanes are back to pure data, and the visualization now
+// lives as a LIGHT overlay on the INSPECTOR's stream + original lanes. DP-35
+// (the DP-34 4 px bottom ribbon was too subtle): the overlay is now a
+// per-x tint of the WHOLE lane body, at a far lighter alpha than the ribbon
+// needed (JIT_ALPHA — the waveform stays fully readable through it), per-x
+// jcol color (fading through yellow to red at ≥ 100 ms, scale capped at
+// JIT_CAP_MS). Gaps at or under JIT_TINT_MIN_MS (~one MATCH frame — the
+// engines effectively AGREE) draw no tint at all, so a healthy region stays
+// visually clean and the shading reads as "flagged sections", not wallpaper.
+// Drawn only where the MATCH path covers the window; the lane titles say what
+// the shading means in words (DP-35), and the legend + the numeric gap at the
+// seat ride the inspector metrics line.
+// It moves with every snap/nudge/drag: the seat line moves, the path does not.
+const JIT_CAP_MS = 150;
+const JIT_ALPHA = 0.145;     // DP-35 + tuning of 2026-08-05: 0.12 → 0.132 → 0.145 (+10% twice)
+const JIT_TINT_MIN_MS = 20;  // DP-35: at/below ~one MATCH frame the lane stays clean
+function jcol(ms) {
+  ms = Math.min(Math.max(ms, 0), JIT_CAP_MS);
+  if (ms <= 20) return GRAD_GREEN;
+  if (ms <= 60) return mixCol(GRAD_GREEN, GRAD_YELLOW, (ms - 20) / 40);
+  if (ms <= 100) return mixCol(GRAD_YELLOW, GRAD_RED, (ms - 60) / 40);
+  return GRAD_RED;
+}
+// the pair's MATCH-path samples: one absolute (stream_s, orig-native) knot per
+// anchor carrying a Pass-1 delta -- fixed for the session, whatever the seat does
+function matchSamples(h) {
+  return h.points.filter(p => typeof p.match_delta_s === "number")
+    .map(p => ({ a: p.stream_s, m: p.orig_s + p.match_delta_s }))
+    .sort((u, v) => u.a - v.a);
+}
+function bMatchAt(samples, t) {
+  const n = samples.length;
+  if (n < 2 || t < samples[0].a || t > samples[n - 1].a) return null;
+  let i = 1;
+  while (i < n - 1 && samples[i].a < t) i++;
+  const s0 = samples[i - 1], s1 = samples[i];
+  const f = s1.a > s0.a ? (t - s0.a) / (s1.a - s0.a) : 0;
+  return s0.m + f * (s1.m - s0.m);
+}
+function jitterGapMs(samples, t) {
+  const bm = bMatchAt(samples, t);
+  if (bm === null) return null;
+  const rate = parseFloat($("rateInp").value) || 1.0;
+  const line = seatNow() + (t - cur.point.stream_s) * rate;
+  return Math.abs(bm - line) * 1000;
+}
+// DP-34/DP-35: the inspector-lane overlay. Runs AFTER drawLane has painted the
+// stream and original lanes (their contexts are already dpr-scaled), so the
+// tint is a pure addition -- nothing about the lanes' own rendering changes.
+function drawJitterOverlay() {
+  if (!cur || !sources || !slice) return;
+  const samples = matchSamples(sources.hints[+$("pairSel").value]);
+  if (samples.length < 2) return;            // no path knowledge: no tint, no legend
+  const win = slice.winN / SR, t0 = cur.point.stream_s - win / 2;
+  for (const id of ["inStream", "inOrig"]) {
+    const c = $(id), g = c.getContext("2d");
+    const cw = c.clientWidth || 900, ch = c.clientHeight || 180;
+    g.globalAlpha = JIT_ALPHA;
+    for (let x = 0; x < cw; x++) {
+      const gap = jitterGapMs(samples, t0 + (x / cw) * win);
+      // no cover (never extrapolate), or the engines agree: leave the lane clean
+      if (gap === null || gap <= JIT_TINT_MIN_MS) continue;
+      g.fillStyle = css(jcol(gap));
+      g.fillRect(x, 0, 1, ch);               // DP-35: the WHOLE lane body, lightly
+    }
+    g.globalAlpha = 1;
+  }
+}
+// the metrics-line legend + the numeric gap at the current SEAT position -- ""
+// when the pair has no MATCH path (no shading either), "n/a" when the seat sits
+// outside the path's anchor span
+function jitterMetricsBit() {
+  const samples = matchSamples(sources.hints[+$("pairSel").value]);
+  if (samples.length < 2) return "";
+  const sg = jitterGapMs(samples, cur.point.stream_s);
+  return " · MATCH−PHAT gap, ms (lane shading) @seat " + (sg === null ? "n/a"
+    : `<b style="color:${css(jcol(sg))}">${sg.toFixed(1)}</b>`);
+}
+
+function drawLane(id, get, color, opt = {}) {
+  const c = $(id), dpr = window.devicePixelRatio || 1;
+  const cw = c.clientWidth || 900, ch = c.clientHeight || 180;
+  c.width = cw * dpr; c.height = ch * dpr;
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const coreA = (0.5 - CORE / 2) * cw, coreW = CORE * cw;
+  if (opt.sumBg) {
+    g.fillStyle = css(opt.sumBg.whole); g.fillRect(0, 0, cw, ch);
+    g.fillStyle = css(opt.sumBg.core); g.fillRect(coreA, 0, coreW, ch);
+  } else {
+    g.fillStyle = "rgba(94,194,255,0.10)"; g.fillRect(coreA, 0, coreW, ch);
+  }
+  const chans = (chan === "both") ? ["L", "R"] : [chan];
+  const N = slice.winN, sc = opt.scale || 1;
+  chans.forEach((cn, k) => {
+    const band = ch / chans.length, y0 = k * band, mid = y0 + band / 2, A = band * 0.46;
+    const v = get(cn);
+    for (let x = 0; x < cw; x++) {
+      const i0 = Math.floor(x * N / cw), i1 = Math.max(i0 + 1, Math.floor((x + 1) * N / cw));
+      let lo = 1e9, hi = -1e9;
+      for (let i = i0; i < i1; i++) { const val = v(i); if (val < lo) lo = val; if (val > hi) hi = val; }
+      if (lo > hi) continue;
+      g.strokeStyle = opt.sumBg
+        ? ((x >= coreA && x <= coreA + coreW) ? contrastLine(opt.sumBg.core) : contrastLine(opt.sumBg.whole))
+        : color;
+      g.beginPath();
+      g.moveTo(x + 0.5, mid - hi * A * sc);
+      g.lineTo(x + 0.5, mid - lo * A * sc + 0.001);
+      g.stroke();
+    }
+    if (chans.length === 2 && k === 0) {
+      g.strokeStyle = "#232830"; g.beginPath(); g.moveTo(0, y0 + band); g.lineTo(cw, y0 + band); g.stroke();
+    }
+  });
+  g.strokeStyle = opt.sumBg ? "rgba(20,22,26,0.55)" : "rgba(94,194,255,0.7)";
+  g.strokeRect(coreA, 1, coreW, ch - 2);
+}
+
+function chTag() { return chan === "both" ? " — L+R" : " — " + chan; }
+function chanTag() { return chan === "both" ? "L+R" : chan; }
+
+// DP-14: the lane annotations live OUTSIDE the panels; the in-panel label slot
+// only carries the channel tag. Filename comes from the sources originals list
+// by num; the rate shown is the effective rate slice requests use (the input).
+function laneTitles() {
+  if (!cur) return;
+  // DP-35: the titles SAY what the lane shading means, in plain
+  // words -- appended only when the loaded pair actually has a MATCH path to
+  // shade from (2+ delta-carrying anchors), so a shading-free pair gets no
+  // orphaned explanation
+  const shadeNote =
+    matchSamples(sources.hints[+$("pairSel").value]).length >= 2
+      ? " — shaded sections: the MATCH cross-check disagrees with the current"
+        + " seat (green → red = gap in ms)"
+      : "";
+  $("streamTitle").textContent = `Stream (fixed): ${cur.stem}` + shadeNote;
+  const o = (sources && sources.originals || []).find(x => x.num === cur.orig);
+  const name = String(cur.orig).padStart(3, "0") + (o ? "-" + o.name : "");
+  const rate = parseFloat($("rateInp").value) || 1.0;
+  $("origTitle").textContent =
+    `Original (drag to shift): ${name} altered rate ${rate.toFixed(5)} and RMS-matched`
+    + shadeNote;
+}
+
+function drawAll() {
+  if (!slice) return;
+  const { s, o } = chanArrays();
+  laneTitles();
+  $("inStreamLbl").textContent = chanTag();
+  $("inOrigLbl").textContent = chanTag();
+  drawLane("inStream", cn => (i => sampleAt(s[cn], i)), "#6fd08c");
+  drawLane("inOrig", cn => (i => sampleAt(o[cn], i)), "#e0b452");
+  drawJitterOverlay();   // DP-34/35: the light gap shading rides the lanes just drawn
+  const m = metrics();
+  if (resMode === "sum") {
+    drawLane("inDiff", cn => (i => sampleAt(s[cn], i) - sampleAt(o[cn], i)), null,
+             { scale: 1.4, sumBg: { whole: qcol(m.whole), core: qcol(m.point) } });
+    $("diffLabel").textContent = "subtraction (stream − orig)" + chTag() +
+      " — background: point-alignment color inside the 10% window, sample-alignment outside";
+    $("blocks").style.display = "none";
+  } else {
+    drawLane("inDiff", cn => (i => sampleAt(s[cn], i) - sampleAt(o[cn], i)), "#c98cf0", { scale: 1.4 });
+    $("diffLabel").textContent = "subtraction (stream − orig)" + chTag();
+    $("blocks").style.display = "";
+    const cWhole = qcol(m.whole), cPoint = qcol(m.point);
+    $("blkSample").style.background = css(cWhole);
+    $("blkSample").style.color = contrastLine(cWhole);
+    $("blkPoint").style.background = css(cPoint);
+    $("blkPoint").style.color = contrastLine(cPoint);
+    $("blkSampleTxt").textContent = m.whole.toFixed(1) + "% residual — whole window";
+    $("blkPointTxt").textContent = m.point.toFixed(2) + "% residual — 10% window around the point";
+  }
+  $("shiftTxt").textContent = (shift > 0 ? "+" : "") + shift + " smp (" + (shift / 16).toFixed(3) + " ms)";
+  // DP-16: the session remembers this point's WORK -- its current seat (snap +
+  // nudge) and its measured 10%-window residual (DP-10's flag color); DP-30
+  // persists it (saveAdjustments only stores points with real work) and DP-29's
+  // original-native readout tracks the seat live
+  const sess = stateFor(cur);
+  sess.seats[cur.point.k] = seatNow();
+  sess.resid[cur.point.k] = m.point;
+  saveAdjustments();
+  updateInspTitle();
+  refreshPointLabels();
+  updateExportInfo();
+  drawCtx();     // the strip's original band tracks the nudge (review iter 1 P2)
+  if ($("ovBox").open && ov) drawOv();   // DP-10: flag colors follow the residual
+  // DP-11: the two alignment values stay prominent, with the confidence at equal
+  // billing — the refine's once one has run, the hint's (n/10) before that.
+  const confBit = lastConf !== null
+    ? `refine confidence <b>${lastConf.toFixed(2)}</b>`
+    : `hint confidence <b>${cur.point.confidence.toFixed(1)}/10</b>`;
+  $("metrics").innerHTML = `RMS(diff)/RMS(stream): whole-window <b>${m.whole.toFixed(1)}%</b> · ` +
+    `10% point window <b>${m.point.toFixed(2)}%</b> · ${confBit} · ` +
+    `gain ×${slice.rmsGain.toFixed(3)} · 16 kHz band` +
+    jitterMetricsBit();   // DP-34: the gap legend + @seat number moved here
+}
+
+function clearLanes() {
+  for (const id of ["inStream", "inOrig", "inDiff"]) {
+    const c = $(id), g = c.getContext("2d");
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, c.width, c.height);
+  }
+  $("metrics").textContent = "";
+  $("shiftTxt").textContent = "0 smp";
+  $("snapTxt").textContent = "";
+  $("blocks").style.display = "none";        // the separate-box residuals are the old
+  $("blkSample").style.background = "";      // slice's numbers too -- clear them with it
+  $("blkSample").style.color = "";
+  $("blkPoint").style.background = "";
+  $("blkPoint").style.color = "";
+  $("blkSampleTxt").textContent = "";
+  $("blkPointTxt").textContent = "";
+  $("btnSnap").disabled = false;             // a superseded refine must not leave the
+}                                            // NEW selection's snap dead for its timeout
+
+function fmtT(t) {
+  const m = Math.floor(t / 60), sec = t - 60 * m;
+  return m + ":" + (sec < 10 ? "0" : "") + sec.toFixed(3);
+}
+
+// ---------- nudge ----------
+function nudge(d) {
+  if (!slice) return;
+  shift = Math.max(-slice.marginN, Math.min(slice.marginN, shift + d));
+  stopPlayback();
+  drawAll();
+}
+async function snapToBest() {
+  if (!cur || !slice) return;
+  const tok = ++reqToken;
+  $("btnSnap").disabled = true;
+  status("refining…");
+  const rate = parseFloat($("rateInp").value) || 1.0;
+  const body = {
+    stem: cur.stem, orig: cur.orig,
+    stream_t: cur.point.stream_s,
+    orig_t: cur.baseOrigT - (shift / SR) * rate,   // the seat as currently nudged
+    rate, invert: $("invChk").checked,
+    win: parseFloat($("winSel").value), radius: 0.05,
+    engine,                                        // DP-08: PHAT | MATCH path
+  };
+  const r = await fetch("/api/align/refine", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json();
+  $("btnSnap").disabled = false;
+  if (tok !== reqToken) return;              // selection changed while refining
+  if (j.error) { status(j.error, true); return; }
+  cur.baseOrigT = j.new_orig_t;
+  shift = 0;
+  lastConf = j.confidence;
+  // DP-31/DP-32: a refine marks the point examined and records the ncc that the
+  // export will carry (n = ncc × 10); DP-30 persists both with the snapped seat
+  const stSnap = stateFor(cur);
+  stSnap.exam[cur.point.k] = true;
+  stSnap.refined[cur.point.k] = true;
+  stSnap.ncc[cur.point.k] = j.confidence;
+  stSnap.seats[cur.point.k] = j.new_orig_t;
+  saveAdjustments();
+  // DP-08: the MATCH-path snap also reports how far it sits from PHAT's answer
+  $("snapTxt").textContent = (j.engine === "match" && j.match_vs_phat_ms !== undefined)
+    ? `— snapped (MATCH path): residual ${j.offset_ms.toFixed(2)} ms, ` +
+      `MATCH−PHAT Δ ${j.match_vs_phat_ms.toFixed(2)} ms, PHAT confidence ${j.confidence.toFixed(2)}`
+    : `— snapped: residual ${j.offset_ms.toFixed(2)} ms, confidence ${j.confidence.toFixed(2)}`;
+  status("");
+  await fetchSlice();
+}
+
+// ---------- playback ----------
+// DP-15: the now-playing cursor — one overlay line per lane, advanced by a rAF
+// loop that integrates audioCtx time × the LIVE playbackRate (the speed select
+// can change mid-play), modulo the window when looping, parked at the end when not.
+let cursorRaf = null;
+function stopCursor() {
+  if (cursorRaf !== null) { cancelAnimationFrame(cursorRaf); cursorRaf = null; }
+  for (const id of ["curStream", "curOrig", "curDiff"]) $(id).style.display = "none";
+}
+function startCursor() {
+  stopCursor();
+  const els = [$("curStream"), $("curOrig"), $("curDiff")];
+  const canvas = $("inStream");
+  let pos = 0, last = audioCtx.currentTime;   // pos in samples through the window
+  const step = () => {
+    if (!playing || !slice) { stopCursor(); return; }
+    const now = audioCtx.currentTime;
+    pos += (now - last) * playing.src.playbackRate.value * SR;
+    last = now;
+    const N = slice.winN;
+    const p = playing.src.loop ? (pos % N) : Math.min(pos, N);  // no loop: park at the end until onended
+    const x = (p / N) * (canvas.clientWidth || 900);
+    for (const el of els) { el.style.display = "block"; el.style.left = x + "px"; }
+    cursorRaf = requestAnimationFrame(step);
+  };
+  cursorRaf = requestAnimationFrame(step);
+}
+
+function stopPlayback() {
+  stopCursor();
+  stopCtxPlayback();     // DP-09: the strip's click-play and the inspector's are exclusive
+  if (playing) { try { playing.src.stop(); } catch (e) {} playing = null; }
+  $("btnComb").classList.remove("flash"); $("btnDiff").classList.remove("flash");
+}
+function play(kind) {
+  if (!slice) return;
+  if (playing && playing.kind === kind) { stopPlayback(); return; }
+  stopPlayback();
+  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+  const { s, o } = chanArrays();
+  const N = slice.winN;
+  const buf = audioCtx.createBuffer(2, N, SR);
+  const L = buf.getChannelData(0), R = buf.getChannelData(1);
+  const sign = kind === "diff" ? -1 : 1;
+  if (route === "split") {
+    // A/B ear: stream in the left ear, original in the right (mono-folded each)
+    for (let i = 0; i < N; i++) {
+      L[i] = 0.5 * (sampleAt(s.L, i) + sampleAt(s.R, i));
+      R[i] = 0.5 * (sampleAt(o.L, i) + sampleAt(o.R, i)) * (kind === "diff" ? -1 : 1);
+    }
+  } else {
+    for (let i = 0; i < N; i++) {
+      L[i] = 0.5 * (sampleAt(s.L, i) + sign * sampleAt(o.L, i));
+      R[i] = 0.5 * (sampleAt(s.R, i) + sign * sampleAt(o.R, i));
+    }
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.playbackRate.value = parseFloat($("speedSel").value);
+  src.loop = $("loopChk").checked;
+  src.connect(audioCtx.destination);
+  src.onended = () => { if (playing && playing.src === src) stopPlayback(); };
+  src.start();
+  playing = { src, kind };
+  startCursor();
+  $(kind === "diff" ? "btnDiff" : "btnComb").classList.add("flash");
+}
+
+// ---------- events ----------
+$("pairSel").addEventListener("change", e => pickPair(+e.target.value));
+$("pointSel").addEventListener("change", () => pickPoint(+$("pairSel").value, +$("pointSel").value));
+$("winSel").addEventListener("change", fetchSlice);
+$("invChk").addEventListener("change", fetchSlice);
+$("rateInp").addEventListener("change", fetchSlice);
+$("loopChk").addEventListener("change", () => { if (playing) { const k = playing.kind; stopPlayback(); play(k); } });
+$("speedSel").addEventListener("change", () => { if (playing) playing.src.playbackRate.value = parseFloat($("speedSel").value); });
+$("btnSnap").addEventListener("click", snapToBest);
+document.querySelectorAll(".nudge button[data-smp]").forEach(b =>
+  b.addEventListener("click", () => nudge(+b.dataset.smp)));
+$("btnComb").addEventListener("click", () => play("comb"));
+$("btnDiff").addEventListener("click", () => play("diff"));
+for (const [segId, setter] of [["chanSeg", v => chan = v], ["resSeg", v => resMode = v],
+                               ["routeSeg", v => route = v], ["engSeg", v => engine = v]]) {
+  $(segId).addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    setter(b.dataset.ch || b.dataset.res || b.dataset.route || b.dataset.eng);
+    [...e.currentTarget.querySelectorAll("button")].forEach(x => x.classList.toggle("on", x === b));
+    if (playing) stopPlayback();
+    savePrefs();
+    drawAll();
+  });
+}
+// DP-12: every persisted control saves on change (after the reload/replay handlers above)
+for (const id of ["winSel", "speedSel", "loopChk", "invChk"])
+  $(id).addEventListener("change", savePrefs);
+// drag-to-shift on the original lane
+(() => {
+  const c = $("inOrig");
+  let dragging = null;
+  c.addEventListener("pointerdown", e => {
+    if (!slice) return;
+    dragging = { x: e.clientX, shift0: shift };
+    c.setPointerCapture(e.pointerId);
+  });
+  c.addEventListener("pointermove", e => {
+    if (!dragging) return;
+    const perPx = slice.winN / (c.clientWidth || 900);   // samples per CSS pixel
+    shift = Math.round(Math.max(-slice.marginN, Math.min(slice.marginN,
+      dragging.shift0 + (e.clientX - dragging.x) * perPx)));
+    drawAll();
+  });
+  c.addEventListener("pointerup", () => { dragging = null; });
+})();
+addEventListener("keydown", e => {
+  if (["SELECT", "INPUT"].includes(e.target.tagName)) return;
+  const sp = $("speedSel");
+  if (e.code === "Escape") { stopPlayback(); }                       // DP-09: stops ctx play too
+  else if (e.code === "Space" && ctxPlay) { e.preventDefault(); stopCtxPlayback(); }
+  else if (e.code === "Space") { e.preventDefault(); play("comb"); }
+  else if (e.key === "s" || e.key === "S") { play("diff"); }
+  else if (e.key === "[") { sp.selectedIndex = Math.min(sp.length - 1, sp.selectedIndex + 1); sp.dispatchEvent(new Event("change")); }
+  else if (e.key === "]") { sp.selectedIndex = Math.max(0, sp.selectedIndex - 1); sp.dispatchEvent(new Event("change")); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); nudge(e.shiftKey ? -16 : -1); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); nudge(e.shiftKey ? 16 : 1); }
+});
+addEventListener("resize", () => requestAnimationFrame(() => {
+  drawAll();
+  if (!slice) { drawCtx(); if ($("ovBox").open && ov) drawOv(); }
+}));
+
+loadPrefs();
+loadSources().catch(err => { $("tool").style.display = ""; status(String(err), true); });
+</script>
+</body>
+</html>
