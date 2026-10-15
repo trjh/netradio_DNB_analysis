@@ -138,8 +138,9 @@ harvest-run:          ## start the harvester (runs for weeks), under its own pid
 
 # The two generated data files, together: the labels give the tracks (track-metadata.json,
 # curated fields carried forward from the committed copy) and the capture files' places on the
-# master timeline (stream-files.json). Durations come from the audio in NETRADIO_MP3_DIR when it
-# is there, else from the committed stream-files.json.
+# master timeline (stream-files.json). A recorded duration is kept; a capture with none is
+# measured from its original .wav/.au in NETRADIO_CAPTURES_DIR (default: the parent of
+# NETRADIO_MP3_DIR), never its MP3, and keeps no duration when its original is not there.
 stream-data:          ## rebuild track-metadata.json and stream-files.json from the labels
 	$(PYTHON) scripts/build_track_metadata.py --seed track-metadata.json
 	$(PYTHON) scripts/stream_files.py
