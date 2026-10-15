@@ -244,6 +244,16 @@ overrides) are carried forward from the previous JSON, so re-generating never lo
 A label change that moves a capture (a `file start sync`, `file sync` or `file end` row) also
 changes `stream-files.json`: `make stream-data` rebuilds both files together.
 
+Each capture's duration is the length of its original `.wav` or `.au` (in
+`NETRADIO_CAPTURES_DIR`, by default the parent of `NETRADIO_MP3_DIR`), never its MP3, and it is
+measured once: a recorded duration is kept. To measure every capture again from its original,
+run `python3 scripts/stream_files.py --remeasure`.
+
+A capture's place comes only from its labels. Where another capture's labels place it at one
+master time and its own start label says another, the other capture's placement wins. The
+Timing section of `tracklist-2017.txt` only marks the primary captures and gives each one's
+approximate minute range, which the file carries beside the label placement, never in its place.
+
 **Q:** Refresh the missing-originals / sourcing inventory.
 
 **A:**

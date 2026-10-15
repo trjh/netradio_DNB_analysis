@@ -961,9 +961,9 @@
       "track_count": 3
     },
     {
-      "duration": 1200.096,
+      "duration": 1200.0,
       "duration_label": "20:00",
-      "duration_seconds": 1200.096,
+      "duration_seconds": 1200.0,
       "filename": "d181-201.14Nov10-a.mp3",
       "is_primary": false,
       "listing_order": 61,
@@ -977,9 +977,9 @@
       "track_count": 0
     },
     {
-      "duration": 1200.096,
+      "duration": 1200.0,
       "duration_label": "20:00",
-      "duration_seconds": 1200.096,
+      "duration_seconds": 1200.0,
       "filename": "d198-218.14Nov02-a.mp3",
       "is_primary": false,
       "listing_order": 62,
@@ -993,9 +993,9 @@
       "track_count": 0
     },
     {
-      "duration": 1200.096,
+      "duration": 1200.0,
       "duration_label": "20:00",
-      "duration_seconds": 1200.096,
+      "duration_seconds": 1200.0,
       "filename": "d201-221.14Nov10-b.mp3",
       "is_primary": false,
       "listing_order": 63,
@@ -1009,9 +1009,9 @@
       "track_count": 0
     },
     {
-      "duration": 1200.096,
+      "duration": 1200.0,
       "duration_label": "20:00",
-      "duration_seconds": 1200.096,
+      "duration_seconds": 1200.0,
       "filename": "d218-238.14Nov02-b.mp3",
       "is_primary": false,
       "listing_order": 64,
@@ -1025,9 +1025,9 @@
       "track_count": 0
     },
     {
-      "duration": 1200.096,
+      "duration": 1200.0,
       "duration_label": "20:00",
-      "duration_seconds": 1200.096,
+      "duration_seconds": 1200.0,
       "filename": "d221-241.14Nov10-c.mp3",
       "is_primary": false,
       "listing_order": 65,
@@ -1041,9 +1041,9 @@
       "track_count": 0
     },
     {
-      "duration": 67.032,
+      "duration": 66.9435,
       "duration_label": "1:07",
-      "duration_seconds": 67.032,
+      "duration_seconds": 66.9435,
       "filename": "d239.14Nov02-c.mp3",
       "is_primary": false,
       "listing_order": 66,
@@ -1057,9 +1057,9 @@
       "track_count": 0
     },
     {
-      "duration": 1200.096,
+      "duration": 1200.0,
       "duration_label": "20:00",
-      "duration_seconds": 1200.096,
+      "duration_seconds": 1200.0,
       "filename": "d241-261.14Nov10-d.mp3",
       "is_primary": false,
       "listing_order": 67,
@@ -1073,9 +1073,9 @@
       "track_count": 0
     },
     {
-      "duration": 1200.096,
+      "duration": 1200.0,
       "duration_label": "20:00",
-      "duration_seconds": 1200.096,
+      "duration_seconds": 1200.0,
       "filename": "d261-281.14Nov10-e.mp3",
       "is_primary": false,
       "listing_order": 68,
@@ -1089,9 +1089,9 @@
       "track_count": 0
     },
     {
-      "duration": 1200.096,
+      "duration": 1200.0,
       "duration_label": "20:00",
-      "duration_seconds": 1200.096,
+      "duration_seconds": 1200.0,
       "filename": "d281-301.14Nov10-f.mp3",
       "is_primary": false,
       "listing_order": 69,
@@ -1105,9 +1105,9 @@
       "track_count": 0
     },
     {
-      "duration": 786.024,
+      "duration": 785.9195,
       "duration_label": "13:06",
-      "duration_seconds": 786.024,
+      "duration_seconds": 785.9195,
       "filename": "d301-314.14Nov10-h.mp3",
       "is_primary": false,
       "listing_order": 70,

@@ -26,13 +26,16 @@ Label grammar that places a file:
     sync row.
   - `file end: <file>` (or `file end <file>`): the file's master end; the latest wins.
 
-Durations are measured once and committed. A capture that already has a duration in
-`stream-files.json` keeps it; only a capture with none is measured, with ffprobe, from its
-audio in NETRADIO_MP3_DIR. `--remeasure` measures every capture whose audio is there again. The
-recordings never change, so a duration measured once stays right, and never re-measuring keeps
-ffprobe's last-digit drift out of the file. A capture with no duration and no audio is written
-with a null duration and named on stderr. Sizes come from the audio when it is there, else from
-the recorded value.
+A capture's duration is the length of its ORIGINAL recording (the `.wav` or `.au` the label
+timings were made against), never its MP3, which can run longer by the encoder's padding. The
+originals are in NETRADIO_CAPTURES_DIR, which defaults to the parent of NETRADIO_MP3_DIR.
+Durations are measured once and committed: a capture that already has a duration in
+`stream-files.json` keeps it, and only a capture with none is measured, with ffprobe, from its
+original. `--remeasure` measures every capture whose original is there again. The recordings
+never change, so a duration measured once stays right, and never re-measuring keeps ffprobe's
+last-digit drift out of the file. A capture that needed measuring but has no original keeps its
+recorded duration (null when there is none) and is named on stderr. `size` is the MP3's size
+when the MP3 is there, else the recorded value.
 
 The committed `stream-files.json` is the capture list: every capture it records is kept, and an
 MP3 that appears in NETRADIO_MP3_DIR is added. A capture leaves the list only with `--prune`,
@@ -107,6 +110,21 @@ def original_filename(mp3_name):
             stem = ("d-" + tail) if tail.startswith("14Nov") else tail
         return stem + ".au"
     return stem + ".wav"
+
+
+def original_path(mp3_name, captures_dir):
+    """The path of a capture's original recording in `captures_dir`, or None when it is not
+    there. Tries `original_filename()`, then the `dnb-` spelling some 14Nov originals carry
+    (`d-14Nov02-a.au` is on disk as `dnb-14Nov02-a.au`)."""
+    if not captures_dir:
+        return None
+    name = original_filename(mp3_name)
+    names = [name] + (["dnb-" + name[2:]] if name.startswith("d-") else [])
+    for candidate in names:
+        path = os.path.join(captures_dir, candidate)
+        if os.path.isfile(path):
+            return path
+    return None
 
 
 def is_pipeline_label_file(name):
@@ -402,13 +420,15 @@ def load_previous(path):
 
 
 def build(labels_dir=LABELS_DIR, tracklist_path=TRACKLIST_PATH, metadata_path=METADATA_PATH,
-          previous=None, audio_dir=None, ffprobe=None, prune=False, remeasure=False):
+          previous=None, audio_dir=None, ffprobe=None, prune=False, remeasure=False,
+          captures_dir=None, report=None):
     """The stream-files document.
 
     The capture set is every capture already recorded (`previous`) plus every MP3 in
     `audio_dir`; with `prune`, only the MP3s in `audio_dir`. A capture's duration is the one
     recorded in `previous`; only a capture with none (or every capture, with `remeasure`) is
-    measured from its audio. Its size comes from its audio when present, else `previous`. Raises BuildRefused for an empty
+    measured, from its original in `captures_dir`, never from its MP3. A capture that needed
+    measuring but has no original is listed in `report["no_original"]` when `report` is given. Its size comes from its audio when present, else `previous`. Raises BuildRefused for an empty
     capture set, a prune with no audio directory, and a shorter set without `prune`."""
     previous = previous or {}
     local = set()
@@ -439,10 +459,13 @@ def build(labels_dir=LABELS_DIR, tracklist_path=TRACKLIST_PATH, metadata_path=ME
         recorded = prev.get("duration_seconds", prev.get("duration"))
         duration, size = None, None
         if filename in local:
-            path = os.path.join(audio_dir, filename)
-            size = os.path.getsize(path)
-            if recorded is None or remeasure:
-                duration = probe_duration(ffprobe, path)
+            size = os.path.getsize(os.path.join(audio_dir, filename))
+        if recorded is None or remeasure:
+            original = original_path(filename, captures_dir)
+            if original:
+                duration = probe_duration(ffprobe, original)
+            elif report is not None:
+                report.setdefault("no_original", []).append(filename)
         if duration is None:
             duration = recorded
         if size is None:
@@ -493,19 +516,26 @@ def main(argv=None):
     parser.add_argument("--prune", action="store_true",
                         help="drop recorded captures whose audio is not in NETRADIO_MP3_DIR")
     parser.add_argument("--remeasure", action="store_true",
-                        help="measure every capture whose audio is present again, recorded or not")
+                        help="measure every capture whose original is present again, "
+                             "recorded or not")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
     audio_dir = read_setting("NETRADIO_MP3_DIR")
     audio_dir = os.path.expanduser(audio_dir) if audio_dir else None
+    captures_dir = read_setting("NETRADIO_CAPTURES_DIR")
+    if captures_dir:
+        captures_dir = os.path.expanduser(captures_dir)
+    elif audio_dir:
+        captures_dir = os.path.dirname(audio_dir.rstrip(os.sep))
     ffprobe = read_setting("NETRADIO_FFPROBE") or shutil.which("ffprobe")
+    report = {}
     try:
         previous = load_previous(args.out)
         data = build(labels_dir=args.labels_dir, tracklist_path=args.tracklist,
                      metadata_path=args.metadata, previous=previous, audio_dir=audio_dir,
                      ffprobe=ffprobe, prune=args.prune,
-                     remeasure=args.remeasure)
+                     remeasure=args.remeasure, captures_dir=captures_dir, report=report)
     except BuildRefused as exc:
         print("REFUSING TO WRITE: %s" % exc)
         return 1
@@ -516,8 +546,11 @@ def main(argv=None):
     missing = [r["filename"] for r in data["files"] if r["duration_seconds"] is None]
     print("%d captures, %d placed on the timeline, %d primary"
           % (len(data["files"]), placed, len(data["primary_files"])))
+    if report.get("no_original"):
+        print("not measured, no original recording in NETRADIO_CAPTURES_DIR (recorded duration "
+              "kept): %s" % ", ".join(report["no_original"]), file=sys.stderr)
     if missing:
-        print("no duration (none recorded, and no audio measured): %s" % ", ".join(missing),
+        print("no duration (none recorded, and no original measured): %s" % ", ".join(missing),
               file=sys.stderr)
     if args.dry_run:
         print("dry-run: nothing written")

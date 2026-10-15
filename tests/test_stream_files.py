@@ -198,6 +198,14 @@ class BuildTests(LabelDirCase):
                 fh.write(b"x" * 7)
         return audio
 
+    def _originals(self, *names):
+        captures = os.path.join(self.tmp, "captures")
+        os.makedirs(captures, exist_ok=True)
+        for name in names:
+            with open(os.path.join(captures, name), "wb") as fh:
+                fh.write(b"w" * 3)
+        return captures
+
     def test_recorded_duration_is_reused_not_remeasured(self):
         # Measured once and committed: a recorded duration wins over the audio, so ffprobe's
         # last-digit drift never reaches the file. The size still comes from the audio.
@@ -207,25 +215,89 @@ class BuildTests(LabelDirCase):
         row = data["files"][0]
         self.assertEqual((row["duration_seconds"], row["size"]), (1.0, 7))
 
-    def test_capture_with_no_duration_is_measured(self):
+    def test_capture_with_no_duration_is_measured_from_its_original(self):
+        # The stub prints the path it was given, so the test sees which file was measured.
         data = sf.build(previous={"da.mp3": {"size": 1}},
-                        audio_dir=self._audio("da.mp3"), ffprobe=self._stub("echo 12.5"),
+                        audio_dir=self._audio("da.mp3"), captures_dir=self._originals("da.wav"),
+                        ffprobe=self._stub('case "$*" in *da.wav*) echo 12.5;; *) echo 99;; esac'),
                         **self._inputs())
         row = data["files"][0]
         self.assertEqual((row["duration_seconds"], row["duration"], row["size"]), (12.5, 12.5, 7))
 
-    def test_remeasure_measures_a_recorded_capture_again(self):
+    def test_the_mp3_is_never_measured(self):
+        # 9.1A2: with the MP3 here and no original, nothing is measured; the capture is named.
+        report = {}
         data = sf.build(previous={"da.mp3": {"duration_seconds": 1.0}},
-                        audio_dir=self._audio("da.mp3"), ffprobe=self._stub("echo 12.5"),
-                        remeasure=True, **self._inputs())
+                        audio_dir=self._audio("da.mp3"), captures_dir=self._originals(),
+                        ffprobe=self._stub("echo 12.5"), remeasure=True, report=report,
+                        **self._inputs())
+        self.assertEqual(data["files"][0]["duration_seconds"], 1.0)
+        self.assertEqual(report["no_original"], ["da.mp3"])
+
+    def test_remeasure_measures_a_recorded_capture_again_from_its_original(self):
+        data = sf.build(previous={"da.mp3": {"duration_seconds": 1.0}},
+                        audio_dir=self._audio("da.mp3"), captures_dir=self._originals("da.wav"),
+                        ffprobe=self._stub("echo 12.5"), remeasure=True, **self._inputs())
         self.assertEqual(data["files"][0]["duration_seconds"], 12.5)
+
+    def test_a_recorded_capture_with_no_original_is_not_named_without_remeasure(self):
+        report = {}
+        sf.build(previous={"da.mp3": {"duration_seconds": 1.0}}, captures_dir=self._originals(),
+                 ffprobe=self._stub("echo 12.5"), report=report, **self._inputs())
+        self.assertEqual(report, {})
 
     def test_failing_probe_falls_back_to_the_recorded_duration(self):
         data = sf.build(previous={"da.mp3": {"duration": 1.0, "size": 1}},
-                        audio_dir=self._audio("da.mp3"), ffprobe=self._stub("exit 1"),
-                        remeasure=True, **self._inputs())
+                        audio_dir=self._audio("da.mp3"), captures_dir=self._originals("da.wav"),
+                        ffprobe=self._stub("exit 1"), remeasure=True, **self._inputs())
         row = data["files"][0]
         self.assertEqual((row["duration_seconds"], row["size"]), (1.0, 7))
+
+    def test_original_path_spellings(self):
+        captures = self._originals("d-14Nov10-b.au", "dnb-14Nov02-a.au", "d019-040.wav")
+        self.assertEqual(sf.original_path("d201-221.14Nov10-b.mp3", captures),
+                         os.path.join(captures, "d-14Nov10-b.au"))
+        self.assertEqual(sf.original_path("d198-218.14Nov02-a.mp3", captures),
+                         os.path.join(captures, "dnb-14Nov02-a.au"))
+        self.assertEqual(sf.original_path("d019-040.mp3", captures),
+                         os.path.join(captures, "d019-040.wav"))
+        self.assertIsNone(sf.original_path("d507-000b.mp3", captures))
+        self.assertIsNone(sf.original_path("d019-040.mp3", None))
+
+    def test_labels_place_a_primary_capture_never_the_timing_range(self):
+        # 9.1A3: the Timing range (minutes 50-70) disagrees with the labels (100 s to 180 s);
+        # the labels place the capture, and the range is carried only in its own fields.
+        self.write_labels("da", [(0.0, "file start sync: da.wav 100"),
+                                (80.0, "file end: da")])
+        tracklist = os.path.join(self.tmp, "tracklist.txt")
+        with open(tracklist, "w", encoding="utf-8") as fh:
+            fh.write("x   da.wav\tPRIMARY 50-70\n")
+        metadata = os.path.join(self.tmp, "track-metadata.json")
+        with open(metadata, "w", encoding="utf-8") as fh:
+            json.dump({"tracks": {}}, fh)
+        row = sf.build(labels_dir=self.labels, tracklist_path=tracklist, metadata_path=metadata,
+                       previous={"da.mp3": {"duration_seconds": 80.0}})["files"][0]
+        self.assertTrue(row["is_primary"])
+        self.assertEqual((row["master_start_seconds"], row["master_end_seconds"]), (100.0, 180.0))
+        self.assertEqual((row["timing_range_start_seconds"], row["timing_range_end_seconds"]),
+                         (3000.0, 4200.0))
+
+    def test_cross_file_placement_beats_the_captures_own_start_label(self):
+        # 9.1A4, in the shape the real disagreements take: the capture's own label file seeds
+        # it at local 0.0, and a `note` row in another capture's file places it differently.
+        self.write_labels("da", [(0.0, "file start sync: da.wav 1000"),
+                                (237.408, "note db: file start sync: db.wav 963.763 verified da")])
+        self.write_labels("db", [(0.0, "file start sync: db.wav 963.763 verified da")])
+        tracklist = os.path.join(self.tmp, "tracklist.txt")
+        with open(tracklist, "w", encoding="utf-8") as fh:
+            fh.write("x   da.wav\tPRIMARY 1-3\n")
+        metadata = os.path.join(self.tmp, "track-metadata.json")
+        with open(metadata, "w", encoding="utf-8") as fh:
+            json.dump({"tracks": {}}, fh)
+        rows = {r["filename"]: r for r in sf.build(
+            labels_dir=self.labels, tracklist_path=tracklist, metadata_path=metadata,
+            previous={"da.mp3": {}, "db.mp3": {}})["files"]}
+        self.assertAlmostEqual(rows["db.mp3"]["master_start_seconds"], 1237.408)
 
     def test_no_duration_and_no_audio_writes_null_and_names_it_on_stderr(self):
         out = os.path.join(self.tmp, "stream-files.json")
@@ -233,7 +305,8 @@ class BuildTests(LabelDirCase):
             json.dump({"files": [{"filename": "da.mp3", "size": 1}]}, fh)
         inputs = self._inputs()
         err = io.StringIO()
-        with unittest.mock.patch.dict(os.environ, {"NETRADIO_MP3_DIR": os.path.join(self.tmp, "none")}), \
+        with unittest.mock.patch.dict(os.environ, {"NETRADIO_MP3_DIR": os.path.join(self.tmp, "none"),
+                                                     "NETRADIO_CAPTURES_DIR": os.path.join(self.tmp, "none")}), \
                 unittest.mock.patch("sys.stdout"), unittest.mock.patch("sys.stderr", err):
             rc = sf.main(["--out", out, "--labels-dir", inputs["labels_dir"],
                           "--tracklist", inputs["tracklist_path"],
@@ -257,7 +330,8 @@ class BuildTests(LabelDirCase):
         with open(path, "w", encoding="utf-8") as fh:
             fh.write("<<<<<<< HEAD\n")
         inputs = self._inputs()
-        with unittest.mock.patch.dict(os.environ, {"NETRADIO_MP3_DIR": os.path.join(self.tmp, "none")}), \
+        with unittest.mock.patch.dict(os.environ, {"NETRADIO_MP3_DIR": os.path.join(self.tmp, "none"),
+                                                     "NETRADIO_CAPTURES_DIR": os.path.join(self.tmp, "none")}), \
                 unittest.mock.patch("sys.stdout"):
             rc = sf.main(["--out", path, "--labels-dir", inputs["labels_dir"],
                           "--tracklist", inputs["tracklist_path"],
