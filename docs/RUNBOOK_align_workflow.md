@@ -174,7 +174,9 @@ whole-pair listening pass on top of this per-point flow — open
 
 **The Mac native surface** ([`PLAN_align_tool.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_align_tool.md) §6.9-b) is built — `make review-app-run` compiles
 (`swiftc` + Command Line Tools, no Xcode) and launches `native/align_review_app`
-against `NETRADIO_ALIGN_URL` (default `http://127.0.0.1:8766`): the same pair
+against `NETRADIO_ALIGN_URL`, else a URL derived from `NETRADIO_ALIGN_HOST` and
+`NETRADIO_ALIGN_PORT` (a `0.0.0.0` bind is reached on `127.0.0.1`; default
+`http://127.0.0.1:8766`): the same pair
 picker / anchor selection / in-waveform notes as the web page, but playback is
 **sample-locked by `AVAudioEngine`** — no drift corrector, the drift readout is
 telemetry — and keeps playing with the display asleep (the iOS-web failure mode
