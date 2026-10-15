@@ -253,6 +253,65 @@ class BuildTests(LabelDirCase):
         row = data["files"][0]
         self.assertEqual((row["duration_seconds"], row["size"]), (1.0, 7))
 
+    def test_a_failed_probe_is_reported(self):
+        report = {}
+        sf.build(previous={"da.mp3": {}}, captures_dir=self._originals("da.wav"),
+                 ffprobe=self._stub("exit 1"), report=report, **self._inputs())
+        self.assertEqual(report["probe_failed"], ["da.mp3"])
+
+    def _main(self, *extra, ffprobe):
+        out = os.path.join(self.tmp, "stream-files.json")
+        with open(out, "w", encoding="utf-8") as fh:
+            json.dump({"files": [{"filename": "da.mp3", "duration_seconds": 1.0}]}, fh)
+        with open(out, encoding="utf-8") as fh:
+            before = fh.read()
+        inputs = self._inputs()
+        stdout, err = io.StringIO(), io.StringIO()
+        env = {"NETRADIO_MP3_DIR": os.path.join(self.tmp, "none"),
+               "NETRADIO_CAPTURES_DIR": self._originals("da.wav"), "NETRADIO_FFPROBE": ffprobe}
+        with unittest.mock.patch.dict(os.environ, env), \
+                unittest.mock.patch("sys.stdout", stdout), unittest.mock.patch("sys.stderr", err):
+            rc = sf.main(["--out", out, "--labels-dir", inputs["labels_dir"],
+                          "--tracklist", inputs["tracklist_path"],
+                          "--metadata", inputs["metadata_path"], *extra])
+        with open(out, encoding="utf-8") as fh:
+            after = fh.read()
+        return rc, before, after, stdout.getvalue(), err.getvalue()
+
+    def test_remeasure_refuses_without_a_working_ffprobe(self):
+        rc, before, after, out, _err = self._main(
+            "--remeasure", ffprobe=os.path.join(self.tmp, "no-such-ffprobe"))
+        self.assertEqual(rc, 1)
+        self.assertEqual(before, after)
+        self.assertIn("REFUSING TO WRITE", out)
+
+    def test_main_names_a_capture_its_probe_could_not_measure(self):
+        # `-version` answers, so the run goes ahead; the measurement itself fails.
+        stub = self._stub('[ "$1" = "-version" ] && exit 0; exit 1')
+        rc, _before, after, _out, err = self._main("--remeasure", ffprobe=stub)
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(after)["files"][0]["duration_seconds"], 1.0)
+        self.assertIn("ffprobe could not measure", err)
+        self.assertIn("da.mp3", err)
+
+    def test_an_overridden_own_start_label_is_reported(self):
+        self.write_labels("da", [(0.0, "file start sync: da.wav 1000"),
+                                (237.408, "note db: file start sync: db.wav 963.763 verified da")])
+        self.write_labels("db", [(0.0, "file start sync: db.wav 963.763 verified da")])
+        tracklist = os.path.join(self.tmp, "tracklist.txt")
+        with open(tracklist, "w", encoding="utf-8") as fh:
+            fh.write("x   da.wav\tPRIMARY 1-3\n")
+        metadata = os.path.join(self.tmp, "track-metadata.json")
+        with open(metadata, "w", encoding="utf-8") as fh:
+            json.dump({"tracks": {}}, fh)
+        report = {}
+        sf.build(labels_dir=self.labels, tracklist_path=tracklist, metadata_path=metadata,
+                 previous={"da.mp3": {}, "db.mp3": {}}, report=report)
+        self.assertEqual(list(report["overridden"]), ["db.mp3"])
+        seed, placed = report["overridden"]["db.mp3"]
+        self.assertAlmostEqual(seed, 963.763)
+        self.assertAlmostEqual(placed, 1237.408)
+
     def test_original_path_spellings(self):
         captures = self._originals("d-14Nov10-b.au", "dnb-14Nov02-a.au", "d019-040.wav")
         self.assertEqual(sf.original_path("d201-221.14Nov10-b.mp3", captures),

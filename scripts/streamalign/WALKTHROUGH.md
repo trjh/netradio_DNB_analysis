@@ -108,7 +108,7 @@ turns them into (a) the answer key and (b) the list of pairs overlaid by hand.
 
 | function | role |
 |---|---|
-| `resolve_starts()` | `{stem: master_start_seconds}` — a port of an earlier timeline parser (`parse_file_timeline`, not in this repo) (3 passes). **Pass 1** seeds files whose sync row sits at local 0.0 (the number *is* the master start). **Pass 2** fills plain `file start` fallbacks. **Pass 3** iteratively resolves syncs expressed in another file's coordinates (`master = owner_master + row_seconds`), so chains like `d000-018 → … → d336-355` resolve. |
+| `resolve_starts()` | `{stem: master_start_seconds}` — read from `scripts/stream_files.py`'s `resolve_timeline()`, this repo's one label-timeline parser, keyed by stem (3 passes). **Pass 1** seeds files whose sync row sits at local 0.0 (the number *is* the master start). **Pass 2** fills plain `file start` fallbacks. **Pass 3** iteratively resolves syncs expressed in another file's coordinates (`master = owner_master + row_seconds`), so chains like `d000-018 → … → d336-355` resolve. |
 | `alignment_edges()` | `[(stem, verified_against_stem), …]` from the `verified [by] X` notes — the pairs aligned by hand, i.e. the graph edges + P1 validation pairs |
 | `_verified_refs(text)` | pull capture-looking tokens after `verified` |
 | `_read_label_rows`, `_stem` | tsv reading / name normalization |

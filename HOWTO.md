@@ -247,10 +247,12 @@ changes `stream-files.json`: `make stream-data` rebuilds both files together.
 Each capture's duration is the length of its original `.wav` or `.au` (in
 `NETRADIO_CAPTURES_DIR`, by default the parent of `NETRADIO_MP3_DIR`), never its MP3, and it is
 measured once: a recorded duration is kept. To measure every capture again from its original,
-run `python3 scripts/stream_files.py --remeasure`.
+run `python3 scripts/stream_files.py --remeasure`. It refuses, and writes nothing, when no working
+`ffprobe` is found, and names every capture whose original `ffprobe` could not measure.
 
 A capture's place comes only from its labels. Where another capture's labels place it at one
-master time and its own start label says another, the other capture's placement wins. The
+master time and its own start label says another, the other capture's placement wins. Each run
+prints one line per capture whose own start label was overridden, so a new disagreement shows. The
 Timing section of `tracklist-2017.txt` only marks the primary captures and gives each one's
 approximate minute range, which the file carries beside the label placement, never in its place.
 

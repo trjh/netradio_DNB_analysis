@@ -165,12 +165,14 @@ def _bare(key):
     return key[:-4] if key.lower().endswith(".mp3") else key
 
 
-def resolve_timeline(label_rows, key=normalize_audio_filename):
+def resolve_timeline(label_rows, key=normalize_audio_filename, overrides=None):
     """Resolve the label rows to (starts, ends, current_by_path).
 
     `key` turns a filename written in a label into the dict key (the `.mp3` timeline key by
     default; a caller that keys by bare stem passes its own). `current_by_path` maps each
-    label file to the capture whose coordinates its rows are in.
+    label file to the capture whose coordinates its rows are in. When `overrides` is a dict,
+    it is filled with `{key: (own_seed, placed)}` for each capture whose own start label a
+    cross-file row overrode.
     """
     starts, ends, current_by_path = {}, {}, {}
 
@@ -184,6 +186,7 @@ def resolve_timeline(label_rows, key=normalize_audio_filename):
         if name and master is not None:
             starts[name] = master
             current_by_path.setdefault(row["path"], name)
+    seeds = dict(starts)
 
     # Pass 2: `file start NAME` (physical start, pre-roll included) seeds only a file that
     # has no sync row.
@@ -239,12 +242,17 @@ def resolve_timeline(label_rows, key=normalize_audio_filename):
                     changed = True
         if not changed:
             break
+    if overrides is not None:
+        for name, seed in seeds.items():
+            if abs(starts[name] - seed) > 0.001:
+                overrides[name] = (seed, starts[name])
     return starts, ends, current_by_path
 
 
-def parse_file_timeline(label_rows):
-    """({key: {master_start_seconds, master_end_seconds}}, current_by_path)."""
-    starts, ends, current_by_path = resolve_timeline(label_rows)
+def parse_file_timeline(label_rows, overrides=None):
+    """({key: {master_start_seconds, master_end_seconds}}, current_by_path). `overrides` is
+    filled as `resolve_timeline` fills it."""
+    starts, ends, current_by_path = resolve_timeline(label_rows, overrides=overrides)
     timeline = {name: {"master_start_seconds": starts[name], "master_end_seconds": ends.get(name)}
                 for name in starts}
     return timeline, current_by_path
@@ -401,6 +409,17 @@ def probe_duration(ffprobe, path):
         return None
 
 
+def ffprobe_works(ffprobe):
+    """True when `ffprobe` names a program that answers `-version`."""
+    if not ffprobe:
+        return False
+    try:
+        return subprocess.run([ffprobe, "-version"], stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, timeout=15, check=False).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 class BuildRefused(Exception):
     """The build would lose recorded captures, or cannot read what is recorded."""
 
@@ -427,9 +446,16 @@ def build(labels_dir=LABELS_DIR, tracklist_path=TRACKLIST_PATH, metadata_path=ME
     The capture set is every capture already recorded (`previous`) plus every MP3 in
     `audio_dir`; with `prune`, only the MP3s in `audio_dir`. A capture's duration is the one
     recorded in `previous`; only a capture with none (or every capture, with `remeasure`) is
-    measured, from its original in `captures_dir`, never from its MP3. A capture that needed
-    measuring but has no original is listed in `report["no_original"]` when `report` is given. Its size comes from its audio when present, else `previous`. Raises BuildRefused for an empty
-    capture set, a prune with no audio directory, and a shorter set without `prune`."""
+    measured, from its original in `captures_dir`, never from its MP3. Its size comes from
+    its MP3 when present, else `previous`.
+
+    When `report` is given, it collects `no_original` (captures that needed measuring but have
+    no original), `probe_failed` (captures whose original ffprobe could not measure) and
+    `overridden` (`{capture: (own_seed, placed)}` for each capture whose own start label a
+    cross-file row overrode).
+
+    Raises BuildRefused for an empty capture set, a prune with no audio directory, and a
+    shorter set without `prune`."""
     previous = previous or {}
     local = set()
     if audio_dir and os.path.isdir(audio_dir):
@@ -444,7 +470,10 @@ def build(labels_dir=LABELS_DIR, tracklist_path=TRACKLIST_PATH, metadata_path=ME
         raise BuildRefused("would drop %d recorded capture(s) without --prune: %s"
                            % (len(dropped), ", ".join(dropped)))
 
-    timeline, _ = parse_file_timeline(read_label_rows(labels_dir))
+    overridden = {}
+    timeline, _ = parse_file_timeline(read_label_rows(labels_dir), overrides=overridden)
+    if report is not None and overridden:
+        report["overridden"] = overridden
     specs = [dict(s, filename=resolve_capture_name(s["filename"], files))
              for s in read_primary_specs(tracklist_path)]
     specs = [s for s in specs if s["filename"] in files]
@@ -464,6 +493,8 @@ def build(labels_dir=LABELS_DIR, tracklist_path=TRACKLIST_PATH, metadata_path=ME
             original = original_path(filename, captures_dir)
             if original:
                 duration = probe_duration(ffprobe, original)
+                if duration is None and report is not None:
+                    report.setdefault("probe_failed", []).append(filename)
             elif report is not None:
                 report.setdefault("no_original", []).append(filename)
         if duration is None:
@@ -530,6 +561,10 @@ def main(argv=None):
         captures_dir = os.path.dirname(audio_dir.rstrip(os.sep))
     ffprobe = read_setting("NETRADIO_FFPROBE") or shutil.which("ffprobe")
     report = {}
+    if args.remeasure and not ffprobe_works(ffprobe):
+        print("REFUSING TO WRITE: --remeasure needs a working ffprobe (NETRADIO_FFPROBE, or "
+              "ffprobe on PATH); found %s" % (ffprobe or "none"))
+        return 1
     try:
         previous = load_previous(args.out)
         data = build(labels_dir=args.labels_dir, tracklist_path=args.tracklist,
@@ -546,6 +581,12 @@ def main(argv=None):
     missing = [r["filename"] for r in data["files"] if r["duration_seconds"] is None]
     print("%d captures, %d placed on the timeline, %d primary"
           % (len(data["files"]), placed, len(data["primary_files"])))
+    for name, (seed, placed) in sorted(report.get("overridden", {}).items()):
+        print("%s: its own start label says %.3f; a cross-file row places it at %.3f, which "
+              "wins" % (name, seed, placed))
+    if report.get("probe_failed"):
+        print("ffprobe could not measure the original (recorded duration kept): %s"
+              % ", ".join(report["probe_failed"]), file=sys.stderr)
     if report.get("no_original"):
         print("not measured, no original recording in NETRADIO_CAPTURES_DIR (recorded duration "
               "kept): %s" % ", ".join(report["no_original"]), file=sys.stderr)
