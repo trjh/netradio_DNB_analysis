@@ -450,7 +450,7 @@ def _cmd_track_mix(args):
     print("flagged unreliable: %d %s" % (len(out["flagged"]), out["flagged"]))
     if out["errored"]:
         print("errored: %d %s" % (len(out["errored"]), out["errored"]))
-    print("no original (G4 missing-source signal): %d %s"
+    print("no original (the missing-source signal): %d %s"
           % (len(out["no_original"]), out["no_original"]))
     if args.json:
         with open(args.json, "w", encoding="utf-8") as handle:

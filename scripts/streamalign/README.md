@@ -209,7 +209,7 @@ verification.
   rate tolerance (≤0.005)**; the rest are correctly flagged (gross mismatch / span
   longer than source / too-short region) for hand or 2nd-pass attention. Three
   reliable-but-rate-disagrees tracks (8, 10, 19) are the piecewise/2nd-pass
-  candidates. A further **30 synced tracks have no original file** — the G4
+  candidates. A further **30 synced tracks have no original file** — the
   missing-source signal, surfaced in the same report.
   See [RATE_AXIS_SPIKE.md](./RATE_AXIS_SPIKE.md) — the **rate-axis design note + go/no-go**:
   the rate axis *is* the DTW warp slope (no separate rate-search needed); A7b's open work is

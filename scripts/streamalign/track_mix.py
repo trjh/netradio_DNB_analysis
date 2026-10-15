@@ -525,7 +525,7 @@ def batch_align(track_metadata, sources_dir, labels_dir=None, audio_dir=None,
     `tracks` limits to a subset (default: every track with a T0 sync `rate`). Each
     result is `align_track`'s dict plus `within_tol` (reliable AND |rate_err| ≤
     `rate_tol`). Returns {results, reliable, within_tol, flagged, no_original,
-    errored} where the lists hold track numbers — `no_original` is the G4 signal
+    errored} where the lists hold track numbers — `no_original` is the missing-source signal
     (synced track, no source file)."""
     gt = track_sync_groundtruth(labels_dir)
     nums = tracks if tracks is not None else sorted(
