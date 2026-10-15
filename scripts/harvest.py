@@ -377,6 +377,9 @@ _KEY = re.compile(r"u[0-9a-f]{20}", re.ASCII)
 # The sidecar's format, carried in its `sidecar` field (docs/HARVEST_FEED.md). A JSON named like a
 # sidecar but without this marker is refused, not guessed at: a later format changes the number.
 SIDECAR_FORMAT = 1
+# How long a sidecar whose audio is missing is given before it is refused: a feeder moving a pair
+# renames one file, then the other, and in between the old directory holds half of it.
+PAIR_SETTLE_S = 0.5
 
 
 def file_key(path):
@@ -443,7 +446,8 @@ def read_sidecar(d, name, issues=None, said=None):
         return None, None                    # torn or mid-write: retried next pass
     audio = sidecar.get("audio")
     why = None
-    if sidecar.get("sidecar") != SIDECAR_FORMAT:
+    marker = sidecar.get("sidecar")
+    if type(marker) is not int or marker != SIDECAR_FORMAT:     # not `true`, not `1.0`
         why = ("it carries no \"sidecar\": %d marker (it has %r) -- not a sidecar this "
                "harvester reads" % (SIDECAR_FORMAT, sidecar.get("sidecar")))
     elif sidecar.get("key") != stem:
@@ -463,13 +467,19 @@ def read_sidecar(d, name, issues=None, said=None):
         audio_path = os.path.join(d, audio)
         if os.path.isfile(audio_path):
             return audio_path, sidecar
-        if not os.path.isfile(path):
+        # A pair being moved has one half in each directory for two renames' time: look again
+        # after a moment, and say nothing if either file has changed since.
+        time.sleep(PAIR_SETTLE_S)
+        if os.path.isfile(audio_path) or _load(path, None) != sidecar:
             return None, None                # the pair moved on while we looked: no verdict
         why = "its audio %s is not there" % audio
+    text = "refused %s: %s" % (name, why)
     if issues is not None and (said is None or path not in said):
         if said is not None:
             said.add(path)
-        issues.append({"at": _now(), "key": stem, "issue": "refused %s: %s" % (name, why)})
+        # Once in the list is enough: a sidecar that stays wrong is not news on every run.
+        if not any(isinstance(r, dict) and r.get("issue") == text for r in issues):
+            issues.append({"at": _now(), "key": stem, "issue": text})
     return None, None
 
 

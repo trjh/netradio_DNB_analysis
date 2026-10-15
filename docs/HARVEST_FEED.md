@@ -35,8 +35,8 @@ The first 20 hex characters of the SHA-1 of the URL **as given** — query strin
 `#t=` media fragments included, exactly the string the feed's own record carries. The key of
 every object already in the signature bucket is this rule, and it never changes.
 
-* **The file is `<key>.<ext>`.** The harvester takes the stem as the key. It never computes a
-  key from anything and never parses a fragment; a `url` in the sidecar is data it carries,
+* **The file is `<key>.<ext>`.** The sidecar's stem is the key, and the file it names is
+  `<key>.<ext>`. The harvester never computes a key from anything and never parses a fragment; a `url` in the sidecar is data it carries,
   never something it reads for meaning.
 * The harvester reads only sidecars, and signs only the file each one names. A sidecar is a
   `<key>.json` whose stem has the key's shape, `u` followed by 20 hex characters; any other
@@ -57,14 +57,14 @@ take the file for unfinished).
 
 | Field | Required | Meaning |
 |---|---|---|
-| `sidecar` | yes | the number `1`: the format of this sidecar. A JSON named like a sidecar without it is refused, so a stray file is never guessed at; a later format changes the number |
+| `sidecar` | yes | the integer `1` (not `true`, not `1.0`): the format of this sidecar. A JSON named like a sidecar without it is refused, so a stray file is never guessed at; a later format changes the number |
 | `key` | yes | `u<sha1(url)[:20]>`, equal to the sidecar's own stem |
 | `audio` | yes | the audio file's name, `<key>.<ext>`, in the sidecar's own directory (a name, never a path) |
 | `url` | no | a string: the source URL, fragment included; carried to the ledger and the bucket, never parsed |
 | `title` | no | a string, as the source names it |
 | `artist` | no | a string: the uploader or channel |
 | `duration_s` | no | a finite number: the file's length in seconds, for the length check |
-| `fed_at` | yes | when the sidecar was written |
+| `fed_at` | yes | when the audio was handed over: written with the first sidecar, and kept when the sidecar is rewritten for the same file |
 
 **No sidecar, no signature.** A file no sidecar names is not complete, and the harvester
 does not read it, sign it, check its name, or record it — the sidecar is how the harvester
@@ -72,8 +72,10 @@ knows the feed is finished, and the file it names is the one signed. A sidecar t
 wrong is refused outright, so a feeder bug is visible rather than silent — no ledger row, one
 row in the issues list: a `sidecar` other than `1`, a `key` that differs from the sidecar's
 own stem, a missing `fed_at`, a missing `audio`, an `audio` that is a path or not
-`<key>.<ext>`, and an `audio` file that is not there. A torn or unreadable sidecar is none of
-these — it is the mid-write state again, retried on the next pass.
+`<key>.<ext>`, and an `audio` file that is still not there a moment later (a pair being moved
+is half in each directory for that moment). A refusal already in the issues list is not added
+again. A torn or unreadable sidecar is none of these — it is the mid-write state again,
+retried on the next pass.
 
 ## What the harvester does with a file
 
@@ -236,7 +238,9 @@ Nothing is renamed, moved, or written beside the audio: the ledger is the mark.
 ## The bucket layout
 
 The signature `<key>.npy`, exactly as the pool has always held it, and beside it `<key>.json`
-— the sidecar as the harvester saw it. The key already carries its `u` prefix.
+— the sidecar as the harvester saw it. The key already carries its `u` prefix. A sidecar
+uploaded before the `sidecar` and `audio` fields existed has neither; that is its age, not
+damage, and nothing reads a bucket sidecar's content (only that it is listed).
 
 ## The two files the harvester reads back
 

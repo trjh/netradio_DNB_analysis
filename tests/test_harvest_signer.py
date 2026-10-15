@@ -147,6 +147,8 @@ class _SignerCase(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="signer-")
+        self.addCleanup(setattr, harvest, "PAIR_SETTLE_S", harvest.PAIR_SETTLE_S)
+        harvest.PAIR_SETTLE_S = 0                       # no real wait for a moving pair
         self.audio = os.path.join(self.tmp, "audio")
         os.makedirs(self.audio)
         self.root = os.path.join(self.tmp, "root")      # the policy's root, OUTSIDE the audio
@@ -660,6 +662,8 @@ class TheScan(_SignerCase):
         cases = {
             "no marker": ({"sidecar": None}, "marker"),
             "a later format": ({"sidecar": 2}, "marker"),
+            "true for the marker": ({"sidecar": True}, "marker"),
+            "1.0 for the marker": ({"sidecar": 1.0}, "marker"),
             "no audio": ({"audio": None}, "names no audio"),
             "a path": ({"audio": "sub/{k}.mp3"}, "is a path"),
             "another key's file": ({"audio": "u" + "0" * 20 + ".mp3"}, "not named <key>.<ext>"),
@@ -679,6 +683,34 @@ class TheScan(_SignerCase):
                 rows = [r for r in issues if r.get("key") == key]
                 self.assertEqual(len(rows), 1, rows)
                 self.assertIn(words, rows[0]["issue"])
+
+    def test_a_pair_moving_between_directories_earns_no_row(self):
+        """A feeder moves the audio, then its sidecar. A scan between the two renames sees the
+        sidecar alone, looks again a moment later, and finds it moved: no verdict."""
+        key = _key("https://y/moving")
+        path = self._feed(key)
+        other = os.path.join(self.tmp, "keep")
+        os.makedirs(other)
+        harvest.HARVEST_DIRS = self.audio + os.pathsep + other
+        os.replace(path, os.path.join(other, os.path.basename(path)))
+        sidecar = os.path.join(self.audio, key + ".json")
+
+        def nap(_s):
+            os.replace(sidecar, os.path.join(other, key + ".json"))
+        issues = []
+        with mock.patch.object(harvest.time, "sleep", nap):
+            harvest.read_sidecar(self.audio, key + ".json", issues=issues)
+        self.assertEqual(issues, [])
+
+    def test_a_refusal_already_listed_is_not_added_again(self):
+        """`said` is one run's memory; the issues list is the standing one. A sidecar that stays
+        wrong across runs keeps the one row."""
+        key = _key("https://y/stays-wrong")
+        self._feed(key, sidecar={"sidecar": None})
+        issues = []
+        for _run in range(3):
+            harvest.scan_directories({}, issues=issues, said=set())
+        self.assertEqual(len([r for r in issues if r.get("key") == key]), 1, issues)
 
     def test_a_sidecar_spoiled_between_scan_and_sign_is_refused_once_a_run(self):
         """The run's scan and its sign share one dedupe set: a sidecar that turns bad after the
