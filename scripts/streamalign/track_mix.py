@@ -1,4 +1,5 @@
-"""Original-track ↔ mix ground truth from the hand-marked sync points (G2 / T0).
+"""Original-track ↔ mix ground truth from the hand-marked sync points (T0 in
+docs/PLAN_track_mix.md).
 
 Each original source track was hand-marked where it lines up with the mix, using paired
 labels: `origNNN sync: <label>` (a moment in original track NNN) and
@@ -519,7 +520,7 @@ def align_track(track_num, track_metadata, sources_dir, labels_dir=None,
 
 def batch_align(track_metadata, sources_dir, labels_dir=None, audio_dir=None,
                 hop=2048, tracks=None, rate_tol=0.005):
-    """G2 1st pass at scale: align every synced track that has an original + capture.
+    """The first pass at scale: align every synced track that has an original + capture.
 
     `tracks` limits to a subset (default: every track with a T0 sync `rate`). Each
     result is `align_track`'s dict plus `within_tol` (reliable AND |rate_err| ≤

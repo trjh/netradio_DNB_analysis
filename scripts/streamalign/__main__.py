@@ -19,7 +19,7 @@
       "does the audio confirm the hand labels" check.
 
   python3 -m streamalign track-mix --meta track-metadata.json --sources sources_local
-      G2 1st pass: chroma+DTW-align every synced original to its mix region, grade
+      The first pass: chroma+DTW-align every synced original to its mix region, grade
       the recovered rate against the sync ground truth, and print a per-track table
       + summary (reliable / within-tolerance / flagged / no-original). Needs librosa
       (run with .venv/bin/python). --json writes the full results to a file.
@@ -531,7 +531,7 @@ def main(argv=None):
                     help="seconds of overlap required to grade a pair (else 'adjacent')")
     pv.add_argument("--conf-ok", type=float, default=0.5,
                     help="min normalized-correlation confidence to confirm a pair")
-    pt = sub.add_parser("track-mix", help="G2 1st pass: align synced originals to the mix")
+    pt = sub.add_parser("track-mix", help="the first pass: align synced originals to the mix")
     pt.add_argument("--meta", default="track-metadata.json", help="track-metadata.json path")
     pt.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
     pt.add_argument("--hop", type=int, default=2048, help="chroma hop length")

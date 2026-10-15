@@ -54,7 +54,7 @@ pairs. This is the data everything else is graded against.
 - `clips.py` — render skip-check review clips (A+B across a skip, B bridging the
   gap) into the skip-clip review's `manifest.json` for verifying by ear.
 
-`track_mix.py` (original-track↔mix, G2) parses the hand-marked `origNNN`/`track` sync points
+`track_mix.py` (original-track↔mix) parses the hand-marked `origNNN`/`track` sync points
 into per-track ground truth (the **rate** = mix-seconds per original-second) that
 the chroma+DTW aligner is graded against.
 
@@ -87,7 +87,7 @@ verification.
 . .venv/bin/activate && python -m streamalign align d000-018 d001-026b
 . .venv/bin/activate && python -m streamalign --labels <dir> validate
 . .venv/bin/activate && python -m streamalign track-mix \
-    --meta track-metadata.json --sources sources_local        # G2 1st pass (needs librosa)
+    --meta track-metadata.json --sources sources_local        # the first pass (needs librosa)
 . .venv/bin/activate && python -m streamalign match-hints d376-395 72 --dry-run
 ```
 
@@ -106,7 +106,7 @@ verification.
   end-to-end, no overlap to compare — listed apart, not an error), then a summary
   (graded / confirmed / suspect / adjacent / skipped). The headline "does the audio
   confirm the hand labels" check.
-- **`track-mix`** — G2 1st pass: chroma+DTW-align every synced original to its mix
+- **`track-mix`** — the first pass: chroma+DTW-align every synced original to its mix
   region, grade the recovered rate against the sync ground truth, and print a
   per-track table (rate / gt_rate / err / confidence / cost / reliable / within-tol)
   plus a summary (reliable, within-tolerance, flagged, no-original). `--json` writes
@@ -198,11 +198,11 @@ verification.
 - **P4 discovery + global solve** — skip-aware edge measurement (offset over the
   earliest skip-free segment) + consistency-based outlier rejection;
   `placement_diagnostics` separates corroborated from uncorroborated placements.
-- **G2 / T1 original-track↔mix rate** — chroma + subsequence-DTW recovers the
+- **T1 original-track↔mix rate** — chroma + subsequence-DTW recovers the
   mix/original rate where waveform correlation cannot, with a **precision-first
   reliability gate** (`is_reliable`: warp-path R² ≥ 0.999 **and** mean DTW cost ≤
   0.03) so the engine flags rather than emits a wrong rate.
-- **G2 / T2 1st pass at scale** (`batch_align` / `track-mix` CLI) — align every
+- **T2, the first pass at scale** (`batch_align` / `track-mix` CLI) — align every
   synced original to the mix region of the capture that actually **contains** its
   master span (not blindly `source_files[0]`, which is ordered by overlap). Of the 26
   synced tracks with an original on disk: **18 pass the gate, 15 within the strict
@@ -211,7 +211,7 @@ verification.
   reliable-but-rate-disagrees tracks (8, 10, 19) are the piecewise/2nd-pass
   candidates. A further **30 synced tracks have no original file** — the G4
   missing-source signal, surfaced in the same report.
-  See [RATE_AXIS_SPIKE.md](./RATE_AXIS_SPIKE.md) — the **A7a rate-axis design note + go/no-go**:
+  See [RATE_AXIS_SPIKE.md](./RATE_AXIS_SPIKE.md) — the **rate-axis design note + go/no-go**:
   the rate axis *is* the DTW warp slope (no separate rate-search needed); A7b's open work is
   **piecewise segmentation** (start on tracks 8/10/19) + polarity, not rate discovery.
 

@@ -213,7 +213,7 @@ optional manual cross-check.
 **A:**
 
 ```bash
-. .venv/bin/activate && python -m streamalign track-mix --tracks <NNN>   # original↔mix rate (G2; needs librosa)
+. .venv/bin/activate && python -m streamalign track-mix --tracks <NNN>   # original↔mix rate (needs librosa)
 ```
 
 **What you get:** a printed report of each original's measured rate/offset vs the mix (add
