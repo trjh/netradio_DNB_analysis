@@ -7,8 +7,9 @@
 The harvester knows directories, and nothing else. `NETRADIO_HARVEST_DIRS` (in `.env`) names
 one or more absolute directories, `:`-separated; the loop reads the TOP LEVEL of each and
 writes nothing into any of them. An audio file is `<key>.<ext>`, and beside it the feeder
-leaves `<key>.json`, the sidecar — written after the audio's final rename, so a file whose
-sidecar has not landed yet is simply not finished, and is neither read nor signed. The sidecar
+leaves `<key>.json`, the sidecar, which names the file in its `audio` field — written after
+the audio's final rename, so a file whose sidecar has not landed yet is simply not finished,
+and is neither read nor signed. The sidecar
 is the only notice the harvester takes: it never reads any queue, index or library to decide
 what to work on, and it is not responsible for moving audio into or out of the directories.
 The full contract, written for whatever fills the directories, is
@@ -373,6 +374,12 @@ register_caches()                 # at import: the wrapper sources .env before a
 # way (sigstore filters on it) -- a stem of any other shape would file a signature where the
 # pool cannot see it, and a signature nobody can list is a signature nobody can score.
 _KEY = re.compile(r"u[0-9a-f]{20}", re.ASCII)
+# The sidecar's format, carried in its `sidecar` field (docs/HARVEST_FEED.md). A JSON named like a
+# sidecar but without this marker is refused, not guessed at: a later format changes the number.
+SIDECAR_FORMAT = 1
+# How long a sidecar whose audio is missing is given before it is refused: a feeder moving a pair
+# renames one file, then the other, and in between the old directory holds half of it.
+PAIR_SETTLE_S = 0.5
 
 
 def file_key(path):
@@ -417,6 +424,63 @@ def _hours(seconds):
     if seconds > _PRINTABLE_MAX_S:
         return "beyond any real length"
     return "%.1f h" % (seconds / 3600.0)
+
+
+def read_sidecar(d, name, issues=None, said=None):
+    """The sidecar `name` in directory `d`, checked. Returns `(audio_path, sidecar)` when it is a
+    finished hand-over, else `(None, None)`.
+
+    Only a `<key>.json` of the key's shape (`u` + 20 hex) is a sidecar at all; any other name
+    (another tool's `<key>.info.json`, a `notes.json`) is not looked at, and returns quietly. A
+    torn or unreadable one is the mid-write state, retried next pass, also quietly. Every other
+    flaw is a feeder bug and is refused with one row in `issues` (deduped through `said`, keyed
+    on the sidecar's path): no `"sidecar": 1` marker, a `key` that differs from the name, no
+    `fed_at`, an `audio` that is missing, not a plain file name in the sidecar's own directory,
+    or not `<key>.<ext>`, and an `audio` file that is not there."""
+    stem = name[:-len(".json")] if name.endswith(".json") else None
+    if not stem or not _KEY.fullmatch(stem):
+        return None, None                    # not a sidecar's name: never looked at
+    path = os.path.join(d, name)
+    sidecar = _load(path, None)
+    if not isinstance(sidecar, dict):
+        return None, None                    # torn or mid-write: retried next pass
+    audio = sidecar.get("audio")
+    why = None
+    marker = sidecar.get("sidecar")
+    if type(marker) is not int or marker != SIDECAR_FORMAT:     # not `true`, not `1.0`
+        why = ("it carries no \"sidecar\": %d marker (it has %r) -- not a sidecar this "
+               "harvester reads" % (SIDECAR_FORMAT, sidecar.get("sidecar")))
+    elif sidecar.get("key") != stem:
+        why = ("its key (%r) differs from its own name -- a feeder bug, not a verdict on the "
+               "audio" % sidecar.get("key"))
+    elif not sidecar.get("fed_at"):
+        why = "it carries no fed_at -- a required field"
+    elif not isinstance(audio, str) or not audio:
+        why = "it names no audio file (the required `audio` field)"
+    elif audio != os.path.basename(audio) or "/" in audio or "\\" in audio:
+        why = ("its audio %r is a path -- it must name a file in the sidecar's own "
+               "directory" % audio)
+    elif (audio.rpartition(".")[0] != stem or not audio.rpartition(".")[2]
+          or audio == name):
+        why = "its audio %r is not named <key>.<ext> for its key" % audio
+    else:
+        audio_path = os.path.join(d, audio)
+        if os.path.isfile(audio_path):
+            return audio_path, sidecar
+        # A pair being moved has one half in each directory for two renames' time: look again
+        # after a moment, and say nothing if either file has changed since.
+        time.sleep(PAIR_SETTLE_S)
+        if os.path.isfile(audio_path) or _load(path, None) != sidecar:
+            return None, None                # the pair moved on while we looked: no verdict
+        why = "its audio %s is not there" % audio
+    text = "refused %s: %s" % (name, why)
+    if issues is not None and (said is None or path not in said):
+        if said is not None:
+            said.add(path)
+        # Once in the list is enough: a sidecar that stays wrong is not news on every run.
+        if not any(isinstance(r, dict) and r.get("issue") == text for r in issues):
+            issues.append({"at": _now(), "key": stem, "issue": text})
+    return None, None
 
 
 def _expect_s(sidecar):
@@ -1330,16 +1394,15 @@ def scan_directories(ledger, issues=None, said=None):
     whichever copy changes -- until only one copy remains, and an issues row names the
     copies once.
 
-    THE COMPLETENESS RULE: a file with no sidecar beside it is not finished, and is neither
-    read nor logged. The sidecar is how the harvester knows the feeder is done with the file;
+    THE SIDECAR NAMES THE FILE. The scan reads only sidecars -- `<key>.json` of the key's shape
+    -- and each names its audio in `audio`; that one file is the hand-over, and nothing else in
+    a directory is ever looked at, whatever its name: a download's temporaries, another tool's
+    JSON, a thumbnail. The sidecar is how the harvester knows the feeder is done with the file;
     a torn or unreadable one is a transient state, not a refusal, and is simply retried next
-    pass. Two things ARE refused, loudly, because a feeder must hear about its own bugs: a
-    sidecar whose `key` differs from the file's stem, and a stem that is not a key's shape
-    (`u` + 20 hex). Both land in `issues` (deduped per run through `said`) -- a silent refusal
-    of a file the feeder thinks it delivered is a wall the feeder cannot see.
-
-    A name ending in `.part` is skipped without a row, whatever its stem: it is a download
-    still in progress, feeder state rather than a feeder bug.
+    pass. A sidecar the feeder got wrong is refused loudly (`read_sidecar` lists how), because a
+    feeder must hear about its own bugs: each refusal lands in `issues` (deduped per run through
+    `said`) -- a silent refusal of a file the feeder thinks it delivered is a wall the feeder
+    cannot see.
 
     The TOP LEVEL only: a subdirectory is never read, whatever it holds.
     """
@@ -1359,48 +1422,10 @@ def scan_directories(ledger, issues=None, said=None):
         except OSError:
             continue
         for name in names:
-            path = os.path.join(d, name)
-            if not os.path.isfile(path):
-                continue                     # never a subdirectory, however tempting
-            if name.endswith(".json"):
-                continue                     # a sidecar is not audio
-            if name.endswith(".part"):
-                continue                     # a download in progress: feeder state, not a bug
-            stem = name.rsplit(".", 1)[0]
-            if not _KEY.fullmatch(stem):
-                if path not in said and issues is not None:
-                    said.add(path)
-                    issues.append({"at": _now(), "key": stem,
-                                   "issue": "refused %s: the file's stem is not a key "
-                                            "(u + 20 hex) -- a signature filed under it would "
-                                            "be invisible to the pool's own listing" % name})
-                continue
-            sidecar_path = os.path.join(d, stem + ".json")
-            if not os.path.isfile(sidecar_path):
-                continue                     # incomplete: not read, not signed, not logged
-            sidecar = _load(sidecar_path, None)
-            if not isinstance(sidecar, dict):
-                continue                     # torn or mid-write: retried next pass
-            if sidecar.get("key") != stem:
-                if path not in said and issues is not None:
-                    said.add(path)
-                    issues.append({"at": _now(), "key": stem,
-                                   "issue": "refused %s: its sidecar's key (%r) differs from "
-                                            "the file's stem -- a feeder bug, not a verdict on "
-                                            "the audio" % (name, sidecar.get("key"))})
-                continue
-            if not sidecar.get("fed_at"):
-                # `fed_at` is required of the feeder (docs/HARVEST_FEED.md) -- the record of
-                # when the hand-over was made, which the backfill that synthesises sidecars
-                # for the old pool writes too. Refused loudly rather than silently skipped: a
-                # feeder that forgot one line of the contract must hear about it, not watch
-                # its file sit unsigned with no row and no reason.
-                if path not in said and issues is not None:
-                    said.add(path)
-                    issues.append({"at": _now(), "key": stem,
-                                   "issue": "refused %s: its sidecar carries no fed_at -- the "
-                                            "one required field it is missing" % name})
-                continue
+            path, _sidecar = read_sidecar(d, name, issues=issues, said=said)
+            if path is None:
+                continue                     # not a finished hand-over: see read_sidecar
+            stem = name[:-len(".json")]
             try:
                 st = os.stat(path)
             except OSError:
@@ -1461,7 +1486,7 @@ def _note_copies(key, found, issues, said):
 
 # --- signing ------------------------------------------------------------------------------------
 
-def sign_file(path, issues=None, publish=True):
+def sign_file(path, issues=None, publish=True, said=None):
     """Sign one audio file: decode it (in the child), upload the signature and the sidecar
     beside it in the bucket, and write the ledger row. Returns `(chroma, samples)` when the
     file is signed -- the chroma to score, the decoded samples as a memory map so the caller
@@ -1501,18 +1526,14 @@ def sign_file(path, issues=None, publish=True):
     _LAST_CHILD.clear()
     key = file_key(path)
     sidecar_path = os.path.join(os.path.dirname(path), key + ".json")
-    sidecar = _load(sidecar_path, None)
-    if not isinstance(sidecar, dict) or sidecar.get("key") != key:
-        return None, None                    # torn or mismatched: the scan's refusals cover it
-    if not sidecar.get("fed_at"):
-        # The one required field, missing at the last moment: the same refusal the scan
-        # makes, visible from this path too -- the hand tool must not tell the operator to
-        # consult an issues list it never wrote to.
-        if issues is not None:
-            issues.append({"at": _now(), "key": key,
-                           "issue": "refused %s: its sidecar carries no fed_at -- the one "
-                                    "required field it is missing"
-                                    % os.path.basename(path)})
+    # The same checks the scan makes, on the sidecar as it reads NOW; a refusal is written to
+    # `issues` from this path too -- the hand tool must not tell the operator to consult an
+    # issues list it never wrote to. `said` is the run's dedupe set, shared with its scan, so a
+    # sidecar spoiled between the scan and the sign is still refused once a run. A sidecar that
+    # names another file is not this file's.
+    named, sidecar = read_sidecar(os.path.dirname(path), key + ".json", issues=issues,
+                                  said=said)
+    if named is None or os.path.basename(named) != os.path.basename(path):
         return None, None
     # Not the scan's copy: the sidecar as it reads now, validated by `_expect_s` (a claim that
     # is not a length makes no claim, and no claim is never a mismatch) -- the docstring's
@@ -1603,30 +1624,16 @@ _said_vanished = set()
 
 
 def find_file(key):
-    """The file for `key` in the configured directories: `<key>.<ext>` with a complete
-    sidecar beside it, or None. The hand tool's finder -- the scan answers "what wants a
-    sign", while --sign-one answers "where is this key's file", which a row that already
-    covers it must not hide. It admits only what the scan admits: a key of the pool's
-    shape (u + 20 hex) and a finished file, never an in-progress `*.part`."""
+    """The file for `key` in the configured directories: the audio its sidecar `<key>.json`
+    names, or None. The hand tool's finder -- the scan answers "what wants a sign", while
+    --sign-one answers "where is this key's file", which a row that already covers it must not
+    hide. It admits only what the scan admits (`read_sidecar`)."""
     if not _KEY.fullmatch(key or ""):
         return None
     for d in _dirs():
-        try:
-            names = sorted(os.listdir(d))
-        except OSError:
-            continue
-        for name in names:
-            if (name.endswith(".json") or name.endswith(".part")
-                    or name.rsplit(".", 1)[0] != key):
-                continue
-            path = os.path.join(d, name)
-            sidecar = os.path.join(d, key + ".json")
-            if not (os.path.isfile(path) and os.path.isfile(sidecar)):
-                continue
-            data = _load(sidecar, None)
-            if (isinstance(data, dict) and data.get("key") == key
-                    and data.get("fed_at")):
-                return path
+        path, _sidecar = read_sidecar(d, key + ".json")
+        if path is not None:
+            return path
     return None
 
 
@@ -2891,7 +2898,7 @@ def run(args):
             continue
         # The signature the key had before this sign, for the rulings check below.
         before_etag = (load_ledger().get(rec_file["key"]) or {}).get("uploaded_etag")
-        c, samples = sign_file(rec_file["path"], issues=state["issues"])
+        c, samples = sign_file(rec_file["path"], issues=state["issues"], said=said)
         # A stop is never a verdict, and it arrives by either route: this process was signalled
         # (the flag), or only the decode child was (the sentinel error). Checking one and not
         # the other is not a guard -- the row's writer is right below.
@@ -3076,6 +3083,8 @@ def main():
             print("# no file for key %s in the configured directories -- the scan wants %d "
                   "file(s): %s" % (args.sign_one, len(todo),
                                    ", ".join(r["key"] for r in todo[:5]) or "none"))
+            if state.get("issues"):
+                _save(STATE, state)          # the scan's refusal rows, the operator's answer
             return
         sign_file(path, issues=state.setdefault("issues", []))
         row = load_ledger().get(args.sign_one) or {}
