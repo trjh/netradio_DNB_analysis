@@ -7,7 +7,7 @@ every test whichever module happens to declare it.
 **Why it exists.** Many tests called `tempfile.mkdtemp()` or
 `tempfile.NamedTemporaryFile(delete=False)` and never removed what they made. One full run
 left 112 entries and about 200 MB in the temp root, most of it the fixture audio that
-`tests/test_g4_missing_sources.py` builds. Every run added the same again, and a suite left
+`tests/test_missing_sources.py` builds. Every run added the same again, and a suite left
 looping unattended fills the disk. The leak is fixed at every site; this guard is what stops
 the next one.
 

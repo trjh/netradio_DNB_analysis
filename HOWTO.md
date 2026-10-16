@@ -213,7 +213,7 @@ optional manual cross-check.
 **A:**
 
 ```bash
-. .venv/bin/activate && python -m streamalign track-mix --tracks <NNN>   # original↔mix rate (G2; needs librosa)
+. .venv/bin/activate && python -m streamalign track-mix --tracks <NNN>   # original↔mix rate (needs librosa)
 ```
 
 **What you get:** a printed report of each original's measured rate/offset vs the mix (add
@@ -261,7 +261,7 @@ approximate minute range, which the file carries beside the label placement, nev
 **A:**
 
 ```bash
-python3 scripts/g4_missing_sources.py              # gap inventory + sourcing leads
+python3 scripts/missing_sources.py                 # gap inventory + sourcing leads
 ```
 
 **What you get:** an up-to-date list of which original tracks are still missing, with sourcing
@@ -442,5 +442,5 @@ verdict); any other global hook, such as `pre-push`, does not run in this reposi
 | seat an original in a capture (paired sync points) | `streamalign match-hints` → verify in `/align` | notate | `labels/automated/*.match.hints.tsv` |
 | original↔mix rate | `streamalign track-mix` | notate | — (read-only) |
 | **rebuild `track-metadata.json`** | `build_track_metadata.py` | **build** | **`track-metadata.json`** |
-| refresh missing-originals inventory | `g4_missing_sources.py` | build/sourcing | inventory |
+| refresh missing-originals inventory | `missing_sources.py` | build/sourcing | inventory |
 | publish finished labels + refresh sheet | `publish.py <stem>` · manual: `sort_tsv` + `git commit`/`push` + Reload Data | publish | git + sheet |

@@ -1,4 +1,4 @@
-"""G4 — inventory original-audio gaps + carry the sourcing leads (pass 1).
+"""Inventory the original-audio gaps and carry the sourcing leads (pass 1).
 
 Cross-reference the identified tracklist (`track-metadata.json`) against the local
 originals folder (`sources_local/`) and classify every track's source:
@@ -10,12 +10,12 @@ originals folder (`sources_local/`) and classify every track's source:
 - **missing**     — no file at all for that track number.
 
 For each gap we also surface the acquisition leads already recorded in the track
-metadata (`fields`: discogs / spotify / release / year / allmusic), so G4 pass 2
+metadata (`fields`: discogs / spotify / release / year / allmusic), so pass 2
 (sourcing) starts from real pointers rather than a blank search.
 
 This is inventory only — it never downloads or buys anything (by design). Run:
 
-    python3 scripts/g4_missing_sources.py --meta track-metadata.json \\
+    python3 scripts/missing_sources.py --meta track-metadata.json \\
         --sources sources_local [--json out.json]
 """
 
@@ -100,7 +100,7 @@ def _leads(entry):
 
 def _is_identified(artist, title):
     """A gap is sourceable now only if the track is actually identified. Unidentified
-    spans ("Mystery Track N", or no artist and no real title) need G3 first, not G4."""
+    spans ("Mystery Track N", or no artist and no real title) need identifying first."""
     if title and title.strip().lower().startswith("mystery track"):
         return False
     return bool((artist or "").strip()) or bool((title or "").strip())
@@ -136,10 +136,10 @@ def inventory(meta_path, sources_dir):
         counts[r["status"]] += 1
     gaps = [r for r in rows if r["status"] != "have"]
     sourceable = [r["track"] for r in gaps if r["identified"]]
-    needs_g3 = [r["track"] for r in gaps if not r["identified"]]
+    needs_identifying = [r["track"] for r in gaps if not r["identified"]]
     return {"tracks": rows, "summary": counts,
             "gaps": [r["track"] for r in gaps],
-            "sourceable": sourceable, "needs_g3": needs_g3}
+            "sourceable": sourceable, "needs_identifying": needs_identifying}
 
 
 def _fmt_size(n):
@@ -153,7 +153,7 @@ def _fmt_size(n):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="g4_missing_sources", description=__doc__,
+    p = argparse.ArgumentParser(prog="missing_sources", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--meta", default="track-metadata.json")
     p.add_argument("--sources", default="sources_local")
@@ -182,8 +182,8 @@ def main(argv=None):
              len(inv["gaps"]), len(inv["tracks"])))
     print("sourceable now (identified, need acquisition): %d %s"
           % (len(inv["sourceable"]), inv["sourceable"]))
-    print("unidentified gaps (need G3 first): %d %s"
-          % (len(inv["needs_g3"]), inv["needs_g3"]))
+    print("unidentified gaps (need identifying first): %d %s"
+          % (len(inv["needs_identifying"]), inv["needs_identifying"]))
     if args.json:
         with open(args.json, "w", encoding="utf-8") as handle:
             json.dump(inv, handle, indent=2)

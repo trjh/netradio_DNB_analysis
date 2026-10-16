@@ -1,8 +1,8 @@
-# Rate-axis research spike — design note + go/no-go (A7a)
+# Rate-axis research spike — design note + go/no-go
 
 | | |
 |---|---|
-| **What this is** | The G2 "rate axis" research spike (roadmap chunk **A7a**): a short, time-boxed investigation that designs the original↔mix **rate axis** and returns a **go/no-go**, *not* production code. |
+| **What this is** | The "rate axis" research spike: a short, time-boxed investigation that designs the original↔mix **rate axis** and returns a **go/no-go**, *not* production code. |
 | **Date** | 2026-06-21 |
 | **Verdict** | **GO** — but the rate axis already exists; promote A7b to the *remaining* gaps (piecewise segmentation + polarity), not a new rate-search primitive. |
 
@@ -55,7 +55,7 @@ wrong rate.
 The ground truth is the hand-marked `origNNN`/`track` sync pairs → per-track `rate` (the sheet's
 `(trackB−trackA)/(origB−origA)`), via `track_sync_groundtruth()`. The aligner is graded against
 it by `align_track` / `batch_align` (the `track-mix` CLI). Documented results (see
-`scripts/streamalign/README.md` §Status, "G2/T1" and "G2/T2"):
+`scripts/streamalign/README.md` §Status, "T1" and "T2"):
 
 - Of the **26** synced tracks with an original on disk: **18 pass the reliability gate, 15 are
   within the strict rate tolerance (|rate_err| ≤ 0.005)**.

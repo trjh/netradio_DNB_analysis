@@ -1,7 +1,7 @@
 """Audit every hand `origNNN sync:` point against the audio (align-tool calibration).
 
-The hand sync pairs are the G2 ground truth, but they were seated by ear and eye in
-Audacity, where exact seating edits the original's clip head -- so the label-file
+The hand sync pairs are the ground truth for the original↔mix rate, but they were seated
+by ear and eye in Audacity, where exact seating edits the original's clip head -- so the label-file
 bookkeeping (`origNNN start:` rows) can sit hundreds of ms from the audio-exact seat,
 and a mislabeled point has nothing checking it at all. This walks EVERY sync pair in
 every label file and grades it against the audio itself:
