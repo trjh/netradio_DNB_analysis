@@ -6,6 +6,7 @@ compute routes relaying the validator's answers, 404s. Runs against a live
 in-process server on an ephemeral port, with no checkout configured (dark).
 """
 
+import ast
 import http.client
 import json
 import os
@@ -84,6 +85,18 @@ class TestStandaloneServer(unittest.TestCase):
     def test_unknown_routes_404(self):
         self.assertEqual(self._req("GET", "/api/other")[0], 404)
         self.assertEqual(self._req("POST", "/api/align/other")[0], 404)
+
+
+class TestLogLines(unittest.TestCase):
+    def test_stdout_is_line_buffered_before_main(self):
+        # The launcher's log is a file: without this, prints reach it in blocks.
+        with open(os.path.join(REPO, "scripts", "align_server.py"), encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+        block = next((n for n in tree.body if isinstance(n, ast.If)
+                      and ast.unparse(n.test) == "__name__ == '__main__'"), None)
+        self.assertIsNotNone(block, "align_server.py has no __main__ block")
+        self.assertEqual([ast.unparse(s) for s in block.body],
+                         ["sys.stdout.reconfigure(line_buffering=True)", "main()"])
 
 
 class TestPaths(unittest.TestCase):
