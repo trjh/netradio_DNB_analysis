@@ -89,11 +89,12 @@ class TestStandaloneServer(unittest.TestCase):
 
 class TestLogLines(unittest.TestCase):
     def test_stdout_is_line_buffered_before_main(self):
-        # The launcher's log is a file: without this, prints reach it in 8 KB blocks.
+        # The launcher's log is a file: without this, prints reach it in blocks.
         with open(os.path.join(REPO, "scripts", "align_server.py"), encoding="utf-8") as f:
             tree = ast.parse(f.read())
-        block = next(n for n in tree.body if isinstance(n, ast.If)
-                     and ast.unparse(n.test) == "__name__ == '__main__'")
+        block = next((n for n in tree.body if isinstance(n, ast.If)
+                      and ast.unparse(n.test) == "__name__ == '__main__'"), None)
+        self.assertIsNotNone(block, "align_server.py has no __main__ block")
         self.assertEqual([ast.unparse(s) for s in block.body],
                          ["sys.stdout.reconfigure(line_buffering=True)", "main()"])
 

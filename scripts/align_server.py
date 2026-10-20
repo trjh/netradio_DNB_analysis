@@ -282,9 +282,9 @@ def main():
 
 
 if __name__ == "__main__":
-    # scripts/run_align.sh sends stdout to a log file, where Python holds it in 8 KB blocks, so a
-    # start's lines could be missing from the log for hours. Line-buffered, each print reaches
-    # the log at once. Here, not in main(): the tests call main() with stdout replaced by a
-    # StringIO, which has no reconfigure.
+    # scripts/run_align.sh sends stdout to a log file, where Python holds it in blocks, so the
+    # start's lines and the access log (log_message prints to stdout) could reach the log late.
+    # Line-buffered, each line reaches it at once. Here, not in main(): the tests call main()
+    # with stdout replaced by a StringIO, which has no reconfigure.
     sys.stdout.reconfigure(line_buffering=True)
     main()
