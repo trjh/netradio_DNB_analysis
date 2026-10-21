@@ -202,8 +202,8 @@ candidates.**
 - **The harvester's directories** — every audio file that lands there is signed and scored
   against the mysteries by `scripts/harvest.py` (see [docs/SCRIPTS.md](./docs/SCRIPTS.md)).
 - **YouTube archive channels** of the era — e.g.
-  <https://www.youtube.com/@back2theoldskoolera999>. Followed as **channel/playlist
-  subscriptions**, they are a candidate *stream*.
+  <https://www.youtube.com/@back2theoldskoolera999>: whole catalogues of the period, so a
+  steady source of candidates.
 - **Discogs**, by label and year: the identified tracks reveal which labels this DJ was playing.
 
 ---
@@ -218,16 +218,14 @@ track: **~55 KB as float16**, versus ~8 MB for the audio. **A 100,000-track pool
 signatures** — and the audio never has to touch the disk at all:
 
 ```
-yt-dlp -o - <url> | ffmpeg -i - -ac 1 -ar 16000 -f wav - | chroma → .npy → discard audio
+ffmpeg -i <audio file> -ac 1 -ar 16000 -f wav - | chroma → .npy → discard audio
 ```
 
 The harvester (`scripts/harvest.py`) works this way: it signs each file once, keeps the float16
 signature, and drops the audio. It is the only way this scales.
 
-**Be a good citizen.** Rate-limit, back off hard on any refusal, and stop when told to. We do
-**not** crawl -- every URL is one a human or a catalogue lookup put in the queue deliberately, and
-the signature cache means each track is fetched **once, ever** —
-that is the point of keeping it.
+The signature cache means each file is signed **once, ever** — that is the point of keeping
+it.
 
 ---
 

@@ -37,10 +37,9 @@ The golden rule of the file naming: **hand** = `<stem>.labels.tsv` (yours, autho
 load it yet**) → `<stem>.starter.labels.tsv` (**ready** to load; `publish` promotes it once the
 owner is published). Both seed states are throwaway and excluded from import/solve/build.
 
-> ✅ **The G5 labelling tooling is now on `main`** — `LABELTRACK` scoping in `sort_tsv.py`
-> (A1), the `streamalign starter` seed emitter (A2), `sort_tsv.py --live` (A3), and
-> `labels/publish.py` (A4) of `docs/ROADMAP_stream_analysis.md`. The manual paths below are kept
-> only as a fallback.
+> ✅ **The labelling tooling is on `main`** — `LABELTRACK` scoping in `sort_tsv.py`, the
+> `streamalign starter` seed emitter, `sort_tsv.py --live`, and `labels/publish.py`. The manual
+> paths below are kept only as a fallback.
 
 ---
 
@@ -91,7 +90,7 @@ file you haven't *published* yet, so it's still provisional — **don't load it 
 **How do I know when a seed is ready to load?** By its name. **`publish`** finalizes it: when you
 publish the owner file (see [Publish](#publish--labels--github--the-google-sheet)), publish
 re-runs `streamalign starter <owner> --ready` against the now-locked labels, which rewrites the
-seed as **`<other>.starter.labels.tsv`** (and removes the `.start-unprocessed` twin). So when you
+seed as **`<other>.starter.labels.tsv`** (and removes the `.start-unprocessed` seed). So when you
 open the next capture: a `.starter.labels.tsv` is **ready** to load and confirm/nudge in Audacity;
 a `.start-unprocessed.labels.tsv` means *publish the owner first*. (This is the accelerator for
 carrying labels forward across any sequential hand-verification.)
