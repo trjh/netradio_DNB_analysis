@@ -215,17 +215,17 @@ signature.**
 
 A chroma signature is a 12×N matrix. At `hop=2048` / 16 kHz that's ~2,300 frames for a 5-minute
 track: **~55 KB as float16**, versus ~8 MB for the audio. **A 100,000-track pool is ~5 GB of
-signatures** — and the audio never has to touch the disk at all:
+signatures** — and the audio need not be kept once it is signed:
 
 ```
 ffmpeg -i <audio file> -ac 1 -ar 16000 -f wav - | chroma → .npy → discard audio
 ```
 
 The harvester (`scripts/harvest.py`) works this way: it signs each file once, keeps the float16
-signature, and drops the audio. It is the only way this scales.
+signature, and keeps none of the decoded audio. It is the only way this scales.
 
-The signature cache means a file is signed again only when it changes or its signature never
-finished landing — that is the point of keeping it.
+The signature cache means a file is signed again when it changes or its signature never
+finished landing, not on every run — that is the point of keeping it.
 
 ---
 

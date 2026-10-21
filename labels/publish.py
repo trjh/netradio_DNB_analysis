@@ -1,5 +1,6 @@
 #!/usr/bin/python3
-"""publish.py — one-command, hard-gated publish of hand labels (ROADMAP G5 / A4).
+"""publish.py — one-command, hard-gated publish of hand labels
+(docs/PLAN_labelling_process.md, Proposal D).
 
 Takes valid edited `<stem>.labels.tsv` files all the way to an open pull request with no
 manual sub-steps: validate → sort → branch → commit → push → open PR. The whole thing is

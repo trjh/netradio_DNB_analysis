@@ -149,7 +149,7 @@ work — what do I run, and how do I read the result?
 
 **How it helps:** these tell you *whether the computed placements are trustworthy* — i.e. does
 the engine reproduce your hand alignments. They change no data; once you trust them, those
-placements feed the auto-label emit (A5) and, after a build, the JSON. Re-run after you add or
+placements feed the auto-label emit and, after a build, the JSON. Re-run after you add or
 verify labels.
 
 **Q:** There are unconfirmed skips (stream discontinuities) — what do these commands actually do?
