@@ -44,8 +44,6 @@ sheetscript/logs
 # Local/private files — not committed
 # NOTE: this repo is PUBLIC. Anything listed here is world-readable the moment it is committed,
 # so keep local paths, working notes and machine-specific config out of it.
-# AGENT.md -- the agent/contributor guide. Carries local paths, machine-specific symlinks and
-# working hypotheses, so it stays out of this public repo and is kept privately elsewhere.
 AGENT.md
 .claude/
 # `.env_vars` -- the variables file's OLD name (renamed `.env` 2026-09); still ignored, because

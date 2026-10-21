@@ -230,7 +230,7 @@ class Environment(CacheBudgetBase):
         os.environ["NETRADIO_DOWNLOAD_ROOT"] = dl
         self.assertIn("download root", self._refused("a", dl))
         self._refused("b", os.path.join(self.tmp, "media"))
-        self.assertIsNotNone(self.cache("c", dir=os.path.join(dl, "unplayed")))
+        self.assertIsNotNone(self.cache("c", dir=os.path.join(dl, "inside")))
         cb._REGISTRY.pop("c")
         os.environ.pop("NETRADIO_DOWNLOAD_ROOT")
         self.assertIsNotNone(self.cache("e", dir=dl))     # the rule reads the variable
