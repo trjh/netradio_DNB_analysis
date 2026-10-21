@@ -90,7 +90,7 @@ file you haven't *published* yet, so it's still provisional — **don't load it 
 **How do I know when a seed is ready to load?** By its name. **`publish`** finalizes it: when you
 publish the owner file (see [Publish](#publish--labels--github--the-google-sheet)), publish
 re-runs `streamalign starter <owner> --ready` against the now-locked labels, which rewrites the
-seed as **`<other>.starter.labels.tsv`** (and removes the `.start-unprocessed` seed). So when you
+seed as **`<other>.starter.labels.tsv`** (and removes the `.start-unprocessed` twin). So when you
 open the next capture: a `.starter.labels.tsv` is **ready** to load and confirm/nudge in Audacity;
 a `.start-unprocessed.labels.tsv` means *publish the owner first*. (This is the accelerator for
 carrying labels forward across any sequential hand-verification.)
