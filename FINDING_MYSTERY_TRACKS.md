@@ -224,8 +224,8 @@ ffmpeg -i <audio file> -ac 1 -ar 16000 -f wav - | chroma → .npy → discard au
 The harvester (`scripts/harvest.py`) works this way: it signs each file once, keeps the float16
 signature, and drops the audio. It is the only way this scales.
 
-The signature cache means each file is signed **once, ever** — that is the point of keeping
-it.
+The signature cache means a file is signed again only when it changes or its signature never
+finished landing — that is the point of keeping it.
 
 ---
 
