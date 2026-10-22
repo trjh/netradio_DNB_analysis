@@ -27,7 +27,10 @@ cd "$ROOT"
 # shellcheck source=scripts/lib/checkout.sh
 . "$ROOT/scripts/lib/checkout.sh"
 
-PYTHON="${NETRADIO_PYTHON:-$(command -v python3.14 || command -v python3)}"
+# The venv's interpreter, as scripts/run_harvester.sh uses: a bare `python3.14` on PATH can be an
+# asdf shim, which exits at once in this checkout because it pins no Python version, and the
+# server died before it bound the port (2026-10-21).
+PYTHON="${NETRADIO_PYTHON:-$ROOT/.venv/bin/python}"
 # the port: real env wins, else .env (align_server.py reads the same chain), else 8766
 NETRADIO_ALIGN_PORT="$(env_get "$ROOT/.env" NETRADIO_ALIGN_PORT)"
 PORT="${NETRADIO_ALIGN_PORT:-8766}"
@@ -62,6 +65,11 @@ launch() {
     [ -n "$(port_pids)" ] && break
     sleep 0.5
   done
+  if [ -z "$(port_pids)" ]; then
+    echo "align inspector did not start; the end of $LOG:"
+    tail -n 20 "$LOG" 2>/dev/null | sed 's/^/  /'
+    return 1
+  fi
   status
 }
 
@@ -122,6 +130,10 @@ status() {
       case "$body" in
         *'"enabled": true'*|*'"enabled":true'*) echo "  DSP: enabled" ;;
         *) echo "  DSP: NOT CONFIGURED — build .venv (make venv) and point NETRADIO_SOURCES_DIR at the originals (else sources_local/)" ;;
+      esac
+      case "$body" in
+        *'"streams": []'*|*'"streams":[]'*)
+          echo "  DATA: no capture MP3s listed — set NETRADIO_MP3_DIR in .env to the capture MP3 directory" ;;
       esac
       case "$body" in
         *'"hints": []'*|*'"hints":[]'*)
