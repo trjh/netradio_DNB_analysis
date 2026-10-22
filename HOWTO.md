@@ -373,6 +373,9 @@ says what each hints row means. Here is the whole flow on one page:
 # Pass 2 — verify / hand-tune in the browser, at the /align URL the server prints
 open "$(scripts/run_align.sh status | grep -o 'http://[^ ]*/align' | head -1)"
 
+# Listen-through — the whole pair, L/R, with notes: /align/review in the browser, or the Mac app
+make review-app-run
+
 # Export — compile labels/automated + labels/review -> labels/summary (one label set per audio file)
 make compile-summary ARGS=--dry-run     # preview
 make compile-summary                    # write (or press "⟳ compile summaries" on /align)
@@ -387,7 +390,8 @@ then `streamalign sync-audit` to re-grade every folded-in point against the audi
 
 Detail:
 [RUNBOOK_align_workflow.md](./docs/RUNBOOK_align_workflow.md)
-§1–§6.
+§0–§8. Beyond the flow above, it covers finding the tracks that still lack precise labels
+(§0), seeding a capture that has no placement (§1) and working offline (§8).
 
 **Q:** How do the review notes and summaries reach `main`?
 
