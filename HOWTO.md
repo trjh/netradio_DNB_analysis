@@ -390,8 +390,8 @@ then `streamalign sync-audit` to re-grade every folded-in point against the audi
 
 Detail:
 [RUNBOOK_align_workflow.md](./docs/RUNBOOK_align_workflow.md)
-§0–§7: finding the tracks that still lack precise labels, seeding a capture that has no
-placement, and working offline (§8).
+§0–§8. Beyond the flow above, it covers finding the tracks that still lack precise labels
+(§0), seeding a capture that has no placement (§1) and working offline (§8).
 
 **Q:** How do the review notes and summaries reach `main`?
 

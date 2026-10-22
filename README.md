@@ -49,7 +49,7 @@ The design records behind the align tools and the label workflow, and the log of
 they cite:
 
 * [docs/DECISIONS.md](./docs/DECISIONS.md) -- **the decision-point log**: one row per `DP-nn` number the code, the tests and these documents cite, with where each decision was first written down
-* [docs/RUNBOOK_align_workflow.md](./docs/RUNBOOK_align_workflow.md) -- the align workflow step by step: a capture and an original on disk, through Pass 1, the `/align` inspector, the summary compile and Audacity, to verified label rows
+* [docs/RUNBOOK_align_workflow.md](./docs/RUNBOOK_align_workflow.md) -- the align workflow step by step: finding the tracks that still lack precise labels, then Pass 1, the `/align` inspector, the whole-song listen-through, the summary compile and Audacity, to verified label rows; and working offline
 * [docs/PLAN_align_tool.md](./docs/PLAN_align_tool.md) -- the align tool's design and build record: the match-hints converter (Pass 1), the `/align` inspector (Pass 2) and the whole-song review mode
 * [docs/PLAN_labels_layout.md](./docs/PLAN_labels_layout.md) -- the `labels/automated/`, `labels/review/` and `labels/summary/` layout, and the summary compile
 * [docs/PLAN_align_export_writeback.md](./docs/PLAN_align_export_writeback.md) -- the export step: the summary compile's build record, and the inspector's write path (not built yet)

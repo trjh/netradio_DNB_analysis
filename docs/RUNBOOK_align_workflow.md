@@ -26,8 +26,10 @@ labels; Audacity stays the place where a label becomes final. §8 covers working
   Activating that venv puts its `scripts/` on the path, which is why the commands below carry no
   `PYTHONPATH`. `make align-check` confirms the venv and the originals directory.
 - The server finds this checkout from its own location; no setting names it.
-- This repo's `.env`: `NETRADIO_LABELS_DIR` (default `labels/`) and `NETRADIO_MP3_DIR`;
-  optionally `NETRADIO_SOURCES_DIR` (the originals; default `sources_local/`); for the align
+- This repo's `.env`: `NETRADIO_LABELS_DIR` (default `labels/`) and `NETRADIO_MP3_DIR` (the
+  capture MP3s the server plays; unset, the inspector and the review page list no captures);
+  `NETRADIO_SOURCES_DIR` (the originals; the converter defaults to `sources_local/`, but
+  `make align-check` fails when it is unset); for the align
   server, `NETRADIO_ALIGN_HOST` / `NETRADIO_ALIGN_PORT`, and `NETRADIO_AUTH_USER` /
   `NETRADIO_AUTH_PASS` for Basic Auth.
 - The original on disk as `sources_local/NNN-Artist - Title.<ext>` — no original, no
@@ -180,7 +182,8 @@ Per point, in the inspector (stream fixed, original shiftable):
 
 Do this **before** you fold into Audacity. Pass 2 checks each point in a few-second window;
 the listen-through checks the whole pair, and it is where you annotate the broadcast. A
-loop-shifted pair (§1) that survived Pass 2 is audible here within a bar. Both surfaces list
+loop-shifted Pass 1 seat (§1) is audible here within a bar. The listen-through plays the seats
+in the hints files, not the inspector's unsaved Pass 2 adjustments. Both surfaces list
 every `*.match.hints.tsv` pair and every hand-seated pair, so a fresh Pass 1 is enough to
 listen to.
 
@@ -277,17 +280,20 @@ before step 11 publishes the file.
 Everything in §0–§7 runs on one machine with no network, provided the audio is on its disk:
 
 - **Before you go:** check that the captures you plan to work on and their originals are
-  on this disk as full-size files (`ls -laL jaz_links/<stem>.wav sources_local/NNN-*`;
+  on this disk as full-size files (`ls -laL jaz_links/<stem>.* sources_local/NNN-*`;
   `make align-check`). Build the Mac app (`make review-app`). Run `git pull` so the
-  converter and the server are current.
+  converter and the server are current. Start the server once (`scripts/run_align.sh start`)
+  and open `/align/review`: it must list the capture you plan to work on. When a start fails,
+  the launcher prints the end of `logs/align.log`.
 - **What works offline:** `hints`, `tail-solve`, `match-hints` (`sonic-annotator` is local),
   the inspector, the listen-through on either surface (the server binds loopback unless
   `.env` says otherwise), `compile-summary`, Audacity, `sort_tsv.py`, `sync-audit`,
-  `track-mix`, `make stream-data` and `validate`.
+  `track-mix`, `make stream-data` and `streamalign validate`.
 - **What waits for the network:** the align server commits review notes and summaries to the
   local `align-review-data` branch as before, but its hourly push fails quietly, records the
-  error and retries next hour (`python3 scripts/review_sync.py status` shows it). Once back
-  online it pushes; then run `make review-sync`. `labels/publish.py` (PROCESS step 11) needs
+  error in the server's memory and retries next hour. `python3 scripts/review_sync.py status`,
+  run from a shell, shows `"unpushed": true` while commits wait. Once back online the server
+  pushes; then run `make review-sync`. `labels/publish.py` (PROCESS step 11) needs
   the network to push and open the PR: run it, or `publish.py <stem> --check` to gate only,
   when you are back.
 - **What to bring back:** your exported `labels/<stem>.labels.tsv` files and the `labels/review/`
