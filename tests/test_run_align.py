@@ -179,6 +179,24 @@ class TheCheckoutGuard(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("stopped", r.stdout)
 
+    def test_a_server_that_dies_at_start_says_so_and_shows_its_log(self):
+        os.makedirs(os.path.join(self.root, ".git"))
+        fake = os.path.join(self.root, "fake-python")
+        with open(fake, "w") as fh:
+            fh.write("#!/bin/sh\necho 'No version is set for command python3.14' >&2\nexit 126\n")
+        os.chmod(fake, 0o755)
+        r = self._run("start", NETRADIO_PYTHON=fake)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("did not start", r.stdout)
+        self.assertIn("No version is set for command python3.14", r.stdout)
+
+
+class TheInterpreter(unittest.TestCase):
+    def test_the_default_is_the_venv_not_a_bare_name_on_path(self):
+        sh = _read("scripts", "run_align.sh")
+        self.assertIn('PYTHON="${NETRADIO_PYTHON:-$ROOT/.venv/bin/python}"', sh)
+        self.assertNotIn("command -v python3.14", sh)
+
 
 if __name__ == "__main__":
     unittest.main()
