@@ -39,111 +39,132 @@ labels; Audacity stays the place where a label becomes final. §8 covers working
 
 ## 0. Find the work
 
-Two kinds of gap remain, and they need different starts.
-
-**Tracks with only a rough position.** A track the hand labels do not reach yet takes its
-position from the 1998/2017 notes (`labels/remainder.tsv`). The build marks it
-`"source": "rough"` in `track-metadata.json`:
-
-```bash
-python3 -c "import json; t=json.load(open('track-metadata.json'))['tracks']
-for n,r in sorted(t.items(), key=lambda x: int(x[0])):
-    if r.get('source') == 'rough':
-        print(n, r.get('artist','?'), '-', r.get('title','?'), '|', ', '.join(r.get('source_files', [])))"
-```
-
-The rough tracks sit in the captures past the labelled frontier. Start at the first of them:
-its capture is placed (its predecessor's `file_<next>:` link carries it), so §1 runs on it
-unaided.
-
-**Tracks with a position but no sync points.** A track placed by hand labels can still lack
-`track sync:`/`origNNN sync:` pairs. `placed` lists every hand-seated pair; a track with an
-original on disk and no entry in that list is unseated:
+A track is done when the hand labels give it a start and at least two sync pairs: a
+`track sync: k` row in the capture's labels matched with an `origNNN sync: k` row at the same
+moment in the original. This command lists every track and what it has so far:
 
 ```bash
 . .venv/bin/activate && python -m streamalign placed | python3 -c "import json,sys
-for p in json.load(sys.stdin)['pairs']: print(p['stem'], 'orig%03d' % p['orig'], len(p['points']), 'points')"
+pts = {}                                   # track -> {capture: sync pairs}
+for p in json.load(sys.stdin)['pairs']:
+    pts.setdefault(p['orig'], {})[p['stem']] = len(p['points'])
+unplaced = {f['original_filename'] for f in json.load(open('stream-files.json'))['files']
+            if f['master_start_seconds'] is None}
+for n, r in sorted(json.load(open('track-metadata.json'))['tracks'].items(), key=lambda x: int(x[0])):
+    sync = ' '.join(f'{s}:{k}' for s, k in pts.get(int(n), {}).items()) or '-'
+    caps = ' '.join(c + ('(unplaced)' if c in unplaced else '') for c in r.get('source_files', []))
+    print(f\"{n:>3} {r.get('source','?'):7} {sync:20} {caps:30} {r.get('artist') or '?'} - {r.get('title','?')}\")"
 ```
 
-**Before any capture with no labels of its own**, ask the engine what it knows (PROCESS step
-2). `hints` needs no placement, and its `SYNC ANCHOR A/B` rows (an original playing alone, at
-confidence ~9.8/10) are the seed §1 needs:
+`streamalign placed` reads the hand labels and prints every sync pair in them as JSON; the
+rest of the command joins that with the track list. Each line shows:
 
-```bash
-. .venv/bin/activate && python -m streamalign hints <stem>        # -> labels/automated/<stem>.hints.tsv
-. .venv/bin/activate && python -m streamalign tail-solve          # report: tail placements, orphans
-```
+- the track number;
+- `precise` when the hand labels place the track, or `rough` when only the 1998/2017 notes
+  (`labels/remainder.tsv`) do;
+- its sync pairs so far, per capture: `d336-355:5` means five pairs in `d336-355`, and `-`
+  means none;
+- the captures it plays in, with `(unplaced)` on a capture that has no position on the master
+  timeline yet;
+- artist and title.
 
-`tail-solve` places the tail captures through the loop-wrap anchor and names any capture it
-cannot place (`orphan … butt-jointed both sides, no audio anchor`). An orphan's position comes
-only from its predecessor's `file_<next>:` hand link (PROCESS step 3). Run `tail-solve`
-**without** `--emit` while exploring: `--emit` writes `<stem>.auto.labels.tsv`, which the
-build and the sheet both read.
+The work is every line with `-` in the sync column whose original is on disk. As of
+2026-10-25 that is tracks 72–91, the rough tracks at the end of the broadcast. The precise
+tracks with no pairs are the station promos and a few tracks with no original, and they stay
+that way.
+
+Work through the captures in order. The first, `d376-395` (tracks 72–76), has a position, so
+§1 runs on it as written. From `d396-415` on, the captures are `(unplaced)`, and §1 needs one
+extra step for each: *A capture with no placement yet*, at the end of §1.
 
 ## 1. Pass 1 — propose the sync points (`match-hints`)
 
-Run in **this repo's checkout** (`scripts/run_align.sh help` prints these commands).
+Pick a capture from the §0 list. This section and the ones after it take that capture's
+tracks, one at a time, to finished start and sync labels: §1 proposes sync points by machine,
+§2–§4 check them by eye and ear, and §5–§7 write them into the hand labels.
+
+`streamalign match-hints` takes a capture and the original of one track that plays in it. It
+finds where the original's audio lines up with the capture, and writes the sync points it
+proposes as two label files, which the inspector opens in §2. Run it in **this repo's
+checkout** (`scripts/run_align.sh help` prints these commands):
 
 ```bash
 . .venv/bin/activate && python -m streamalign \
     match-hints <stem> <NNN>
-#   match-hints <stem> --all              # batch: every original overlapping the capture
+#   match-hints <stem> --all              # every original that plays in the capture
 #   match-hints <stem> <NNN> --around S   # capture not placed yet (see below)
 #   add --dry-run to print the rows without writing
 ```
 
-`streamalign` reads captures from the repo's `jaz_links/` symlink by default; set
-`NETRADIO_AUDIO_DIR` if your captures are elsewhere.
+It reads captures from the repo's `jaz_links/` symlink; set `NETRADIO_AUDIO_DIR` if yours
+are elsewhere.
 
-Two algorithms do the work, and both run headless inside the converter. MATCH builds a
-coarse map of where the original sits in the capture, and acts as referee. GCC-PHAT then
-seats each anchor precisely.
+It uses two matching methods, and runs both itself: there is no window to open. MATCH first
+works out roughly where the original sits in the capture, and checks the final result.
+GCC-PHAT then places each sync point precisely. Sonic Visualiser is no longer part of the
+flow (decided 2026-08-04); you can still use it as a cross-check.
 
-**You never open Sonic Visualiser.** SV+MATCH came out of the standard flow
-(decision made 2026-08-04). It survives only as an optional cross-check.
-
-The converter writes two files per pair into `labels/automated/`:
+It writes two files per pair into this repo's `labels/automated/`:
 
 | File | Side |
 |---|---|
-| `<stem>.origNNN.match.hints.tsv` | stream |
-| `origNNN.<stem>.match.hints.tsv` | original |
+| `<stem>.origNNN.match.hints.tsv` | the capture |
+| `origNNN.<stem>.match.hints.tsv` | the original |
 
-Both land in this repo's `labels/automated/` (committed machine output since
-DP-24, freely overwritten on re-run); neither the label pipeline nor the publish flow
-ever reads them.
+Both are machine output, committed (DP-24) and overwritten by the next run. Nothing else in
+the pipeline reads them.
 
-Anchor rows read `track sync: k verified confidence n/10`; boundary rows come one
-`origNNN start:/end:` pair per sync point, named by its marker number (`start: k` /
-`end: k`, bare `confidence n/10`, never ` verified`) at the point's own implied
-NATIVE clip seat. Anchors carry no ` HINT` suffix. For the full grammar see
+The first row of each file sums up the fit: the rate (how much faster or slower the original
+runs than the capture) and the polarity. The sync points follow, as
+`track sync: k verified confidence n/10` rows. Each point also gets an `origNNN start: k` /
+`end: k` pair: where the original's start and end would fall if that point were right. For the
+full grammar see
 [the label grammar in `PROCESS.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/PROCESS.md#label-grammar).
 
-Before trusting a pair, answer any `note QUESTION:` rows it carries — those flag thin
-coverage, or a rival seat one loop-length away.
+Before you trust a pair, read its `note QUESTION:` rows. They flag thin coverage, or a second
+seat nearly as good one loop-length away.
+
+**When the original does not fit.** Sometimes the original on disk is a different edit from
+the one played in 1998, and no seat is right. `match-hints` does not judge this; you do, from
+what it prints and from the summary row. Suspect the original when:
+
+- the rate is more than a few percent from 1.0 (a DJ pitches a record by a percent or two);
+- the polarity reads `INVERTED` and the printed `sweep score` is low;
+- its sync points disagree with every `SYNC ANCHOR` row in the capture's `<stem>.hints.tsv`.
+
+Then leave its points unticked in the inspector (§3; only ticked points are exported), add a
+`note:` label at the track in the capture's hand labels saying the original does not fit, and
+go on to the next track.
 
 ### A capture with no placement yet
 
-When a capture has no master position, the converter cannot derive the neighbourhood to trim
-to, and an unseeded run can lock onto a **loop-shifted** seat: the right record, the wrong
-repetition. Seed `--around` from the `hints` file, not from the notes' track start:
+When a capture has no position on the master timeline, `match-hints` does not know where in
+the capture to look. Run without a seed, it can settle on the right record at the wrong
+repetition of a loop: a **loop-shifted** seat. Give it `--around`, taken from the capture's
+`hints` file. Do not take it from the track's rough start in the notes.
 
-1. Take a `SYNC ANCHOR` row for the track from `<stem>.hints.tsv`: capture instant `t`,
-   original instant `o`.
+`streamalign hints <stem>` writes `labels/automated/<stem>.hints.tsv`. It needs no
+placement. Its `SYNC ANCHOR A/B` rows each mark a passage where one original plays alone, with
+the instant in the capture and in the original:
+
+```bash
+. .venv/bin/activate && python -m streamalign hints <stem>
+```
+
+1. Take a `SYNC ANCHOR` row for the track: capture instant `t`, original instant `o`.
 2. Pass `--around` as `t − o`, the capture second where the original's 0:00 would sit.
 3. Check the result against the anchor: for a `track sync: k` / `origNNN sync: k` pair,
    `stream − orig` must come out near `t − o`. Several seconds off means a loop-shifted seat;
    the `rival whole-bar-shifted seat` QUESTION row says the same thing.
 
-Worked example, `d396-415` and track 077 (2026-10-20): the hints anchor reads
-`352.372` ↔ `3:25.82` (205.82 s), so `--around 146`. That run gives
-`track sync: 5` at 355.151 ↔ 208.641, which is 146.5 s apart: it agrees with the anchor. A run
-with `--around 244` (the notes' track start) seats the record about 30 s away, on a different
-repetition, at similar confidence. The anchors' confidence alone does not tell the two apart.
+Worked example, `d396-415` and track 077 (2026-10-20):
 
-Reject a pair outright when the fit is implausible: a rate more than a few percent from 1.0,
-`polarity INVERTED` with a low `sweep score`, or anchors that disagree with every hints anchor.
-The original on disk may be a different edit. Note it in the hand labels and move on.
+- The hints anchor reads `352.372` in the capture and `3:25.82` (205.82 s) in the original.
+- So `--around 146` (352.372 − 205.82).
+- That run gives `track sync: 5` at 355.151 in the capture and 208.641 in the original:
+  146.5 s apart, in agreement with the anchor.
+- A run with `--around 244` (the notes' track start) seats the record about 30 s away, on
+  another repetition, at similar confidence. Confidence alone does not tell the two apart.
 
 Full step detail: [`PROCESS.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/PROCESS.md) step 9 (Pass 1).
 
@@ -285,7 +306,7 @@ Everything in §0–§7 runs on one machine with no network, provided the audio 
   converter and the server are current. Start the server once (`scripts/run_align.sh start`)
   and open `/align/review`: it must list the capture you plan to work on. When a start fails,
   the launcher prints the end of `logs/align.log`.
-- **What works offline:** `hints`, `tail-solve`, `match-hints` (`sonic-annotator` is local),
+- **What works offline:** `hints`, `match-hints` (`sonic-annotator` is local),
   the inspector, the listen-through on either surface (the server binds loopback unless
   `.env` says otherwise), `compile-summary`, Audacity, `sort_tsv.py`, `sync-audit`,
   `track-mix`, `make stream-data` and `streamalign validate`.
