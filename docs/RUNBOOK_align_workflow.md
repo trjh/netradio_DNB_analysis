@@ -1,9 +1,10 @@
 # Align workflow — fresh capture + original → verified labels
 
-> **What this is:** the end-to-end operator walkthrough of the CURRENT align flow — from a
-> capture + an original on disk, through `streamalign match-hints` (Pass 1) and the `/align`
-> inspector (Pass 2), to verified sync rows in the Audacity labels. Compact by design: each
-> step points at the doc that owns its detail.
+> **What this is:** the end-to-end operator walkthrough of the CURRENT align flow — from
+> finding the tracks that still lack precise labels, through `streamalign match-hints`
+> (Pass 1), the `/align` inspector (Pass 2) and the whole-song listen-through, to verified
+> sync rows in the Audacity labels. Compact by design: each step points at the doc that owns
+> its detail.
 >
 > **Fits in:** [the repo's README](https://github.com/trjh/netradio_DNB_analysis/blob/main/README.md) (master index). The tool's design/build record is
 > [`PLAN_align_tool.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_align_tool.md); the label semantics (incl. the two
@@ -13,60 +14,157 @@
 >
 > Decision points (`DP-nn`) are listed in [`docs/DECISIONS.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/DECISIONS.md).
 
+The flow in one line: **find** the work (§0) → **propose** sync points (§1) → **check** each
+point by eye and ear (§2–§3) → **listen** to the whole pair (§4) → **compile** (§5) → **fold**
+into Audacity, where you finalise (§6) → **audit** (§7). Nothing before §6 touches your hand
+labels; Audacity stays the place where a label becomes final. §8 covers working offline.
+
 ## Prerequisites (once per machine)
 
 - This repo checked out with its venv built (`make env` builds `.venv` with uv from
   both requirement sets and also installs the MATCH binaries: `sonic-annotator` + `match-vamp`).
   Activating that venv puts its `scripts/` on the path, which is why the commands below carry no
-  `PYTHONPATH`.
+  `PYTHONPATH`. `make align-check` confirms the venv and the originals directory.
 - The server finds this checkout from its own location; no setting names it.
-- This repo's `.env`: `NETRADIO_LABELS_DIR` (default `labels/`) and `NETRADIO_MP3_DIR`;
-  optionally `NETRADIO_SOURCES_DIR` (the originals; default `sources_local/`); for the align
+- This repo's `.env`: `NETRADIO_LABELS_DIR` (default `labels/`) and `NETRADIO_MP3_DIR` (the
+  capture MP3s the server plays; unset, the inspector and the review page list no captures);
+  `NETRADIO_SOURCES_DIR` (the originals; the converter defaults to `sources_local/`, but
+  `make align-check` fails when it is unset); for the align
   server, `NETRADIO_ALIGN_HOST` / `NETRADIO_ALIGN_PORT`, and `NETRADIO_AUTH_USER` /
   `NETRADIO_AUTH_PASS` for Basic Auth.
 - The original on disk as `sources_local/NNN-Artist - Title.<ext>` — no original, no
-  alignment (as of 2026-10-11, some originals are still missing).
+  alignment (as of 2026-10-20, some originals are still missing).
+- For the Mac listen-through (§4): `make review-app` builds the app and runs its selftest
+  (`swiftc` from the Command Line Tools; no Xcode).
+
+## 0. Find the work
+
+A track is done when the hand labels give it a start and at least two sync pairs: a
+`track sync: k` row in the capture's labels matched with an `origNNN sync: k` row at the same
+moment in the original. This command lists every track and what it has so far:
+
+```bash
+. .venv/bin/activate && python -m streamalign placed | python3 -c "import json,sys
+pts = {}                                   # track -> {capture: sync pairs}
+for p in json.load(sys.stdin)['pairs']:
+    pts.setdefault(p['orig'], {})[p['stem']] = len(p['points'])
+unplaced = {f['original_filename'] for f in json.load(open('stream-files.json'))['files']
+            if f['master_start_seconds'] is None}
+for n, r in sorted(json.load(open('track-metadata.json'))['tracks'].items(), key=lambda x: int(x[0])):
+    sync = ' '.join(f'{s}:{k}' for s, k in pts.get(int(n), {}).items()) or '-'
+    caps = ' '.join(c + ('(unplaced)' if c in unplaced else '') for c in r.get('source_files', []))
+    print(f\"{n:>3} {r.get('source','?'):7} {sync:20} {caps:30} {r.get('artist') or '?'} - {r.get('title','?')}\")"
+```
+
+`streamalign placed` reads the hand labels and prints every sync pair in them as JSON; the
+rest of the command joins that with the track list. Each line shows:
+
+- the track number;
+- `precise` when the hand labels place the track, or `rough` when only the 1998/2017 notes
+  (`labels/remainder.tsv`) do;
+- its sync pairs so far, per capture: `d336-355:5` means five pairs in `d336-355`, and `-`
+  means none;
+- the captures it plays in, with `(unplaced)` on a capture that has no position on the master
+  timeline yet;
+- artist and title.
+
+The work is every line with `-` in the sync column whose original is on disk. As of
+2026-10-25 that is tracks 72–91, the rough tracks at the end of the broadcast. The precise
+tracks with no pairs are the station promos and a few tracks with no original, and they stay
+that way.
+
+Work through the captures in order. The first, `d376-395` (tracks 72–76), has a position, so
+§1 runs on it as written. From `d396-415` on, the captures are `(unplaced)`, and §1 needs one
+extra step for each: *A capture with no placement yet*, at the end of §1.
 
 ## 1. Pass 1 — propose the sync points (`match-hints`)
 
-Run in **this repo's checkout** (`scripts/run_align.sh help` prints these commands).
+Pick a capture from the §0 list. This section and the ones after it take that capture's
+tracks, one at a time, to finished start and sync labels: §1 proposes sync points by machine,
+§2–§4 check them by eye and ear, and §5–§7 write them into the hand labels.
+
+`streamalign match-hints` takes a capture and the original of one track that plays in it. It
+finds where the original's audio lines up with the capture, and writes the sync points it
+proposes as two label files, which the inspector opens in §2. Run it in **this repo's
+checkout** (`scripts/run_align.sh help` prints these commands):
 
 ```bash
 . .venv/bin/activate && python -m streamalign \
     match-hints <stem> <NNN>
-#   match-hints <stem> --all              # batch: every original overlapping the capture
-#   match-hints <stem> <NNN> --around S   # track not placed on the timeline yet
+#   match-hints <stem> --all              # every original that plays in the capture
+#   match-hints <stem> <NNN> --around S   # capture not placed yet (see below)
+#   add --dry-run to print the rows without writing
 ```
 
-`streamalign` reads captures from the repo's `jaz_links/` symlink by default; set
-`NETRADIO_AUDIO_DIR` if your captures are elsewhere.
+It reads captures from the repo's `jaz_links/` symlink; set `NETRADIO_AUDIO_DIR` if yours
+are elsewhere.
 
-Two algorithms do the work, and both run headless inside the converter. MATCH builds a
-coarse map of where the original sits in the capture, and acts as referee. GCC-PHAT then
-seats each anchor precisely.
+It uses two matching methods, and runs both itself: there is no window to open. MATCH first
+works out roughly where the original sits in the capture, and checks the final result.
+GCC-PHAT then places each sync point precisely. Sonic Visualiser is no longer part of the
+flow (decided 2026-08-04); you can still use it as a cross-check.
 
-**You never open Sonic Visualiser.** SV+MATCH came out of the standard flow
-(decision made 2026-08-04). It survives only as an optional cross-check.
-
-The converter writes two files per pair into `labels/automated/`:
+It writes two files per pair into this repo's `labels/automated/`:
 
 | File | Side |
 |---|---|
-| `<stem>.origNNN.match.hints.tsv` | stream |
-| `origNNN.<stem>.match.hints.tsv` | original |
+| `<stem>.origNNN.match.hints.tsv` | the capture |
+| `origNNN.<stem>.match.hints.tsv` | the original |
 
-Both land in this repo's `labels/automated/` (committed machine output since
-DP-24, freely overwritten on re-run); neither the label pipeline nor the publish flow
-ever reads them.
+Both are machine output, committed (DP-24) and overwritten by the next run. Nothing else in
+the pipeline reads them.
 
-Anchor rows read `track sync: k verified confidence n/10`; boundary rows come one
-`origNNN start:/end:` pair per sync point, named by its marker number (`start: k` /
-`end: k`, bare `confidence n/10`, never ` verified`) at the point's own implied
-NATIVE clip seat. Anchors carry no ` HINT` suffix. For the full grammar see
+The first row of each file sums up the fit: the rate (how much faster or slower the original
+runs than the capture) and the polarity. The sync points follow, as
+`track sync: k verified confidence n/10` rows. Each point also gets an `origNNN start: k` /
+`end: k` pair: where the original's start and end would fall if that point were right. For the
+full grammar see
 [the label grammar in `PROCESS.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/PROCESS.md#label-grammar).
 
-Before trusting a pair, answer any `note QUESTION:` rows it carries — those flag thin
-coverage, or a rival seat one loop-length away.
+Before you trust a pair, read its `note QUESTION:` rows. They flag thin coverage, or a second
+seat nearly as good one loop-length away.
+
+**When the original does not fit.** Sometimes the original on disk is a different edit from
+the one played in 1998, and no seat is right. `match-hints` does not judge this; you do, from
+what it prints and from the summary row. Suspect the original when:
+
+- the rate is more than a few percent from 1.0 (a DJ pitches a record by a percent or two);
+- the polarity reads `INVERTED` and the printed `sweep score` is low;
+- its sync points disagree with every `SYNC ANCHOR` row in the capture's `<stem>.hints.tsv`.
+
+Then leave its points unticked in the inspector (§3; only ticked points are exported), add a
+`note:` label at the track in the capture's hand labels saying the original does not fit, and
+go on to the next track.
+
+### A capture with no placement yet
+
+When a capture has no position on the master timeline, `match-hints` does not know where in
+the capture to look. Run without a seed, it can settle on the right record at the wrong
+repetition of a loop: a **loop-shifted** seat. Give it `--around`, taken from the capture's
+`hints` file. Do not take it from the track's rough start in the notes.
+
+`streamalign hints <stem>` writes `labels/automated/<stem>.hints.tsv`. It needs no
+placement. Its `SYNC ANCHOR A/B` rows each mark a passage where one original plays alone, with
+the instant in the capture and in the original:
+
+```bash
+. .venv/bin/activate && python -m streamalign hints <stem>
+```
+
+1. Take a `SYNC ANCHOR` row for the track: capture instant `t`, original instant `o`.
+2. Pass `--around` as `t − o`, the capture second where the original's 0:00 would sit.
+3. Check the result against the anchor: for a `track sync: k` / `origNNN sync: k` pair,
+   `stream − orig` must come out near `t − o`. Several seconds off means a loop-shifted seat;
+   the `rival whole-bar-shifted seat` QUESTION row says the same thing.
+
+Worked example, `d396-415` and track 077 (2026-10-20):
+
+- The hints anchor reads `352.372` in the capture and `3:25.82` (205.82 s) in the original.
+- So `--around 146` (352.372 − 205.82).
+- That run gives `track sync: 5` at 355.151 in the capture and 208.641 in the original:
+  146.5 s apart, in agreement with the anchor.
+- A run with `--around 244` (the notes' track start) seats the record about 30 s away, on
+  another repetition, at similar confidence. Confidence alone does not tell the two apart.
 
 Full step detail: [`PROCESS.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/PROCESS.md) step 9 (Pass 1).
 
@@ -101,53 +199,16 @@ Per point, in the inspector (stream fixed, original shiftable):
 - The all-pairs overview shows every hints set on the capture; click a foreign flag to
   switch pairs.
 
-## 4. Export — compile the summaries
+## 4. The whole-song listen-through (`/align/review`, or the Mac app)
 
-Press **⟳ compile summaries** (or run `make compile-summary`, `ARGS=--dry-run` to preview).
-The server compiles `labels/automated/` + `labels/review/` in this checkout into
-`labels/summary/` — **one importable label set per audio file** (DP-24 §3,
-[`PLAN_labels_layout.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_labels_layout.md)):
+Do this **before** you fold into Audacity. Pass 2 checks each point in a few-second window;
+the listen-through checks the whole pair, and it is where you annotate the broadcast. A
+loop-shifted Pass 1 seat (§1) is audible here within a bar. The listen-through plays the seats
+in the hints files, not the inspector's unsaved Pass 2 adjustments. Both surfaces list
+every `*.match.hints.tsv` pair and every hand-seated pair, so a fresh Pass 1 is enough to
+listen to.
 
-| File | Clock | Carries |
-|---|---|---|
-| `labels/summary/<stem>.summary.tsv` | capture-local | every automated row for the capture (all its pairs + `<stem>.hints.tsv`), every review row — including the converter's per-anchor `origNNN start: k confidence n/10` **clip-seat** rows (`a_k − b_native_k`); where the converter emitted none, one compiled seat row in the same grammar at the best-confidence anchor + an `origNNN note:` |
-| `labels/summary/origNNN.summary.tsv` | original-native | the original's rows from every capture it appears in, plus its review rows on the record's clock |
-
-Rows are verbatim (nothing dropped, no `verified` token rewritten, markers identical in both
-files); the write is whole-file and idempotent; the files ride the `align-review-data`
-branch with the review notes. The **⬇ download hints pair** button still exists for a
-session's refined seats (DP-26 grammar, ticked points only, refined confidence as ncc × 10) —
-that path writes nothing server-side.
-
-## 5. Fold into Audacity
-
-**File ▸ Import ▸ Labels** on `<stem>.summary.tsv` (track 3, imports aligned from zero) and
-`origNNN.summary.tsv` (track 6 — drag the record so its start sits on the stem summary's
-`origNNN start: k` label for the anchor you trust — the seats slope anchor-to-anchor by design,
-that spread is the drift — then check that anchor *k* lines up across tracks 3 and 6; in a
-capture covering several originals `track sync: k` repeats per original, the `origNNN sync: k`
-row in track 6 is the unambiguous side). They land
-as their **own** label tracks beside your hand labels; nothing existing is touched. Copy the
-rows you accept into your hand labels; strip the ` verified` token from any row you moved by
-hand without re-snapping (it then honestly reads as unchecked).
-
-## 6. Back through the label pipeline
-
-Export/sort via the normal `sort_tsv.py` flow ([`PROCESS.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/PROCESS.md) step 6), then
-grade:
-
-```bash
-. .venv/bin/activate && python -m streamalign sync-audit --tracks <n>   # re-grade points
-. .venv/bin/activate && python -m streamalign track-mix  --tracks <n>   # grade the rate
-```
-
-`sync-audit` is a report, not a gate — resolve what it flags (re-snap or strip the token)
-before step 11 publishes the file.
-
-## 7. Optional: the whole-song ear pass (`/align/review`)
-
-**DP-22** ([`PLAN_align_tool.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_align_tool.md) §6; web POC built) adds a
-whole-pair listening pass on top of this per-point flow — open
+**DP-22** ([`PLAN_align_tool.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_align_tool.md) §6; web POC built) — open
 `http://<align-host>:8766/align/review` (same server, phone-first):
 
 - pick the pair; the capture plays in the **left** ear, the rate-corrected original in
@@ -181,3 +242,81 @@ picker / anchor selection / in-waveform notes as the web page, but playback is
 **sample-locked by `AVAudioEngine`** — no drift corrector, the drift readout is
 telemetry — and keeps playing with the display asleep (the iOS-web failure mode
 this surface exists to dodge).
+
+What to note as you listen, so the Audacity pass has less to find: the audible track
+changeovers (`startNNN:` candidates), skips and dropouts, anything a QUESTION row asked, and
+the anchors you untick and why.
+
+## 5. Export — compile the summaries
+
+Press **⟳ compile summaries** (or run `make compile-summary`, `ARGS=--dry-run` to preview).
+The server compiles `labels/automated/` + `labels/review/` in this checkout into
+`labels/summary/` — **one importable label set per audio file** (DP-24 §3,
+[`PLAN_labels_layout.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_labels_layout.md)):
+
+| File | Clock | Carries |
+|---|---|---|
+| `labels/summary/<stem>.summary.tsv` | capture-local | every automated row for the capture (all its pairs + `<stem>.hints.tsv`), every review row — including the converter's per-anchor `origNNN start: k confidence n/10` **clip-seat** rows (`a_k − b_native_k`); where the converter emitted none, one compiled seat row in the same grammar at the best-confidence anchor + an `origNNN note:` |
+| `labels/summary/origNNN.summary.tsv` | original-native | the original's rows from every capture it appears in, plus its review rows on the record's clock |
+
+Rows are verbatim (nothing dropped, no `verified` token rewritten, markers identical in both
+files); the write is whole-file and idempotent; the files ride the `align-review-data`
+branch with the review notes. The **⬇ download hints pair** button still exists for a
+session's refined seats (DP-26 grammar, ticked points only, refined confidence as ncc × 10) —
+that path writes nothing server-side.
+
+## 6. Fold into Audacity — where you finalise
+
+A capture with no project yet starts from its predecessor's `.aup3` (PROCESS step 1).
+
+**File ▸ Import ▸ Labels** on `<stem>.summary.tsv` (track 3, imports aligned from zero) and
+`origNNN.summary.tsv` (track 6 — drag the record so its start sits on the stem summary's
+`origNNN start: k` label for the anchor you trust — the seats slope anchor-to-anchor by design,
+that spread is the drift — then check that anchor *k* lines up across tracks 3 and 6; in a
+capture covering several originals `track sync: k` repeats per original, the `origNNN sync: k`
+row in track 6 is the unambiguous side). They land
+as their **own** label tracks beside your hand labels; nothing existing is touched. Copy the
+rows you accept into your hand labels; strip the ` verified` token from any row you moved by
+hand without re-snapping (it then honestly reads as unchecked).
+
+Finalising is the rest of the hand pass (PROCESS step 5): `startNNN:` at each boundary,
+`file note: skip …` at each skip, `file start sync:` and `file end: … COMPLETE`. Use the
+listen-through notes from §4 as the checklist.
+
+## 7. Back through the label pipeline
+
+Export/sort via the normal `sort_tsv.py` flow ([`PROCESS.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/PROCESS.md) step 6), then
+grade:
+
+```bash
+. .venv/bin/activate && python -m streamalign sync-audit --tracks <n>   # re-grade points
+. .venv/bin/activate && python -m streamalign track-mix  --tracks <n>   # grade the rate
+```
+
+`sync-audit` is a report, not a gate — resolve what it flags (re-snap or strip the token)
+before step 11 publishes the file.
+
+## 8. Working offline
+
+Everything in §0–§7 runs on one machine with no network, provided the audio is on its disk:
+
+- **Before you go:** check that the captures you plan to work on and their originals are
+  on this disk as full-size files (`ls -laL jaz_links/<stem>.* sources_local/NNN-*`;
+  `make align-check`). Build the Mac app (`make review-app`). Run `git pull` so the
+  converter and the server are current. Start the server once (`scripts/run_align.sh start`)
+  and open `/align/review`: it must list the capture you plan to work on. When a start fails,
+  the launcher prints the end of `logs/align.log`.
+- **What works offline:** `hints`, `match-hints` (`sonic-annotator` is local),
+  the inspector, the listen-through on either surface (the server binds loopback unless
+  `.env` says otherwise), `compile-summary`, Audacity, `sort_tsv.py`, `sync-audit`,
+  `track-mix`, `make stream-data` and `streamalign validate`.
+- **What waits for the network:** the align server commits review notes and summaries to the
+  local `align-review-data` branch as before, but its hourly push fails quietly, records the
+  error in the server's memory and retries next hour. `python3 scripts/review_sync.py status`,
+  run from a shell, shows `"unpushed": true` while commits wait. Once back online the server
+  pushes; then run `make review-sync`. `labels/publish.py` (PROCESS step 11) needs
+  the network to push and open the PR: run it, or `publish.py <stem> --check` to gate only,
+  when you are back.
+- **What to bring back:** your exported `labels/<stem>.labels.tsv` files and the `labels/review/`
+  notes. The listen-through notes live in the review files, not in Audacity, until you fold
+  them in.
