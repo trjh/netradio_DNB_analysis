@@ -37,10 +37,9 @@ The golden rule of the file naming: **hand** = `<stem>.labels.tsv` (yours, autho
 load it yet**) → `<stem>.starter.labels.tsv` (**ready** to load; `publish` promotes it once the
 owner is published). Both seed states are throwaway and excluded from import/solve/build.
 
-> ✅ **The G5 labelling tooling is now on `main`** — `LABELTRACK` scoping in `sort_tsv.py`
-> (A1), the `streamalign starter` seed emitter (A2), `sort_tsv.py --live` (A3), and
-> `labels/publish.py` (A4) of `docs/ROADMAP_stream_analysis.md`. The manual paths below are kept
-> only as a fallback.
+> ✅ **The labelling tooling is on `main`** — `LABELTRACK` scoping in `sort_tsv.py`, the
+> `streamalign starter` seed emitter, `sort_tsv.py --live`, and `labels/publish.py`. The manual
+> paths below are kept only as a fallback.
 
 ---
 
@@ -150,7 +149,7 @@ work — what do I run, and how do I read the result?
 
 **How it helps:** these tell you *whether the computed placements are trustworthy* — i.e. does
 the engine reproduce your hand alignments. They change no data; once you trust them, those
-placements feed the auto-label emit (A5) and, after a build, the JSON. Re-run after you add or
+placements feed the auto-label emit and, after a build, the JSON. Re-run after you add or
 verify labels.
 
 **Q:** There are unconfirmed skips (stream discontinuities) — what do these commands actually do?

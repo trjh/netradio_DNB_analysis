@@ -6,7 +6,7 @@ var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
 // Initialize a dictionary-like structure to store sync points
 var syncPoints = {};
 
-// Web App entry point (ROADMAP G5 / A4 — Proposal D "auto sheet refresh").
+// Web App entry point (docs/PLAN_labelling_process.md, Proposal D "auto sheet refresh").
 // Deploy this script as a Web App (Deploy > New deployment > Web app) and POST to its URL
 // to run GithubImport() without the manual "Reload Data" click. The `publish` wrapper posts
 // here when NETRADIO_SHEET_WEBHOOK is set; an event-driven GitHub Action on push to labels/
