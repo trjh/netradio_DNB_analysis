@@ -99,9 +99,9 @@ PAUSE = os.path.join(STATE_DIR, "PAUSED")
 RULINGS = os.path.join(HOME, "data", "rulings.json")
 
 # The directories of audio to sign: one or more absolute paths, `:`-separated, read at import
-# (the wrapper sources `.env` before any import). The loop reads the TOP LEVEL of each and
-# writes nothing into any of them -- a subdirectory is never read, so a directory's own
-# scratch can sit one level down and stay invisible. A listed directory that does not exist
+# (the launcher loads `.env`, through scripts/lib/env.sh, before any import). The loop reads the
+# TOP LEVEL of each and writes nothing into any of them -- a subdirectory is never read, so a
+# directory's own scratch can sit one level down and stay invisible. A listed directory that does not exist
 # is skipped with a row in the issues list, so a typo in `.env` is visible rather than silent.
 HARVEST_DIRS = os.environ.get("NETRADIO_HARVEST_DIRS", "")
 
@@ -363,7 +363,7 @@ MAX_DURATION_S = 4 * 3600
 # the pause notice says "within ~20s" and a ruling must reach the search within one pass.
 PASS_GAP_S = 20.0
 
-register_caches()                 # at import: the wrapper sources .env before any import
+register_caches()                 # at import: the launcher loads .env before any import
 
 # --- the key ------------------------------------------------------------------------------------
 #

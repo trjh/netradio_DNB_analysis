@@ -31,17 +31,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-load_env() {
-  # The repo's .env, read the way every make target reads it: the file wins. An ABSENT
-  # .env is a normal state, not an error — a fresh clone has none and every value below
-  # has a default — so this returns quietly.
-  [ -f "$ROOT/.env" ] || return 0
-  set -a
-  # shellcheck disable=SC1091   # machine-local, never committed
-  . "$ROOT/.env"
-  set +a
-}
-load_env
+# The repo's .env, read through scripts/lib/env.sh (read, never executed) as run_align.sh reads
+# it: every name the environment does not already hold is exported, so the harvester sees it, and
+# a variable already set wins over the file. An ABSENT .env is a normal state, not an error -- a
+# fresh clone has none and every value below has a default.
+# shellcheck source=scripts/lib/env.sh
+. "$ROOT/scripts/lib/env.sh"
+env_load "$ROOT/.env"
 
 STATE_DIR="$ROOT/.harvest"
 STATE="$STATE_DIR/state.json"

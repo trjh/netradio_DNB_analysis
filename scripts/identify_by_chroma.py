@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Identify a record from the 1998 stream by CHROMA matching against a candidate pool.
 
-    set -a && . ./.env && set +a
+    eval "$(python3 scripts/envfile.py --export .env)"
     . .venv/bin/activate && python scripts/identify_by_chroma.py --query "Mystery Track 7.wav"
     . .venv/bin/activate && python scripts/identify_by_chroma.py --all-mystery
     . .venv/bin/activate && python scripts/identify_by_chroma.py --pool ~/dnb-candidates

@@ -74,7 +74,7 @@ FONTDIR = "/System/Library/Fonts/Supplemental"
 
 
 sys.path.insert(0, SELF)
-from stream_files import read_env  # noqa: E402  (the one .env reader for these scripts)
+from stream_files import read_env  # noqa: E402  (envfile, the repo's one .env reader)
 
 
 def setting(name, env=None):

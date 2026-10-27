@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Identify a mystery record by acoustic-fingerprint APIs (ACRCloud + AudD).
 
-    set -a && . ./.env && set +a          # needs the API keys below
+    eval "$(python3 scripts/envfile.py --export .env)"          # needs the API keys below
     python3 scripts/identify_by_api.py --query "Mystery Track 4.wav"
     python3 scripts/identify_by_api.py --all-mystery
     python3 scripts/identify_by_api.py --query "Mystery Track 4.wav" --windows 6 --json out.json
@@ -283,7 +283,7 @@ def main(argv=None):
             "  ACRCLOUD_HOST=...             # identify-<region>.acrcloud.com\n"
             "  ACRCLOUD_ACCESS_KEY=...       # from your ACRCloud project\n"
             "  ACRCLOUD_ACCESS_SECRET=...\n"
-            "then: set -a && . ./.env && set +a")
+            "then: eval \"$(python3 scripts/envfile.py --export .env)\"")
 
     sources = os.environ.get("NETRADIO_SOURCES_DIR")
     queries = list(args.query or [])

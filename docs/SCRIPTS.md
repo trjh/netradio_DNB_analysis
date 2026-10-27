@@ -17,7 +17,7 @@ Most scripts want the venv active and the machine paths from `.env`. Activating 
 the path (`netradio-scripts.pth`, written by `make venv` and `make dep`), so no `PYTHONPATH`:
 
 ```bash
-set -a && . ./.env && set +a
+eval "$(python3 scripts/envfile.py --export .env)"
 . .venv/bin/activate
 ```
 
@@ -105,6 +105,7 @@ own original, the change is wrong.
 | `scripts/enrich_musicbrainz.py`, `enrich_mb_links.py`, `enrich_album_covers.py`, `enrich_covers_links.py` | fill artwork/links on `track-metadata.json` (network) |
 | `scripts/merge_track_sources.py`, `missing_sources.py`, `find_streaming_links.py` | source inventory: what we have, what's missing, where to get it |
 | `scripts/backup_sheet.py` | back up the Google Sheet |
+| `scripts/envfile.py`, `scripts/lib/env.sh` | the repo's one `.env` reader, for Python and for the shell: one grammar (read, never executed; no `export`; a `#` after a value is part of it), and a variable already set wins; `python3 scripts/envfile.py --export .env` prints the file for `eval` |
 | `scripts/cache_budget.py` | the one cache policy: a registry of size-bounded local caches, `reserve` before every write, an eviction run, one disk floor — a library the cache-holding scripts register with (dark until `NETRADIO_CACHE_ROOT` is set); the decoded-array cache in `scripts/streamalign/audio.py` registers with it |
 
 ## Retired
@@ -124,7 +125,7 @@ scripts/run_harvester.sh status                                       # pid, upd
 scripts/run_harvester.sh stop                                         # / restart [--accept-ledger-rebuild]
 make harvest-run                                                      # alias for `start`
 
-set -a && . ./.env && set +a
+eval "$(python3 scripts/envfile.py --export .env)"
 . .venv/bin/activate && python scripts/harvest.py --status
 MallocLargeCache=0 .venv/bin/python scripts/harvest.py --run
                                                      # the foreground form: no

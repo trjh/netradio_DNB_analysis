@@ -147,6 +147,19 @@ class Scratch(unittest.TestCase):
         self.assertNotIn("secret", buf.getvalue())
 
 
+    def test_lines_a_shell_would_read_differently_fail_the_check(self):
+        env = self.env("export NETRADIO_THING_ROOT=/x\nNETRADIO_THING_ROOT=/y   # a note\n")
+        self.assertEqual([(n, k) for n, k, _ in env_check.oddities(env)],
+                         [(1, "NETRADIO_THING_ROOT"), (2, "NETRADIO_THING_ROOT")])
+        buf = io.StringIO()
+        old = env_check.ROOT
+        env_check.ROOT = self.repo
+        self.addCleanup(setattr, env_check, "ROOT", old)
+        with contextlib.redirect_stdout(buf):
+            rc = env_check.main([env])
+        self.assertEqual(rc, 1)
+        self.assertNotIn("/y", buf.getvalue(), "values are never printed")
+
 class TheRepo(unittest.TestCase):
 
     def test_env_example_passes_clean(self):
