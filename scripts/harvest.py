@@ -1804,7 +1804,10 @@ def migrate_query_shape(state):
     for m in state.get("matches") or []:
         dropped += 1
         path = m.get("audio") if isinstance(m, dict) else None
-        if path:
+        # A dark or refused `candidates` cache deletes nothing, and never raises (an
+        # unregistered name is a KeyError while the policy is on): this runs before the start's
+        # dark check.
+        if path and cache_budget.registered(CANDIDATES_CACHE):
             cache_budget.remove(CANDIDATES_CACHE, path, "query-shape-changed")
     state["matches"] = []
     state["kept"] = 0                 # no row names an excerpt any more
@@ -2336,9 +2339,12 @@ def evict_overfull(state, num):
         if not path:
             continue
         # Through the policy's one door: the removal is recorded with its reason, refuses a
-        # path outside the cache, and -- while the policy is dark -- deletes nothing (a refused
-        # `kept` count is honest either way: the row is gone, and the file stays where it is).
-        if cache_budget.remove(CANDIDATES_CACHE, path, "board-overfull"):
+        # path outside the cache, and -- while the policy is dark, or `candidates` is refused --
+        # deletes nothing (a refused `kept` count is honest either way: the row is gone, and the
+        # file stays where it is). An unregistered name would raise KeyError, so it is asked
+        # `registered()` first: `--rescan` reaches here with no dark check.
+        if (cache_budget.registered(CANDIDATES_CACHE)
+                and cache_budget.remove(CANDIDATES_CACHE, path, "board-overfull")):
             state["kept"] -= 1
 
 
@@ -2408,7 +2414,8 @@ def drop_ruled_excerpts(state, ruled):
         # The row stops carrying its audio whatever the policy answers (already gone, dark,
         # pinned): the ruling is the reason the audio existed, and that reason is spent. The
         # removal itself is the policy's to make and to record.
-        cache_budget.remove(CANDIDATES_CACHE, path, "ruled-on")
+        if cache_budget.registered(CANDIDATES_CACHE):
+            cache_budget.remove(CANDIDATES_CACHE, path, "ruled-on")
         state["kept"] = max(0, state.get("kept", 0) - 1)
         dropped += 1
     return dropped

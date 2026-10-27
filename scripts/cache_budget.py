@@ -62,7 +62,17 @@ like any other entry.
 A name nobody registered is an error while the module is on: `reserve`, `commit` and `remove`
 raise `KeyError`, so a misspelt name never writes uncapped. A caller whose cache is registered
 only on some machines asks `registered(name)` first. A directory `register` refuses raises
-`CacheRefused`.
+`CacheRefused`; every refusal is also kept, for a notice, in `refusals()` until the name
+registers.
+
+Who stops on a refusal. A clash with this process's own caches, the root, the registry
+directory, a `.git` checkout, the home directory or the download root is a configuration error
+in this process: `register` raises `CacheRefused`, and a caller that cannot run uncapped stops
+its start. A clash with a cache ANOTHER live process registered is `CacheClash`, a subclass: the
+other process's configuration is not this one's to fix, so a caller that can run without the
+cache calls `register_unless_clash`, which prints the clash, keeps it in `refusals()` and returns
+None. That cache then runs without the policy (each writer asks `registered()` first) until one
+of the two directories moves and the process restarts.
 
 The registry file. Every process that registers a cache writes its rows to
 `<NETRADIO_CACHE_ROOT>/registry/<pid>.json`, and holds an exclusive lock on `<pid>.lock` beside
@@ -70,12 +80,15 @@ it for as long as it runs. A row whose lock is free belongs to a process that ha
 ignored (and deleted). `register` refuses a directory that overlaps a cache another live process
 has registered, unless it is the same cache: the same name and the same directory.
 `other_processes()` is the read for a page that shows every cache on the machine. Under
-`NETRADIO_READ_ONLY` the rows are read but never written or deleted.
+`NETRADIO_READ_ONLY` the rows are read but never written or deleted. The lock on the registry
+directory is waited on for at most `REGISTRY_LOCK_S` seconds (a directory on a hung mount would
+otherwise hold every start): past that, the registration is skipped, printed and kept in
+`refusals()`, and the cache runs without the policy.
 
 The read API, for modules that show or plan around the caches: `names()`, `settings(name)` (the
 registry row, no scan), `usage(name)` (one scan), `entries(name)` (one scan, every entry with its
-held flag and companions), `status()` (every cache), `volume()` (the floor and the root's
-reading, no scan), `held_here()` (this thread's depth inside the machine lock),
+held flag and companions), `status()` (every cache), `volume()` (the floor and one reading per volume
+a cache sits on, no scan), `refusals()` (every refused registration, by name), `held_here()` (this thread's depth inside the machine lock),
 `record_event(...)`, `read_settings(name, ...)` (a cache's settings as the environment would set
 them, without registering it) and `parse_number(text, default, what)`.
 """
@@ -90,6 +103,7 @@ import os
 import shutil
 import sys
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 GB = 1000 ** 3
@@ -103,16 +117,27 @@ DEFAULT_IN_PROGRESS_MIN = 60    # a write in progress older than this died part-
 LOCK_NAME = ".cache_budget.lock"
 EVENTS_NAME = "events.jsonl"
 REGISTRY_DIR = "registry"
+REGISTRY_LOCK_S = 10    # how long `register` waits for the registry directory's lock
 
 _REGISTRY = {}          # name -> the cache's record, in registration order
 _STATS = {}             # name -> {"last_run", "evicted", "removed", "over_cap"}
 _mutex = threading.Lock()
 _held_here = threading.local()   # this thread's depth inside `_machine_lock`
 _own_row = {"dir": None, "fd": None, "atexit": False}   # this process's registry file and lock
+_REFUSED = {}           # name -> why its registration was refused (`refusals()`)
 
 
 class CacheRefused(ValueError):
     """`register` will not make this directory a cache's (the reason is the message)."""
+
+
+class CacheClash(CacheRefused):
+    """The directory overlaps a cache another live process registered: `other` is that cache's
+    name, `pid` and `process` its owner's."""
+
+    def __init__(self, message, other=None, pid=None, process=None):
+        super().__init__(message)
+        self.other, self.pid, self.process = other, pid, process
 
 
 # --- the environment ------------------------------------------------------------------------
@@ -225,8 +250,11 @@ def register(name, dir=None, cap=DEFAULT_CAP, headroom=0, max_age=None, order="o
     inside another cache's directory (this process's, or one another live process registered
     under a different name or directory), has a `.git` entry at its top level, or is or holds
     the home directory or the download root. A refused cache would be an uncapped one, so the
-    caller stops rather than carries on. Registering a name again replaces it, and rewrites
-    this process's registry file.
+    caller stops rather than carries on. A clash with another process's cache raises the
+    subclass `CacheClash` (`register_unless_clash` is the call that carries on without it).
+    Returns None, with the reason in `refusals()`, when the registry lock is not had within
+    `REGISTRY_LOCK_S`. Registering a name again replaces it, and rewrites this process's
+    registry file.
     """
     if not enabled():
         return None
@@ -235,17 +263,46 @@ def register(name, dir=None, cap=DEFAULT_CAP, headroom=0, max_age=None, order="o
     if order == "by-score" and score is None:
         raise ValueError("order 'by-score' needs a score function")
     cache_dir = _read_dir(name, dir)
-    with _registry_locked():            # no other process checks or publishes in between
+    with _registry_locked() as got:     # no other process checks or publishes in between
+        if not got:
+            why = ("cache_budget: not registering %r: the registry lock was not had within %ss;"
+                   " the cache runs without the policy" % (name, REGISTRY_LOCK_S))
+            print(why)
+            _REFUSED[name] = {"name": name, "reason": "lock", "message": why}
+            return None
         return _register(name, cache_dir, cap, headroom, max_age, order, pinned, refill, rank,
                          score, companions)
+
+
+def register_unless_clash(name, **settings):
+    """`register`, for a caller that can run without this cache: a clash with a cache another
+    live process registered is printed, kept in `refusals()`, and answered None, so the cache
+    runs without the policy. Every other refusal still raises `CacheRefused`."""
+    try:
+        return register(name, **settings)
+    except CacheClash as exc:
+        print("%s; the cache runs without the policy" % exc)
+        return None
+
+
+def refusals():
+    """{name: {name, reason, message[, other, pid, process]}} for every registration refused
+    since start and not registered since. `reason` is "clash" (another process's cache),
+    "refused" (this process's configuration) or "lock" (the registry lock timed out)."""
+    return {k: dict(v) for k, v in _REFUSED.items()}
 
 
 def _register(name, cache_dir, cap, headroom, max_age, order, pinned, refill, rank, score,
               companions):
     clash = _overlap(name, cache_dir)
     if clash:
-        raise CacheRefused("cache_budget: not registering %r: its directory %s %s"
-                           % (name, cache_dir, clash))
+        why, owner = clash if isinstance(clash, tuple) else (clash, None)
+        message = "cache_budget: not registering %r: its directory %s %s" % (name, cache_dir, why)
+        if owner is None:
+            _REFUSED[name] = {"name": name, "reason": "refused", "message": message}
+            raise CacheRefused(message)
+        _REFUSED[name] = dict(owner, name=name, reason="clash", message=message)
+        raise CacheClash(message, **owner)
     rec = {
         "name": name,
         "dir": cache_dir,
@@ -261,6 +318,7 @@ def _register(name, cache_dir, cap, headroom, max_age, order, pinned, refill, ra
     }
     with _mutex:
         _REGISTRY[name] = rec
+        _REFUSED.pop(name, None)
         _STATS.setdefault(name, {"last_run": None, "evicted": 0, "removed": 0,
                                  "over_cap": False})
         _publish()
@@ -284,14 +342,17 @@ def registry_dir():
 @contextlib.contextmanager
 def _registry_locked():
     """An exclusive lock on the registry directory itself, across processes, so one process's
-    overlap check and the publication of its row are never split by another's. Under
-    NETRADIO_READ_ONLY nothing is created or locked (nothing is published either). A lock that
-    cannot be taken (an unwritable root) is printed and the registration goes on unlocked, as it
-    did before the registry file existed."""
+    overlap check and the publication of its row are never split by another's. Yields True to
+    go on. Under NETRADIO_READ_ONLY nothing is created or locked (nothing is published either).
+    A lock that cannot be taken (an unwritable root) is printed and the registration goes on
+    unlocked, as it did before the registry file existed. A lock another process holds for
+    longer than REGISTRY_LOCK_S yields False: the caller registers nothing."""
     if _read_only():
-        yield
+        yield True
         return
     where, fd = registry_dir(), None
+    deadline = time.monotonic() + REGISTRY_LOCK_S
+    timed_out = False
     try:
         for _attempt in range(5):
             os.makedirs(where, exist_ok=True)
@@ -299,7 +360,17 @@ def _registry_locked():
                 fd = os.open(where, os.O_RDONLY)
             except FileNotFoundError:
                 continue                        # removed by an exiting process: make it again
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            while not _try_lock(fd):
+                if time.monotonic() >= deadline:
+                    timed_out = True
+                    break
+                time.sleep(0.05)
+            if timed_out:
+                os.close(fd)
+                fd = None
+                print("cache_budget: the registry lock at %s was not had within %ss"
+                      % (where, REGISTRY_LOCK_S))
+                break
             try:
                 same = os.fstat(fd).st_ino == os.stat(where).st_ino
             except OSError:
@@ -313,11 +384,34 @@ def _registry_locked():
         if fd is not None:
             os.close(fd)
             fd = None
+    if timed_out:
+        yield False
+        return
     try:
-        yield
+        yield True
     finally:
         if fd is not None:
             os.close(fd)
+
+
+def _try_lock(fd):
+    """Take an exclusive lock on `fd` without waiting: True when taken, False while another
+    holder has it. Any other error raises."""
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except BlockingIOError:
+        return False
+
+
+def _same_dir(a, b):
+    """True when `a` and `b` name one directory: the same device and inode where both exist
+    (so letter case on a case-insensitive volume, a symlink or `/var` against `/private/var`
+    never split one directory in two), else the same identity (`_identity`)."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return _identity(os.path.realpath(a)) == _identity(os.path.realpath(b))
 
 
 def _publish():
@@ -328,8 +422,12 @@ def _publish():
         return
     where = registry_dir()
     pid = os.getpid()
+    path = os.path.join(where, "%d.json" % pid)
+    tmp = path + ".tmp"
     try:
         os.makedirs(where, exist_ok=True)
+        if _own_row["dir"] is not None and _same_dir(_own_row["dir"], where):
+            _own_row["dir"] = where     # one directory, two spellings: never lock it twice
         if _own_row["dir"] != where:
             _drop_own_row()
             fd = os.open(os.path.join(where, "%d.lock" % pid), os.O_RDWR | os.O_CREAT, 0o644)
@@ -345,13 +443,18 @@ def _publish():
         row = {"pid": pid, "process": os.path.basename(sys.argv[0] if sys.argv else "") or "python",
                "at": _now().isoformat(),
                "caches": [_settings_of(r) for r in _REGISTRY.values()]}
-        path = os.path.join(where, "%d.json" % pid)
-        tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(row, fh, ensure_ascii=False)
         os.replace(tmp, path)
     except OSError as exc:
+        # Neither the torn `.tmp` nor the old row stays: the old one lists fewer caches than
+        # this process now holds. Its lock is still held, so the next write puts a row back.
         print("cache_budget: registry file write failed: %s" % exc)
+        for gone in (tmp, path):
+            try:
+                os.unlink(gone)
+            except OSError:
+                pass
 
 
 def _drop_own_row():
@@ -423,17 +526,20 @@ def other_processes():
 
 
 def _alive(lock_path):
-    """True while some process holds `lock_path` exclusively (its owner is running)."""
+    """True while some process holds `lock_path` exclusively (its owner is running). Only a
+    lock file that is gone, or a lock this call takes, means the owner has ended: any other
+    error (a lock file it may not open, no locks on that volume) cannot tell, and counts as
+    alive, so a live process's row is never deleted on a guess."""
     try:
         fd = os.open(lock_path, os.O_RDWR)
-    except OSError:
+    except FileNotFoundError:
         return False
+    except OSError:
+        return True
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        return True
     except OSError:
-        return False
+        return True                     # BlockingIOError: held; anything else: cannot tell
     finally:
         os.close(fd)          # closing releases a lock this call took
     return False
@@ -479,7 +585,8 @@ def _identity(path):
 
 
 def _overlap(name, cache_dir):
-    """Why `cache_dir` may not be a cache's directory, or None. Two caches never share or nest
+    """Why `cache_dir` may not be a cache's directory, or None. A clash with another process's
+    cache is (why, {other, pid, process}); every other reason is a string. Two caches never share or nest
     directories, and no cache holds the root, where the lock file lives. A directory that looks
     like real data is refused too, because the cap would delete its oldest files: one with a
     `.git` entry at its top level, the home directory or one that holds it, and the download
@@ -504,12 +611,13 @@ def _overlap(name, cache_dir):
         for other in proc["caches"]:
             try:
                 theirs = other["dir"]
-                if (other["name"] == name
-                        and os.path.realpath(theirs) == os.path.realpath(cache_dir)):
+                if other["name"] == name and _same_dir(theirs, cache_dir):
                     continue                    # the same cache, registered there too
                 if _nested(cache_dir, theirs) or _nested(theirs, cache_dir):
                     return ("overlaps the %r cache's directory, registered by process %s (%s)"
-                            % (other["name"], proc.get("pid"), proc.get("process")))
+                            % (other["name"], proc.get("pid"), proc.get("process")),
+                            {"other": other["name"], "pid": proc.get("pid"),
+                             "process": proc.get("process")})
             except (KeyError, TypeError, ValueError):
                 continue                        # a malformed row names no directory
     return None
@@ -1063,7 +1171,8 @@ def _run(recs, protect=()):
                 break
     return {"ran": True,
             "evicted": {n: _STATS[n]["evicted"] - before[n] for n in before},
-            "disk_pct": round(_disk_pct(root()), 1), "floor_pct": floor}
+            "disk_pct": round(_disk_pct(root()), 1), "floor_pct": floor,
+            "volumes": _readings(floor)}
 
 
 # --- the reads ------------------------------------------------------------------------------
@@ -1111,19 +1220,66 @@ def status_row(name, listing=None):
         return None
     row = _settings_of(rec)
     row.update(_usage_of(_listing(rec) if listing is None else listing))
+    try:
+        row["disk_pct"] = round(_disk_pct(rec["dir"]), 1)     # its own volume's reading
+    except OSError:
+        row["disk_pct"] = None
     stats = _STATS[name]
     row.update({"last_run": stats["last_run"], "evicted_since_start": stats["evicted"],
                 "removed_since_start": stats["removed"], "over_cap": stats["over_cap"]})
     return row
 
 
+def _mount_of(path):
+    """The mount point of the volume holding `path`: how a notice names the volume. A seam for
+    the tests."""
+    path = os.path.realpath(_existing(path))
+    while not os.path.ismount(path):
+        parent = os.path.dirname(path)
+        if parent == path:
+            break
+        path = parent
+    return path
+
+
+def _readings(floor):
+    """One reading per volume the root or a registered cache sits on, the root's first:
+    [{mount, disk_pct, past_floor, holds_root, caches}]. `caches` names the registered caches
+    on that volume. A volume that cannot be read is left out."""
+    out = []
+    root_dev = None
+    try:
+        root_dev = _device(root())
+    except OSError:
+        pass
+    for dev, where in _volumes().items():
+        try:
+            pct = round(_disk_pct(where), 1)
+            mount = _mount_of(where)
+        except OSError:
+            continue
+        on = []
+        for rec in _REGISTRY.values():
+            try:
+                if _device(rec["dir"]) == dev:
+                    on.append(rec["name"])
+            except OSError:
+                continue
+        out.append({"mount": mount, "disk_pct": pct, "past_floor": pct > floor,
+                    "holds_root": dev == root_dev, "caches": on})
+    return out
+
+
 def volume():
-    """The floor and the root volume's reading, no scan: {enabled, root, floor_pct, disk_pct},
-    or {enabled: False, reason} while dark."""
+    """The floor and the readings, no scan: {enabled, root, floor_pct, disk_pct, volumes}, where
+    `disk_pct` is the root's volume and `volumes` has one reading per volume a cache sits on
+    (`_readings`), so a cache on a second disk past the floor shows. {enabled: False, reason}
+    while dark."""
     if not enabled():
         return {"enabled": False, "reason": "NETRADIO_CACHE_ROOT is unset"}
-    return {"enabled": True, "root": root(), "floor_pct": disk_max_pct(),
-            "disk_pct": round(_disk_pct(root()), 1)}
+    floor = disk_max_pct()
+    return {"enabled": True, "root": root(), "floor_pct": floor,
+            "disk_pct": round(_disk_pct(root()), 1), "volumes": _readings(floor)}
 
 
 def status():
