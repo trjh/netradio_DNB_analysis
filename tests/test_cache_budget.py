@@ -1172,6 +1172,38 @@ class RegistryFile(CacheBudgetBase):
             fh.write("{torn")
         self.assertEqual(cb.other_processes(), [])
 
+    def test_two_processes_registering_overlapping_directories_at_once_one_is_refused(self):
+        """The overlap check and the row's publication run under one lock on the registry
+        directory, so two starts at the same moment can never both accept one directory."""
+        import fcntl
+        where = cb.registry_dir()
+        os.makedirs(where)
+        held = os.open(where, os.O_RDONLY)
+        fcntl.flock(held, fcntl.LOCK_EX)            # both children wait here, then race
+        code = ("import sys; sys.path.insert(0, %r); import cache_budget as cb\n"
+                "print('ready', flush=True)\n"
+                "try:\n    cb.register(sys.argv[1], dir=%r); print('registered', flush=True)\n"
+                "except cb.CacheRefused:\n    print('refused', flush=True)\n"
+                "sys.stdin.read()\n"
+                % (os.path.dirname(os.path.abspath(cb.__file__)), os.path.join(self.tmp, "same")))
+        kids = []
+        for name in ("one", "two"):
+            kid = subprocess.Popen([sys.executable, "-c", code, name], stdin=subprocess.PIPE,
+                                   stdout=subprocess.PIPE, text=True,
+                                   env=dict(os.environ, NETRADIO_CACHE_ROOT=self.root))
+            self.addCleanup(lambda k=kid: k.poll() is None and k.kill())
+            kids.append(kid)
+        for kid in kids:
+            self.assertEqual(kid.stdout.readline().strip(), "ready")
+        time.sleep(0.3)                             # both are at the lock
+        os.close(held)
+        outcomes = sorted(kid.stdout.readline().strip() for kid in kids)
+        for kid in kids:
+            kid.stdin.close()
+            kid.wait(timeout=30)
+            kid.stdout.close()
+        self.assertEqual(outcomes, ["refused", "registered"])
+
     def test_a_real_second_process_is_seen_while_it_runs_and_gone_after(self):
         child = subprocess.Popen(
             [sys.executable, "-c",

@@ -235,6 +235,13 @@ def register(name, dir=None, cap=DEFAULT_CAP, headroom=0, max_age=None, order="o
     if order == "by-score" and score is None:
         raise ValueError("order 'by-score' needs a score function")
     cache_dir = _read_dir(name, dir)
+    with _registry_locked():            # no other process checks or publishes in between
+        return _register(name, cache_dir, cap, headroom, max_age, order, pinned, refill, rank,
+                         score, companions)
+
+
+def _register(name, cache_dir, cap, headroom, max_age, order, pinned, refill, rank, score,
+              companions):
     clash = _overlap(name, cache_dir)
     if clash:
         raise CacheRefused("cache_budget: not registering %r: its directory %s %s"
@@ -272,6 +279,45 @@ def registry_dir():
     """`<root>/registry`, where each registering process keeps its rows; None when dark."""
     base = root()
     return os.path.join(base, REGISTRY_DIR) if base else None
+
+
+@contextlib.contextmanager
+def _registry_locked():
+    """An exclusive lock on the registry directory itself, across processes, so one process's
+    overlap check and the publication of its row are never split by another's. Under
+    NETRADIO_READ_ONLY nothing is created or locked (nothing is published either). A lock that
+    cannot be taken (an unwritable root) is printed and the registration goes on unlocked, as it
+    did before the registry file existed."""
+    if _read_only():
+        yield
+        return
+    where, fd = registry_dir(), None
+    try:
+        for _attempt in range(5):
+            os.makedirs(where, exist_ok=True)
+            try:
+                fd = os.open(where, os.O_RDONLY)
+            except FileNotFoundError:
+                continue                        # removed by an exiting process: make it again
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                same = os.fstat(fd).st_ino == os.stat(where).st_ino
+            except OSError:
+                same = False
+            if same:
+                break
+            os.close(fd)                        # locked a directory removed under us
+            fd = None
+    except OSError as exc:
+        print("cache_budget: registry lock not taken: %s" % exc)
+        if fd is not None:
+            os.close(fd)
+            fd = None
+    try:
+        yield
+    finally:
+        if fd is not None:
+            os.close(fd)
 
 
 def _publish():
@@ -315,20 +361,29 @@ def _drop_own_row():
     if where is None:
         return
     pid = os.getpid()
-    for fname in ("%d.json" % pid, "%d.lock" % pid):
-        try:
-            os.unlink(os.path.join(where, fname))
-        except OSError:
-            pass
-    if fd is not None:
-        try:
-            os.close(fd)
-        except OSError:
-            pass
     try:
-        os.rmdir(where)         # only when no other process has a row there
+        dfd = os.open(where, os.O_RDONLY)
+        fcntl.flock(dfd, fcntl.LOCK_EX)         # never remove the directory mid-registration
     except OSError:
-        pass
+        dfd = None
+    try:
+        for fname in ("%d.json" % pid, "%d.lock" % pid):
+            try:
+                os.unlink(os.path.join(where, fname))
+            except OSError:
+                pass
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        try:
+            os.rmdir(where)     # only when no other process has a row there
+        except OSError:
+            pass
+    finally:
+        if dfd is not None:
+            os.close(dfd)
 
 
 def other_processes():
