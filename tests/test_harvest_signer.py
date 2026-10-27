@@ -1450,7 +1450,10 @@ class ATornLedgerRefusesTheStart(_SignerCase):
         code, _sf, out = self._main("--rescan")
         self.assertEqual(code, 1)
         self.assertIn("cannot be read", out)
-        self.assertNotIn("rescan_pending", harvest._load(harvest.STATE, {}))
+        state = harvest._load(harvest.STATE, {})
+        self.assertNotIn("rescan_pending", state)
+        self.assertEqual((state["sig_alert"]["kind"], state["sig_alert"]["unreadable"]),
+                         ("ledger", True), "the same standing alert a run's start raises")
         self.assertEqual(self._bytes(), data)
 
 

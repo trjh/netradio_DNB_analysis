@@ -1130,6 +1130,18 @@ def _ledger_unreadable_alert(state):
     return isinstance(alert, dict) and bool(alert.get("unreadable"))
 
 
+def _raise_unreadable_alert(state, reason):
+    """Stand the unreadable-ledger alert in `state` (one issues row, not one per start) and
+    return the refusal's text. The caller saves the state."""
+    why = ledger_unreadable_why(reason)
+    first = not _ledger_unreadable_alert(state)
+    state["sig_alert"] = {"at": _now(), "kind": "ledger", "unreadable": True, "why": why}
+    if first:
+        state["issues"] = ((state.get("issues") or []) +
+                           [{"at": _now(), "issue": "ledger: " + why}])[-50:]
+    return why
+
+
 def reconcile_ledger(state=None, accept_rebuild=False):
     """Seed the ledger at first start; at every later writer start, rebuild it from the
     bucket's listing, compare, and merge the rebuild in. This replaces the old lost-signature
@@ -1182,15 +1194,9 @@ def reconcile_ledger(state=None, accept_rebuild=False):
     # on the first start that finds a readable or absent ledger.
     unreadable = ledger_unreadable()
     if unreadable is not None:
-        why = ledger_unreadable_why(unreadable)
         if state is None:
             state = _load(STATE, blank_state())
-        first = not _ledger_unreadable_alert(state)
-        state["sig_alert"] = {"at": _now(), "kind": "ledger", "unreadable": True, "why": why}
-        if first:
-            state["issues"] = ((state.get("issues") or []) +
-                               [{"at": _now(), "issue": "ledger: " + why}])[-50:]
-        return dict(res, refused=True, why=why)
+        return dict(res, refused=True, why=_raise_unreadable_alert(state, unreadable))
     if state is not None and _ledger_unreadable_alert(state):
         state.pop("sig_alert", None)
         res["cleared"] = True                 # the ledger reads again (or was moved aside)
@@ -3190,12 +3196,6 @@ def main():
             print("# %s does not exist yet -- start the harvester once (it seeds the ledger "
                   "from the bucket) and re-run." % LEDGER)
             return
-        # A ledger that does not parse would read as an empty corpus, and the rescan would
-        # stamp that same completion over nothing.
-        unreadable = ledger_unreadable()
-        if unreadable is not None:
-            print("# " + ledger_unreadable_why(unreadable))
-            return 1
         # ONE WRITER: the rescan rewrites the state file for hours, and so does the loop. Two
         # writers means the last save wins and the other's work is silently lost, so this
         # takes the loop's lock and refuses while the loop holds it -- as --sign-one does.
@@ -3209,6 +3209,14 @@ def main():
         # rescan notices it between pairs and the state is saved below.
         install_signal_handlers()
         state = _load(STATE, blank_state())
+        # A ledger that does not parse would read as an empty corpus, and the rescan would
+        # stamp that same completion over nothing. Refuse, under the lock, with the same
+        # standing alert a run's start raises.
+        unreadable = ledger_unreadable()
+        if unreadable is not None:
+            print("# " + _raise_unreadable_alert(state, unreadable))
+            _save(STATE, state)
+            return 1
         if migrate_query_shape(state) is not None:
             _save(STATE, state)
         ledger = load_ledger()
