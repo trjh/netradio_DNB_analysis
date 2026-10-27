@@ -48,6 +48,13 @@ class ImportOrSkip(unittest.TestCase):
         with self.assertRaises(ImportError):
             import_or_skip("needs_local", deps=("numpy",))
 
+    def test_a_missing_name_in_an_optional_library_raises(self):
+        """`from numpy import x` for an x numpy lacks names numpy, but numpy is installed:
+        the code is wrong, and the test file must fail."""
+        self._module("bad_from_import", "from json import a_name_json_lacks\n")
+        with self.assertRaises(ImportError):
+            import_or_skip("bad_from_import", deps=("json",))
+
     def test_any_other_error_raises(self):
         self._module("broken_at_import", "raise RuntimeError('a bug at import time')\n")
         with self.assertRaises(RuntimeError):
@@ -58,6 +65,7 @@ class ImportOrSkip(unittest.TestCase):
 
     def test_the_rule_reads_only_import_errors(self):
         self.assertFalse(missing_optional(RuntimeError("numpy")))
+        self.assertFalse(missing_optional(ImportError("x", name="numpy")))
         self.assertTrue(missing_optional(ModuleNotFoundError("x", name="numpy.linalg")))
         self.assertFalse(missing_optional(ModuleNotFoundError("x", name="sigstore")))
 

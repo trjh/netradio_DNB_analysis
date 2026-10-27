@@ -6,8 +6,8 @@ constant) is a bug, and its tests must fail, not skip. A bare `except Exception`
 import treats both the same, so a harvester that cannot start would leave its suite green
 with nearly every test skipped.
 
-`import_or_skip(name)` imports `name` and returns the module. When the import fails with an
-`ImportError` for one of the optional third-party libraries in `deps`, it returns None
+`import_or_skip(name)` imports `name` and returns the module. When the import fails with a
+`ModuleNotFoundError` for one of the optional third-party libraries in `deps`, it returns None
 instead, and the caller's `unittest.skipUnless(module, ...)` decorators skip. Every other
 error is raised.
 """
@@ -19,8 +19,12 @@ OPTIONAL_DEPS = ("numpy", "scipy", "librosa", "soundfile", "numba", "audioread")
 
 
 def missing_optional(exc, deps=OPTIONAL_DEPS):
-    """True when `exc` is an ImportError for one of `deps` (or a submodule of one)."""
-    if not isinstance(exc, ImportError):
+    """True when `exc` says one of `deps` (or a submodule of one) is not installed.
+
+    Only a ModuleNotFoundError counts. A plain ImportError naming the library, such as
+    `from numpy import a_name_it_lacks`, means the code under test is wrong, not that the
+    library is missing."""
+    if not isinstance(exc, ModuleNotFoundError):
         return False
     missing = (getattr(exc, "name", None) or "").split(".")[0]
     return missing in deps
