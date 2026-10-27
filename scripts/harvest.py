@@ -3217,6 +3217,9 @@ def main():
             print("# " + _raise_unreadable_alert(state, unreadable))
             _save(STATE, state)
             return 1
+        if _ledger_unreadable_alert(state):
+            state.pop("sig_alert", None)          # the ledger reads again: stand it down
+            _save(STATE, state)
         if migrate_query_shape(state) is not None:
             _save(STATE, state)
         ledger = load_ledger()

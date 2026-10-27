@@ -1455,6 +1455,11 @@ class ATornLedgerRefusesTheStart(_SignerCase):
         self.assertEqual((state["sig_alert"]["kind"], state["sig_alert"]["unreadable"]),
                          ("ledger", True), "the same standing alert a run's start raises")
         self.assertEqual(self._bytes(), data)
+        # repaired: the next rescan stands the alert down
+        harvest._save(harvest.LEDGER, {})
+        code, _sf, _out = self._main("--rescan")
+        self.assertIsNone(code)
+        self.assertNotIn("sig_alert", harvest._load(harvest.STATE, {}))
 
 
 @unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
