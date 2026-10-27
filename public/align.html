@@ -1470,10 +1470,14 @@ addEventListener("resize", () => requestAnimationFrame(() => {
 // The review-note committer runs inside the server; its failures reach only the server log
 // and this route. Shown as one line while any is standing; checked again every minute, so a
 // failure that clears goes away by itself.
+// One check at a time: the next is scheduled only when this one ends, and a fetch that hangs
+// is abandoned after 20 s.
 async function loadSyncStatus() {
   const el = $("syncNote");
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 20000);
   try {
-    const r = await fetch("/api/align/sync-status");
+    const r = await fetch("/api/align/sync-status", {signal: ctl.signal});
     if (!r.ok) return;
     const errs = (await r.json()).errors || {};
     const ops = Object.keys(errs);
@@ -1483,12 +1487,12 @@ async function loadSyncStatus() {
       : "";
     el.style.display = ops.length ? "" : "none";
   } catch (e) { /* a missed check is retried on the next one */ }
+  finally { clearTimeout(timer); setTimeout(loadSyncStatus, 60000); }
 }
 
 loadPrefs();
 loadSources().catch(err => { $("tool").style.display = ""; status(String(err), true); });
 loadSyncStatus();
-setInterval(loadSyncStatus, 60000);
 </script>
 </body>
 </html>

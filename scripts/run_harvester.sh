@@ -290,7 +290,9 @@ start_locked() {
       ''|Z*) code=0; wait "$pid" 2>/dev/null || code=$? ;;
     esac
     case "$code" in
-      1) echo "the harvester refused to start: its ledger (exit 1)" >&2 ;;
+      # 1 is the ledger's refusal, and also any Python crash (a SyntaxError after a bad pull,
+      # an exception in the start-up reconcile): the log tells the two apart, this line cannot.
+      1) echo "the harvester refused to start (its ledger) or crashed: see the log (exit 1)" >&2 ;;
       2) echo "the harvester refused to start: a file or setting it needs is missing (exit 2)" >&2 ;;
       3) echo "the harvester refused to start: another ledger/state writer holds the lock (exit 3)" >&2 ;;
     esac

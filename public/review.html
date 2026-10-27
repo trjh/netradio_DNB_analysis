@@ -1276,7 +1276,7 @@ function buildPicker() {
     }
     const li = document.createElement("li");
     li.className = "pairRow" + (e.usable.length ? "" : " disabled") +
-                   (cur === e ? " cur" : "");
+                   (cur && cur.stem === e.stem && cur.orig === e.orig ? " cur" : "");
     const name = document.createElement("span");
     name.className = "grow";
     name.textContent = "orig" + String(e.orig).padStart(3, "0") +
@@ -1320,8 +1320,12 @@ function buildPicker() {
   const placedNote = !sources.enabled || !sources.placed_state || sources.placed_state === "ok"
     ? ""
     : sources.placed_state === "busy"
-      ? " — placed pairs not listed yet: the server is busy with another computation, asking again"
-      : " — placed pairs unavailable: the listing failed (see the server log); reload to retry";
+      ? (sources.placed_gave_up
+          ? " — placed pairs not listed: the server is still busy; reload to retry"
+          : " — placed pairs not listed yet: the server is busy with another computation, asking again")
+      : " — placed pairs unavailable: the listing failed" +
+        (sources.placed_error ? " (" + sources.placed_error + ")" : "") +
+        "; the server log has the same line; reload to retry";
   $("pickInfo").textContent = (entries.length
     ? entries.length + " pairs (hints + placed, grouped by capture)" +
       (sources.enabled ? "" : " — DSP dark: hints only, no waveform envelopes")
@@ -1532,7 +1536,17 @@ function restorePrefs() {
     $("modeConst").className = mode === "constant-rate" ? "on" : "";
     $("modeRe").className = mode === "re-anchor" ? "on" : "";
   }
-  if (!p.pair) return false;
+  return restorePrefPair(p);
+}
+
+// The pair-restoring half of restorePrefs: open the remembered pair if the picker has it. A
+// placed-only pair is missing while the placed listing is busy, so a retry that brings the
+// placed pairs calls this again.
+function restorePrefPair(p) {
+  if (p === undefined) {
+    try { p = JSON.parse(localStorage.getItem(PREFS_KEY) || "null"); } catch (e) { p = null; }
+  }
+  if (!p || p.v !== 1 || !p.pair) return false;
   const idx = entries.findIndex(e => e.stem + "|" + e.orig === p.pair && e.usable.length);
   if (idx < 0) return false;
   openPair(idx, Array.isArray(p.sel) ? p.sel : null);
@@ -1560,9 +1574,14 @@ async function boot() {
 
 // A busy listing is asked again a few times, a few seconds apart. When the placed pairs
 // arrive the picker is rebuilt; a pair already open stays open as it is (only reopening it
-// picks up placed points it did not have).
+// picks up placed points it did not have), and with nothing open the remembered pair is
+// restored. After the last attempt the note says to reload.
 async function retryPlaced(attempt) {
-  if (attempt > 5) return;
+  if (attempt > 5) {
+    sources.placed_gave_up = true;
+    buildPicker();
+    return;
+  }
   await new Promise(res => setTimeout(res, 3000 * attempt));
   let j;
   try {
@@ -1571,8 +1590,10 @@ async function retryPlaced(attempt) {
   if (j.placed_state === "busy") return retryPlaced(attempt + 1);
   sources.placed = j.placed;
   sources.placed_state = j.placed_state;
+  sources.placed_error = j.placed_error;
   buildEntries();
   buildPicker();
+  if (!cur) restorePrefPair();
 }
 window.addEventListener("resize", () => { renderZoom(); drawWave(); });
 boot();

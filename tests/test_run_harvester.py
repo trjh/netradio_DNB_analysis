@@ -128,7 +128,9 @@ class StartTests(LauncherTestCase):
     def test_a_refusal_at_start_is_named_by_its_exit_code(self):
         # harvest.py exits 2 for a missing file or setting and 3 for a held lock; a start
         # that sees the process gone names the kind, so a caller need not read the log.
-        for code, words in ((2, "a file or setting it needs is missing"),
+        # 1 is the ledger's refusal or any crash, so its line names both and points at the log.
+        for code, words in ((1, "refused to start (its ledger) or crashed: see the log"),
+                            (2, "a file or setting it needs is missing"),
                             (3, "another ledger/state writer holds the lock")):
             with self.subTest(code=code):
                 self.fake_interpreter(body="#!/bin/sh\nexit %d\n" % code)

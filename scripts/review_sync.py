@@ -53,6 +53,7 @@ its `errors` are that process's own, never the server's.
 import glob
 import json
 import os
+import re
 import subprocess
 import tempfile
 import threading
@@ -99,8 +100,9 @@ def _now():
 
 
 def _fail(op, detail):
-    """Record `op`'s failure; print it once per distinct message (the server's log)."""
-    _last_error[op] = {"at": _now(), "detail": detail}
+    """Record `op`'s failure; print it once per distinct message (the server's log). `at` is
+    when the failure began: it stays the first failure's time until the op next succeeds."""
+    _last_error[op] = {"at": _last_error.get(op, {}).get("at") or _now(), "detail": detail}
     if _logged.get(op) != detail:
         _logged[op] = detail
         if ECHO:
@@ -112,6 +114,15 @@ def _ok(op):
     _last_error.pop(op, None)
     if _logged.pop(op, None) is not None and ECHO:
         print("review-sync: %s working again" % op, flush=True)
+
+
+# commit_once stages through a temp index with a new random name each pass; a failure that names
+# it would read as a new message every pass, so the name is replaced before the message is kept.
+_TEMP_INDEX = re.compile(r"[^\s'\"]*review_sync_index\.[^\s'\"]*")
+
+
+def _temp_index_named(detail):
+    return _TEMP_INDEX.sub("<temp index>", detail)
 
 
 # --- config (read lazily, so a test's environment is the one used) ------------------------------
@@ -316,7 +327,7 @@ def commit_once(message=None, dry_run=False):
             _ok("commit")
             return sha
         except Exception as exc:        # noqa: BLE001 — a sync failure must never crash the server
-            _fail("commit", str(exc)[:200])
+            _fail("commit", _temp_index_named(str(exc))[:200])
             return None
 
 

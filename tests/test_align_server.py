@@ -90,6 +90,12 @@ class TestStandaloneServer(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(data)["errors"]["commit"]["detail"], "disk full")
 
+    def test_sync_status_route_leaves_out_the_checkout_path(self):
+        fake = {"enabled": True, "repo": "/somewhere/checkout", "errors": {}}
+        with mock.patch.object(align_server.review_sync, "status", return_value=fake):
+            _status, data = self._req("GET", "/api/align/sync-status")
+        self.assertNotIn("repo", json.loads(data))
+
     def test_compute_routes_relay_the_dark_404(self):
         for path in ("/api/align/slice", "/api/align/refine", "/api/align/context",
                      "/api/align/overview"):

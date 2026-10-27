@@ -28,6 +28,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "scripts"))
@@ -292,6 +293,27 @@ class TestFailuresReachTheLog(ReviewSyncBase):
         self.assertNotIn("commit", review_sync.status()["errors"])
         _sha, quiet = self._commit()                 # nothing changed: nothing to say
         self.assertEqual(quiet, "")
+
+    def test_failing_since_keeps_the_first_failures_time(self):
+        with mock.patch.object(review_sync, "_now", side_effect=["t1", "t2", "t3"]):
+            review_sync._fail("push", "offline")
+            review_sync._fail("push", "still offline")
+        self.assertEqual(review_sync._last_error["push"], {"at": "t1", "detail": "still offline"})
+        review_sync._ok("push")
+        with mock.patch.object(review_sync, "_now", return_value="t9"):
+            review_sync._fail("push", "offline")
+        self.assertEqual(review_sync._last_error["push"]["at"], "t9", "a new failure starts anew")
+
+    def test_the_temp_index_name_does_not_make_a_failure_new(self):
+        # commit_once stages through a temp index with a new random name each pass.
+        lines = set()
+        for name in ("review_sync_index.ab12cd", "review_sync_index.zz99qq"):
+            self._failing_update_ref("fatal: Unable to create '/tmp/x/%s.lock': File exists" % name)
+            self._seed_review()
+            _sha, out = self._commit()
+            lines.add(out)
+        self.assertEqual(len([ln for ln in lines if ln]), 1, lines)
+        self.assertIn("<temp index>", review_sync.status()["errors"]["commit"]["detail"])
 
 
 class TestPush(ReviewSyncBase):

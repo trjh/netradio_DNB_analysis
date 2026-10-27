@@ -340,6 +340,23 @@ def list_placed(mp3_dir, runner=None, worker=None):
     return placed_listing(mp3_dir, runner=runner, worker=worker)["sets"]
 
 
+_placed_logged = [None]               # the last failure printed: one log line per distinct reason
+
+
+def _placed_failed(reason):
+    """A "failed" answer, with its reason printed to the server log once per distinct reason."""
+    reason = reason[:200]
+    if _placed_logged[0] != reason:
+        _placed_logged[0] = reason
+        print("align: the placed listing failed -- %s" % reason, flush=True)
+    return {"state": "failed", "sets": [], "error": reason}
+
+
+def _first_line(data):
+    text = (data or b"").decode("utf-8", "replace") if isinstance(data, bytes) else (data or "")
+    return next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
+
+
 def placed_listing(mp3_dir, runner=None, worker=None):
     """{"state", "sets"}: the hand-placed pairs, and whether the list is the whole answer.
 
@@ -347,7 +364,8 @@ def placed_listing(mp3_dir, runner=None, worker=None):
     exactly as §6.5 specifies), "busy" (another computation holds the lock: ask again in a
     moment) or "failed" (the op timed out, could not start, or gave no usable answer). Only
     "ok" means "these are all the placed pairs"; every other state has an empty list, and the
-    page says which, so an empty list is never read as "nothing placed".
+    page says which, so an empty list is never read as "nothing placed". A "failed" answer
+    also carries `error`, a short reason, and prints it to the server log once.
     """
     if not enabled():
         return {"state": "dark", "sets": []}
@@ -379,11 +397,20 @@ def placed_listing(mp3_dir, runner=None, worker=None):
                 payload = json.loads((proc.stdout or b"").decode("utf-8", "replace"))
             except ValueError:
                 payload = None
-        if not isinstance(payload, dict) or payload.get("error"):
-            return {"state": "failed", "sets": []}
+            if not isinstance(payload, dict):
+                why = _first_line(getattr(proc, "stderr", None)) or "no JSON answer"
+                return _placed_failed("the placed op exited %s: %s"
+                                      % (getattr(proc, "returncode", "?"), why))
+        if not isinstance(payload, dict):
+            return _placed_failed("the placed op gave no answer")
+        if payload.get("error"):
+            return _placed_failed("the placed op answered: %s" % _first_line(str(payload["error"])))
+        _placed_logged[0] = None
         return {"state": "ok", "sets": _validated_placed_sets(payload, streams)}
-    except (subprocess.TimeoutExpired, OSError):
-        return {"state": "failed", "sets": []}
+    except subprocess.TimeoutExpired:
+        return _placed_failed("the placed op timed out after %s s" % SUBPROCESS_TIMEOUT_S)
+    except OSError as exc:
+        return _placed_failed("the placed op could not start: %s" % exc)
     finally:
         _run_lock.release()
 

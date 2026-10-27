@@ -204,7 +204,8 @@ is a usage error: an unknown verb, an argument to `start`/`restart` other than
 `--accept-ledger-rebuild`, or a `NETRADIO_HARVEST_*` value that is not a plain number —
 `NETRADIO_HARVEST_LOG_MAX_BYTES=10MB` is refused rather than quietly taken as "never
 rotate". `harvest.py` itself exits 0 on a clean stop and non-zero on a refusal: 1 for the
-ledger, 2 when a file or setting it needs is missing (the rulings file, a cache, the
+ledger's refusal (and for any crash, so `start` says "refused (its ledger) or crashed" and
+points at the log), 2 when a file or setting it needs is missing (the rulings file, a cache, the
 directories, the ledger a rescan reads, a malformed key), and 3 when another ledger/state
 writer holds the lock. When `start` sees the harvester exit at once, it names which of these
 it was. The interpreter is `.venv/bin/python` unless `NETRADIO_PYTHON` names another one.

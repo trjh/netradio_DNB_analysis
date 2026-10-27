@@ -279,7 +279,7 @@ def acquire_writer_lock():
 
 
 # THE EXIT CODE OF A REFUSAL, so the process that started this one tells a refusal from a clean
-# stop (0) without reading the log. 1 stays the ledger's refusal (and a decode child's crash).
+# stop (0) without reading the log. 1 stays the ledger's refusal, and any crash exits 1 too.
 EXIT_CONFIG = 2      # a file or setting the run needs is missing: rulings, a cache, directories
 EXIT_LOCKED = 3      # another ledger/state writer holds the lock
 

@@ -175,6 +175,31 @@ class LiveEndTests(unittest.TestCase):
         self.assertNotIn("master_seconds", json.dumps(data))
 
 
+class RefusalTests(unittest.TestCase):
+    """A refused build prints one line and exits non-zero: no traceback, no file."""
+
+    def test_a_refusal_is_a_message_and_exit_1(self):
+        import contextlib
+        import io
+        import sys
+        import tempfile
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "track-metadata.json")
+            argv, sys.argv = sys.argv, ["build_track_metadata.py", "--out", out]
+            printed = io.StringIO()
+            try:
+                with mock.patch.object(b, "parse_label_track_ids",
+                                       side_effect=b.stream_files.BuildRefused("cannot read x")), \
+                        contextlib.redirect_stdout(printed):
+                    code = b.main()
+            finally:
+                sys.argv = argv
+            self.assertEqual(code, 1)
+            self.assertIn("REFUSING TO WRITE: cannot read x", printed.getvalue())
+            self.assertFalse(os.path.exists(out))
+
+
 class RemainderParseTests(unittest.TestCase):
     """First-pass remainder.tsv: `Title / Artist` (artist last, may be empty/absent)."""
 

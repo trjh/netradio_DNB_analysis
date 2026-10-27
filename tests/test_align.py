@@ -1530,6 +1530,26 @@ class TestPlacedProvider(_Env):
         again = align_inspect.placed_listing(self.mp3, runner=self._runner(self._op_payload()))
         self.assertEqual(again["state"], "ok", "the next answer clears it")
 
+    def test_a_failed_listing_says_why_once_in_the_log(self):
+        # The page says "the server log has the same line": every failed case prints its
+        # reason, once per distinct reason, and carries it in `error` for the page.
+        import contextlib
+        import io
+        align_inspect._placed_logged[0] = None
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            first = align_inspect.placed_listing(self.mp3, runner=self._runner({"error": "no labels"}))
+            align_inspect.placed_listing(self.mp3, runner=self._runner({"error": "no labels"}))
+            timeout = mock.Mock(side_effect=subprocess.TimeoutExpired("placed", 120))
+            timed = align_inspect.placed_listing(self.mp3, runner=timeout)
+        self.assertIn("no labels", first["error"])
+        self.assertIn("timed out", timed["error"])
+        log = out.getvalue()
+        self.assertEqual(log.count("no labels"), 1, log)
+        self.assertEqual(log.count("timed out"), 1, log)
+        self.assertNotIn("error", align_inspect.placed_listing(
+            self.mp3, runner=self._runner(self._op_payload())))
+
     def test_worker_answer_short_circuits_the_subprocess(self):
         worker = self._StubWorker(result=self._op_payload())
         runner = mock.Mock(side_effect=AssertionError("one-shot path must not run"))
