@@ -732,11 +732,14 @@ class UsageTests(LauncherTestCase):
 
 
 # A stand-in that runs the real stamp check when the launcher asks for it, and otherwise stays
-# up like FAKE_PY. The launcher runs `$PYTHON <root>/scripts/rulings_stamp.py`.
+# up like FAKE_PY. The launcher runs `$PYTHON <root>/scripts/rulings_stamp.py`. The `exit 0`
+# after the sleep keeps a shell that execs its last command from replacing itself with
+# `sleep`, which would take `harvest.py` off the process's command line.
 STAMP_PY = (
     "#!/bin/sh\n"
     "case \"$1\" in */rulings_stamp.py) exec %s \"$@\" ;; esac\n"
-    "sleep 30\n" % sys.executable
+    "sleep 30\n"
+    "exit 0\n" % sys.executable
 )
 STAMP_SRC = os.path.join(os.path.dirname(HERE), "scripts", "rulings_stamp.py")
 REQUIRE = {"NETRADIO_RULINGS_STAMP": "require"}

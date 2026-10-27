@@ -226,7 +226,8 @@ rulings file is written again.
 The stamp is written by the process that writes the rulings file; a mismatch usually means a
 merge or a pull put an older committed copy back. The fix is to have that process write the
 file again (it writes the stamp with it), then start again. The check reads nothing else: not
-the stamp's age, not its writer's pid.
+the stamp's age, not its writer's pid. The check is at the start only: a running harvester
+re-reads the rulings file every pass and follows whatever its writer puts there.
 
 The setting is off by default (unset, empty or `off`), so a harvester run with rulings kept by
 hand and no stamp starts as before. Any other value is refused with exit 2, so a misspelt
