@@ -215,10 +215,12 @@ class HarvestTakesWhatTheLauncherForwards(LauncherTestCase):
         from unittest import mock
         sys.path.insert(0, os.path.join(os.path.dirname(HERE), "scripts"))
         self.addCleanup(sys.path.remove, sys.path[0])
-        try:
-            import harvest
-        except Exception as exc:        # librosa/numba absent -> not this test's job
-            self.skipTest("harvest.py does not import here: %s" % exc)
+        sys.path.insert(0, HERE)                     # sibling test helpers
+        self.addCleanup(sys.path.remove, HERE)
+        from optional_imports import import_or_skip
+        harvest = import_or_skip("harvest")   # any error but a missing library fails here
+        if harvest is None:
+            self.skipTest("harvest.py needs the audio libraries (.venv) -- skipping")
 
         class Parsed(Exception):
             pass
@@ -440,6 +442,20 @@ class StatusTests(LauncherTestCase):
         self.assertIn("  alert:  the ledger and its rebuild differ on 30 of 120 keys, start "
                       "refused (since 2026-09-03T09:00:00Z)", out.stdout)
 
+    def test_an_unreadable_ledger_alert_says_what_to_do_not_a_rebuild_count(self):
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
+            json.dump({"sig_alert": {"at": "2026-10-27T09:00:00Z", "kind": "ledger",
+                                     "unreadable": True,
+                                     "why": "the ledger (x) exists but cannot be read"}},
+                      fh, indent=2)
+        out = self.run_cmd("status")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("  alert:  the ledger cannot be read, nothing is signed: restore it from "
+                      "a backup, repair it, fix its permissions, or move it aside "
+                      "(since 2026-10-27T09:00:00Z)", out.stdout)
+        self.assertNotIn("rebuild differ", out.stdout)
+
     def test_no_alert_line_without_a_standing_alert(self):
         os.makedirs(self.state_dir, exist_ok=True)
         with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
@@ -521,8 +537,8 @@ class StatusTests(LauncherTestCase):
 
     def test_a_garbled_ledger_is_not_reported_as_nothing_signed(self):
         """A ledger the counter finds no rows in is "nothing signed yet" only when it really
-        is `{}`. harvest.py treats a ledger it cannot parse as empty, so `status` is where a
-        garbled one has to show."""
+        is `{}`. harvest.py refuses to start on a ledger it cannot parse, and `status` must
+        not call a garbled one empty."""
         for data in (b"not json at all\n", bytes(range(256)), b"", b"{}x"):
             with self.subTest(data=data[:12]):
                 self.write_raw(data)

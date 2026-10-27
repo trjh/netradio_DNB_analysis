@@ -129,7 +129,8 @@ alert_line() {
   # The standing signature alert: the harvester writes a `sig_alert` block into
   # .harvest/state.json, and prints one status line while the block is there and nothing
   # at all otherwise. Two kinds: `ledger` (the ledger and its rebuild from the bucket
-  # listing differ past the threshold, so the start was refused) and `store` (more signed
+  # listing differ past the threshold, or, with `unreadable` set, the ledger file exists
+  # and cannot be read; either way nothing is signed) and `store` (more signed
   # rows lost their objects than the cap allows, so nothing was changed on that side). A
   # block with no `kind` is the store shape. Read with grep and sed, like the other lines:
   # the file is flattened to one line, and the block holds no nested braces.
@@ -140,7 +141,12 @@ alert_line() {
   [ -n "$block" ] || return 0
   kind="$(alert_field "$block" kind '"\([^"]*\)"')"
   at="$(alert_field "$block" at '"\([^"]*\)"')"
-  if [ "$kind" = "ledger" ]; then
+  if printf '%s' "$block" | grep -q '"unreadable"[[:space:]]*:[[:space:]]*true'; then
+    # The unreadable-ledger alert is kind `ledger` too, but carries no counts: there is no
+    # ledger to compare a rebuild with. A start refuses on it, and a running loop stops.
+    printf '  alert:  the ledger cannot be read, nothing is signed: restore it from a backup, '
+    printf 'repair it, fix its permissions, or move it aside (since %s)\n' "${at:-?}"
+  elif [ "$kind" = "ledger" ]; then
     printf '  alert:  the ledger and its rebuild differ on %s of %s keys, start refused (since %s)\n' \
       "$(alert_field "$block" differ '\([0-9]*\)')" \
       "$(alert_field "$block" keys '\([0-9]*\)')" "${at:-?}"
@@ -187,8 +193,8 @@ ledger_line() {
   delayed="$(ledger_count '"status"[[:space:]]*:[[:space:]]*"delayed"')"
   if [ "$rows" -eq 0 ]; then
     # No rows is "nothing signed yet" only for a ledger that really is empty, `{}`. A file
-    # that is empty or garbled reads as no rows too, and harvest.py treats a ledger it cannot
-    # parse as empty, so `status` is where that has to show.
+    # that is empty or garbled reads as no rows too; harvest.py refuses to start on it, and
+    # `status` must say so rather than call it empty.
     # `tr` runs in the C locale: under UTF-8 it stops at the first byte that is not UTF-8,
     # and a `{}` followed by one would read as empty.
     if [ "$(LC_ALL=C tr -d '[:space:]' <"$LEDGER" 2>/dev/null | head -c 3 || true)" = '{}' ]

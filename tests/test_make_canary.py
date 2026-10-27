@@ -19,10 +19,10 @@ from unittest import mock
 SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
 sys.path.insert(0, SCRIPTS)
 
-try:
-    import make_canary                      # noqa: E402
-except Exception:                            # numpy absent -> not this test's job
-    make_canary = None
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # sibling test helpers
+from optional_imports import import_or_skip  # noqa: E402
+
+make_canary = import_or_skip("make_canary")  # None only when numpy is missing
 
 
 @unittest.skipUnless(make_canary, "make_canary.py needs numpy -- not this test's job")

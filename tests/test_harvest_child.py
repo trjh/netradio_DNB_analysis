@@ -29,11 +29,11 @@ sys.path.insert(0, SCRIPTS)
 
 import numpy as np                      # noqa: E402
 
-try:
-    import harvest                      # noqa: E402
-    import memwatch                     # noqa: E402
-except Exception:                       # a dependency this test does not own
-    harvest = memwatch = None
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # sibling test helpers
+from optional_imports import import_or_skip  # noqa: E402
+
+harvest = import_or_skip("harvest")     # None only when an audio library is missing
+memwatch = import_or_skip("memwatch") if harvest else None
 
 import cache_budget                     # noqa: E402  (the machine's one cache policy)
 
