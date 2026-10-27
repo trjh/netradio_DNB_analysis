@@ -202,7 +202,9 @@ was started.
 and **1 when it is down**; `start` is 1 when it refuses (one is already running, another
 start is in flight, no interpreter) and 0 when one is now up; `stop` is 0 either way. A `2`
 is a usage error or a refused setting: an unknown verb, an argument to `start`/`restart` other
-than `--accept-ledger-rebuild`, a refused rulings file's stamp (see below) or a
+than `--accept-ledger-rebuild`, a refused rulings file's stamp (see below; that check runs
+before the "already running" check, so `start` against a running harvester exits 2, not 1,
+when the stamp does not match) or a
 `NETRADIO_RULINGS_STAMP` value other than `require` or `off`, or a `NETRADIO_HARVEST_*` value
 that is not a plain number —
 `NETRADIO_HARVEST_LOG_MAX_BYTES=10MB` is refused rather than quietly taken as "never
@@ -210,7 +212,7 @@ rotate". The interpreter is `.venv/bin/python` unless `NETRADIO_PYTHON` names an
 
 ```bash
 NETRADIO_RULINGS_STAMP=require scripts/run_harvester.sh start    # or set it in .env
-.venv/bin/python scripts/rulings_stamp.py                         # the same check, alone
+.venv/bin/python scripts/rulings_stamp.py                         # the same check, alone: reads .env, prints one line
 ```
 
 **The rulings file's stamp is checked only when asked for.** With

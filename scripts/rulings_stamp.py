@@ -32,6 +32,9 @@ gives a missing file or setting.
 
     .venv/bin/python scripts/rulings_stamp.py      # exit 0: off or matching; exit 2: refused
 
+Run by itself it reads the checkout's `.env` for the setting (the file wins, as it does for the
+launcher) and prints one line on success saying which it was.
+
 Standard library only, so the launcher can run it cheaply before it starts anything.
 """
 
@@ -110,11 +113,37 @@ def check(rulings=RULINGS, stamp=STAMP, environ=None):
     return refusal(rulings, stamp)
 
 
+def env_file_value(path=None, key=SETTING):
+    """`key`'s value in the checkout's `.env`, read the way the launcher's `.env` reader does
+    (trimmed lines, `#` comments, split on the first `=`, quotes stripped, first line wins),
+    or None when the file or the key is absent."""
+    path = path or os.path.join(_ROOT, ".env")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = (part.strip() for part in line.split("=", 1))
+        if name == key:
+            return value.strip('"').strip("'")
+    return None
+
+
 def main():
-    why = check()
+    environ = dict(os.environ)
+    from_file = env_file_value()
+    if from_file is not None:
+        environ[SETTING] = from_file          # the file wins, as the launcher's load does
+    why = check(environ=environ)
     if why:
         print("refusing to start the harvester: " + why, file=sys.stderr)
         return EXIT_REFUSED
+    print("rulings stamp check: " + ("matches" if mode(environ) == "require"
+                                     else "off (%s unset or off)" % SETTING))
     return 0
 
 

@@ -50,6 +50,25 @@ CMDLINE_PY = (
 class LauncherTestCase(unittest.TestCase):
     """A temp repo root with the launcher in it, and nothing else."""
 
+    @classmethod
+    def setUpClass(cls):
+        # The launcher confirms a start through `ps -p <pid> -o command=`. Where `ps` cannot
+        # see this process's own children (a restricted process table, a stub `ps`), every
+        # start test would fail as "the harvester exited immediately": skip with the reason.
+        child = subprocess.Popen(["sleep", "5"])
+        try:
+            time.sleep(0.2)
+            seen = subprocess.run(["ps", "-p", str(child.pid), "-o", "command="],
+                                  capture_output=True, text=True).stdout
+        except OSError:
+            seen = ""
+        finally:
+            child.kill()
+            child.wait()
+        if "sleep" not in seen:
+            raise unittest.SkipTest("ps cannot see child processes here; the launcher's "
+                                    "start check depends on it")
+
     def setUp(self):
         self.root = os.path.realpath(tempfile.mkdtemp(prefix="run-harvester-"))
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)

@@ -278,7 +278,8 @@ read, and a harvester run with rulings kept by hand needs none.
   `written_at` (UTC) and `writer` are information only; the check reads `sha256` alone.
 * **When:** after every write of `data/rulings.json`, once the file is in place, hashed from
   the bytes on disk. Write it atomically (a temporary file, then a rename), as the rulings file
-  itself is written.
+  itself is written. Write the rulings file first and the stamp second: a start that falls
+  between the two writes is refused, so start again once the stamp is written.
 * **What the harvester does with it:** with the setting on, `scripts/run_harvester.sh start`
   and `restart` and `harvest.py --run` refuse to start, with exit 2 and a line saying what to
   do, when the stamp is absent, unreadable, not an object or without a valid `sha256`, when

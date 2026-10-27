@@ -132,6 +132,17 @@ class TheCommandLine(unittest.TestCase):
         out = self.run_it({})
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertEqual(out.stderr, "")
+        self.assertEqual(out.stdout.count("\n"), 1)
+        self.assertIn("off", out.stdout)
+
+    def test_env_file_value_reads_the_launchers_way(self):
+        tmp = tempfile.mkdtemp(prefix="rulings-env-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        path = os.path.join(tmp, "env")
+        with open(path, "w") as fh:
+            fh.write("# c\nOTHER=1\n  NETRADIO_RULINGS_STAMP = \"require\" \nNETRADIO_RULINGS_STAMP=off\n")
+        self.assertEqual(rulings_stamp.env_file_value(path), "require")
+        self.assertIsNone(rulings_stamp.env_file_value(os.path.join(tmp, "none")))
 
     def test_a_refusal_exits_two(self):
         out = self.run_it({"NETRADIO_RULINGS_STAMP": "no-such-mode"})
