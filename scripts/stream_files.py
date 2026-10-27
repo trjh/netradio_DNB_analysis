@@ -13,7 +13,9 @@ minute ranges), plus `track-metadata.json` (to count the tracks in each capture)
     make stream-data                             # track-metadata.json, then this
 
 It is also the one label-timeline parser in this repo: `build_track_metadata.py` and
-`streamalign/groundtruth.py` call `read_label_rows` and `resolve_timeline` here.
+`streamalign/groundtruth.py` call `read_label_rows` and `resolve_timeline` here. Both raise
+`BuildRefused` rather than return a partial timeline: on a label file that cannot be read, and
+on rows that never settle (two rows placing one capture two ways).
 
 Label grammar that places a file:
   - `file start sync: <file> <n>` / `file sync: <file> <n>` at local 0.0 of a label file: the
@@ -156,8 +158,11 @@ def read_label_rows(labels_dir=LABELS_DIR):
                         continue
                     rows.append({"path": path, "seconds": seconds,
                                  "end": parse_float(parts[1], None), "text": parts[2].strip()})
-        except OSError:
-            pass
+        except OSError as exc:
+            # An unreadable label file drops every capture it places; stop rather than build a
+            # timeline without them, as an unreadable stream-files.json already stops the build.
+            raise BuildRefused("cannot read the label file %s (%s): fix or restore it first"
+                               % (path, exc))
     return rows
 
 
@@ -201,10 +206,13 @@ def resolve_timeline(label_rows, key=normalize_audio_filename, overrides=None):
         if owner and owner in starts:
             starts[name] = starts[owner] + row["seconds"]
 
-    # Pass 3: starts and ends written in another file's coordinates. A few rounds resolve
-    # chains such as d000 -> d019 -> d026.
-    for _ in range(6):
-        changed = False
+    # Pass 3: starts and ends written in another file's coordinates. Rounds resolve chains
+    # such as d000 -> d019 -> d026; each round settles at least one more link, so a chain needs
+    # at most one round per label file, and one more shows nothing moved. Rows still moving
+    # after that keep placing a capture two ways, and the build stops naming them.
+    rounds = max(6, len(set(current_by_path.values())) + 2)
+    for _ in range(rounds):
+        changed = set()
         for row in label_rows:
             current = current_by_path.get(row["path"])
             if not current or current not in starts:
@@ -224,7 +232,7 @@ def resolve_timeline(label_rows, key=normalize_audio_filename, overrides=None):
                     old = starts.get(name)
                     if old is None or abs(old - master) > 0.001:
                         starts[name] = master
-                        changed = True
+                        changed.add(name)
 
             m = FILE_END_RE.search(text)
             if m:
@@ -233,15 +241,19 @@ def resolve_timeline(label_rows, key=normalize_audio_filename, overrides=None):
                 old = ends.get(name)
                 if name and (old is None or master_end > old):
                     ends[name] = master_end
-                    changed = True
+                    changed.add(name)
             elif re.search(r"\bfile end:\s*%s\b" % re.escape(_bare(current)), text, re.I):
                 master_end = current_master + row["seconds"]
                 old = ends.get(current)
                 if old is None or master_end > old:
                     ends[current] = master_end
-                    changed = True
+                    changed.add(current)
         if not changed:
             break
+    else:
+        raise BuildRefused("the label rows did not settle after %d rounds: %s still moved in "
+                           "the last one -- two rows keep placing the same capture differently"
+                           % (rounds, ", ".join(sorted(changed))))
     if overrides is not None:
         for name, seed in seeds.items():
             if abs(starts[name] - seed) > 0.001:
@@ -585,8 +597,13 @@ def main(argv=None):
         print("%s: its own start label says %.3f; a cross-file row places it at %.3f, which "
               "wins" % (name, seed, placed))
     if report.get("probe_failed"):
-        print("ffprobe could not measure the original (recorded duration kept): %s"
-              % ", ".join(report["probe_failed"]), file=sys.stderr)
+        if ffprobe_works(ffprobe):
+            print("ffprobe could not measure the original (recorded duration kept): %s"
+                  % ", ".join(report["probe_failed"]), file=sys.stderr)
+        else:
+            print("not measured, no working ffprobe (NETRADIO_FFPROBE, or ffprobe on PATH; "
+                  "found %s; recorded duration kept): %s"
+                  % (ffprobe or "none", ", ".join(report["probe_failed"])), file=sys.stderr)
     if report.get("no_original"):
         print("not measured, no original recording in NETRADIO_CAPTURES_DIR (recorded duration "
               "kept): %s" % ", ".join(report["no_original"]), file=sys.stderr)

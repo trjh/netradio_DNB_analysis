@@ -112,6 +112,35 @@ class TimelineTests(LabelDirCase):
                                 (50.0, "file start sync: b.wav 1102.848 verified a")])
         self.assertEqual(groundtruth.resolve_starts(self.labels), {"a": 100.0, "b": 150.0})
 
+    def test_a_chain_longer_than_six_links_resolves(self):
+        # Each file is read after the one whose capture it places (they sort in reverse chain
+        # order), so each round settles one link: nine links need nine rounds.
+        for i in range(9):
+            seed = 0 if i == 0 else 1000
+            self.write_labels("l%d" % (9 - i), [(0.0, "file start sync: x%d.wav %d" % (i, seed)),
+                                                (10.0, "file start sync: x%d.wav 0" % (i + 1))])
+        tl = self.timeline()
+        self.assertEqual(tl["x9.mp3"]["master_start_seconds"], 90.0)
+
+    def test_rows_that_never_settle_stop_the_build_naming_the_captures(self):
+        # a places b at a + 10 and b places a at b + 10: each round moves both again.
+        self.write_labels("a", [(0.0, "file start sync: a.wav 0"),
+                                (10.0, "file start sync: b.wav 0")])
+        self.write_labels("b", [(0.0, "file start sync: b.wav 0"),
+                                (10.0, "file start sync: a.wav 0")])
+        with self.assertRaises(sf.BuildRefused) as ctx:
+            sf.resolve_timeline(sf.read_label_rows(self.labels))
+        self.assertIn("did not settle", str(ctx.exception))
+        self.assertIn("a.mp3", str(ctx.exception))
+        self.assertIn("b.mp3", str(ctx.exception))
+
+    def test_an_unreadable_label_file_stops_the_read_naming_it(self):
+        self.write_labels("a", [(0.0, "file start sync: a.wav 100")])
+        os.mkdir(os.path.join(self.labels, "b.labels.tsv"))     # open() fails on a directory
+        with self.assertRaises(sf.BuildRefused) as ctx:
+            sf.read_label_rows(self.labels)
+        self.assertIn("b.labels.tsv", str(ctx.exception))
+
 
 class PrimarySpecTests(LabelDirCase):
     def test_timing_section(self):
@@ -293,6 +322,45 @@ class BuildTests(LabelDirCase):
         self.assertEqual(json.loads(after)["files"][0]["duration_seconds"], 1.0)
         self.assertIn("ffprobe could not measure", err)
         self.assertIn("da.mp3", err)
+
+    def test_main_names_a_missing_ffprobe_rather_than_a_failed_probe(self):
+        out = os.path.join(self.tmp, "stream-files.json")
+        with open(out, "w", encoding="utf-8") as fh:
+            json.dump({"files": [{"filename": "da.mp3"}]}, fh)     # no duration recorded
+        inputs = self._inputs()
+        err = io.StringIO()
+        env = {"NETRADIO_MP3_DIR": os.path.join(self.tmp, "none"),
+               "NETRADIO_CAPTURES_DIR": self._originals("da.wav"),
+               "NETRADIO_FFPROBE": os.path.join(self.tmp, "no-such-ffprobe")}
+        with unittest.mock.patch.dict(os.environ, env), \
+                unittest.mock.patch("sys.stdout", io.StringIO()), \
+                unittest.mock.patch("sys.stderr", err):
+            rc = sf.main(["--out", out, "--labels-dir", inputs["labels_dir"],
+                          "--tracklist", inputs["tracklist_path"],
+                          "--metadata", inputs["metadata_path"], "--dry-run"])
+        self.assertEqual(rc, 0)
+        self.assertIn("no working ffprobe", err.getvalue())
+        self.assertNotIn("ffprobe could not measure", err.getvalue())
+
+    def test_main_exits_non_zero_naming_an_unreadable_label_file(self):
+        inputs = self._inputs()
+        os.mkdir(os.path.join(self.labels, "db.labels.tsv"))
+        out = os.path.join(self.tmp, "stream-files.json")
+        before = json.dumps({"files": [{"filename": "da.mp3", "duration_seconds": 1.0}]})
+        with open(out, "w", encoding="utf-8") as fh:
+            fh.write(before)
+        stdout = io.StringIO()
+        with unittest.mock.patch.dict(os.environ, {"NETRADIO_MP3_DIR": os.path.join(self.tmp, "none"),
+                                                     "NETRADIO_CAPTURES_DIR": os.path.join(self.tmp, "none")}), \
+                unittest.mock.patch("sys.stdout", stdout):
+            rc = sf.main(["--out", out, "--labels-dir", inputs["labels_dir"],
+                          "--tracklist", inputs["tracklist_path"],
+                          "--metadata", inputs["metadata_path"]])
+        self.assertEqual(rc, 1)
+        self.assertIn("REFUSING TO WRITE", stdout.getvalue())
+        self.assertIn("db.labels.tsv", stdout.getvalue())
+        with open(out, encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), before)
 
     def test_an_overridden_own_start_label_is_reported(self):
         self.write_labels("da", [(0.0, "file start sync: da.wav 1000"),

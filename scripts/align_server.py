@@ -7,8 +7,11 @@ so stopping or breaking it touches nothing else on the machine. A reverse proxy 
 It is stdlib-only: this file serves two pages (`/align`, the
 per-point inspector, and `/align/review`, the DP-22 whole-song L/R review POC —
 §6.9-a), five JSON routes
-(sources — whose answer now carries the DP-22 `placed` collection beside `hints` —
-slice, refine, context, overview) and two whole-file review-audio GETs
+(sources — whose answer now carries the DP-22 `placed` collection beside `hints`, and
+`placed_state`, which says "busy" or "failed" when the list could not be read, and
+`placed_error` with the reason a listing failed — slice, refine, context,
+overview), `sync-status` (the review-note committer's state and errors) and two whole-file
+review-audio GETs
 (DP-22 §6.8: `/api/align/audio/stream/<stem>` + `/api/align/audio/orig/<NNN>`,
 Range-supported via `rangeserve.py`, resolved DSP-free in `review_audio.py`;
 wv-only originals refused pending the DP-23 sync).
@@ -150,15 +153,27 @@ class AlignHandler(BaseHTTPRequestHandler):
             # DP-22 §6.9-a: the whole-song L/R review page (phone-first web POC)
             return self._page("review.html")
         if path == "/api/align/sources":
+            # DP-22 §6.5 source (b): the hand-placed pairs, source-tagged so the review page
+            # can interleave them with the hints sets. `placed_state` says whether the list
+            # is the whole answer: "busy" while another computation holds the lock, so the
+            # page asks again rather than read an empty list as "nothing placed".
+            placed = align_inspect.placed_listing(_mp3_dir())
             return self._json({
                 "enabled": align_inspect.enabled(),
                 "streams": align_inspect.list_streams(_mp3_dir()),
                 "originals": align_inspect.list_originals(),
                 "hints": align_inspect.parse_match_hints(_labels_dir()),
-                # DP-22 §6.5 source (b): the hand-placed pairs, source-tagged so the
-                # review page can interleave them with the hints sets ([] when dark)
-                "placed": align_inspect.list_placed(_mp3_dir()),
+                "placed": placed["sets"],
+                "placed_state": placed["state"],
+                "placed_error": placed.get("error"),
             })
+        if path == "/api/align/sync-status":
+            # The review-note committer's state, its errors included: the committer runs in
+            # this process, so this route is the one place outside the log they can be read.
+            # The checkout's path stays out of the answer: the page has no use for it.
+            answer = review_sync.status()
+            answer.pop("repo", None)
+            return self._json(answer)
         if path.startswith(self.AUDIO_STREAM) or path.startswith(self.AUDIO_ORIG):
             return self._serve_review_audio(path)
         return self.send_error(404)

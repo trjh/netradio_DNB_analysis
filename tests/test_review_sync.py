@@ -28,6 +28,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "scripts"))
@@ -56,6 +57,9 @@ class ReviewSyncBase(unittest.TestCase):
         self._run_git = review_sync._run_git
         self._run_gh = review_sync._run_gh
         review_sync._last_error = {}
+        review_sync._logged = {}
+        self._echo = review_sync.ECHO
+        review_sync.ECHO = False             # quiet; TestFailuresReachTheLog turns it on
         review_sync._last_ok = {}
         review_sync._last_commit = None
         review_sync._last_push = 0.0
@@ -85,6 +89,7 @@ class ReviewSyncBase(unittest.TestCase):
         os.environ.pop("NETRADIO_REVIEW_SYNC_REMOTE", None)
 
     def tearDown(self):
+        review_sync.ECHO = self._echo
         review_sync._run_git = self._run_git
         review_sync._run_gh = self._run_gh
         os.environ.clear()
@@ -241,6 +246,74 @@ class TestCommitPlumbing(ReviewSyncBase):
         sha = review_sync.commit_once()
         self.assertIsNone(sha)
         self.assertNotIn("commit", review_sync._last_error)
+
+
+class TestFailuresReachTheLog(ReviewSyncBase):
+    """A commit failure is printed once per distinct message, stays in status() until the
+    next success, and the success prints that it cleared."""
+
+    def setUp(self):
+        super().setUp()
+        review_sync.ECHO = True
+
+    def _failing_update_ref(self, message):
+        real = self._run_git
+
+        def run(argv, **kw):
+            if "update-ref" in argv:
+                return subprocess.CompletedProcess(argv, 1, "", message)
+            return real(argv, **kw)
+        review_sync._run_git = run
+
+    def _commit(self):
+        import contextlib
+        import io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            sha = review_sync.commit_once()
+        return sha, out.getvalue()
+
+    def test_a_commit_failure_is_logged_once_then_cleared(self):
+        self._failing_update_ref("fatal: cannot lock ref: index.lock exists")
+        self._seed_review()
+        sha, out = self._commit()
+        self.assertIsNone(sha)
+        self.assertIn("review-sync: commit failing", out)
+        self.assertIn("index.lock", out)
+        self.assertIn("index.lock", review_sync.status()["errors"]["commit"]["detail"])
+        _sha, again = self._commit()                 # the same failure: no second line
+        self.assertEqual(again, "")
+        self._failing_update_ref("fatal: disk full")  # a new message is news
+        _sha, other = self._commit()
+        self.assertIn("disk full", other)
+        review_sync._run_git = self._run_git
+        sha, cleared = self._commit()
+        self.assertIsNotNone(sha)
+        self.assertIn("review-sync: commit working again", cleared)
+        self.assertNotIn("commit", review_sync.status()["errors"])
+        _sha, quiet = self._commit()                 # nothing changed: nothing to say
+        self.assertEqual(quiet, "")
+
+    def test_failing_since_keeps_the_first_failures_time(self):
+        with mock.patch.object(review_sync, "_now", side_effect=["t1", "t2", "t3"]):
+            review_sync._fail("push", "offline")
+            review_sync._fail("push", "still offline")
+        self.assertEqual(review_sync._last_error["push"], {"at": "t1", "detail": "still offline"})
+        review_sync._ok("push")
+        with mock.patch.object(review_sync, "_now", return_value="t9"):
+            review_sync._fail("push", "offline")
+        self.assertEqual(review_sync._last_error["push"]["at"], "t9", "a new failure starts anew")
+
+    def test_the_temp_index_name_does_not_make_a_failure_new(self):
+        # commit_once stages through a temp index with a new random name each pass.
+        lines = set()
+        for name in ("review_sync_index.ab12cd", "review_sync_index.zz99qq"):
+            self._failing_update_ref("fatal: Unable to create '/tmp/x/%s.lock': File exists" % name)
+            self._seed_review()
+            _sha, out = self._commit()
+            lines.add(out)
+        self.assertEqual(len([ln for ln in lines if ln]), 1, lines)
+        self.assertIn("<temp index>", review_sync.status()["errors"]["commit"]["detail"])
 
 
 class TestPush(ReviewSyncBase):

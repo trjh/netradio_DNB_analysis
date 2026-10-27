@@ -70,6 +70,31 @@ class TestStandaloneServer(unittest.TestCase):
         self.assertEqual(payload["streams"], [])
         # DP-22: the placed collection is always present, [] when dark
         self.assertEqual(payload["placed"], [])
+        self.assertEqual(payload["placed_state"], "dark")
+
+    def test_sources_says_busy_rather_than_an_empty_placed_list(self):
+        # While another computation holds the lock, an empty list would read as "nothing
+        # placed"; the answer says "busy" so the page asks again.
+        with mock.patch.object(align_inspect, "placed_listing",
+                               return_value={"state": "busy", "sets": []}):
+            status, data = self._req("GET", "/api/align/sources")
+        self.assertEqual(status, 200)
+        payload = json.loads(data)
+        self.assertEqual(payload["placed_state"], "busy")
+        self.assertEqual(payload["placed"], [])
+
+    def test_sync_status_route_serves_the_committers_errors(self):
+        fake = {"enabled": True, "errors": {"commit": {"at": "t", "detail": "disk full"}}}
+        with mock.patch.object(align_server.review_sync, "status", return_value=fake):
+            status, data = self._req("GET", "/api/align/sync-status")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(data)["errors"]["commit"]["detail"], "disk full")
+
+    def test_sync_status_route_leaves_out_the_checkout_path(self):
+        fake = {"enabled": True, "repo": "/somewhere/checkout", "errors": {}}
+        with mock.patch.object(align_server.review_sync, "status", return_value=fake):
+            _status, data = self._req("GET", "/api/align/sync-status")
+        self.assertNotIn("repo", json.loads(data))
 
     def test_compute_routes_relay_the_dark_404(self):
         for path in ("/api/align/slice", "/api/align/refine", "/api/align/context",
