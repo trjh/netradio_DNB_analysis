@@ -222,14 +222,22 @@ def register_caches():
     # variable families as read.
     # The age limit applies only while the bucket is configured: with no bucket, the local
     # file is the signature's only home, and `_chroma_pinned` holds every one of them anyway.
-    cache_budget.register("chroma",
-                         max_age=CHROMA_CACHE_MAX_AGE_DAYS if sigstore.enabled() else None,
-                         pinned=_chroma_pinned,
-                         refill="bucket:chroma/", rank=4)
-    cache_budget.register("candidates", cap=CANDIDATES_CACHE_CAP, order="by-score",
-                         score=_excerpt_score, max_age=KEEP_TTL_DAYS,
-                         pinned=_excerpt_pinned,
-                         refill="on-play", rank=10)
+    # A refused directory raises; it is printed and that cache stays unregistered, which the
+    # harvester's start refuses (its directory reads None).
+    try:
+        cache_budget.register("chroma",
+                             max_age=CHROMA_CACHE_MAX_AGE_DAYS if sigstore.enabled() else None,
+                             pinned=_chroma_pinned,
+                             refill="bucket:chroma/", rank=4)
+    except cache_budget.CacheRefused as exc:
+        print(exc)
+    try:
+        cache_budget.register("candidates", cap=CANDIDATES_CACHE_CAP, order="by-score",
+                             score=_excerpt_score, max_age=KEEP_TTL_DAYS,
+                             pinned=_excerpt_pinned,
+                             refill="on-play", rank=10)
+    except cache_budget.CacheRefused as exc:
+        print(exc)
     CACHE = _CACHE_AT_IMPORT = cache_budget.dir_of(CHROMA_CACHE)
     KEEP = _KEEP_AT_IMPORT = cache_budget.dir_of(CANDIDATES_CACHE)
 

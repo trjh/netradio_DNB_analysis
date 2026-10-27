@@ -187,18 +187,20 @@ class Environment(CacheBudgetBase):
                         ("c", os.path.join(self.tmp, "a", "inner")),   # inside a's
                         ("d", self.tmp),                               # holds a's, and the root
                         ("e", self.root)):                             # the root itself
-            with contextlib.redirect_stdout(io.StringIO()) as out:
-                self.assertIsNone(cb.register(name, dir=d), name)
-            self.assertIn("not registering", out.getvalue())
+            with self.assertRaises(cb.CacheRefused) as caught:
+                cb.register(name, dir=d)
+            self.assertIn("not registering", str(caught.exception))
             self.assertFalse(cb.registered(name))
         self.assertIsNotNone(self.cache("a"))                         # re-registering is fine
 
     def _refused(self, name, d):
-        with contextlib.redirect_stdout(io.StringIO()) as out:
-            self.assertIsNone(cb.register(name, dir=d), name)
-        self.assertIn("not registering", out.getvalue())
+        """A refused directory raises (a refused cache would be an uncapped one, so the start
+        stops), and the name stays unregistered."""
+        with self.assertRaises(cb.CacheRefused) as caught:
+            cb.register(name, dir=d)
+        self.assertIn("not registering", str(caught.exception))
         self.assertFalse(cb.registered(name))
-        return out.getvalue()
+        return str(caught.exception)
 
     def test_a_directory_with_a_git_entry_at_its_top_level_is_refused(self):
         checkout = os.path.join(self.tmp, "checkout")
@@ -269,8 +271,8 @@ class Environment(CacheBudgetBase):
         with open(old, "wb") as fh:
             fh.write(b"x" * (5 * KB))
         os.environ["NETRADIO_CLIPS_CACHE_DIR"] = checkout
-        with contextlib.redirect_stdout(io.StringIO()):
-            self.assertIsNone(cb.register("clips", cap=KB))
+        with self.assertRaises(cb.CacheRefused):
+            cb.register("clips", cap=KB)
         cb.run_eviction()
         self.assertTrue(os.path.isfile(old))
 
@@ -383,9 +385,52 @@ class RegistryAndEvictionRun(CacheBudgetBase):
         cb._device = lambda p: 2 if os.path.realpath(p).startswith(
             os.path.realpath(away["dir"])) else 1
         self.base = 80 * KB
+        cb._disk_usage = self._two_volumes(away["dir"], away_used=10 * KB)
         cb.run_eviction()
-        self.assertEqual(self.names(away), ["a"])     # freeing it would not move this volume
+        self.assertEqual(self.names(away), ["a"])     # its own volume is under the floor
         self.assertEqual(self.names(here), [])
+
+    def _two_volumes(self, away_dir, away_used):
+        """A fake volume per device: the root's as the base fixture reads it, and a second one
+        holding `away_dir` whose "used" is `away_used` plus every byte under that directory."""
+        away_real = os.path.realpath(away_dir)
+
+        def usage(path):
+            if os.path.realpath(path).startswith(away_real):
+                used = away_used + sum(os.path.getsize(os.path.join(d, f))
+                                       for d, _s, fs in os.walk(away_dir) for f in fs)
+                return (self.VOLUME, used, self.VOLUME - used)
+            return self._fake_disk_usage(path)
+        return usage
+
+    def test_the_floor_is_kept_on_a_second_volume_by_its_own_reading(self):
+        """A cache on another volume past the floor is relieved by that volume's
+        reading, while the root's volume, under the floor, gives up nothing."""
+        here = self.cache("here", rank=1)
+        away = self.cache("away", rank=2)
+        self.file(here, "h", 4 * KB)
+        self.file(away, "a1", 4 * KB, age_s=60)
+        self.file(away, "a2", 4 * KB)
+        self.addCleanup(setattr, cb, "_device", cb._device)
+        cb._device = lambda p: 2 if os.path.realpath(p).startswith(
+            os.path.realpath(away["dir"])) else 1
+        cb._disk_usage = self._two_volumes(away["dir"], away_used=76 * KB)   # 84 %: past 82
+        cb.run_eviction()
+        self.assertEqual(self.names(here), ["h"])
+        self.assertEqual(self.names(away), ["a2"])    # the oldest went; 80 % is under the floor
+        self.assertEqual([(e["event"], e["reason"]) for e in self.events()], [("evict", "floor")])
+
+    def test_commit_reads_the_floor_on_the_cache_s_own_volume(self):
+        away = self.cache("away", rank=1)
+        old = self.file(away, "old", 4 * KB, age_s=60)
+        self.addCleanup(setattr, cb, "_device", cb._device)
+        cb._device = lambda p: 2 if os.path.realpath(p).startswith(
+            os.path.realpath(away["dir"])) else 1
+        cb._disk_usage = self._two_volumes(away["dir"], away_used=76 * KB)
+        new = self.file(away, "new", 4 * KB)
+        cb.commit("away", new)
+        self.assertFalse(os.path.exists(old))
+        self.assertTrue(os.path.exists(new))
 
     def test_all_pinned_is_refused_and_over_cap_reported(self):
         rec = self.cache("c", cap=2 * KB, pinned=lambda p: True)
@@ -929,9 +974,16 @@ class HeadroomAndOverflow(CacheBudgetBase):
         with self.assertRaises(ValueError):
             cb.commit("c", os.path.join(self.tmp, "elsewhere"))
 
-    def test_an_unregistered_name_is_admitted_and_left_alone(self):
-        self.assertTrue(cb.reserve("nobody", 10 ** 12))
-        self.assertFalse(cb.remove("nobody", os.path.join(self.tmp, "x"), "heard"))
+    def test_an_unregistered_name_raises_and_changes_nothing(self):
+        """Fail closed: a misspelt name never writes uncapped, and never removes silently."""
+        stray = self.file(self.cache("c"), "x")
+        for call in (lambda: cb.reserve("nobody", 10 ** 12),
+                     lambda: cb.commit("nobody", stray),
+                     lambda: cb.remove("nobody", stray, "heard")):
+            with self.assertRaises(KeyError):
+                call()
+        self.assertTrue(os.path.isfile(stray))
+        self.assertEqual(self.events(), [])
         self.assertFalse(cb.run_eviction("nobody")["ran"])
 
 
@@ -980,6 +1032,164 @@ class Status(CacheBudgetBase):
                           ("rank", 11), ("evicted_since_start", 0)):
             self.assertEqual(row[key], want, key)
         self.assertIsNotNone(row["last_run"])
+
+
+class ReadApi(CacheBudgetBase):
+    """The public reads: what a page or a guard asks of the policy without its private names."""
+
+    def test_settings_reads_the_registry_row_without_a_scan(self):
+        self.cache("c", cap=3 * KB, headroom=KB, max_age=2, rank=5, refill="re-decode")
+        self.addCleanup(setattr, cb, "_scan", cb._scan)
+        cb._scan = lambda rec: self.fail("settings() scanned the cache")
+        self.assertEqual(cb.settings("c"), {
+            "name": "c", "dir": os.path.join(self.tmp, "c"), "cap": 3 * KB, "headroom": KB,
+            "max_age_days": 2, "order": "oldest-added", "refill": "re-decode", "rank": 5})
+        self.assertIsNone(cb.settings("nobody"))
+        self.assertEqual(cb.names(), ["c"])
+        self.assertTrue(cb.volume()["enabled"])
+
+    def test_usage_entries_and_status_row_agree_with_status(self):
+        rec = self.cache("c", pinned=lambda p: p.endswith("keep"))
+        self.file(rec, "a", 2 * KB)
+        self.file(rec, "keep", KB)
+        self.assertEqual(cb.usage("c"), {"size": 3 * KB, "entries": 2, "pinned": 1})
+        listing = cb.entries("c")
+        self.assertEqual([(os.path.basename(e.path), e.size, e.held) for e in listing],
+                         [("a", 2 * KB, False), ("keep", KB, True)])
+        self.assertEqual(cb.status()["caches"], [cb.status_row("c")])
+        self.assertEqual(cb.status_row("c", listing), cb.status_row("c"))
+        self.assertIsNone(cb.usage("nobody"))
+        self.assertEqual(cb.entries("nobody"), [])
+
+    def test_entries_carry_each_entry_s_companions(self):
+        rec = self.cache("c", companions=lambda p: [p + ".json"] if not p.endswith(".json") else [])
+        audio = self.file(rec, "k.mp3", 2 * KB)
+        self.file(rec, "k.mp3.json", 10)
+        [entry] = cb.entries("c")
+        self.assertEqual((entry.path, entry.size, entry.companions),
+                         (audio, 2 * KB + 10, [audio + ".json"]))
+
+    def test_held_here_counts_the_depth_inside_the_machine_lock(self):
+        self.assertEqual(cb.held_here(), 0)
+        with cb.locked():
+            self.assertEqual(cb.held_here(), 1)
+            with cb.locked():
+                self.assertEqual(cb.held_here(), 2)
+        self.assertEqual(cb.held_here(), 0)
+
+    def test_record_event_writes_one_record_in_the_policy_s_shape(self):
+        cb.record_event("land", "c", "a.mp3", 5, "test", mover="bucket")
+        [row] = self.events()
+        self.assertEqual({k: row[k] for k in ("event", "cache", "entry", "bytes", "reason",
+                                              "mover")},
+                         {"event": "land", "cache": "c", "entry": "a.mp3", "bytes": 5,
+                          "reason": "test", "mover": "bucket"})
+
+    def test_read_settings_applies_the_environment_without_registering(self):
+        os.environ["NETRADIO_W_CACHE_GB"] = "2"
+        os.environ["NETRADIO_W_CACHE_MAX_AGE_DAYS"] = "none"
+        got = cb.read_settings("w", max_age=14)
+        self.assertEqual(got, {"dir": os.path.join(self.root, "w"), "cap": 2 * cb.GB,
+                               "max_age_days": None})
+        self.assertFalse(cb.registered("w"))
+        self.assertEqual(cb.parse_number("1.5", 0, "X"), 1.5)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(cb.parse_number("lots", 7, "X"), 7)
+
+
+class RegistryFile(CacheBudgetBase):
+    """Each process's registrations in `<root>/registry/<pid>.json`, so a cache
+    another process registered is visible and its directory is refused to a second cache."""
+
+    def setUp(self):
+        super().setUp()
+        saved = os.environ.pop("NETRADIO_READ_ONLY", None)
+        self.addCleanup(lambda: saved is not None and os.environ.__setitem__(
+            "NETRADIO_READ_ONLY", saved))
+        self.addCleanup(cb._drop_own_row)
+
+    def own_row(self):
+        with open(os.path.join(cb.registry_dir(), "%d.json" % os.getpid())) as fh:
+            return json.load(fh)
+
+    def plant(self, pid, caches, hold=True):
+        """Another process's row; `hold` keeps its lock taken, as a live owner does."""
+        where = cb.registry_dir()
+        os.makedirs(where, exist_ok=True)
+        with open(os.path.join(where, "%d.json" % pid), "w") as fh:
+            json.dump({"pid": pid, "process": "other", "caches": caches}, fh)
+        lock = os.path.join(where, "%d.lock" % pid)
+        fd = os.open(lock, os.O_RDWR | os.O_CREAT, 0o644)
+        self.addCleanup(os.close, fd)
+        if hold:
+            import fcntl
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        return where
+
+    def test_register_writes_this_process_s_rows_and_holds_its_lock(self):
+        self.cache("a", cap=2 * KB)
+        self.cache("b", cap=None)
+        row = self.own_row()
+        self.assertEqual(row["pid"], os.getpid())
+        self.assertEqual([c["name"] for c in row["caches"]], ["a", "b"])
+        self.assertEqual(row["caches"][0], cb.settings("a"))
+        self.assertTrue(cb._alive(os.path.join(cb.registry_dir(), "%d.lock" % os.getpid())))
+        self.assertEqual(cb.other_processes(), [])          # its own row is not "other"
+        cb._drop_own_row()
+        self.assertFalse(os.path.exists(cb.registry_dir()))
+
+    def test_read_only_writes_no_row(self):
+        os.environ["NETRADIO_READ_ONLY"] = "1"
+        self.cache("a")
+        self.assertFalse(os.path.exists(cb.registry_dir()))
+
+    def test_a_live_process_s_cache_is_seen_and_its_directory_refused_to_another_name(self):
+        theirs = os.path.join(self.tmp, "align", "streamalign")
+        self.plant(999999, [{"name": "streamalign", "dir": theirs, "cap": KB}])
+        [proc] = cb.other_processes()
+        self.assertEqual(proc["caches"][0]["name"], "streamalign")
+        for d in (theirs, os.path.join(theirs, "inner"), os.path.join(self.tmp, "align")):
+            with self.assertRaises(cb.CacheRefused) as caught:
+                cb.register("mine", dir=d)
+            self.assertIn("process 999999", str(caught.exception))
+        self.assertIsNotNone(cb.register("streamalign", dir=theirs))   # the same cache: allowed
+        self.assertIsNotNone(self.cache("elsewhere"))
+
+    def test_a_row_whose_lock_is_free_is_an_ended_process_and_is_deleted(self):
+        theirs = os.path.join(self.tmp, "x")
+        where = self.plant(999998, [{"name": "x", "dir": theirs}], hold=False)
+        os.environ["NETRADIO_READ_ONLY"] = "1"
+        self.assertEqual(cb.other_processes(), [])
+        self.assertTrue(os.path.exists(os.path.join(where, "999998.json")))   # read-only: kept
+        os.environ.pop("NETRADIO_READ_ONLY")
+        self.assertIsNotNone(cb.register("y", dir=theirs))    # nothing live claims it
+        self.assertFalse(os.path.exists(os.path.join(where, "999998.json")))
+        self.assertFalse(os.path.exists(os.path.join(where, "999998.lock")))
+
+    def test_an_unreadable_row_is_skipped(self):
+        where = self.plant(999997, [])
+        with open(os.path.join(where, "999997.json"), "w") as fh:
+            fh.write("{torn")
+        self.assertEqual(cb.other_processes(), [])
+
+    def test_a_real_second_process_is_seen_while_it_runs_and_gone_after(self):
+        child = subprocess.Popen(
+            [sys.executable, "-c",
+             "import sys; sys.path.insert(0, %r); import cache_budget as cb; "
+             "cb.register('far', dir=%r); print('up', flush=True); sys.stdin.read()"
+             % (os.path.dirname(os.path.abspath(cb.__file__)), os.path.join(self.tmp, "far"))],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+            env=dict(os.environ, NETRADIO_CACHE_ROOT=self.root))
+        self.addCleanup(lambda: child.poll() is None and child.kill())
+        self.assertEqual(child.stdout.readline().strip(), "up")
+        self.assertEqual([c["name"] for p in cb.other_processes() for c in p["caches"]], ["far"])
+        with self.assertRaises(cb.CacheRefused):
+            cb.register("near", dir=os.path.join(self.tmp, "far"))
+        child.stdin.close()
+        child.wait(timeout=30)
+        child.stdout.close()
+        self.assertEqual(cb.other_processes(), [])
+        self.assertIsNotNone(cb.register("near", dir=os.path.join(self.tmp, "far")))
 
 
 if __name__ == "__main__":
