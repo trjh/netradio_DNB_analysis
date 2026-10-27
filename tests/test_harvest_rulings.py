@@ -299,7 +299,8 @@ class TheRunGate(unittest.TestCase):
                 lambda state=None: (_ for _ in ()).throw(
                     AssertionError("the refusal must come before the query set is read"))), \
              contextlib.redirect_stdout(out):
-            harvest.run(None)
+            code = harvest.run(None)
+        self.assertEqual(code, harvest.EXIT_CONFIG, "a refusal is not a clean stop's 0")
         text = out.getvalue()
         self.assertIn("the rulings file", text)
         self.assertIn(harvest.RULINGS, text, "the refusal names the file, so a hand-run can "
@@ -316,10 +317,22 @@ class TheRunGate(unittest.TestCase):
         out = io.StringIO()
         with unittest.mock.patch.object(harvest, "queries", lambda state=None: []), \
              contextlib.redirect_stdout(out):
-            harvest.run(None)
+            code = harvest.run(None)
+        self.assertEqual(code, harvest.EXIT_CONFIG)
         text = out.getvalue()
         self.assertIn("nothing to search for", text)
         self.assertIn("NETRADIO_CACHE_ROOT", text, "the next gate refused, so the run went on")
+
+    def test_a_held_lock_refuses_with_its_own_code(self):
+        held = harvest.acquire_writer_lock()
+        self.addCleanup(held.close)
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = harvest.run(None)
+        self.assertEqual(code, harvest.EXIT_LOCKED)
+        self.assertNotEqual(harvest.EXIT_LOCKED, harvest.EXIT_CONFIG)
+        self.assertNotIn(harvest.EXIT_LOCKED, (0, 1))
 
 
 if __name__ == "__main__":

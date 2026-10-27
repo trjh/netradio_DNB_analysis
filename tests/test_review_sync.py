@@ -56,6 +56,9 @@ class ReviewSyncBase(unittest.TestCase):
         self._run_git = review_sync._run_git
         self._run_gh = review_sync._run_gh
         review_sync._last_error = {}
+        review_sync._logged = {}
+        self._echo = review_sync.ECHO
+        review_sync.ECHO = False             # quiet; TestFailuresReachTheLog turns it on
         review_sync._last_ok = {}
         review_sync._last_commit = None
         review_sync._last_push = 0.0
@@ -85,6 +88,7 @@ class ReviewSyncBase(unittest.TestCase):
         os.environ.pop("NETRADIO_REVIEW_SYNC_REMOTE", None)
 
     def tearDown(self):
+        review_sync.ECHO = self._echo
         review_sync._run_git = self._run_git
         review_sync._run_gh = self._run_gh
         os.environ.clear()
@@ -241,6 +245,53 @@ class TestCommitPlumbing(ReviewSyncBase):
         sha = review_sync.commit_once()
         self.assertIsNone(sha)
         self.assertNotIn("commit", review_sync._last_error)
+
+
+class TestFailuresReachTheLog(ReviewSyncBase):
+    """A commit failure is printed once per distinct message, stays in status() until the
+    next success, and the success prints that it cleared."""
+
+    def setUp(self):
+        super().setUp()
+        review_sync.ECHO = True
+
+    def _failing_update_ref(self, message):
+        real = self._run_git
+
+        def run(argv, **kw):
+            if "update-ref" in argv:
+                return subprocess.CompletedProcess(argv, 1, "", message)
+            return real(argv, **kw)
+        review_sync._run_git = run
+
+    def _commit(self):
+        import contextlib
+        import io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            sha = review_sync.commit_once()
+        return sha, out.getvalue()
+
+    def test_a_commit_failure_is_logged_once_then_cleared(self):
+        self._failing_update_ref("fatal: cannot lock ref: index.lock exists")
+        self._seed_review()
+        sha, out = self._commit()
+        self.assertIsNone(sha)
+        self.assertIn("review-sync: commit failing", out)
+        self.assertIn("index.lock", out)
+        self.assertIn("index.lock", review_sync.status()["errors"]["commit"]["detail"])
+        _sha, again = self._commit()                 # the same failure: no second line
+        self.assertEqual(again, "")
+        self._failing_update_ref("fatal: disk full")  # a new message is news
+        _sha, other = self._commit()
+        self.assertIn("disk full", other)
+        review_sync._run_git = self._run_git
+        sha, cleared = self._commit()
+        self.assertIsNotNone(sha)
+        self.assertIn("review-sync: commit working again", cleared)
+        self.assertNotIn("commit", review_sync.status()["errors"])
+        _sha, quiet = self._commit()                 # nothing changed: nothing to say
+        self.assertEqual(quiet, "")
 
 
 class TestPush(ReviewSyncBase):

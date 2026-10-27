@@ -280,6 +280,20 @@ start_locked() {
   echo "$pid" >"$PIDFILE"
   sleep 1
   if ! is_harvester "$pid"; then
+    # The harvester is this shell's child, so `wait` hands back its exit code: harvest.py
+    # gives each kind of refusal its own, and naming it here tells a caller which kind it was
+    # without reading the log. Only a process that is gone (or a zombie) is waited for: a
+    # live one would hold `start` for as long as it runs.
+    local code="" pstate
+    pstate="$(ps -p "$pid" -o stat= 2>/dev/null || true)"
+    case "$pstate" in
+      ''|Z*) code=0; wait "$pid" 2>/dev/null || code=$? ;;
+    esac
+    case "$code" in
+      1) echo "the harvester refused to start: its ledger (exit 1)" >&2 ;;
+      2) echo "the harvester refused to start: a file or setting it needs is missing (exit 2)" >&2 ;;
+      3) echo "the harvester refused to start: another ledger/state writer holds the lock (exit 3)" >&2 ;;
+    esac
     echo "the harvester exited immediately — see the end of $LOG" >&2
     # Withdraw OUR OWN registration and nobody else's. The lock above should make that
     # distinction moot; this is the second lock on the same door, because the failure it

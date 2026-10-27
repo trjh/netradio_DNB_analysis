@@ -408,6 +408,19 @@ the last merge. A PR that changes only `data/rulings.json` holds no free text, s
 PR by hand, then run `make review-sync-postmerge` (the scripts print it with this checkout's
 path) so the hourly commits start again on a fresh branch.
 
+**Q:** How do I tell whether the server's commits are failing?
+
+**A:** Ask the running server, or read its log:
+
+```bash
+curl -s http://127.0.0.1:8766/api/align/sync-status   # the committer's state; `errors` names each failing step
+grep review-sync logs/align.log                        # one line per new failure, one when it clears
+```
+
+**What you get:** an empty `errors` object while commits and pushes work. The `/align` page shows
+a red line while any failure stands. `python3 scripts/review_sync.py status` starts a new process,
+so its `errors` are always empty; use the route.
+
 **Q:** How do I keep the align server on the code I just pulled?
 
 **A:** Switch on the repository's git hooks once per machine:

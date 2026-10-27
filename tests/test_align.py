@@ -9,6 +9,7 @@ loopback-only-without-auth route gate.
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import threading
@@ -1504,6 +1505,30 @@ class TestPlacedProvider(_Env):
         finally:
             if acquired:
                 align_inspect._run_lock.release()
+
+    def test_the_listing_says_why_a_list_is_empty(self):
+        # "ok" is the only state that means "these are all the placed pairs"; busy and
+        # failed carry an empty list the page must not read as "nothing placed".
+        with _root(""):
+            self.assertEqual(align_inspect.placed_listing(self.mp3)["state"], "dark")
+        ok = align_inspect.placed_listing(self.mp3, runner=self._runner(self._op_payload()))
+        self.assertEqual((ok["state"], len(ok["sets"])), ("ok", 1))
+        acquired = align_inspect._run_lock.acquire()
+        try:
+            busy = align_inspect.placed_listing(
+                self.mp3, runner=mock.Mock(side_effect=AssertionError("must not run")))
+        finally:
+            if acquired:
+                align_inspect._run_lock.release()
+        self.assertEqual(busy, {"state": "busy", "sets": []})
+        timeout = mock.Mock(side_effect=subprocess.TimeoutExpired("placed", 120))
+        self.assertEqual(align_inspect.placed_listing(self.mp3, runner=timeout)["state"],
+                         "failed")
+        error = self._runner({"error": "no labels"})
+        self.assertEqual(align_inspect.placed_listing(self.mp3, runner=error)["state"],
+                         "failed")
+        again = align_inspect.placed_listing(self.mp3, runner=self._runner(self._op_payload()))
+        self.assertEqual(again["state"], "ok", "the next answer clears it")
 
     def test_worker_answer_short_circuits_the_subprocess(self):
         worker = self._StubWorker(result=self._op_payload())

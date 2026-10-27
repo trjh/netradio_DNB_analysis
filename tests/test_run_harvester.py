@@ -125,6 +125,19 @@ class StartTests(LauncherTestCase):
         self.assertTrue(self.alive(self.read_pid()))
         self.assertIn("harvester UP", out.stdout)
 
+    def test_a_refusal_at_start_is_named_by_its_exit_code(self):
+        # harvest.py exits 2 for a missing file or setting and 3 for a held lock; a start
+        # that sees the process gone names the kind, so a caller need not read the log.
+        for code, words in ((2, "a file or setting it needs is missing"),
+                            (3, "another ledger/state writer holds the lock")):
+            with self.subTest(code=code):
+                self.fake_interpreter(body="#!/bin/sh\nexit %d\n" % code)
+                out = self.start()
+                self.assertEqual(out.returncode, 1, out.stderr)
+                self.assertIn(words, out.stderr)
+                self.assertIn("(exit %d)" % code, out.stderr)
+                self.assertFalse(os.path.exists(self.pidfile))
+
     def test_a_stale_pidfile_is_cleared_and_the_start_goes_ahead(self):
         """The ordinary aftermath of a crash or a reboot: a pid that names nothing."""
         self.fake_interpreter()

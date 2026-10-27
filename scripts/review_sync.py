@@ -43,8 +43,11 @@ when dark) and wakes on `nudge()` (poked by the review-note route after each fsy
 on its poll interval. It runs INSIDE the align server's process, commits only to the local
 clone, and its only network act is the hourly `git push` to `origin` — nothing here changes the
 server's HTTP exposure posture. This repository is PUBLIC: the squash PR (invariant 6) is the
-contents gate before any note reaches `main`. Failures are visible in `status()`
-(`python3 scripts/review_sync.py status`) and echoed to the server log.
+contents gate before any note reaches `main`. A failure is printed to the server log
+(`logs/align.log`) once per distinct message, and again when the operation next succeeds; the
+running server's `GET /api/align/sync-status` returns `status()`, errors included, and the
+inspector page shows them. `python3 scripts/review_sync.py status` runs in a new process, so
+its `errors` are that process's own, never the server's.
 """
 
 import glob
@@ -81,6 +84,8 @@ _stop = threading.Event()
 _lock = threading.Lock()            # one commit/push pass at a time (loop + CLI + tests)
 
 _last_error = {}                    # {op: {"at": iso, "detail": str}}
+_logged = {}                        # {op: detail last printed}: one log line per distinct message
+ECHO = True                         # print failures and recoveries (the CLI prints its own)
 _last_ok = {}
 _last_commit = None
 _last_push = 0.0                    # monotonic clock of the last push ATTEMPT
@@ -91,6 +96,22 @@ _last_commit_pass = None            # monotonic clock of the last commit ATTEMPT
 
 def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _fail(op, detail):
+    """Record `op`'s failure; print it once per distinct message (the server's log)."""
+    _last_error[op] = {"at": _now(), "detail": detail}
+    if _logged.get(op) != detail:
+        _logged[op] = detail
+        if ECHO:
+            print("review-sync: %s failing -- %s" % (op, detail), flush=True)
+
+
+def _ok(op):
+    """Clear `op`'s failure; print the recovery once, if a failure was printed."""
+    _last_error.pop(op, None)
+    if _logged.pop(op, None) is not None and ECHO:
+        print("review-sync: %s working again" % op, flush=True)
 
 
 # --- config (read lazily, so a test's environment is the one used) ------------------------------
@@ -277,7 +298,7 @@ def commit_once(message=None, dry_run=False):
             if not new_tree:
                 raise RuntimeError("write-tree produced no tree")
             if new_tree == base_tree:
-                _last_error.pop("commit", None)
+                _ok("commit")
                 return None                      # nothing changed since the last commit
             if dry_run:
                 return "(dry-run: would commit %s)" % new_tree[:12]
@@ -292,10 +313,10 @@ def commit_once(message=None, dry_run=False):
                 raise RuntimeError("update-ref failed: " + (ur.stderr or "").strip())
             _last_commit = sha
             _last_ok["commit"] = _now()
-            _last_error.pop("commit", None)
+            _ok("commit")
             return sha
         except Exception as exc:        # noqa: BLE001 — a sync failure must never crash the server
-            _last_error["commit"] = {"at": _now(), "detail": str(exc)[:200]}
+            _fail("commit", str(exc)[:200])
             return None
 
 
@@ -326,10 +347,10 @@ def push(dry_run=False):
         r = _git("push", remote(), refspec)
         if r.returncode != 0:
             detail = (r.stderr or r.stdout or "git push exited %d" % r.returncode).strip()
-            _last_error["push"] = {"at": _now(), "detail": detail[-200:]}
+            _fail("push", detail[-200:])
             return False
         _last_ok["push"] = _now()
-        _last_error.pop("push", None)
+        _ok("push")
         return True
 
 
@@ -522,8 +543,11 @@ def _loop():
             break
         try:
             _tick()
-        except Exception:
-            # The committer must never die; per-op failures are already recorded in status().
+            _ok("loop")
+        except Exception as exc:        # noqa: BLE001 — the committer must never die
+            # commit_once and push record their own failures; this is anything else a pass
+            # raised (a ref read, the remote-tracking check), recorded and printed the same way.
+            _fail("loop", ("%s: %s" % (type(exc).__name__, exc))[:200])
             time.sleep(1.0)
 
 
@@ -637,7 +661,12 @@ def main(argv=None):
         print("pushed" if push(dry_run=dry_run) else "not pushed")
         return 0
     if cmd == "sync":
-        return _cmd_sync(dry_run)
+        global ECHO
+        echo, ECHO = ECHO, False         # sync prints each failure itself, once
+        try:
+            return _cmd_sync(dry_run)
+        finally:
+            ECHO = echo
     if cmd == "post-merge":
         try:
             print("review-sync: " + post_merge(dry_run=dry_run))

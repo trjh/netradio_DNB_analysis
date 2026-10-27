@@ -277,6 +277,12 @@ def acquire_writer_lock():
         return None
     return fh
 
+
+# THE EXIT CODE OF A REFUSAL, so the process that started this one tells a refusal from a clean
+# stop (0) without reading the log. 1 stays the ledger's refusal (and a decode child's crash).
+EXIT_CONFIG = 2      # a file or setting the run needs is missing: rulings, a cache, directories
+EXIT_LOCKED = 3      # another ledger/state writer holds the lock
+
 HOP = chroma_recipe.HOP          # single source: chroma_recipe.py
 # THE QUERY: a mystery clip is asked as 120 s windows, a new one every 15 s, the last placed to
 # end at the clip's end; per (mystery, candidate) the lowest cost over the windows is the score.
@@ -2626,7 +2632,7 @@ def run(args):
     if lock is None:
         print("another ledger/state writer is running (another harvest.py --run) -- "
               "ONE writer, always. Not starting.")
-        return
+        return EXIT_LOCKED
     state = _load(STATE, blank_state())
     # THE RETIRED SET IS A FILE ANOTHER PROCESS WRITES: every key this search must never
     # propose again lives in the rulings file, so without it the run has no way to know what
@@ -2638,7 +2644,7 @@ def run(args):
         print("the rulings file (%s) is absent or unreadable: the search has no way to know which "
               "keys it must never propose again. Put the file back in place and start again."
               % RULINGS)
-        return
+        return EXIT_CONFIG
     # THE OLD ROWS MOVE ONTO KEYS before anything reads them: every reader joins on the key,
     # and a row still carrying its url is invisible to that join.
     moved = migrate_matches(state)
@@ -2668,7 +2674,7 @@ def run(args):
               "refused): the harvester has nowhere to keep a signature or an excerpt.\n"
               "Set NETRADIO_CACHE_ROOT in .env (see .env.example) and start again."
               % (" and the ".join(dark), "is" if len(dark) == 1 else "are"))
-        return
+        return EXIT_CONFIG
     # NO DIRECTORIES, NOTHING TO SIGN, EVER. Refuse here, naming the setting, rather than
     # idling forever over an unset variable -- the same refusal a dark cache earns. A
     # relative entry is refused by name in the issues row the gate collects, so an operator
@@ -2682,7 +2688,7 @@ def run(args):
               "`:`-separated) in .env -- see .env.example and docs/HARVEST_FEED.md -- and "
               "start again.")
         _save(STATE, state)
-        return
+        return EXIT_CONFIG
     print("# searching for Mystery Tracks %s"
           % (", ".join(str(n) for n, _, _ in qs) or "none"))
     print("# signing the top level of %d director%s, one file a pass. Ctrl-C or SIGTERM stops "
@@ -2773,7 +2779,7 @@ def run(args):
             _save(STATE, state)
             print("!! the rulings file (%s) could not be read -- stopping this run. Put the file "
                   "back in place and start again." % RULINGS)
-            return
+            return EXIT_CONFIG
 
         # A ruling spends the excerpt: the audio existed to let the human make the call, and the
         # call has been made. Drop it now, not at the 30-day sweep.
@@ -3044,7 +3050,7 @@ def main():
     if args.sign_one and not _KEY.fullmatch(args.sign_one):
         print("# %r is not a key (u + 20 hex) -- a signature filed under it would be "
               "invisible to the pool's own listing; not signing" % args.sign_one)
-        return
+        return EXIT_CONFIG
     if args.sign_one:
         # The hand tool, and a writer: it takes the same lock, reconciles the ledger the same
         # way a run does, and signs through the same sign_file. It does not score -- scoring
@@ -3053,14 +3059,14 @@ def main():
         if lock is None:
             print("# a ledger/state writer is RUNNING (a harvest.py --run) -- not signing "
                   "under it. Stop the writer first if you need this now.")
-            return
+            return EXIT_LOCKED
         state = _load(STATE, blank_state())
         if not _dirs(issues=state.setdefault("issues", [])):
             print("# NETRADIO_HARVEST_DIRS is unset, empty, or names no absolute directory: "
                   "--sign-one looks for the file in the configured directories. Name them in "
                   ".env (see .env.example) and try again.")
             _save(STATE, state)
-            return
+            return EXIT_CONFIG
         rec = reconcile_ledger(state, accept_rebuild=args.accept_ledger_rebuild)
         print("# ledger: %s" % rec["why"])
         # The same save a run makes after its reconcile, and for the same reason: an alert it
@@ -3105,7 +3111,7 @@ def main():
         # now met every mystery" -- a completion claim about work that never ran.
         if _chroma_dir() is None:
             print("# the signature cache is dark -- set NETRADIO_CACHE_ROOT in .env first.")
-            return
+            return EXIT_CONFIG
         # The same refusal run() makes: the rescan scores the corpus, and without the rulings
         # file it cannot know which keys it must never propose -- it would score records
         # already rejected and stamp `rescan_pending` over them.
@@ -3114,14 +3120,14 @@ def main():
             print("# the rulings file (%s) is absent or unreadable -- not rescanning: without it the "
                   "rescan cannot tell a ruled-out candidate from an active one. Put the file back "
                   "in place and start again." % RULINGS)
-            return
+            return EXIT_CONFIG
         # The corpus the rescan walks is the LEDGER, so a ledger that does not exist yet means
         # the harvester has never run under this contract -- and a rescan over nothing would
         # stamp the same completion over work that never ran.
         if not os.path.exists(LEDGER):
             print("# %s does not exist yet -- start the harvester once (it seeds the ledger "
                   "from the bucket) and re-run." % LEDGER)
-            return
+            return EXIT_CONFIG
         # ONE WRITER: the rescan rewrites the state file for hours, and so does the loop. Two
         # writers means the last save wins and the other's work is silently lost, so this
         # takes the loop's lock and refuses while the loop holds it -- as --sign-one does.
@@ -3130,7 +3136,7 @@ def main():
             print("# a ledger/state writer is RUNNING (a harvest.py --run) -- not rescanning "
                   "under it: the loop scores the same pairs a chunk each pass. Stop it first "
                   "if you want the rescan finished now.")
-            return
+            return EXIT_LOCKED
         # A Ctrl-C or SIGTERM raises the stop flag instead of killing the process mid-save;
         # rescan notices it between pairs and the state is saved below.
         install_signal_handlers()
