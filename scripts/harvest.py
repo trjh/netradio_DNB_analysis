@@ -256,12 +256,11 @@ def _keep_dir():
     cache is dark."""
     return KEEP if KEEP is not _KEEP_AT_IMPORT else cache_budget.dir_of(CANDIDATES_CACHE)
 
-# THE ledger/state writer lock. run() and the on-demand --sign-one -- the two paths that take
-# it -- each hold this flock for their lifetime, so a second of them refuses loudly instead of
-# interleaving their writes of ledger.json and state.json. The rare hand tool --forget also
-# rewrites state.json, with no lock: use it on a stopped run, since beside a live one it can
-# interleave. The path keeps its historic name (collector.lock), so a writer still running under
-# an old binary and this one still exclude each other.
+# THE ledger/state writer lock. Every path that writes ledger.json or state.json takes it and
+# holds it for its lifetime: run(), the on-demand --sign-one, --rescan and the two hand tools
+# --purge-audio and --forget. A second of them refuses loudly instead of interleaving its writes
+# with the first. The path keeps its historic name (collector.lock), so a writer still running
+# under an old binary and this one still exclude each other.
 WRITER_LOCK = os.path.join(STATE_DIR, "collector.lock")
 
 
@@ -994,6 +993,35 @@ def load_ledger():
     return ledger
 
 
+def ledger_unreadable():
+    """Why the ledger file cannot be used, or None when it can (or does not exist yet).
+
+    `load_ledger` reads a file it cannot parse as empty, and an empty ledger is the first
+    start's cue to seed from the bucket. A file that EXISTS and does not parse (a write cut
+    short by a full disk, a truncated restore, a hand edit) is not a first start: seeding over
+    it would drop every `delayed` verdict and every signed row's `size` and `mtime`, with no
+    refusal. So every writer start asks this first and refuses on an answer."""
+    try:
+        with open(LEDGER, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as exc:
+        return "%s: %s" % (type(exc).__name__, exc)
+    if not isinstance(data, dict):
+        return "it holds a JSON %s, not an object of rows" % type(data).__name__
+    return None
+
+
+def ledger_unreadable_why(reason):
+    """The refusal a start prints for an unreadable ledger: what is wrong and what to do."""
+    return ("the ledger (%s) exists but cannot be read (%s). Not starting: reading it as empty "
+            "would seed it again from the bucket listing and lose every delayed verdict and "
+            "every signed row's size and mtime. Restore it from a backup, or repair it by hand. "
+            "If it cannot be saved, move it aside (for example to ledger.json.torn) and start "
+            "again: an absent ledger is seeded from the bucket." % (LEDGER, reason))
+
+
 def _clean_row_fields(ledger):
     """Give every row's sidecar fields the types `_sidecar_row_fields` allows, in place; how
     many rows changed. A row written before those types were enforced may carry a nested
@@ -1096,13 +1124,23 @@ def _alert_kind(alert):
     return "store" if "missing" in alert else None
 
 
+def _ledger_unreadable_alert(state):
+    """True when the state's standing alert is the unreadable-ledger refusal."""
+    alert = state.get("sig_alert")
+    return isinstance(alert, dict) and bool(alert.get("unreadable"))
+
+
 def reconcile_ledger(state=None, accept_rebuild=False):
     """Seed the ledger at first start; at every later writer start, rebuild it from the
     bucket's listing, compare, and merge the rebuild in. This replaces the old lost-signature
     recovery: the `done` lists are gone, and the listing is the only record of what is signed.
 
-      * the ledger is EMPTY -> seed one `signed` row per complete bucket key, `size` and
-        `mtime` empty: the ledger is the complete record of the pool from its first day.
+      * the ledger file EXISTS but cannot be parsed (`ledger_unreadable`) -> REFUSE the start,
+        before anything is written: a standing `sig_alert` of kind `ledger` with
+        `unreadable` set says what to do. It is never read as empty and never re-seeded.
+      * the ledger is EMPTY (absent, or `{}`) -> seed one `signed` row per complete bucket
+        key, `size` and `mtime` empty: the ledger is the complete record of the pool from its
+        first day.
       * otherwise the listing's rows are written to `ledger.rebuild.json` beside the ledger
         and compared with it (`ledger_rebuild_diff`). A difference past
         `NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT` (default 10) REFUSES the start: a standing
@@ -1138,6 +1176,24 @@ def reconcile_ledger(state=None, accept_rebuild=False):
     res = {"seeded": 0, "merged": 0, "dropped": 0, "restored": 0, "sidecar_lost": 0,
            "promoted": 0, "cleaned": 0, "reported": False, "refused": False,
            "cleared": False}
+    # A LEDGER THAT EXISTS AND DOES NOT PARSE is a lost ledger, not a first start: refuse
+    # before anything (the cleaning save, the seed) can write over it. The standing alert is
+    # kind `ledger`, like the rebuild refusal's, so the notices path shows it; it stands down
+    # on the first start that finds a readable or absent ledger.
+    unreadable = ledger_unreadable()
+    if unreadable is not None:
+        why = ledger_unreadable_why(unreadable)
+        if state is None:
+            state = _load(STATE, blank_state())
+        first = not _ledger_unreadable_alert(state)
+        state["sig_alert"] = {"at": _now(), "kind": "ledger", "unreadable": True, "why": why}
+        if first:
+            state["issues"] = ((state.get("issues") or []) +
+                               [{"at": _now(), "issue": "ledger: " + why}])[-50:]
+        return dict(res, refused=True, why=why)
+    if state is not None and _ledger_unreadable_alert(state):
+        state.pop("sig_alert", None)
+        res["cleared"] = True                 # the ledger reads again (or was moved aside)
     raw = _load(LEDGER, {})
     if isinstance(raw, dict):
         res["cleaned"] = _clean_row_fields(raw)
@@ -3029,18 +3085,30 @@ def main():
         return 0
 
     os.makedirs(STATE_DIR, exist_ok=True)
-    if args.purge_audio:
-        print(purge_audio())
-        return
-    if args.forget:
-        state = _load(STATE, blank_state())
-        leads, pairs = forget(state, args.forget)
-        _save(STATE, state)
-        print("# forgot MT%d: dropped %d lead(s) and %d scored pairing(s)."
-              % (args.forget, leads, pairs))
-        print("# Cut a better clip and it re-enters the search by itself, against every held "
-              "signature.")
-        return
+    # THE TWO HAND TOOLS ARE WRITERS TOO: each loads the state file, changes it and saves it.
+    # The run holds its state in memory and saves it every pass, so beside a live run the
+    # run's next save undoes the tool's change (or the tool's save discards the run's pass).
+    # Each takes the writer lock and refuses while another writer holds it.
+    if args.purge_audio or args.forget:
+        lock = acquire_writer_lock()
+        if lock is None:
+            print("# a ledger/state writer is RUNNING (a harvest.py --run) -- not %s under "
+                  "it: its next save would undo the change. Stop the harvester first, then "
+                  "run this again." % ("purging the excerpts" if args.purge_audio
+                                       else "forgetting MT%d" % args.forget))
+            return 1
+        with lock:                           # released as the tool ends
+            if args.purge_audio:
+                print(purge_audio())
+                return
+            state = _load(STATE, blank_state())
+            leads, pairs = forget(state, args.forget)
+            _save(STATE, state)
+            print("# forgot MT%d: dropped %d lead(s) and %d scored pairing(s)."
+                  % (args.forget, leads, pairs))
+            print("# Cut a better clip and it re-enters the search by itself, against every "
+                  "held signature.")
+            return
     if args.sign_one and not _KEY.fullmatch(args.sign_one):
         print("# %r is not a key (u + 20 hex) -- a signature filed under it would be "
               "invisible to the pool's own listing; not signing" % args.sign_one)
@@ -3122,6 +3190,12 @@ def main():
             print("# %s does not exist yet -- start the harvester once (it seeds the ledger "
                   "from the bucket) and re-run." % LEDGER)
             return
+        # A ledger that does not parse would read as an empty corpus, and the rescan would
+        # stamp that same completion over nothing.
+        unreadable = ledger_unreadable()
+        if unreadable is not None:
+            print("# " + ledger_unreadable_why(unreadable))
+            return 1
         # ONE WRITER: the rescan rewrites the state file for hours, and so does the loop. Two
         # writers means the last save wins and the other's work is silently lost, so this
         # takes the loop's lock and refuses while the loop holds it -- as --sign-one does.

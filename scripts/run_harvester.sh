@@ -187,8 +187,8 @@ ledger_line() {
   delayed="$(ledger_count '"status"[[:space:]]*:[[:space:]]*"delayed"')"
   if [ "$rows" -eq 0 ]; then
     # No rows is "nothing signed yet" only for a ledger that really is empty, `{}`. A file
-    # that is empty or garbled reads as no rows too, and harvest.py treats a ledger it cannot
-    # parse as empty, so `status` is where that has to show.
+    # that is empty or garbled reads as no rows too; harvest.py refuses to start on it, and
+    # `status` must say so rather than call it empty.
     # `tr` runs in the C locale: under UTF-8 it stops at the first byte that is not UTF-8,
     # and a `{}` followed by one would read as empty.
     if [ "$(LC_ALL=C tr -d '[:space:]' <"$LEDGER" 2>/dev/null | head -c 3 || true)" = '{}' ]

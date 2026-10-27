@@ -215,10 +215,10 @@ class HarvestTakesWhatTheLauncherForwards(LauncherTestCase):
         from unittest import mock
         sys.path.insert(0, os.path.join(os.path.dirname(HERE), "scripts"))
         self.addCleanup(sys.path.remove, sys.path[0])
-        try:
-            import harvest
-        except Exception as exc:        # librosa/numba absent -> not this test's job
-            self.skipTest("harvest.py does not import here: %s" % exc)
+        from optional_imports import import_or_skip
+        harvest = import_or_skip("harvest")   # any error but a missing library fails here
+        if harvest is None:
+            self.skipTest("harvest.py needs the audio libraries (.venv) -- skipping")
 
         class Parsed(Exception):
             pass
@@ -521,8 +521,8 @@ class StatusTests(LauncherTestCase):
 
     def test_a_garbled_ledger_is_not_reported_as_nothing_signed(self):
         """A ledger the counter finds no rows in is "nothing signed yet" only when it really
-        is `{}`. harvest.py treats a ledger it cannot parse as empty, so `status` is where a
-        garbled one has to show."""
+        is `{}`. harvest.py refuses to start on a ledger it cannot parse, and `status` must
+        not call a garbled one empty."""
         for data in (b"not json at all\n", bytes(range(256)), b"", b"{}x"):
             with self.subTest(data=data[:12]):
                 self.write_raw(data)

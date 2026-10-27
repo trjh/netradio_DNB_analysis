@@ -34,10 +34,9 @@ sys.path.insert(0, SCRIPTS)
 
 import numpy as np                      # noqa: E402
 
-try:
-    import harvest                      # noqa: E402
-except Exception:                       # a dependency this test does not own
-    harvest = None
+from optional_imports import import_or_skip  # noqa: E402
+
+harvest = import_or_skip("harvest")     # None only when an audio library is missing
 
 import cache_budget                     # noqa: E402  (the machine's one cache policy)
 import sigstore                         # noqa: E402  (the seam every bucket test fakes)
@@ -1336,6 +1335,179 @@ class TheLedgerRebuild(_SignerCase):
         sf.assert_called_once()
         self.assertNotIn("sig_alert", harvest._load(harvest.STATE, {}))
         self.assertEqual(len(harvest.load_ledger()), 5)
+
+
+# A ledger that exists and does not parse: the forms a lost ledger takes on disk.
+TORN_LEDGERS = (b'{"u0123456789abcdef0123": ', b"", b"not json\n", b"[]", b"{}x")
+
+
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class ATornLedgerRefusesTheStart(_SignerCase):
+    """A ledger file that cannot be parsed is a lost ledger, not a first start. Every writer
+    start refuses on it, exits non-zero and leaves the file exactly as it found it: reading it
+    as empty would seed it from the bucket and lose every delayed verdict and every signed
+    row's size and mtime, silently."""
+
+    def _objects(self):
+        key = "u" + "a" * 20
+        return {key + ".npy": "e-1", key + ".json": "e-2"}
+
+    def _tear(self, data=TORN_LEDGERS[0]):
+        os.makedirs(harvest.STATE_DIR, exist_ok=True)
+        with open(harvest.LEDGER, "wb") as fh:
+            fh.write(data)
+        return data
+
+    def _bytes(self):
+        with open(harvest.LEDGER, "rb") as fh:
+            return fh.read()
+
+    def test_the_reconcile_refuses_and_writes_nothing(self):
+        for data in TORN_LEDGERS:
+            with self.subTest(data=data[:12]):
+                self._tear(data)
+                state = {"issues": []}
+                with mock.patch.object(harvest, "_remote_objects",
+                                       lambda max_age_s=900: self._objects()):
+                    res = harvest.reconcile_ledger(state)
+                self.assertTrue(res["refused"])
+                self.assertEqual(res["seeded"], 0, "a torn ledger is never seeded over")
+                self.assertEqual(self._bytes(), data, "the file is left as it was found")
+                self.assertFalse(os.path.exists(harvest._rebuild_path()))
+                alert = state["sig_alert"]
+                self.assertEqual((alert["kind"], alert["unreadable"]), ("ledger", True))
+                self.assertIn(harvest.LEDGER, alert["why"])
+                self.assertIn("move it aside", alert["why"])
+                self.assertEqual(
+                    len([r for r in state["issues"] if r["issue"].startswith("ledger:")]), 1)
+
+    def test_a_second_refusal_raises_no_second_issues_row(self):
+        self._tear()
+        state = {"issues": []}
+        harvest.reconcile_ledger(state)
+        harvest.reconcile_ledger(state)
+        self.assertEqual(len([r for r in state["issues"] if r["issue"].startswith("ledger:")]), 1)
+
+    def test_an_absent_ledger_still_seeds_and_the_alert_stands_down(self):
+        self._tear()
+        state = {"issues": []}
+        self.assertTrue(harvest.reconcile_ledger(state)["refused"])
+        os.replace(harvest.LEDGER, harvest.LEDGER + ".torn")     # the operator moves it aside
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900: self._objects()):
+            res = harvest.reconcile_ledger(state)
+        self.assertFalse(res["refused"])
+        self.assertEqual(res["seeded"], 1)
+        self.assertTrue(res["cleared"])
+        self.assertNotIn("sig_alert", state)
+
+    def test_an_empty_object_is_a_ledger_not_a_torn_one(self):
+        self._tear(b"{}")
+        self.assertIsNone(harvest.ledger_unreadable())
+        with mock.patch.object(harvest, "_remote_objects",
+                               lambda max_age_s=900: self._objects()):
+            self.assertEqual(harvest.reconcile_ledger({"issues": []})["seeded"], 1)
+
+    def _main(self, *argv):
+        out = io.StringIO()
+        with mock.patch.object(harvest, "queries", lambda state=None: []), \
+                mock.patch.object(harvest, "_remote_objects",
+                                  lambda max_age_s=900: self._objects()), \
+                mock.patch.object(harvest, "sign_file",
+                                  side_effect=AssertionError("signed on a refused start")) as sf, \
+                mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
+                mock.patch.object(harvest.memwatch, "allocator_canary",
+                                  lambda *a, **k: (0, 0, None)), \
+                mock.patch.object(sys, "argv", ["harvest.py", *argv]), \
+                contextlib.redirect_stdout(out):
+            code = harvest.main()
+        return code, sf, out.getvalue()
+
+    def test_a_run_on_a_torn_ledger_refuses_the_start(self):
+        harvest._save(harvest.RULINGS, {})
+        self._feed(_key("https://y/waiting"))
+        data = self._tear()
+        code, sf, out = self._main("--run")
+        self.assertEqual(code, 1, "a refusal exits non-zero")
+        sf.assert_not_called()
+        self.assertEqual(self._bytes(), data, "the torn file is left for the operator")
+        self.assertIn("cannot be read", out)
+        alert = harvest._load(harvest.STATE, {})["sig_alert"]
+        self.assertEqual((alert["kind"], alert["unreadable"]), ("ledger", True))
+
+    def test_a_hand_sign_on_a_torn_ledger_refuses(self):
+        key = _key("https://y/hand")
+        self._feed(key)
+        data = self._tear()
+        code, sf, _out = self._main("--sign-one", key)
+        self.assertEqual(code, 1)
+        sf.assert_not_called()
+        self.assertEqual(self._bytes(), data)
+
+    def test_a_rescan_on_a_torn_ledger_refuses(self):
+        harvest._save(harvest.RULINGS, {})
+        data = self._tear()
+        code, _sf, out = self._main("--rescan")
+        self.assertEqual(code, 1)
+        self.assertIn("cannot be read", out)
+        self.assertNotIn("rescan_pending", harvest._load(harvest.STATE, {}))
+        self.assertEqual(self._bytes(), data)
+
+
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class TheHandToolsTakeTheWriterLock(_SignerCase):
+    """`--purge-audio` and `--forget` rewrite the state file, so each takes the writer lock
+    and refuses while a run holds it: the run saves its in-memory state every pass, and its
+    next save would undo the hand tool's change."""
+
+    STATE = {"matches": [{"key": "u" + "b" * 20, "mystery": 7, "audio": "MT7-0.0500-x.wav"}],
+             "scored": {"7:abc": {}}, "kept": 1}
+
+    def setUp(self):
+        super().setUp()
+        harvest._save(harvest.STATE, self.STATE)
+        self.excerpt = None
+        keep = harvest._keep_dir()
+        if keep:
+            os.makedirs(keep, exist_ok=True)
+            self.excerpt = os.path.join(keep, "MT7-0.0500-x.wav")
+            with open(self.excerpt, "wb") as fh:
+                fh.write(b"\0" * 64)
+
+    def _main(self, *argv):
+        with mock.patch.object(sys, "argv", ["harvest.py", *argv]), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            code = harvest.main()
+        return code, out.getvalue()
+
+    def _hold_the_lock(self):
+        held = harvest.acquire_writer_lock()
+        self.assertIsNotNone(held)
+        self.addCleanup(held.close)
+
+    def test_purge_audio_refuses_under_a_live_writer(self):
+        self._hold_the_lock()
+        code, out = self._main("--purge-audio")
+        self.assertEqual(code, 1, "a refusal exits non-zero")
+        self.assertIn("writer is RUNNING", out)
+        self.assertEqual(harvest._load(harvest.STATE, {}), self.STATE, "the state is untouched")
+        if self.excerpt:
+            self.assertTrue(os.path.exists(self.excerpt), "no excerpt was deleted")
+
+    def test_forget_refuses_under_a_live_writer(self):
+        self._hold_the_lock()
+        code, out = self._main("--forget", "7")
+        self.assertEqual(code, 1)
+        self.assertIn("writer is RUNNING", out)
+        self.assertEqual(harvest._load(harvest.STATE, {}), self.STATE)
+
+    def test_with_no_writer_both_run(self):
+        code, _out = self._main("--forget", "7")
+        self.assertIsNone(code)
+        self.assertEqual(harvest._load(harvest.STATE, {})["matches"], [])
+        code, out = self._main("--purge-audio")      # the lock was released when --forget ended
+        self.assertIsNone(code)
+        self.assertIn("purged", out)
 
 
 class TheKeyRule(unittest.TestCase):

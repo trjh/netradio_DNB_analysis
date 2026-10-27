@@ -24,12 +24,12 @@ import unittest.mock
 SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
 sys.path.insert(0, SCRIPTS)
 
-try:
+from optional_imports import import_or_skip  # noqa: E402
+
+harvest = import_or_skip("harvest")     # None only when an audio library is missing
+if harvest:
     import numpy as np
-    import harvest
     from streamalign import chroma_match as cm
-except Exception:                       # numpy/librosa absent -> not this test's job
-    harvest = None
 
 
 # The real alignments need librosa; CI runs without it.

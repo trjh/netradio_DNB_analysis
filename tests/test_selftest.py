@@ -24,10 +24,9 @@ from unittest import mock
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "scripts"))
 
-try:
-    import selftest
-except Exception:                       # librosa/numba absent -> not this test's job
-    selftest = None
+from optional_imports import import_or_skip  # noqa: E402
+
+selftest = import_or_skip("selftest")   # None only when an audio library is missing
 
 
 @unittest.skipIf(selftest is None, "selftest.py needs the librosa venv (.venv) — skipping")

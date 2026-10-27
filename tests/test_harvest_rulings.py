@@ -24,11 +24,9 @@ import unittest.mock
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "scripts"))
 
-try:
-    import harvest
-except Exception as exc:                    # librosa/numba not installed -> not this test's job
-    harvest = None
-    _why = str(exc)
+from optional_imports import import_or_skip  # noqa: E402
+
+harvest = import_or_skip("harvest")         # None only when an audio library is missing
 
 
 class TheCommittedRulingsFile(unittest.TestCase):
