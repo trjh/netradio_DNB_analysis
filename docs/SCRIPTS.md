@@ -82,6 +82,7 @@ checkout's unless `.env` says otherwise (`.env.example`, "The align server").
 | `scripts/identify_by_chroma.py` | chroma-match a clip against a pool of candidate records | when you have candidate audio |
 | `scripts/identify_by_api.py` | ask the commercial catalogues (ACRCloud + AudD) to name a clip — searches ~150-160M tracks you don't own, unlike the local chroma pool | when a mystery may be a catalogued release. **Acoustic fingerprinting may be defeated by the 1998 codec/EQ like AcoustID is — it's an experiment; every hit is a lead to confirm by ear.** Needs `ACRCLOUD_*` / `AUDD_API_TOKEN` in `.env` |
 | `scripts/harvest.py` | the long-runner: sign the audio that lands in the harvest directories → chroma signature → **drop the audio** → score | continuously. See [the harvester](#the-harvester) |
+| `scripts/rulings_stamp.py` | checks the rulings file's stamp (`.harvest/rulings-stamp.json`) against `data/rulings.json`; exit 0 when the check is off or matches, 2 when it refuses. Standard library only | by `run_harvester.sh start`/`restart` and `harvest.py --run`, when `NETRADIO_RULINGS_STAMP=require`. See [the harvester](#the-harvester) |
 | `scripts/discogs_leads.py` | read the labels this DJ actually played, ask Discogs what else they released 1994–99. A lead is tested by adding its audio to a directory the harvester reads | when the pool needs new leads |
 | `scripts/acoustid_check.py` | verify the **originals** against AcoustID; catch mislabelled source files | occasionally. **Does not work on stream audio** — see `Archive/LESSON_acoustid_stream.md` |
 
@@ -200,10 +201,34 @@ was started.
 **Exit codes**, for a caller that branches on them: `status` is 0 when the harvester is up
 and **1 when it is down**; `start` is 1 when it refuses (one is already running, another
 start is in flight, no interpreter) and 0 when one is now up; `stop` is 0 either way. A `2`
-is a usage error: an unknown verb, an argument to `start`/`restart` other than
-`--accept-ledger-rebuild`, or a `NETRADIO_HARVEST_*` value that is not a plain number —
+is a usage error or a refused setting: an unknown verb, an argument to `start`/`restart` other
+than `--accept-ledger-rebuild`, a refused rulings file's stamp (see below) or a
+`NETRADIO_RULINGS_STAMP` value other than `require` or `off`, or a `NETRADIO_HARVEST_*` value
+that is not a plain number —
 `NETRADIO_HARVEST_LOG_MAX_BYTES=10MB` is refused rather than quietly taken as "never
 rotate". The interpreter is `.venv/bin/python` unless `NETRADIO_PYTHON` names another one.
+
+```bash
+NETRADIO_RULINGS_STAMP=require scripts/run_harvester.sh start    # or set it in .env
+.venv/bin/python scripts/rulings_stamp.py                         # the same check, alone
+```
+
+**The rulings file's stamp is checked only when asked for.** With
+`NETRADIO_RULINGS_STAMP=require`, `start` and `restart` run `scripts/rulings_stamp.py`
+before they stop or start anything, and `harvest.py --run` makes the same check at its start,
+so a hand start is covered too. The check refuses, exits 2 and prints one line saying what to
+do, when the stamp `.harvest/rulings-stamp.json` is absent, unreadable, or not a JSON object
+with a lower-case hex `sha256`, when `data/rulings.json` is absent, or when the SHA-256 of the
+file's bytes differs from the stamp's. A refused `restart` leaves the running harvester up.
+The stamp is written by the process that writes the rulings file; a mismatch usually means a
+merge or a pull put an older committed copy back. The fix is to have that process write the
+file again (it writes the stamp with it), then start again. The check reads nothing else: not
+the stamp's age, not its writer's pid.
+
+The setting is off by default (unset, empty or `off`), so a harvester run with rulings kept by
+hand and no stamp starts as before. Any other value is refused with exit 2, so a misspelt
+setting cannot turn the check off. The stamp's format is in
+[HARVEST_FEED.md](HARVEST_FEED.md#the-rulings-files-stamp).
 
 **The harvester's caches live on the machine's cache policy.** The signature working cache and
 the excerpt board (`chroma` and `candidates`) are no longer fixed paths: each lives under

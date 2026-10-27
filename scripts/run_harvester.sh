@@ -26,6 +26,12 @@
 # lifetime (harvest.WRITER_LOCK), so a second one refuses rather than corrupting anything;
 # `start` refuses earlier and more cheaply, by looking for the process it launched before.
 #
+# THE RULINGS FILE'S STAMP (opt-in). With NETRADIO_RULINGS_STAMP=require, `start` and `restart`
+# first run scripts/rulings_stamp.py, and refuse with its exit code (2) and its one line when
+# the stamp beside the state (.harvest/rulings-stamp.json) is absent or unreadable, or names
+# other bytes than data/rulings.json holds now. `restart` checks before it stops anything, so a
+# refused restart leaves the running harvester up. Unset or `off`, nothing is checked.
+#
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -291,6 +297,18 @@ start_locked() {
   cmd_status
 }
 
+check_rulings_stamp() {
+  # The opt-in stamp check, before anything is stopped or started. Off (unset, empty, `off`)
+  # costs nothing: no interpreter runs. On, scripts/rulings_stamp.py decides and prints the
+  # reason, and its exit code (2, a missing file or setting) is this script's. With no
+  # interpreter there is nothing to check with; start_locked refuses that case by name.
+  case "${NETRADIO_RULINGS_STAMP:-}" in
+    ''|off) return 0 ;;
+  esac
+  [ -x "$PYTHON" ] || return 0
+  "$PYTHON" "$ROOT/scripts/rulings_stamp.py"
+}
+
 withdraw_pidfile() {
   # $1 = the pid this call is entitled to withdraw. Never remove a registration that is
   # not the one we just accounted for: a start can complete between our last look and
@@ -358,6 +376,9 @@ case "$verb" in
       1:--accept-ledger-rebuild) ACCEPT_LEDGER_REBUILD=1 ;;
       *) echo "$verb: unknown argument(s): $*" >&2; usage >&2; exit 2 ;;
     esac
+    rc=0
+    check_rulings_stamp || rc=$?
+    [ "$rc" = 0 ] || exit "$rc"
     [ "$verb" = restart ] && cmd_stop
     cmd_start
     ;;
