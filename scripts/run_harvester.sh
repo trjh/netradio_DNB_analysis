@@ -30,7 +30,12 @@
 # first run scripts/rulings_stamp.py, and refuse with its exit code (2) and its one line when
 # the stamp beside the state (.harvest/rulings-stamp.json) is absent or unreadable, or names
 # other bytes than data/rulings.json holds now. `restart` checks before it stops anything, so a
-# refused restart leaves the running harvester up. Unset or `off`, nothing is checked.
+# restart this check refuses leaves the running harvester up. The check is not atomic with the
+# stop: if the file or its stamp changes after it passes, the old harvester is stopped and the
+# new one's own check (harvest.py --run) refuses, so the harvester stays down until the writer
+# writes again. That fails safe: a start is refused, never made on rulings nobody vouched for.
+# The writer is another process, with no lock this launcher could share. Unset or `off`,
+# nothing is checked.
 #
 set -euo pipefail
 

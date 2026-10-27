@@ -219,7 +219,10 @@ before they stop or start anything, and `harvest.py --run` makes the same check 
 so a hand start is covered too. The check refuses, exits 2 and prints one line saying what to
 do, when the stamp `.harvest/rulings-stamp.json` is absent, unreadable, or not a JSON object
 with a lower-case hex `sha256`, when `data/rulings.json` is absent, or when the SHA-256 of the
-file's bytes differs from the stamp's. A refused `restart` leaves the running harvester up.
+file's bytes differs from the stamp's. A `restart` that this check refuses leaves the running
+harvester up. The check is not atomic with the stop: a file or stamp that changes just after it
+passes is refused by `harvest.py`'s own check instead, and the harvester stays down until the
+rulings file is written again.
 The stamp is written by the process that writes the rulings file; a mismatch usually means a
 merge or a pull put an older committed copy back. The fix is to have that process write the
 file again (it writes the stamp with it), then start again. The check reads nothing else: not
