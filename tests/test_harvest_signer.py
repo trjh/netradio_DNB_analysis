@@ -34,6 +34,7 @@ sys.path.insert(0, SCRIPTS)
 
 import numpy as np                      # noqa: E402
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # sibling test helpers
 from optional_imports import import_or_skip  # noqa: E402
 
 harvest = import_or_skip("harvest")     # None only when an audio library is missing
@@ -1408,6 +1409,26 @@ class ATornLedgerRefusesTheStart(_SignerCase):
                                lambda max_age_s=900: self._objects()):
             self.assertEqual(harvest.reconcile_ledger({"issues": []})["seeded"], 1)
 
+    def test_the_reason_uses_json_words_not_python_type_names(self):
+        for data, words in ((b"null", "JSON null"), (b"[]", "a JSON array"),
+                            (b'"x"', "a JSON string"), (b"7", "a JSON number"),
+                            (b"true", "a JSON true or false")):
+            with self.subTest(data=data):
+                self._tear(data)
+                reason = harvest.ledger_unreadable()
+                self.assertEqual(reason, "it holds %s, not an object of rows" % words)
+                self.assertNotIn("NoneType", reason)
+                self.assertIn("move it aside", harvest.ledger_unreadable_why(reason))
+
+    def test_a_ledger_that_cannot_be_opened_is_told_to_check_permissions(self):
+        self._tear(b"{}")
+        with mock.patch("builtins.open", side_effect=PermissionError(13, "Permission denied")):
+            reason = harvest.ledger_unreadable()
+        self.assertTrue(reason.startswith(harvest.LEDGER_NOT_OPENED))
+        why = harvest.ledger_unreadable_why(reason)
+        self.assertIn("permissions", why)
+        self.assertNotIn("repair it by hand", why)
+
     def _main(self, *argv):
         out = io.StringIO()
         with mock.patch.object(harvest, "queries", lambda state=None: []), \
@@ -1460,6 +1481,97 @@ class ATornLedgerRefusesTheStart(_SignerCase):
         code, _sf, _out = self._main("--rescan")
         self.assertIsNone(code)
         self.assertNotIn("sig_alert", harvest._load(harvest.STATE, {}))
+
+
+@unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")
+class ALedgerTornMidRunIsNeverWrittenOver(_SignerCase):
+    """The start's check is not enough: a run lasts weeks, and a bad restore or hand edit
+    can tear the ledger under it. A sign never saves its row over a ledger that does not
+    parse, and the loop stops with the same standing alert a start raises."""
+
+    TORN = TORN_LEDGERS[0]
+
+    def _tear(self):
+        with open(harvest.LEDGER, "wb") as fh:
+            fh.write(self.TORN)
+
+    def _bytes(self):
+        with open(harvest.LEDGER, "rb") as fh:
+            return fh.read()
+
+    def _tear_during_the_decode(self):
+        """The decode patches, with the ledger torn while the file is being decoded."""
+        def chroma(y, sr=None):
+            self._tear()
+            return np.zeros((12, 8), dtype="float32")
+        for patch in (mock.patch.object(harvest.subprocess, "Popen",
+                                        fake_decode(pcm=_pcm(LONG_ENOUGH))),
+                      mock.patch.object(harvest.chroma_recipe, "compute_chroma", chroma)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def _run(self, nap=None):
+        harvest._save(harvest.RULINGS, {})
+        acquired = []
+        self.addCleanup(lambda: [fh.close() for fh in acquired if fh])
+        real_acquire = harvest.acquire_writer_lock
+
+        def stop_nap(seconds):
+            harvest._STOP["signum"] = signal.SIGTERM
+            return True
+        with mock.patch.object(harvest, "acquire_writer_lock",
+                               lambda: acquired.append(real_acquire()) or acquired[-1]), \
+                mock.patch.object(harvest, "queries", lambda state=None: []), \
+                mock.patch.object(harvest, "_remote_objects", lambda max_age_s=900: None), \
+                mock.patch.object(harvest, "_nap", nap or stop_nap), \
+                mock.patch.object(harvest.selftest, "offline", lambda: {"why": "test"}), \
+                mock.patch.object(harvest.memwatch, "allocator_canary",
+                                  lambda *a, **k: (0, 0, None)), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            code = harvest.run(None)
+        return code, out.getvalue()
+
+    def _assert_stood_down(self, code, out):
+        self.assertEqual(code, 1, "the loop stops, non-zero, so a restart sees the refusal")
+        self.assertEqual(self._bytes(), self.TORN, "the torn file is left for the operator")
+        state = harvest._load(harvest.STATE, {})
+        self.assertEqual((state["sig_alert"]["kind"], state["sig_alert"]["unreadable"]),
+                         ("ledger", True))
+        self.assertIsNone(state.get("current"))
+        self.assertIn("cannot be read", out)
+
+    def test_a_sign_writes_no_row_over_a_ledger_torn_during_its_decode(self):
+        key = _key("https://y/torn-mid-sign")
+        path = self._feed(key)
+        harvest._save(harvest.LEDGER, {})
+        self._store_on()
+        self._tear_during_the_decode()
+        issues = []
+        c, samples = harvest.sign_file(path, issues=issues)
+        self.assertEqual(self._bytes(), self.TORN, "no one-row ledger saved over the torn one")
+        self.assertEqual((c, samples), (None, None))
+        self.assertTrue(any("cannot be read" in r["issue"] for r in issues))
+
+    def test_the_loop_stops_when_the_ledger_tears_during_a_sign(self):
+        self._feed(_key("https://y/torn-in-the-loop"))
+        harvest._save(harvest.LEDGER, {})
+        self._store_on()
+        self._tear_during_the_decode()
+        self._assert_stood_down(*self._run())
+
+    def test_the_loop_stops_when_the_ledger_tears_between_passes(self):
+        harvest._save(harvest.LEDGER, {})
+        naps = []
+
+        def tear_then_stop(seconds):
+            naps.append(seconds)
+            if len(naps) == 1:
+                self._tear()                     # torn while the loop sleeps
+                return False
+            harvest._STOP["signum"] = signal.SIGTERM
+            return True
+        self._assert_stood_down(*self._run(nap=tear_then_stop))
+        self.assertEqual(len(naps), 1, "the next pass stopped before it slept again")
 
 
 @unittest.skipUnless(harvest, "harvest.py needs numpy -- not this test's job")

@@ -16,6 +16,7 @@ from unittest import mock
 SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
 sys.path.insert(0, SCRIPTS)
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # sibling test helpers
 from optional_imports import import_or_skip  # noqa: E402
 
 calibrate = import_or_skip("calibrate")  # None only when an audio library is missing

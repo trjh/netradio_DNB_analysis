@@ -174,8 +174,8 @@ before the signing pass has run once there is nothing signed and no candidates, 
 exactly what a fresh clone looks like. A ledger that is there but cannot be read says
 `present, not readable`, and one with no rows that is not `{}` (empty or garbled) says
 `present, N bytes, no rows the counter can read`, never "nothing signed yet". `harvest.py`
-refuses to start on a ledger it cannot parse (it never reads one as empty and seeds over it),
-and `status` shows the same file before the start does. While the state
+refuses to start on a ledger it cannot read, and a running loop stops when it finds one (see
+**A ledger that cannot be read** below); `status` shows the same file before the start does. While the state
 carries a standing `sig_alert` (see
 **The ledger replaces the working queue** below), `status` adds one `alert:` line with its
 numbers and since when; with no alert there is no such line. Same shape as the align server's
@@ -278,12 +278,24 @@ path that writes the ledger or the state file (`--run`, `--sign-one`, `--rescan`
 `collector.lock` name) for its lifetime — a second writer, including a hand tool under a
 running daemon, refuses loudly instead of interleaving, and the two hand tools exit non-zero.
 
-**A ledger that cannot be parsed refuses the start.** A `ledger.json` that exists and does not
-parse (a write cut short, a truncated restore, a hand edit) is a lost ledger, not a first start:
-`--run` and `--sign-one` refuse before writing anything, exit non-zero and leave a standing
-`sig_alert` of kind `ledger` with `unreadable` set. Restore the file from a backup or repair
-it; if it cannot be saved, move it aside and start again, and the absent ledger is seeded from
-the bucket. The alert stands down on the first start that finds the ledger readable or absent.
+**A ledger that cannot be read refuses the start, and stops a running loop.** A
+`ledger.json` that exists and cannot be read (a write cut short, a truncated restore, a hand
+edit, a permission change) is a lost ledger, not a first start:
+
+- `--run`, `--sign-one` and `--rescan` refuse before writing the ledger, exit non-zero and
+  leave a standing `sig_alert` of kind `ledger` with `unreadable` set. The ledger file is left
+  exactly as it was. Before that check, `--run` still saves the state file's own migrations
+  and sweeps expired excerpts and stale decode job directories.
+- A running loop checks the ledger once a pass, and every sign checks it again before it
+  saves its row. A ledger torn under the run gets no row written over it: the loop raises the
+  same alert, clears `current`, saves the state and exits non-zero. The file in flight gets
+  no row, so it is signed again once the ledger reads. `--sign-one` stops the same way.
+
+`run_harvester.sh status` shows the alert as `the ledger cannot be read, nothing is signed`.
+If the file does not parse, restore it from a backup or repair it; if it cannot be saved,
+move it aside and start again, and the absent ledger is seeded from the bucket. If the file
+cannot be opened, check its permissions and the disk. The alert stands down on the first
+start that finds the ledger readable or absent.
 
 The rescan also fills in **where** each old match hit (`at_s`), which is why a lead can be
 cued to the moment it matched even for leads found before that field existed. The

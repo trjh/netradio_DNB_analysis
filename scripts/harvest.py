@@ -1000,26 +1000,52 @@ def ledger_unreadable():
     start's cue to seed from the bucket. A file that EXISTS and does not parse (a write cut
     short by a full disk, a truncated restore, a hand edit) is not a first start: seeding over
     it would drop every `delayed` verdict and every signed row's `size` and `mtime`, with no
-    refusal. So every writer start asks this first and refuses on an answer."""
+    refusal. So every writer start asks this first and refuses on an answer, and so
+    does every sign before it saves a row, and the loop once a pass. An answer that begins
+    with `LEDGER_NOT_OPENED` is an error opening or reading the file, not its content."""
     try:
         with open(LEDGER, "r", encoding="utf-8") as fh:
             data = json.load(fh)
     except FileNotFoundError:
         return None
-    except (OSError, ValueError) as exc:
-        return "%s: %s" % (type(exc).__name__, exc)
+    except ValueError as exc:                # a parse error, or bytes that are not UTF-8
+        return "it is not valid JSON: %s" % exc
+    except OSError as exc:
+        return "%s: %s" % (LEDGER_NOT_OPENED, exc)
     if not isinstance(data, dict):
-        return "it holds a JSON %s, not an object of rows" % type(data).__name__
+        return "it holds %s, not an object of rows" % _json_kind(data)
     return None
 
 
-def ledger_unreadable_why(reason):
-    """The refusal a start prints for an unreadable ledger: what is wrong and what to do."""
-    return ("the ledger (%s) exists but cannot be read (%s). Not starting: reading it as empty "
-            "would seed it again from the bucket listing and lose every delayed verdict and "
-            "every signed row's size and mtime. Restore it from a backup, or repair it by hand. "
-            "If it cannot be saved, move it aside (for example to ledger.json.torn) and start "
-            "again: an absent ledger is seeded from the bucket." % (LEDGER, reason))
+LEDGER_NOT_OPENED = "it could not be opened or read"
+
+
+def _json_kind(value):
+    """What a parsed JSON value is, in JSON's own words."""
+    if value is None:
+        return "JSON null"
+    if isinstance(value, bool):
+        return "a JSON true or false"
+    if isinstance(value, (int, float)):
+        return "a JSON number"
+    if isinstance(value, str):
+        return "a JSON string"
+    return "a JSON array"
+
+
+def ledger_unreadable_why(reason, running=False):
+    """The refusal printed for an unreadable ledger: what is wrong and what to do. `running`
+    is the loop's stop, not a start's refusal."""
+    head = ("the ledger (%s) exists but cannot be read (%s). %s: reading it as empty would "
+            "seed it again from the bucket listing and lose every delayed verdict and every "
+            "signed row's size and mtime. "
+            % (LEDGER, reason, "Stopping the run" if running else "Not starting"))
+    if reason.startswith(LEDGER_NOT_OPENED):
+        return head + ("Check the file's permissions and the disk it is on, then start "
+                       "again.")
+    return head + ("Restore it from a backup, or repair it by hand. If it cannot be saved, "
+                   "move it aside (for example to ledger.json.torn) and start again: an "
+                   "absent ledger is seeded from the bucket.")
 
 
 def _clean_row_fields(ledger):
@@ -1130,16 +1156,30 @@ def _ledger_unreadable_alert(state):
     return isinstance(alert, dict) and bool(alert.get("unreadable"))
 
 
-def _raise_unreadable_alert(state, reason):
+def _raise_unreadable_alert(state, reason, running=False):
     """Stand the unreadable-ledger alert in `state` (one issues row, not one per start) and
     return the refusal's text. The caller saves the state."""
-    why = ledger_unreadable_why(reason)
+    why = ledger_unreadable_why(reason, running)
     first = not _ledger_unreadable_alert(state)
     state["sig_alert"] = {"at": _now(), "kind": "ledger", "unreadable": True, "why": why}
     if first:
         state["issues"] = ((state.get("issues") or []) +
                            [{"at": _now(), "issue": "ledger: " + why}])[-50:]
     return why
+
+
+def _stop_on_unreadable_ledger(state):
+    """True, with the alert raised and the state saved, when the ledger has become
+    unreadable under a running writer. The start's check covers only the start: a restore
+    or a hand edit can tear the file mid-run, and the loop would then read it as empty."""
+    reason = ledger_unreadable()
+    if reason is None:
+        return False
+    why = _raise_unreadable_alert(state, reason, running=True)
+    state["current"] = None
+    _save(STATE, state)
+    print("!! " + why)
+    return True
 
 
 def reconcile_ledger(state=None, accept_rebuild=False):
@@ -1630,6 +1670,15 @@ def sign_file(path, issues=None, publish=True, said=None):
                                         "it comes back" % os.path.basename(path)})
             return None, None
 
+        # A LEDGER TORN DURING THE DECODE is not read as empty: the row saved over it would
+        # be a one-row ledger in place of the whole record. No row; the caller stops.
+        torn = ledger_unreadable()
+        if torn is not None:
+            if issues is not None:
+                issues.append({"at": _now(), "key": key,
+                               "issue": "the ledger cannot be read (%s) -- no row written "
+                                        "over it for %s" % (torn, os.path.basename(path))})
+            return None, None
         ledger = load_ledger()
         if not publish:
             # The canary's re-sign: no new row, ever. On success the existing row's
@@ -2686,7 +2735,8 @@ def run(args):
     install_signal_handlers()
     lock = acquire_writer_lock()
     if lock is None:
-        print("another ledger/state writer is running (another harvest.py --run) -- "
+        print("another ledger/state writer holds the lock (harvest.py --run, --rescan, "
+              "--sign-one, --forget or --purge-audio) -- "
               "ONE writer, always. Not starting.")
         return
     state = _load(STATE, blank_state())
@@ -2818,6 +2868,8 @@ def run(args):
                 return _stopped(state)
             continue
 
+        if _stop_on_unreadable_ledger(state):
+            return 1
         ledger = load_ledger()
         # Re-read the rulings file every pass, before anything consumes it: a ruling in the file
         # must reach this search within one loop iteration. Unreadable is NOT "nothing ruled" --
@@ -2971,6 +3023,9 @@ def run(args):
             samples = None
             _save(STATE, state)
             return
+        if _stop_on_unreadable_ledger(state):
+            samples = None
+            return 1
 
         row = load_ledger().get(rec_file["key"]) or {}
         if row.get("status") == "signed":
@@ -3098,8 +3153,9 @@ def main():
     if args.purge_audio or args.forget:
         lock = acquire_writer_lock()
         if lock is None:
-            print("# a ledger/state writer is RUNNING (a harvest.py --run) -- not %s under "
-                  "it: its next save would undo the change. Stop the harvester first, then "
+            print("# a ledger/state writer is RUNNING (harvest.py --run, --rescan, --sign-one, "
+                  "--forget or --purge-audio holds the lock) -- not %s under "
+                  "it: its next save would undo the change. Stop that writer first, then "
                   "run this again." % ("purging the excerpts" if args.purge_audio
                                        else "forgetting MT%d" % args.forget))
             return 1
@@ -3125,7 +3181,8 @@ def main():
         # is the loop's, and the next run's rescan finds the fresh row.
         lock = acquire_writer_lock()
         if lock is None:
-            print("# a ledger/state writer is RUNNING (a harvest.py --run) -- not signing "
+            print("# a ledger/state writer is RUNNING (harvest.py --run, --rescan, --sign-one, "
+                  "--forget or --purge-audio holds the lock) -- not signing "
                   "under it. Stop the writer first if you need this now.")
             return
         state = _load(STATE, blank_state())
@@ -3161,6 +3218,8 @@ def main():
                 _save(STATE, state)          # the scan's refusal rows, the operator's answer
             return
         sign_file(path, issues=state.setdefault("issues", []))
+        if _stop_on_unreadable_ledger(state):
+            return 1
         row = load_ledger().get(args.sign_one) or {}
         if row.get("status") == "signed":
             print("# signed %s (%s)" % (args.sign_one, _LAST_CHILD.get("seconds")))
@@ -3201,7 +3260,8 @@ def main():
         # takes the loop's lock and refuses while the loop holds it -- as --sign-one does.
         lock = acquire_writer_lock()
         if lock is None:
-            print("# a ledger/state writer is RUNNING (a harvest.py --run) -- not rescanning "
+            print("# a ledger/state writer is RUNNING (harvest.py --run, --rescan, --sign-one, "
+                  "--forget or --purge-audio holds the lock) -- not rescanning "
                   "under it: the loop scores the same pairs a chunk each pass. Stop it first "
                   "if you want the rescan finished now.")
             return
