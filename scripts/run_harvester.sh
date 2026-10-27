@@ -31,17 +31,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-load_env() {
-  # The repo's .env, read the way every make target reads it: the file wins. An ABSENT
-  # .env is a normal state, not an error — a fresh clone has none and every value below
-  # has a default — so this returns quietly.
-  [ -f "$ROOT/.env" ] || return 0
-  set -a
-  # shellcheck disable=SC1091   # machine-local, never committed
-  . "$ROOT/.env"
-  set +a
-}
-load_env
+# The repo's .env, read through scripts/lib/env.sh (read, never executed) as run_align.sh reads
+# it: every name the environment does not already hold is exported, so the harvester sees it, and
+# a variable already set wins over the file. An ABSENT .env is a normal state, not an error -- a
+# fresh clone has none and every value below has a default.
+# shellcheck source=scripts/lib/env.sh
+. "$ROOT/scripts/lib/env.sh"
+env_load "$ROOT/.env"
 
 STATE_DIR="$ROOT/.harvest"
 STATE="$STATE_DIR/state.json"
@@ -67,7 +63,8 @@ LOG_MAX_BYTES="${NETRADIO_HARVEST_LOG_MAX_BYTES:-10485760}"
 # buys: a `kill -9` instead would leave state.json still naming the file it was signing
 # (`current`) for a process that no longer exists.
 STOP_WAIT_S="${NETRADIO_HARVEST_STOP_WAIT_S:-30}"
-PYTHON="${NETRADIO_PYTHON:-$ROOT/.venv/bin/python}"
+# .env is read, not sourced, so a leading ~ is ours to expand (env.sh's env_home).
+PYTHON="$(env_home "${NETRADIO_PYTHON:-}")"; PYTHON="${PYTHON:-$ROOT/.venv/bin/python}"
 # Set by `start --accept-ledger-rebuild` (or `restart --accept-ledger-rebuild`, which takes
 # the same one argument): harvest.py --run refuses to start when its rebuilt ledger differs
 # from the recorded one past a threshold, and this is the operator's override for that one

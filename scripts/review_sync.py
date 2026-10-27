@@ -663,6 +663,6 @@ if __name__ == "__main__":
     import sys
     # the checkout's .env (NETRADIO_REVIEW_SYNC_*), read the way the align server reads it;
     # here and not in main(), so a test calling main() never loads a real .env
-    from align_server import load_env
-    load_env()
+    import envfile                       # the repo's one `.env` reader
+    envfile.load(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
     sys.exit(main())

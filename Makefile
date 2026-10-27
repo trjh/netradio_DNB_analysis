@@ -20,9 +20,8 @@ endif
 UV_PYTHON ?= 3.13
 
 # Machine-specific paths and credentials (NETRADIO_SOURCES_DIR, ...) live in `.env`, gitignored
-# since this repo is PUBLIC. `VAR=value` lines, so the file is both make-includable and
-# shell-sourceable (`set -a; . ./.env; set +a`). Optional: the leading `-` means "don't fail if
-# it isn't there".
+# since this repo is PUBLIC. `VAR=value` lines in one grammar, read by scripts/lib/env.sh and
+# scripts/envfile.py and never executed or included. Optional: a missing file reads as empty.
 #
 # Until 2026-09 `.env` was the general virtualenv DIRECTORY and the variables lived in
 # `.env_vars`. `-include` of a directory stops make dead with "Is a directory", so say what
@@ -37,8 +36,15 @@ ifneq (,$(wildcard .env_vars))
     $(error ".env_vars is the old name of the variables file; it is no longer read. Rename it: mv .env_vars .env")
 endif
 endif
--include .env
+# The one value a recipe here reads itself: the environment's, else the file's (env.sh), and
+# exported to the recipes only when it has one, so an empty export never hides the file from a
+# script that reads `.env` itself. The environment wins, an empty value included, as it does for
+# envfile.get and env_get: a caller that exports NETRADIO_SOURCES_DIR= gets it unset here even
+# when `.env` sets it.
+NETRADIO_SOURCES_DIR ?= $(shell bash -c '. scripts/lib/env.sh; env_value .env NETRADIO_SOURCES_DIR')
+ifneq (,$(NETRADIO_SOURCES_DIR))
 export NETRADIO_SOURCES_DIR
+endif
 
 #########################################
 ##### DEVELOPMENT ENVIRONMENT SETUP #####
@@ -153,7 +159,7 @@ tracklist:            ## resolve artwork into track-metadata.json + render TRACK
 #########################################
 # The align server (scripts/align_server.py) runs under its own launcher, scripts/run_align.sh
 # (start|stop|status|restart). These targets are its data verbs. Each script reads this
-# checkout's .env itself, so nothing here exports it.
+# checkout's .env itself (scripts/envfile.py), so nothing here exports it.
 
 review-sync:          ## DP-22: the align-review-data branch -> ONE squash PR (review notes, summaries, data/rulings.json). ARGS=--dry-run
 	$(PYTHON) scripts/review_sync.py sync $(ARGS)

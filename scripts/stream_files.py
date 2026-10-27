@@ -52,6 +52,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import envfile  # noqa: E402  (the repo's one .env reader)
+
 REPO = Path(__file__).resolve().parents[1]
 LABELS_DIR = REPO / "labels"
 TRACKLIST_PATH = REPO / "tracklist-2017.txt"
@@ -374,20 +377,9 @@ def track_count(tracks, start, end, filename):
 
 
 def read_env(path):
-    """KEY -> value from a `.env` file, never executed: blank lines and `#` lines skipped, each
-    line split on its first `=`, both sides trimmed, then double and single quotes stripped
-    from the value's ends. The first line for a key wins. A missing file reads as empty."""
-    env = {}
-    try:
-        with open(path, encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    env.setdefault(k.strip(), v.strip().strip('"').strip("'"))
-    except OSError:
-        pass
-    return env
+    """KEY -> value from a `.env` file, through envfile, the repo's one `.env` reader (never
+    executed; the first line for a key wins; a missing file reads as empty)."""
+    return envfile.read(path)
 
 
 def read_setting(name, env=None):

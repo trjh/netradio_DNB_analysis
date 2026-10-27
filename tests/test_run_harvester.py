@@ -56,6 +56,9 @@ class LauncherTestCase(unittest.TestCase):
         os.makedirs(os.path.join(self.root, "scripts"))
         self.script = os.path.join(self.root, "scripts", "run_harvester.sh")
         shutil.copy2(SCRIPT, self.script)
+        os.makedirs(os.path.join(self.root, "scripts", "lib"))
+        shutil.copy2(os.path.join(os.path.dirname(SCRIPT), "lib", "env.sh"),
+                     os.path.join(self.root, "scripts", "lib", "env.sh"))
         self.state_dir = os.path.join(self.root, ".harvest")
         self.pidfile = os.path.join(self.state_dir, "harvester.pid")
         self.log = os.path.join(self.state_dir, "harvest.log")
@@ -269,7 +272,8 @@ class HarvestTakesWhatTheLauncherForwards(LauncherTestCase):
 
 
 class EnvFileTests(LauncherTestCase):
-    """The repo's .env is read, and its absence is not an error."""
+    """The repo's .env is read through scripts/lib/env.sh: never executed, a variable already set
+    wins over it, and its absence is not an error."""
 
     def test_the_env_file_supplies_the_interpreter(self):
         fake = self.fake_interpreter(path="elsewhere/python")   # NOT at .venv/bin/python
@@ -278,6 +282,33 @@ class EnvFileTests(LauncherTestCase):
         out = self.start()
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn(fake, out.stdout)
+
+    def test_a_leading_tilde_in_the_interpreter_is_expanded(self):
+        # A sourced .env expanded `~` on assignment; read, it stays literal until the launcher
+        # expands it (HOME is the scratch root here).
+        fake = self.fake_interpreter(path="venvs/x/bin/python")
+        with open(os.path.join(self.root, ".env"), "w") as fh:
+            fh.write("NETRADIO_PYTHON=~/venvs/x/bin/python\n")
+        out = self.start()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn(fake, out.stdout)
+
+    def test_the_environment_wins_over_the_file(self):
+        fake = self.fake_interpreter(path="elsewhere/python")
+        with open(os.path.join(self.root, ".env"), "w") as fh:
+            fh.write("NETRADIO_PYTHON=/no/such/python\n")
+        out = self.start(env={"NETRADIO_PYTHON": fake})
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn(fake, out.stdout)
+
+    def test_the_file_is_read_never_executed(self):
+        self.fake_interpreter()
+        marker = os.path.join(self.root, "ran")
+        with open(os.path.join(self.root, ".env"), "w") as fh:
+            fh.write("NETRADIO_X=$(touch %s)\ntouch %s\n" % (marker, marker))
+        out = self.start()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertFalse(os.path.exists(marker))
 
     def test_no_env_file_is_a_normal_state(self):
         self.assertFalse(os.path.exists(os.path.join(self.root, ".env")))
