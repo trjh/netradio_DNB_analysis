@@ -134,6 +134,7 @@ def main(argv=None):
     from align_server import load_env    # the checkout's .env; real env vars win
     load_env()
     args.sheet = sheet_id(args.sheet)
+    skip = skip_tabs()                    # after load_env, so a skip named in .env counts
 
     zf = download_xlsx(args.sheet)
     strings = shared_strings(zf)
@@ -141,7 +142,7 @@ def main(argv=None):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     print("sheet %s — %d tabs" % (args.sheet, len(parts)))
     for name, part in parts:
-        if name.strip().lower() in SKIP_TABS:
+        if name.strip().lower() in skip:
             print("  SKIP %-28s (excluded — may hold secrets)" % name)
             continue
         rows = sheet_to_rows(zf, part, strings)
