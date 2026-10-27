@@ -96,10 +96,14 @@ def register_cache():
     # decoded captures and signatures -- each one comes back by a re-cut. The literal name,
     # not the constant above, so env_check.py's code scan sees the registration and counts
     # its variable family as read.
-    return cache_budget.register("stream_tracks",
-                                 cap=int(STREAM_TRACKS_CACHE_GB * cache_budget.GB),
-                                 max_age=STREAM_TRACKS_CACHE_MAX_AGE_DAYS,
-                                 refill="re-extract", rank=8)
+    try:
+        return cache_budget.register("stream_tracks",
+                                     cap=int(STREAM_TRACKS_CACHE_GB * cache_budget.GB),
+                                     max_age=STREAM_TRACKS_CACHE_MAX_AGE_DAYS,
+                                     refill="re-extract", rank=8)
+    except cache_budget.CacheRefused as exc:
+        print(exc)              # `resolve_out` then refuses to cut, naming the setting
+        return None
 
 
 register_cache()                  # at import: the wrapper sources .env before any import

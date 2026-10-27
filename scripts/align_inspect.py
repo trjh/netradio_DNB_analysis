@@ -153,8 +153,12 @@ def register_cache():
     call it again to re-read the environment. Returns the cache's record, or
     None when the policy is dark (NETRADIO_CACHE_ROOT unset) or its directory
     is refused."""
-    return cache_budget.register("streamalign", max_age=STREAMALIGN_CACHE_MAX_AGE_DAYS,
-                                 refill="re-decode", rank=3)
+    try:
+        return cache_budget.register("streamalign", max_age=STREAMALIGN_CACHE_MAX_AGE_DAYS,
+                                     refill="re-decode", rank=3)
+    except cache_budget.CacheRefused as exc:
+        print(exc)              # refused: decodes then run without the cache
+        return None
 
 
 def _contained(path, root):

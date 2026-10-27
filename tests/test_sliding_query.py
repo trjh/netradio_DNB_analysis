@@ -253,8 +253,10 @@ class EveryOldScoreIsStale(unittest.TestCase):
                              {"mystery": 4, "key": r, "cost": 0.03, "verdict": "MATCH"}],
                  "current_query": {"mystery": 4, "query_key": "4:abc"}}
         removed = []
+        # The board is on the policy (`registered`), so its excerpt goes through `remove`.
         with unittest.mock.patch.object(harvest.cache_budget, "remove",
-                                        lambda cache, path, why: removed.append(why) or True):
+                                        lambda cache, path, why: removed.append(why) or True), \
+                unittest.mock.patch.object(harvest.cache_budget, "registered", lambda name: True):
             first = harvest.migrate_query_shape(state)
             snapshot = repr(state)
             second = harvest.migrate_query_shape(state)

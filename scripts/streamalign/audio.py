@@ -95,9 +95,13 @@ def register_cache():
     # entries third — a re-decode is seconds, the refill costs nothing.
     # The literal name, not the CACHE constant, so env_check.py's code scan sees
     # the registration and counts its variable family as read.
-    return cache_budget.register("streamalign", max_age=CACHE_MAX_AGE_DAYS,
-                                 pinned=_pinned_entry,
-                                 refill="re-decode", rank=3)
+    try:
+        return cache_budget.register("streamalign", max_age=CACHE_MAX_AGE_DAYS,
+                                     pinned=_pinned_entry,
+                                     refill="re-decode", rank=3)
+    except cache_budget.CacheRefused as exc:
+        print(exc)              # refused: decodes then run without the cache
+        return None
 
 
 register_cache()
