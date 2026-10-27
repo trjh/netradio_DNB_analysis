@@ -1,5 +1,6 @@
 """Tests for the Google Sheet backup helpers (offline — no network)."""
 import io
+import os
 import sys
 import unittest
 import zipfile
@@ -48,6 +49,50 @@ class HelperTests(unittest.TestCase):
         self.assertIn("tracklist", s)
         # Case/whitespace normalisation.
         self.assertIn("secrets", b.skip_tabs("  SECRETS  "))
+
+
+class SheetIdTests(unittest.TestCase):
+    def setUp(self):
+        saved = os.environ.pop("NETRADIO_SHEET_ID", None)
+        if saved is not None:
+            self.addCleanup(os.environ.__setitem__, "NETRADIO_SHEET_ID", saved)
+        else:
+            self.addCleanup(os.environ.pop, "NETRADIO_SHEET_ID", None)
+
+    def test_no_id_committed_in_the_script(self):
+        # the ID lives in .env only: the module carries no default sheet
+        self.assertFalse(hasattr(b, "DEFAULT_SHEET"))
+        src = (REPO / "scripts" / "backup_sheet.py").read_text(encoding="utf-8")
+        self.assertNotRegex(src, r"[A-Za-z0-9_-]{40,}")
+
+    def test_refuses_with_no_id(self):
+        for value in (None, "", "   "):
+            with self.subTest(value=value):
+                if value is None:
+                    os.environ.pop("NETRADIO_SHEET_ID", None)
+                else:
+                    os.environ["NETRADIO_SHEET_ID"] = value
+                with self.assertRaises(SystemExit) as ctx:
+                    b.sheet_id(None)
+                self.assertIn("NETRADIO_SHEET_ID", str(ctx.exception.code))
+
+    def test_flag_wins_then_the_environment(self):
+        os.environ["NETRADIO_SHEET_ID"] = "from-env"
+        self.assertEqual(b.sheet_id("from-flag"), "from-flag")
+        self.assertEqual(b.sheet_id(None), "from-env")
+
+    def test_main_refuses_before_any_download(self):
+        # main() loads the checkout's .env first; point that at a missing file so the
+        # test does not depend on this machine's .env, and make any download fail loudly
+        import align_server
+        real_load, real_dl = align_server.load_env, b.download_xlsx
+        self.addCleanup(setattr, align_server, "load_env", real_load)
+        self.addCleanup(setattr, b, "download_xlsx", real_dl)
+        align_server.load_env = lambda path=None: None
+        b.download_xlsx = lambda sheet: self.fail("downloaded with no sheet ID")
+        with self.assertRaises(SystemExit) as ctx:
+            b.main([])
+        self.assertIn("NETRADIO_SHEET_ID", str(ctx.exception.code))
 
 
 class SharedStringsAndRowsTests(unittest.TestCase):

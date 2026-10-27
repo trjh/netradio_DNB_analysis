@@ -83,9 +83,10 @@ _ORIG_FILE_RE = re.compile(r"^(\d{3})-(.+)\.(mp3|flac|m4a|opus|wav|wv|aif|aiff|m
                            re.IGNORECASE)
 _HINTS_NAME_RE = re.compile(r"^([A-Za-z0-9._-]+)\.orig(\d{3})\.match\.hints\.tsv$")
 _SUMMARY_RE = re.compile(r"rate ([0-9.]+) .*polarity (INVERTED|not inverted)")
-# the optional ` verified` token is DP-01's machine/human-checked mark -- Pass-1
+# the optional ` verified` token is DP-01's machine-measured mark -- Pass-1
 # files carry it (matchconv emits `track sync: 1 verified confidence ...`), and so
-# do this page's own exports; a parser without it silently drops every such point.
+# do the inspector's exports on a seat the machine measured (a hand-moved seat
+# exports without it); a parser without it silently drops every such point.
 # Neither regex anchors the line END on purpose: anchor rows are accepted BOTH with
 # and without the trailing ` HINT` token (the converter dropped it from emitted
 # sync/start/end rows in DP-26, and files written before that still carry it). The optional per-anchor `MATCH %+.3fs` token after

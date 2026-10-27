@@ -526,8 +526,8 @@ def _export_texts(stem, orig, points, rate, inverted):
     """A Python MIRROR of align.html's buildExport() (DP-16) -- keep in lockstep.
 
     `points` are the already-filtered included points, each
-    {k, stream_s, orig_s (the session seat), confidence}. Returns
-    (stream_name, stream_text, orig_name, orig_text).
+    {k, stream_s, orig_s (the session seat), confidence, measured (default True)}.
+    Returns (stream_name, stream_text, orig_name, orig_text).
     """
     tag = "orig%03d" % int(orig)
     pol = ("INVERTED (flip the original before a null test)" if inverted
@@ -536,10 +536,12 @@ def _export_texts(stem, orig, points, rate, inverted):
     summary = ("%s via /align inspector: rate %.5f (original runs %s%.2f%% vs stream), "
                "polarity %s, %d anchors"
                % (tag, rate, "+" if pct >= 0 else "", pct, pol, len(points)))
-    srows = [(p["stream_s"], "track sync: %s verified confidence %.1f/10"
-              % (p["k"], p["confidence"])) for p in points]
-    orows = [(p["orig_s"], "%s sync: %s verified confidence %.1f/10"
-              % (tag, p["k"], p["confidence"])) for p in points]
+    def vtok(p):
+        return " verified" if p.get("measured", True) else ""
+    srows = [(p["stream_s"], "track sync: %s%s confidence %.1f/10"
+              % (p["k"], vtok(p), p["confidence"])) for p in points]
+    orows = [(p["orig_s"], "%s sync: %s%s confidence %.1f/10"
+              % (tag, p["k"], vtok(p), p["confidence"])) for p in points]
     srows.append((0.0, "note HINT: " + summary + " HINT"))
     orows.append((0.0, "note HINT: " + summary
                   + "; times are original-local seconds HINT"))
@@ -614,7 +616,7 @@ class TestExportLoop(unittest.TestCase):
     def test_js_mirror_templates_match(self):
         # the JS template strings the Python mirror above mirrors
         for needle in (
-                "verified confidence ${p.confidence.toFixed(1)}/10",
+                "${vtok(p)} confidence ${p.confidence.toFixed(1)}/10",
                 "${r[0].toFixed(6)}\\t${r[0].toFixed(6)}\\t${r[1]}\\n",
                 "note HINT: ${summary} HINT",
                 "via /align inspector: rate ${rate.toFixed(5)}",
@@ -663,6 +665,87 @@ class TestExportLoop(unittest.TestCase):
 
     def test_summary_line_shows_points_adjusted_rate(self):
         self.assertIn("adjusted, rate ${ex.rate.toFixed(5)}", self.src)
+
+
+def _measured(seat, hint_seat, refined, rseat):
+    """A Python MIRROR of exportPoints()' `measured` rule in align.html -- keep in lockstep.
+
+    DP-01: the bare ` verified` token on `track sync:` / `origNNN sync:` rows is machine
+    provenance. A seat is machine-measured when it is the last refine's seat, or, with no
+    refine, the hint's own seat.
+    """
+    if refined:
+        return rseat is not None and abs(seat - rseat) <= 1e-6
+    return abs(seat - hint_seat) <= 1e-6
+
+
+class TestExportVerifiedIsMachineProvenance(unittest.TestCase):
+    """The inspector's export writes ` verified` only on a seat the machine measured.
+
+    A seat moved by hand and not re-snapped has no measurement: it exports without the
+    token, so `streamalign sync-audit --only-unchecked` lists it. (The file-sync
+    `verified <neighbour>` family is a different token; the page never writes it.)
+    """
+
+    HTML = TestExportLoop.HTML
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="align-verified-")
+        self.addCleanup(self.tmp.cleanup)
+        with open(self.HTML, "r", encoding="utf-8") as handle:
+            self.src = handle.read()
+        self.block = self.src.split("function exportPoints(h) {", 1)[1]
+        self.block = self.block.split("function download(", 1)[0]
+
+    def test_mirror_rule(self):
+        hint = 228.425
+        cases = (
+            # (seat, refined, rseat, measured)
+            (hint, False, None, True),            # the hint's own seat
+            (hint + 0.01, False, None, False),    # nudged by hand, never snapped
+            (229.0, True, 229.0, True),           # snapped, left where it landed
+            (229.01, True, 229.0, False),         # snapped, then nudged by hand
+            (229.0, True, None, False),           # a restored refine with no measured seat
+        )
+        for seat, refined, rseat, want in cases:
+            with self.subTest(seat=seat, refined=refined, rseat=rseat):
+                self.assertIs(_measured(seat, hint, refined, rseat), want)
+
+    def test_unchecked_rows_carry_no_token_and_still_parse(self):
+        points = [{"k": "1", "stream_s": 10.0, "orig_s": 20.0, "confidence": 6.0,
+                   "measured": True},
+                  {"k": "2", "stream_s": 40.0, "orig_s": 50.5, "confidence": 7.0,
+                   "measured": False}]
+        sname, stext, oname, otext = _export_texts("d1-2", 3, points, 1.0, False)
+        self.assertIn("track sync: 1 verified confidence 6.0/10", stext)
+        self.assertIn("track sync: 2 confidence 7.0/10", stext)
+        self.assertIn("orig003 sync: 2 confidence 7.0/10", otext)
+        self.assertNotIn("sync: 2 verified", stext + otext)
+        for name, text in ((sname, stext), (oname, otext)):
+            with open(os.path.join(self.tmp.name, name), "w") as f:
+                f.write(text)
+        h = align_inspect.parse_match_hints(self.tmp.name)[0]
+        self.assertEqual([p["k"] for p in h["points"]], ["1", "2"])
+
+    def test_page_writes_the_token_only_through_the_measured_rule(self):
+        self.assertIn("const measured = refined ? (typeof rs === \"number\" && "
+                      "Math.abs(seat - rs) <= 1e-6)\n                               : !adjusted;",
+                      self.block)
+        self.assertIn('const vtok = p => p.measured ? " verified" : "";', self.block)
+        self.assertEqual(self.block.count("${vtok(p)} confidence"), 2)
+        # no export template writes the token unconditionally
+        self.assertNotIn(" verified confidence ${", self.block)
+        self.assertNotRegex(self.block, r"sync: \$\{p\.k\} verified")
+
+    def test_the_snap_records_its_measured_seat_and_storage_keeps_it(self):
+        self.assertIn("stSnap.rseat[cur.point.k] = j.new_orig_t;", self.src)
+        self.assertIn('rseat: typeof st.rseat[p.k] === "number" ? st.rseat[p.k] : null,',
+                      self.src)
+        self.assertIn("if (Number.isFinite(s.rseat)) st.rseat[p.k] = s.rseat;", self.src)
+
+    def test_help_text_calls_the_token_machine_measured(self):
+        self.assertNotIn("human-checked", self.src)
+        self.assertIn("<b>machine-measured</b> seat (DP-01's meaning)", self.src)
 
 
 class TestOverviewFrontend(unittest.TestCase):

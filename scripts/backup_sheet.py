@@ -8,6 +8,9 @@ we read the xlsx directly.)
 
 Stdlib only (uses `curl` for the download). Usage:
     python3 scripts/backup_sheet.py [--sheet ID]
+
+The sheet ID comes from `--sheet`, else from NETRADIO_SHEET_ID (the environment, then the
+checkout's `.env`). No ID is committed here: with neither set, the script refuses.
 """
 import argparse
 import csv
@@ -21,7 +24,6 @@ from xml.etree import ElementTree as ET
 
 REPO = Path(__file__).resolve().parents[1]
 OUT_DIR = REPO / "data" / "sheet"
-DEFAULT_SHEET = os.environ.get("NETRADIO_SHEET_ID", "1bQ8S1v-IgOMpJAHftaSZdtLXCz3wHAfufQk8F6A3nck")
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 RNS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
@@ -115,10 +117,23 @@ def safe_filename(name):
     return re.sub(r'[\\/:*?"<>|]+', "-", name).strip() or "sheet"
 
 
-def main():
+def sheet_id(arg=None):
+    """The sheet to back up: `--sheet`, else NETRADIO_SHEET_ID. Refuses when neither is set."""
+    value = (arg or os.environ.get("NETRADIO_SHEET_ID", "")).strip()
+    if not value:
+        raise SystemExit("no sheet ID: set NETRADIO_SHEET_ID in .env (see .env.example) "
+                         "or pass --sheet ID")
+    return value
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sheet", default=DEFAULT_SHEET, help="Google Sheet ID")
-    args = parser.parse_args()
+    parser.add_argument("--sheet", default=None,
+                        help="Google Sheet ID (default: NETRADIO_SHEET_ID)")
+    args = parser.parse_args(argv)
+    from align_server import load_env    # the checkout's .env; real env vars win
+    load_env()
+    args.sheet = sheet_id(args.sheet)
 
     zf = download_xlsx(args.sheet)
     strings = shared_strings(zf)
