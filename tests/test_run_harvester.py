@@ -283,6 +283,16 @@ class EnvFileTests(LauncherTestCase):
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn(fake, out.stdout)
 
+    def test_a_leading_tilde_in_the_interpreter_is_expanded(self):
+        # A sourced .env expanded `~` on assignment; read, it stays literal until the launcher
+        # expands it (HOME is the scratch root here).
+        fake = self.fake_interpreter(path="venvs/x/bin/python")
+        with open(os.path.join(self.root, ".env"), "w") as fh:
+            fh.write("NETRADIO_PYTHON=~/venvs/x/bin/python\n")
+        out = self.start()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn(fake, out.stdout)
+
     def test_the_environment_wins_over_the_file(self):
         fake = self.fake_interpreter(path="elsewhere/python")
         with open(os.path.join(self.root, ".env"), "w") as fh:

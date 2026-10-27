@@ -4,7 +4,7 @@ Both readers run on the same fixture files, so the two grammars cannot drift: ev
 the first-line rule, the skipped lines, and the environment winning. The repo's `.env.example`
 goes through both as well, every setting line uncommented, and must read the same in each, with
 no line the shared grammar reads differently from a shell that sources the file (envfile.lint).
-No real `.env` is read.
+The lint is checked against a shell that really sources each case. No real `.env` is read.
 """
 
 import os
@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for _where in (ROOT, os.path.join(ROOT, "scripts")):
@@ -150,7 +151,44 @@ class TheEnvironmentWins(Case):
 class TheLint(Case):
     def test_it_names_the_lines_a_sourced_shell_would_read_differently(self):
         found = [(n, k) for n, k, _ in envfile.lint(self.path)]
-        self.assertEqual(found, [(15, "EXPORTED"), (17, "TAIL")])
+        self.assertEqual(found, [(12, "DOLLAR"), (13, "SUBST"), (15, "EXPORTED"), (17, "TAIL")])
+
+    # (line, flagged): every case is also sourced by a real shell below, and the lint must flag
+    # exactly the lines whose sourced value differs from the shared grammar's.
+    CASES = (
+        ('K=plain', False),
+        ('K="a # b"', False),                 # one quoted string: both read `a # b`
+        ("K='a # b'", False),
+        ('K=a # b', True),
+        ('K="a" # b', True),
+        ("K='a$HOME'", False),                # single quotes: a shell keeps the `$` too
+        ('K="a$HOME"', True),
+        ('K=a$HOME', True),
+        ('K=`printf x`', True),
+        ('K=~root/x', True),                  # a shell expands `~name`; env_home does not
+        ('K=a~b', False),
+    )
+
+    def sourced(self, path):
+        return self.sh('set -a; . "$F"; set +a; printf "%s" "$K"', F=path)
+
+    def test_it_flags_exactly_the_lines_a_sourced_shell_reads_differently(self):
+        for i, (line, flagged) in enumerate(self.CASES):
+            path = self.write("case%d.env" % i, line + "\n")
+            differs = self.sourced(path) != envfile.value(path, "K")
+            self.assertEqual(differs, flagged, line)
+            self.assertEqual(bool(envfile.lint(path)), flagged, line)
+
+    def test_a_leading_home_tilde_is_not_flagged_and_env_home_gives_the_shells_path(self):
+        # `~` and `~/` are left for the readers that build a path (expanduser, env_home), so the
+        # path they reach is the one a sourcing shell reached.
+        for i, line in enumerate(("K=~", "K=~/x/y")):
+            path = self.write("home%d.env" % i, line + "\n")
+            self.assertEqual(envfile.lint(path), [], line)
+            want = self.sourced(path)
+            self.assertEqual(self.sh('env_home "$(env_value "$F" K)"', F=path), want, line)
+            with mock.patch.dict(os.environ, {"HOME": self.tmp}):
+                self.assertEqual(os.path.expanduser(envfile.value(path, "K")), want, line)
 
     def test_it_never_reports_a_value(self):
         path = self.write("secret.env", "TOKEN=hunter2   # rotate monthly\n")

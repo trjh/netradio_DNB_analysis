@@ -14,8 +14,8 @@ Reports three lists:
     registration departs from the generic cap (4 GB) or age (none) are named in the tool's
     own table so the list states the default the code really uses.
   * **lines read differently from a sourced shell file** -- a line starting `export ` (the
-    name is not read) and a value holding ` #` (the comment is part of the value), found by
-    `envfile.lint`: every reader shares one grammar (scripts/lib/env.sh, scripts/envfile.py)
+    name is not read), a value holding ` #` (the comment is part of the value), and a value a
+    shell would expand (`$`, a backtick, `~name`), found by `envfile.lint`: every reader shares one grammar (scripts/lib/env.sh, scripts/envfile.py)
     and none executes the file. These make the check fail too. Not checked in a `.example` file.
 
 Only names are printed, never values: a `.env` holds credentials and machine paths.

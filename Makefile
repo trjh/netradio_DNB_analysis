@@ -38,7 +38,9 @@ endif
 endif
 # The one value a recipe here reads itself: the environment's, else the file's (env.sh), and
 # exported to the recipes only when it has one, so an empty export never hides the file from a
-# script that reads `.env` itself.
+# script that reads `.env` itself. The environment wins, an empty value included, as it does for
+# envfile.get and env_get: a caller that exports NETRADIO_SOURCES_DIR= gets it unset here even
+# when `.env` sets it.
 NETRADIO_SOURCES_DIR ?= $(shell bash -c '. scripts/lib/env.sh; env_value .env NETRADIO_SOURCES_DIR')
 ifneq (,$(NETRADIO_SOURCES_DIR))
 export NETRADIO_SOURCES_DIR

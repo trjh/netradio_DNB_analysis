@@ -63,7 +63,8 @@ LOG_MAX_BYTES="${NETRADIO_HARVEST_LOG_MAX_BYTES:-10485760}"
 # buys: a `kill -9` instead would leave state.json still naming the file it was signing
 # (`current`) for a process that no longer exists.
 STOP_WAIT_S="${NETRADIO_HARVEST_STOP_WAIT_S:-30}"
-PYTHON="${NETRADIO_PYTHON:-$ROOT/.venv/bin/python}"
+# .env is read, not sourced, so a leading ~ is ours to expand (env.sh's env_home).
+PYTHON="$(env_home "${NETRADIO_PYTHON:-}")"; PYTHON="${PYTHON:-$ROOT/.venv/bin/python}"
 # Set by `start --accept-ledger-rebuild` (or `restart --accept-ledger-rebuild`, which takes
 # the same one argument): harvest.py --run refuses to start when its rebuilt ledger differs
 # from the recorded one past a threshold, and this is the operator's override for that one

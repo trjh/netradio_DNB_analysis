@@ -22,7 +22,8 @@ same files so they cannot drift. The file is never executed:
   - `export KEY=v` is a key named "export KEY", which nothing reads
   - a `#` after a value is part of the value: a comment goes on a line of its own
   - nothing is expanded: no `$VAR`, no command substitution, and a leading `~` stays as written
-    for the reader to expand (os.path.expanduser)
+    for the reader that builds a path from the value to expand (os.path.expanduser; env_home in
+    a shell). `lint` names the lines a sourcing shell would expand differently.
 A missing file reads as empty. The real environment wins over the file: `get` and `load` never
 replace a name that is already set, even to an empty value.
 """
@@ -93,8 +94,11 @@ def load(path, environ=None):
 
 def lint(path):
     """[(line number, key, problem)] for the lines this grammar reads differently from a shell
-    that sources the file: an `export` prefix (the key is not read), and a value holding a
-    ` #` (the comment is part of the value). Keys only, never values: a `.env` holds secrets."""
+    that sources the file: an `export` prefix (the key is not read); a value holding ` #` (the
+    comment is part of the value); a value holding `$` or a backtick (a shell expands them and no
+    reader does); and an unquoted value starting `~name` (a shell expands it; the readers that
+    build a path from a value expand only `~` and `~/`, as env_home does). A value that is one quoted string is read alike by both, except a `$` or
+    backtick inside double quotes. Keys only, never values: a `.env` holds secrets."""
     out = []
     try:
         with open(path, encoding="utf-8", errors="surrogateescape", newline="\n") as fh:
@@ -111,9 +115,20 @@ def lint(path):
         if exported:
             out.append((number, exported.group(1),
                         "starts with `export`, so the name is not read; drop the `export`"))
-        elif re.search(r"[ \t]#", val):
+            continue
+        val = val.strip(_SPACE)
+        single = re.match(r"'[^']*'$", val) is not None
+        quoted = single or re.match(r'"[^"]*"$', val) is not None
+        if not quoted and re.search(r"[ \t]#", val):
             out.append((number, key,
                         "holds ` #`, which is part of the value; put the comment on its own line"))
+        elif not single and re.search(r"[$`]", val):
+            out.append((number, key,
+                        "holds `$` or a backtick, which a shell expands and no reader does; write "
+                        "the value out, or wrap it in single quotes if it is meant as written"))
+        elif re.match(r"~[^/]", val):
+            out.append((number, key,
+                        "starts with `~name`, which only a shell expands; write the full path"))
     return out
 
 
