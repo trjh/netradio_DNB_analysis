@@ -9,6 +9,8 @@ loopback-only-without-auth route gate.
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -742,10 +744,145 @@ class TestExportVerifiedIsMachineProvenance(unittest.TestCase):
         self.assertIn('rseat: typeof st.rseat[p.k] === "number" ? st.rseat[p.k] : null,',
                       self.src)
         self.assertIn("if (Number.isFinite(s.rseat)) st.rseat[p.k] = s.rseat;", self.src)
+        # the snap and the restore are the only places that set the measured seat
+        self.assertEqual(re.findall(r"rseat\[[^\]]+\]\s*=[^=]", self.src),
+                         ["rseat[p.k] = ", "rseat[cur.point.k] = "])
 
     def test_help_text_calls_the_token_machine_measured(self):
         self.assertNotIn("human-checked", self.src)
         self.assertIn("<b>machine-measured</b> seat (DP-01's meaning)", self.src)
+
+
+def _js_function(src, name):
+    """The full source of the page's top-level `function name(...) {...}`."""
+    start = src.index("function %s(" % name)
+    i = src.index("{", start)
+    depth = 0
+    for j in range(i, len(src)):
+        if src[j] == "{":
+            depth += 1
+        elif src[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return src[start:j + 1]
+    raise ValueError(name)
+
+
+def _js_between(src, first, last):
+    """The page's statements from `first` through `last` (both included)."""
+    start = src.index(first)
+    return src[start:src.index(last, start) + len(last)]
+
+
+_NODE = shutil.which("node")
+
+# A harness for the page's own export code: stub DOM and storage, then the page's
+# real state, storage, snap and redraw statements, driven through each seat path.
+_EXPORT_HARNESS = r"""
+const els = {};
+const $ = id => els[id] || (els[id] = { value: id === "pairSel" ? "0" : "1.0",
+                                        checked: false, textContent: "" });
+const store = {};
+const localStorage = { getItem: k => (k in store ? store[k] : null),
+                       setItem: (k, v) => { store[k] = String(v); },
+                       removeItem: k => { delete store[k]; } };
+const SR = 16000;
+let ptState = {}, cur = null, shift = 0, lastConf = null;
+const h = { stem: "d1-2", orig: 3, points: [
+  { k: "1", stream_s: 10, orig_s: 20, confidence: 6 },
+  { k: "2", stream_s: 40, orig_s: 50, confidence: 6 },
+  { k: "3", stream_s: 70, orig_s: 80, confidence: 6 },
+  { k: "4", stream_s: 100, orig_s: 110, confidence: 6 },
+  { k: "5", stream_s: 130, orig_s: 140, confidence: 6 } ] };
+const sources = { hints: [h] };
+__PAGE__
+function open(p) { cur = { stem: h.stem, orig: h.orig, point: p, baseOrigT:
+  (stateFor(h).seats[p.k] !== undefined ? stateFor(h).seats[p.k] : p.orig_s) }; shift = 0; }
+function snap(p, t) { open(p); const j = { new_orig_t: t, confidence: 0.9 }; __SNAP__ }
+function redraw(nudge) { shift = nudge; const m = { point: 0.5 }; __REDRAW__ }
+const P = k => h.points.find(p => p.k === k);
+for (const p of h.points) stateFor(h).include[p.k] = true;
+open(P("1")); redraw(0);                   // 1: the hint's own seat, untouched
+snap(P("2"), 50.003); redraw(0);           // 2: snapped, the page redraws, not moved
+snap(P("3"), 80.003); redraw(0); redraw(5);  // 3: snapped, then nudged by hand
+open(P("4")); redraw(5);                   // 4: moved by hand, never snapped
+saveAdjustments();
+const live = buildExport();
+// 5: an older stored record: refined, no measured seat
+const rec = JSON.parse(localStorage.getItem(adjustKey(h)));
+rec.points["5"] = { seat: 140.002, refined: true, ncc: 0.8, inc: true, resid: 0.4 };
+localStorage.setItem(adjustKey(h), JSON.stringify(rec));
+ptState = {};
+restoreAdjustments(h);
+const restored = buildExport();
+console.log(JSON.stringify({ live: live.streamText + live.origText,
+                             restored: restored.streamText + restored.origText }));
+"""
+
+
+@unittest.skipUnless(_NODE, "node is not installed")
+class TestExportVerifiedUnderNode(unittest.TestCase):
+    """The page's real exportPoints, with its save and restore, decides the token.
+
+    The snap and redraw steps are the page's own statements, so a second place that
+    sets the measured seat (for example in the redraw) fails here.
+    """
+
+    HTML = TestExportLoop.HTML
+
+    @classmethod
+    def setUpClass(cls):
+        with open(cls.HTML, "r", encoding="utf-8") as handle:
+            src = handle.read()
+        page = "\n".join(
+            [_js_between(src, "const ADJUST_PREFIX =", "String(h.orig).padStart(3, \"0\");"),
+             _js_between(src, "const vtok =", ";")]
+            + [_js_function(src, n) for n in ("stateFor", "seatNow", "saveAdjustments",
+                                              "restoreAdjustments", "exportPoints",
+                                              "buildExport")])
+        start = src.index("cur.baseOrigT = j.new_orig_t;")
+        end = src.index("saveAdjustments();", src.index("const stSnap = stateFor(cur);", start))
+        snap = src[start:end + len("saveAdjustments();")]
+        redraw = _js_between(src, "const sess = stateFor(cur);", "saveAdjustments();")
+        js = (_EXPORT_HARNESS.replace("__PAGE__", page).replace("__SNAP__", snap)
+              .replace("__REDRAW__", redraw))
+        res = subprocess.run([_NODE, "-"], input=js, capture_output=True, text=True,
+                             timeout=30, check=False)
+        if res.returncode != 0:
+            raise AssertionError("node harness failed: " + res.stderr)
+        cls.out = json.loads(res.stdout)
+
+    def _rows(self, text, k):
+        return [ln for ln in text.splitlines() if "sync: %s " % k in ln]
+
+    def _check(self, text, k, verified):
+        rows = self._rows(text, k)
+        self.assertEqual(len(rows), 2, rows)          # one stream row, one orig row
+        for row in rows:
+            self.assertEqual(" verified " in row, verified, row)
+
+    def test_hint_seat_untouched_is_verified(self):
+        for which in ("live", "restored"):
+            with self.subTest(which):
+                self._check(self.out[which], "1", True)
+
+    def test_snap_unmoved_is_verified(self):
+        for which in ("live", "restored"):
+            with self.subTest(which):
+                self._check(self.out[which], "2", True)
+
+    def test_snap_then_nudge_is_unchecked(self):
+        for which in ("live", "restored"):
+            with self.subTest(which):
+                self._check(self.out[which], "3", False)
+
+    def test_hand_moved_never_snapped_is_unchecked(self):
+        for which in ("live", "restored"):
+            with self.subTest(which):
+                self._check(self.out[which], "4", False)
+
+    def test_restored_refine_without_a_measured_seat_is_unchecked(self):
+        self._check(self.out["restored"], "5", False)
 
 
 class TestOverviewFrontend(unittest.TestCase):

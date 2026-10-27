@@ -42,9 +42,6 @@ def skip_tabs(env_value=None):
     return set(MANDATORY_SKIP_TABS) | extra
 
 
-SKIP_TABS = skip_tabs()
-
-
 def download_xlsx(sheet_id):
     res = subprocess.run(
         ["curl", "-sL", "--max-time", "40",
@@ -121,8 +118,10 @@ def sheet_id(arg=None):
     """The sheet to back up: `--sheet`, else NETRADIO_SHEET_ID. Refuses when neither is set."""
     value = (arg or os.environ.get("NETRADIO_SHEET_ID", "")).strip()
     if not value:
-        raise SystemExit("no sheet ID: set NETRADIO_SHEET_ID in .env (see .env.example) "
-                         "or pass --sheet ID")
+        raise SystemExit("no sheet ID: NETRADIO_SHEET_ID is unset or empty. Set it in .env "
+                         "(see .env.example) or pass --sheet ID. The environment wins over "
+                         ".env, so an empty exported NETRADIO_SHEET_ID hides the .env value: "
+                         "unset it or set it.")
     return value
 
 

@@ -30,8 +30,10 @@ class HelperTests(unittest.TestCase):
 
     def test_skip_tabs_excludes_secrets_by_default(self):
         # The hard default must always exclude the credential tabs.
-        self.assertIn("secrets", b.SKIP_TABS)
-        self.assertIn("baseurl", b.SKIP_TABS)
+        self.assertIn("secrets", b.skip_tabs())
+        self.assertIn("baseurl", b.skip_tabs())
+        # no import-time skip list: the set is built only after .env loads
+        self.assertFalse(hasattr(b, "SKIP_TABS"))
 
     def test_skip_tabs_credential_exclusion_is_mandatory(self):
         # Empty / unset env must NOT re-enable the SECRETS export.
