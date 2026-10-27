@@ -257,6 +257,36 @@ Two files in the harvester's checkout tell the harvester what not to do.
   still signed, but it is scored only when its signature changed (a different ETag for the
   `.npy` than the row held before).
 
+### The rulings file's stamp
+
+The process that writes the rulings file can vouch for it with a stamp, and the harvester can
+be told to require one. This is part of the feeder contract only when the setting
+`NETRADIO_RULINGS_STAMP=require` is in the harvester's `.env`; unset (the default), no stamp is
+read, and a harvester run with rulings kept by hand needs none.
+
+* **Where:** `.harvest/rulings-stamp.json`, beside the harvester's state. `.harvest/` is
+  gitignored: the stamp is this machine's fact about this machine's file, and never travels
+  with the repo.
+* **What:** one JSON object.
+
+  ```json
+  {"sha256": "<lower-case hex SHA-256 of the exact bytes of data/rulings.json>",
+   "written_at": "2026-10-27T03:14:15Z",
+   "writer": {"pid": 4242, "host": "example", "program": "example"}}
+  ```
+
+  `written_at` (UTC) and `writer` are information only; the check reads `sha256` alone.
+* **When:** after every write of `data/rulings.json`, once the file is in place, hashed from
+  the bytes on disk. Write it atomically (a temporary file, then a rename), as the rulings file
+  itself is written. Write the rulings file first and the stamp second: a start that falls
+  between the two writes is refused, so start again once the stamp is written.
+* **What the harvester does with it:** with the setting on, `scripts/run_harvester.sh start`
+  and `restart` and `harvest.py --run` refuse to start, with exit 2 and a line saying what to
+  do, when the stamp is absent, unreadable, not an object or without a valid `sha256`, when
+  the rulings file is absent, or when the file's SHA-256 differs from the stamp's (a merge or
+  a pull put another copy of the file in place). Nothing else is checked: not the age, not the
+  writer's pid. A run already going is not stopped; the check is at the start.
+
 ## The hand tool
 
 ```bash

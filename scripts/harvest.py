@@ -22,7 +22,9 @@ Two files tell the harvester what not to do:
   READS it — the keys alone — and re-reads it every pass. An empty `{}` is valid: nothing is
   ruled out. A run refuses while the file is
   absent or unreadable — a search that has forgotten every ruling hands back records already
-  rejected.
+  rejected. With `NETRADIO_RULINGS_STAMP=require`, a run also refuses unless the rulings file's
+  stamp, `.harvest/rulings-stamp.json`, names the exact bytes the file holds now (see
+  scripts/rulings_stamp.py).
 * `.harvest/PAUSED` — the pause flag, noticed within one pass.
 
 The idea
@@ -84,6 +86,7 @@ import chroma_recipe                                 # noqa: E402  (THE recipe, 
 import memwatch                                      # noqa: E402  (footprint + allocator canary)
 import selftest                                      # noqa: E402  (the canary; see run())
 import sigstore                                      # noqa: E402  (bucket = the pool's only home)
+import rulings_stamp                                 # noqa: E402  (the rulings file's stamp)
 
 HOME = _gt.REPO_ROOT
 STATE_DIR = os.path.join(HOME, ".harvest")
@@ -2628,6 +2631,13 @@ def run(args):
               "ONE writer, always. Not starting.")
         return
     state = _load(STATE, blank_state())
+    # THE RULINGS FILE'S STAMP, when the setting asks for it: a merge or a pull can put an older
+    # committed copy of the rulings file back, and the stamp is how its writer says which bytes
+    # it wrote. Off by default (scripts/rulings_stamp.py), and the same check the launcher makes.
+    why = rulings_stamp.check(RULINGS, os.path.join(STATE_DIR, rulings_stamp.STAMP_NAME))
+    if why:
+        print("refusing to start: " + why)
+        return rulings_stamp.EXIT_REFUSED
     # THE RETIRED SET IS A FILE ANOTHER PROCESS WRITES: every key this search must never
     # propose again lives in the rulings file, so without it the run has no way to know what
     # it has already been told to stop looking at -- and a search that has forgotten every

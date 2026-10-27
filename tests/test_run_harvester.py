@@ -50,6 +50,25 @@ CMDLINE_PY = (
 class LauncherTestCase(unittest.TestCase):
     """A temp repo root with the launcher in it, and nothing else."""
 
+    @classmethod
+    def setUpClass(cls):
+        # The launcher confirms a start through `ps -p <pid> -o command=`. Where `ps` cannot
+        # see this process's own children (a restricted process table, a stub `ps`), every
+        # start test would fail as "the harvester exited immediately": skip with the reason.
+        child = subprocess.Popen(["sleep", "5"])
+        try:
+            time.sleep(0.2)
+            seen = subprocess.run(["ps", "-p", str(child.pid), "-o", "command="],
+                                  capture_output=True, text=True).stdout
+        except OSError:
+            seen = ""
+        finally:
+            child.kill()
+            child.wait()
+        if "sleep" not in seen:
+            raise unittest.SkipTest("ps cannot see child processes here; the launcher's "
+                                    "start check depends on it")
+
     def setUp(self):
         self.root = os.path.realpath(tempfile.mkdtemp(prefix="run-harvester-"))
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
@@ -729,6 +748,101 @@ class UsageTests(LauncherTestCase):
             "start [--accept-ledger-rebuild]|stop|restart [--accept-ledger-rebuild]|status|help",
             out.stdout,
         )
+
+
+# A stand-in that runs the real stamp check when the launcher asks for it, and otherwise stays
+# up like FAKE_PY. The launcher runs `$PYTHON <root>/scripts/rulings_stamp.py`. The `exit 0`
+# after the sleep keeps a shell that execs its last command from replacing itself with
+# `sleep`, which would take `harvest.py` off the process's command line.
+STAMP_PY = (
+    "#!/bin/sh\n"
+    "case \"$1\" in */rulings_stamp.py) exec %s \"$@\" ;; esac\n"
+    "sleep 30\n"
+    "exit 0\n" % sys.executable
+)
+STAMP_SRC = os.path.join(os.path.dirname(HERE), "scripts", "rulings_stamp.py")
+REQUIRE = {"NETRADIO_RULINGS_STAMP": "require"}
+
+
+class RulingsStampTests(LauncherTestCase):
+    """With NETRADIO_RULINGS_STAMP=require, `start` and `restart` refuse (exit 2, one line
+    saying what to do) unless the stamp names the bytes the rulings file holds now. Off, the
+    launcher never looks."""
+
+    def setUp(self):
+        super().setUp()
+        shutil.copy2(STAMP_SRC, os.path.join(self.root, "scripts", "rulings_stamp.py"))
+        os.makedirs(os.path.join(self.root, "data"))
+        self.rulings = os.path.join(self.root, "data", "rulings.json")
+        self.stamp = os.path.join(self.state_dir, "rulings-stamp.json")
+        with open(self.rulings, "wb") as fh:
+            fh.write(b'{"u0123456789abcdef0123": "not_a_match"}\n')
+        self.fake_interpreter(body=STAMP_PY)
+
+    def write_stamp(self, text=None):
+        import hashlib
+        os.makedirs(self.state_dir, exist_ok=True)
+        if text is None:
+            with open(self.rulings, "rb") as fh:
+                text = json.dumps({"sha256": hashlib.sha256(fh.read()).hexdigest(),
+                                   "written_at": "2026-10-27T03:00:00Z",
+                                   "writer": {"pid": 1, "host": "h", "program": "p"}})
+        with open(self.stamp, "w") as fh:
+            fh.write(text)
+
+    def assertRefused(self, out, *words, todo="write it again"):
+        self.assertEqual(out.returncode, 2, out.stdout + out.stderr)
+        self.assertIn("refusing to start the harvester", out.stderr)
+        self.assertIn(todo, out.stderr, "the refusal says what to do")
+        for w in words:
+            self.assertIn(w, out.stderr)
+        self.assertFalse(os.path.exists(self.pidfile), "nothing was started")
+
+    def test_a_matching_stamp_lets_the_start_through(self):
+        self.write_stamp()
+        out = self.start(env=REQUIRE)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("harvester UP", out.stdout)
+
+    def test_an_absent_stamp_is_refused(self):
+        self.assertRefused(self.start(env=REQUIRE), "absent", self.stamp)
+
+    def test_an_unreadable_stamp_is_refused(self):
+        self.write_stamp("{not json")
+        self.assertRefused(self.start(env=REQUIRE), "unreadable")
+
+    def test_a_stamp_naming_other_bytes_is_refused(self):
+        self.write_stamp()
+        with open(self.rulings, "ab") as fh:        # a pull put other bytes in place
+            fh.write(b" ")
+        self.assertRefused(self.start(env=REQUIRE), "has changed since its last write")
+
+    def test_a_misspelt_setting_is_refused(self):
+        self.assertRefused(self.start(env={"NETRADIO_RULINGS_STAMP": "requre"}),
+                           "NETRADIO_RULINGS_STAMP", todo="`require` or `off`")
+
+    def test_the_setting_off_skips_the_check(self):
+        for env in ({}, {"NETRADIO_RULINGS_STAMP": ""}, {"NETRADIO_RULINGS_STAMP": "off"}):
+            with self.subTest(env=env):
+                out = self.start(env=env)           # no stamp at all
+                self.assertEqual(out.returncode, 0, out.stderr)
+                self.assertEqual(self.run_cmd("stop").returncode, 0)
+
+    def test_the_setting_in_env_file_is_read(self):
+        with open(os.path.join(self.root, ".env"), "w") as fh:
+            fh.write("NETRADIO_RULINGS_STAMP=require\n")
+        self.assertRefused(self.start(), "absent")
+
+    def test_a_refused_restart_leaves_the_running_harvester_up(self):
+        self.write_stamp()
+        self.assertEqual(self.start(env=REQUIRE).returncode, 0)
+        pid = self.read_pid()
+        os.unlink(self.stamp)
+        out = self.run_cmd("restart", env=REQUIRE)
+        self.assertEqual(out.returncode, 2, out.stderr)
+        self.assertIn("absent", out.stderr)
+        self.assertTrue(self.alive(pid))
+        self.assertEqual(self.read_pid(), pid)
 
 
 if __name__ == "__main__":
