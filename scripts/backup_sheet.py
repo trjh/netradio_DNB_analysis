@@ -11,6 +11,10 @@ Stdlib only (uses `curl` for the download). Usage:
 
 The sheet ID comes from `--sheet`, else from NETRADIO_SHEET_ID (the environment, then the
 checkout's `.env`). No ID is committed here: with neither set, the script refuses.
+
+The download carries no login, so it works only on a sheet shared as "anyone with the link".
+The sheet is private (2026-10-29): its export answers 401, and this script stops with its
+"auth/sharing?" message until it is given authenticated access. The sheet holds no credentials.
 """
 import argparse
 import csv
