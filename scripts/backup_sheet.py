@@ -8,6 +8,13 @@ we read the xlsx directly.)
 
 Stdlib only (uses `curl` for the download). Usage:
     python3 scripts/backup_sheet.py [--sheet ID]
+
+The sheet ID comes from `--sheet`, else from NETRADIO_SHEET_ID (the environment, then the
+checkout's `.env`). No ID is committed here: with neither set, the script refuses.
+
+The download carries no login, so it works only on a sheet shared as "anyone with the link".
+The sheet is private (2026-10-29): its export answers 401, and this script stops with its
+"auth/sharing?" message until it is given authenticated access. The sheet holds no credentials.
 """
 import argparse
 import csv
@@ -21,7 +28,6 @@ from xml.etree import ElementTree as ET
 
 REPO = Path(__file__).resolve().parents[1]
 OUT_DIR = REPO / "data" / "sheet"
-DEFAULT_SHEET = os.environ.get("NETRADIO_SHEET_ID", "1bQ8S1v-IgOMpJAHftaSZdtLXCz3wHAfufQk8F6A3nck")
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 RNS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
@@ -38,9 +44,6 @@ def skip_tabs(env_value=None):
         env_value = os.environ.get("NETRADIO_SHEET_SKIP_TABS", "")
     extra = {t.strip().lower() for t in env_value.split(",") if t.strip()}
     return set(MANDATORY_SKIP_TABS) | extra
-
-
-SKIP_TABS = skip_tabs()
 
 
 def download_xlsx(sheet_id):
@@ -115,10 +118,26 @@ def safe_filename(name):
     return re.sub(r'[\\/:*?"<>|]+', "-", name).strip() or "sheet"
 
 
-def main():
+def sheet_id(arg=None):
+    """The sheet to back up: `--sheet`, else NETRADIO_SHEET_ID. Refuses when neither is set."""
+    value = (arg or os.environ.get("NETRADIO_SHEET_ID", "")).strip()
+    if not value:
+        raise SystemExit("no sheet ID: NETRADIO_SHEET_ID is unset or empty. Set it in .env "
+                         "(see .env.example) or pass --sheet ID. The environment wins over "
+                         ".env, so an empty exported NETRADIO_SHEET_ID hides the .env value: "
+                         "unset it or set it.")
+    return value
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sheet", default=DEFAULT_SHEET, help="Google Sheet ID")
-    args = parser.parse_args()
+    parser.add_argument("--sheet", default=None,
+                        help="Google Sheet ID (default: NETRADIO_SHEET_ID)")
+    args = parser.parse_args(argv)
+    from align_server import load_env    # the checkout's .env; real env vars win
+    load_env()
+    args.sheet = sheet_id(args.sheet)
+    skip = skip_tabs()                    # after load_env, so a skip named in .env counts
 
     zf = download_xlsx(args.sheet)
     strings = shared_strings(zf)
@@ -126,7 +145,7 @@ def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     print("sheet %s — %d tabs" % (args.sheet, len(parts)))
     for name, part in parts:
-        if name.strip().lower() in SKIP_TABS:
+        if name.strip().lower() in skip:
             print("  SKIP %-28s (excluded — may hold secrets)" % name)
             continue
         rows = sheet_to_rows(zf, part, strings)

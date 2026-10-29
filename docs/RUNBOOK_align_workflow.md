@@ -128,8 +128,9 @@ that spread is the drift — then check that anchor *k* lines up across tracks 3
 capture covering several originals `track sync: k` repeats per original, the `origNNN sync: k`
 row in track 6 is the unambiguous side). They land
 as their **own** label tracks beside your hand labels; nothing existing is touched. Copy the
-rows you accept into your hand labels; strip the ` verified` token from any row you moved by
-hand without re-snapping (it then honestly reads as unchecked).
+rows you accept into your hand labels; strip the ` verified` token from any row you move by
+hand without re-snapping (it then honestly reads as unchecked). The **⬇ download hints pair**
+export already leaves the token off a seat moved by hand and not re-snapped.
 
 ## 6. Back through the label pipeline
 

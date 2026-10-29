@@ -183,8 +183,10 @@ Whole-pair listening lives on the <a href="/align/review">/align/review</a> page
   </div>
   <div class="readout">Downloads the two Pass-1-grammar hint files (stream-side +
   original-side) carrying this session's work: only the <b>ticked</b> points, each at its
-  current seat (snap + hand nudges), marked <code>verified</code> (human-checked here —
-  DP-01's meaning). Refined points carry the refine's confidence (ncc × 10);
+  current seat (snap + hand nudges). The <code>verified</code> token marks a
+  <b>machine-measured</b> seat (DP-01's meaning): the hint's own seat, or a snap-to-best
+  result nobody moved afterwards. A point moved by hand and not re-snapped exports without it,
+  so it reads as unchecked. Refined points carry the refine's confidence (ncc × 10);
   never-refined points keep the hint's score. The download writes nothing server-side — the
   only server write in this section is the compile above, into <code>labels/summary/</code>;
   <code>labels/*.labels.tsv</code> stays hand territory: fold accepted rows in via Audacity
@@ -221,7 +223,9 @@ let ptState = {};            // DP-16: per-pair SESSION state, keyed "stem|orig"
                              // resid: k -> the last measured 10%-window residual;
                              // exam: k -> true once the point was opened/refined/
                              // adjusted (DP-31's examined marker); refined/ncc:
-                             // k -> this session's snap result (DP-32 export)
+                             // k -> this session's snap result (DP-32 export);
+                             // rseat: k -> the seat that snap measured (a seat
+                             // still there exports ` verified`, DP-01)
 
 const $ = id => document.getElementById(id);
 const status = (msg, err) => { const el = $("status"); el.textContent = msg || ""; el.className = err ? "err" : ""; };
@@ -229,7 +233,8 @@ const status = (msg, err) => { const el = $("status"); el.textContent = msg || "
 function stateFor(h) {
   const key = h.stem + "|" + h.orig;
   return ptState[key] || (ptState[key] = { seats: {}, include: {}, resid: {},
-                                           exam: {}, refined: {}, ncc: {} });
+                                           exam: {}, refined: {}, ncc: {},
+                                           rseat: {} });
 }
 // the current point's seat as adjusted RIGHT NOW: the (possibly snapped) base plus
 // the pending hand nudge, in original-native seconds -- the one number DP-16 exports.
@@ -259,7 +264,8 @@ function updateInspTitle() {
 // colors it for the session but never writes storage, so a page load can't
 // manufacture an "adjustment" for the auto-opened first point. Schema v1:
 //   netradio.align.adjust.<stem>|<NNN> = {"v":1, "points": {k: {seat, refined,
-//     ncc, inc, resid}}}   (seat in original-native seconds; ncc/resid nullable)
+//     ncc, rseat, inc, resid}}}   (seats in original-native seconds; ncc/rseat/resid
+//     nullable; a record without rseat restores a refine whose seat is unmeasured)
 const ADJUST_PREFIX = "netradio.align.adjust.";
 const adjustKey = h => ADJUST_PREFIX + h.stem + "|" + String(h.orig).padStart(3, "0");
 
@@ -276,6 +282,7 @@ function saveAdjustments() {
       seat,
       refined: st.refined[p.k] === true,
       ncc: typeof st.ncc[p.k] === "number" ? st.ncc[p.k] : null,
+      rseat: typeof st.rseat[p.k] === "number" ? st.rseat[p.k] : null,
       inc: st.include[p.k] === true,
       resid: typeof st.resid[p.k] === "number" ? st.resid[p.k] : null,
     };
@@ -303,6 +310,7 @@ function restoreAdjustments(h) {
     st.include[p.k] = s.inc === true;
     if (s.refined === true && typeof s.ncc === "number") {
       st.refined[p.k] = true; st.ncc[p.k] = s.ncc;
+      if (Number.isFinite(s.rseat)) st.rseat[p.k] = s.rseat;
     }
     if (typeof s.resid === "number") st.resid[p.k] = s.resid;
     n++;
@@ -913,8 +921,9 @@ $("btnCompile").addEventListener("click", compileSummaries);
 // the DP-24 compile above writes only the derived labels/summary/).
 // Two files in the Pass-1 grammar and naming (matchconv build_rows/hint_filenames):
 // `track sync:` rows at capture-local seconds, `origNNN sync:` rows at
-// original-NATIVE seconds, ` verified` after the marker (DP-01: human-checked in
-// the inspector), 6-decimal times, BARE anchor rows (DP-26: the ` verified` token
+// original-NATIVE seconds, ` verified` after the marker ONLY on a machine-measured
+// seat (DP-01: the hint's own seat, or a refine's seat nobody moved since; a hand-moved,
+// never-re-snapped seat has no measurement, so it exports unchecked), 6-decimal times, BARE anchor rows (DP-26: the ` verified` token
 // carries provenance; only the summary `note HINT:` rows keep the trailing suffix,
 // matching matchconv's post-#128 output), plus the summary note
 // (rate, polarity, anchor count). Times carry the operator's WORK: only included
@@ -930,12 +939,21 @@ function exportPoints(h) {
       // exports the REFINED confidence, n = ncc × 10 in the same n/10 format;
       // never-refined points keep the hint's original score
       const refined = st.refined[p.k] === true && typeof st.ncc[p.k] === "number";
+      const adjusted = Math.abs(seat - p.orig_s) > 1e-6;
+      // DP-01: ` verified` is machine provenance, never a human vouch -- the seat
+      // must be the one the machine measured: the last refine's, or the hint's own
+      const rs = st.rseat[p.k];
+      const measured = refined ? (typeof rs === "number" && Math.abs(seat - rs) <= 1e-6)
+                               : !adjusted;
       return { k: p.k, stream_s: p.stream_s, orig_s: seat,
                confidence: refined ? st.ncc[p.k] * 10 : p.confidence,
-               adjusted: Math.abs(seat - p.orig_s) > 1e-6 };
+               adjusted, measured };
     })
     .sort((a, b) => a.stream_s - b.stream_s);
 }
+
+// the bare ` verified` token, on a machine-measured seat only (DP-01)
+const vtok = p => p.measured ? " verified" : "";
 
 function buildExport() {
   const h = sources.hints[+$("pairSel").value];
@@ -948,9 +966,9 @@ function buildExport() {
   const summary = `${tag} via /align inspector: rate ${rate.toFixed(5)} (original runs ` +
     `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}% vs stream), polarity ${pol}, ${pts.length} anchors`;
   const sRows = pts.map(p =>
-    [p.stream_s, `track sync: ${p.k} verified confidence ${p.confidence.toFixed(1)}/10`]);
+    [p.stream_s, `track sync: ${p.k}${vtok(p)} confidence ${p.confidence.toFixed(1)}/10`]);
   const oRows = pts.map(p =>
-    [p.orig_s, `${tag} sync: ${p.k} verified confidence ${p.confidence.toFixed(1)}/10`]);
+    [p.orig_s, `${tag} sync: ${p.k}${vtok(p)} confidence ${p.confidence.toFixed(1)}/10`]);
   sRows.push([0, `note HINT: ${summary} HINT`]);
   oRows.push([0, `note HINT: ${summary}; times are original-local seconds HINT`]);
   const text = rows => rows.sort((a, b) => a[0] - b[0])
@@ -1325,6 +1343,7 @@ async function snapToBest() {
   stSnap.refined[cur.point.k] = true;
   stSnap.ncc[cur.point.k] = j.confidence;
   stSnap.seats[cur.point.k] = j.new_orig_t;
+  stSnap.rseat[cur.point.k] = j.new_orig_t;     // the measured seat (DP-01's token)
   saveAdjustments();
   // DP-08: the MATCH-path snap also reports how far it sits from PHAT's answer
   $("snapTxt").textContent = (j.engine === "match" && j.match_vs_phat_ms !== undefined)
