@@ -43,6 +43,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import align_inspect
 import cache_budget
+import envfile
 import rangeserve
 import review_audio
 import review_notes
@@ -56,16 +57,9 @@ PUBLIC_DIR = os.path.join(ROOT_DIR, "public")
 
 
 def load_env(path=None):
-    """Minimal .env loader: KEY=VALUE lines, '#' comments, optional quotes."""
-    path = path or os.path.join(ROOT_DIR, ".env")
-    if not os.path.isfile(path):
-        return
-    with open(path, "r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, value = line.split("=", 1)
-                os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+    """Load this checkout's `.env` (or `path`) through envfile, the repo's one `.env` reader;
+    a name already in the environment keeps its value."""
+    envfile.load(path or os.path.join(ROOT_DIR, ".env"))
 
 
 def _mp3_dir():

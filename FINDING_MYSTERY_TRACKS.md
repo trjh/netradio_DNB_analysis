@@ -132,7 +132,7 @@ changed to a real artist/title is *solved*, and the tools will (correctly) stop 
 Then:
 
 ```bash
-set -a && . ./.env && set +a
+eval "$(python3 scripts/envfile.py --export .env)"
 
 # what does the engine now consider unsolved-and-searchable?
 . .venv/bin/activate && python -c \
@@ -182,7 +182,7 @@ If you can get audio of a *plausible* record, the engine will tell you reliably 
 the mystery:
 
 ```bash
-set -a && . ./.env && set +a
+eval "$(python3 scripts/envfile.py --export .env)"
 . .venv/bin/activate && python scripts/identify_by_chroma.py --all-mystery
 . .venv/bin/activate && python scripts/identify_by_chroma.py --pool ~/dnb-candidates
 ```

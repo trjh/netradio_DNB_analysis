@@ -33,7 +33,7 @@ NETRADIO_ALIGN_PORT="$(env_get "$ROOT/.env" NETRADIO_ALIGN_PORT)"
 PORT="${NETRADIO_ALIGN_PORT:-8766}"
 # the log: real env wins, else .env, else logs/align.log in this checkout
 NETRADIO_ALIGN_LOG="$(env_get "$ROOT/.env" NETRADIO_ALIGN_LOG)"
-LOG="${NETRADIO_ALIGN_LOG:-$ROOT/logs/align.log}"
+LOG="$(env_home "$NETRADIO_ALIGN_LOG")"; LOG="${LOG:-$ROOT/logs/align.log}"
 PIDFILE="$ROOT/.align.pid"
 
 port_pids() { lsof -nP -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true; }

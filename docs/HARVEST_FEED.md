@@ -260,7 +260,7 @@ Two files in the harvester's checkout tell the harvester what not to do.
 ## The hand tool
 
 ```bash
-set -a && . ./.env && set +a        # the settings live in .env: the directories, the cache root
+eval "$(python3 scripts/envfile.py --export .env)"        # the settings live in .env: the directories, the cache root
 .venv/bin/python scripts/harvest.py --sign-one <key>
 ```
 
