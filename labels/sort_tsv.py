@@ -609,8 +609,8 @@ def load_env_vars(path=None):
     """Fold the repo-root `.env` into os.environ so the engine steps see e.g.
     NETRADIO_SOURCES_DIR (the Makefile sources it; a bare `python3 sort_tsv.py` did not).
 
-    `.env` is `VAR=value`, `#` comments, no quotes/`export` (per `.env.example`).
-    Real environment variables win -- setdefault, never clobber. A missing file is fine -- unless
+    Read through envfile, the repo's one `.env` reader (scripts/lib/env.sh's grammar: quotes
+    stripped, never executed). Real environment variables win, never clobbered. A missing file is fine -- unless
     the OLD name, `.env_vars`, sits beside it: then the file was never renamed and ignoring it
     would silently drop every path in it, so refuse with the one-line fix (the Makefile does the
     same at parse time).
@@ -624,16 +624,10 @@ def load_env_vars(path=None):
     if not os.path.exists(path) and os.path.isfile(old):
         raise SystemExit(".env_vars is the old name of the variables file; it is no longer read. "
                          "Rename it: mv %s %s" % (old, path))
-    try:
-        with open(path) as handle:
-            for line in handle:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                key, _, val = line.partition("=")
-                os.environ.setdefault(key.strip(), val.strip())
-    except OSError:
-        pass
+    if SCRIPTS_DIR not in sys.path:
+        sys.path.insert(0, SCRIPTS_DIR)
+    import envfile                        # the repo's one `.env` reader
+    envfile.load(path)
 
 
 def engine_python():

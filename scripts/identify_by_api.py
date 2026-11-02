@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Identify a mystery record by acoustic-fingerprint APIs (ACRCloud + AudD).
 
-    set -a && . ./.env && set +a          # needs the API keys below
+    eval "$(python3 scripts/envfile.py --export .env)"          # needs the API keys below
     python3 scripts/identify_by_api.py --query "Mystery Track 4.wav"
     python3 scripts/identify_by_api.py --all-mystery
     python3 scripts/identify_by_api.py --query "Mystery Track 4.wav" --windows 6 --json out.json
@@ -278,12 +278,15 @@ def main(argv=None):
     services = resolve_services(args.service)
     if not services:
         sys.exit(
-            "No music-ID credentials set. Add to .env (gitignored):\n"
-            "  AUDD_API_TOKEN=...            # audd.io -- 300 free requests, no card\n"
-            "  ACRCLOUD_HOST=...             # identify-<region>.acrcloud.com\n"
-            "  ACRCLOUD_ACCESS_KEY=...       # from your ACRCloud project\n"
+            "No music-ID credentials set. Add to .env (gitignored), each comment on its own\n"
+            "line (a `#` after a value is part of the value):\n"
+            "  # audd.io -- 300 free requests, no card\n"
+            "  AUDD_API_TOKEN=...\n"
+            "  # identify-<region>.acrcloud.com, and the key pair from your ACRCloud project\n"
+            "  ACRCLOUD_HOST=...\n"
+            "  ACRCLOUD_ACCESS_KEY=...\n"
             "  ACRCLOUD_ACCESS_SECRET=...\n"
-            "then: set -a && . ./.env && set +a")
+            "then: eval \"$(python3 scripts/envfile.py --export .env)\"")
 
     sources = os.environ.get("NETRADIO_SOURCES_DIR")
     queries = list(args.query or [])

@@ -300,9 +300,19 @@ def _open_pr(staged, branch, message, dry_run):
         _run(["git", "branch", "-D", branch], dry_run, cwd=root)
 
 
+def _setting(name):
+    """The environment's `name`, else this checkout's `.env` (envfile, the repo's one `.env`
+    reader), else ""."""
+    scripts = os.path.join(os.path.dirname(HERE), "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    import envfile
+    return envfile.get(os.path.join(os.path.dirname(HERE), ".env"), name)
+
+
 def trigger_refresh(dry_run=False):
     """POST to the Apps Script Web App if configured, else print the manual reminder."""
-    url = os.environ.get("NETRADIO_SHEET_WEBHOOK")
+    url = _setting("NETRADIO_SHEET_WEBHOOK")
     if not url:
         print("NOTE: NETRADIO_SHEET_WEBHOOK unset — click 'Reload Data' on the File Analysis "
               "tab to refresh the sheet (deploy Code.js as a Web App + set the URL to automate).")
