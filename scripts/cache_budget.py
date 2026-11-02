@@ -106,6 +106,8 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
+import envfile
+
 GB = 1000 ** 3
 MB = 1000 ** 2
 DEFAULT_CAP = 4 * GB
@@ -147,7 +149,7 @@ def enabled():
 
 
 def _read_only():
-    return os.environ.get("NETRADIO_READ_ONLY", "").strip().lower() in ("1", "true", "yes", "on")
+    return envfile.flag("NETRADIO_READ_ONLY")
 
 
 def root():

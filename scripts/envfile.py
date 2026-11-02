@@ -6,6 +6,7 @@
     envfile.value(path, key)        # KEY's value in the file, or "" (None with default=None)
     envfile.get(path, key)          # the real environment's KEY when it is set, else the file's
     envfile.load(path)              # put every key the environment does not already hold into it
+    envfile.flag(key)               # an on/off setting from the environment: True, False or default
     envfile.lint(path)              # [(line number, key, problem)] for lines that read oddly
 
 From a shell (bash or zsh), to put a `.env` into the current shell:
@@ -90,6 +91,26 @@ def load(path, environ=None):
         environ[key] = val
         added.append(key)
     return added
+
+
+_TRUE = ("1", "true", "yes", "on")
+_FALSE = ("0", "false", "no", "off", "")
+
+
+def flag(key, default=False, environ=None):
+    """An on/off setting from the environment, after `load`. Unset: `default`. Set: `1`, `true`,
+    `yes` or `on` (any case, trimmed) is True; `0`, `false`, `no`, `off` or empty is False; any
+    other value is `default`. The one reading of every NETRADIO_* switch."""
+    environ = os.environ if environ is None else environ
+    value = environ.get(key)
+    if value is None:
+        return default
+    value = value.strip(_SPACE).lower()
+    if value in _TRUE:
+        return True
+    if value in _FALSE:
+        return False
+    return default
 
 
 def lint(path):

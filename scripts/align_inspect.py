@@ -64,6 +64,7 @@ import subprocess
 import threading
 
 import cache_budget
+import envfile
 
 MAX_WIN_S = 30.0
 MAX_RADIUS_S = 2.0
@@ -610,10 +611,9 @@ _worker = WorkerClient()
 
 
 def worker_enabled():
-    """The keep-warm worker is on by default; NETRADIO_ALIGN_WORKER=0 disables it
-    (leaving only the always-there one-shot subprocess path)."""
-    return os.environ.get("NETRADIO_ALIGN_WORKER", "").strip().lower() not in (
-        "0", "false", "no", "off")
+    """The keep-warm worker is on by default; NETRADIO_ALIGN_WORKER=0 (or off,
+    or empty) disables it (leaving only the always-there one-shot subprocess path)."""
+    return envfile.flag("NETRADIO_ALIGN_WORKER", True)
 
 
 def run_request(params, mp3_dir, op="slice", runner=None, worker=None):

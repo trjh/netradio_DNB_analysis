@@ -77,8 +77,7 @@ def _labels_dir():
 
 
 def _read_only():
-    return os.environ.get("NETRADIO_READ_ONLY", "").strip().lower() in (
-        "1", "true", "yes", "on")
+    return envfile.flag("NETRADIO_READ_ONLY")
 
 
 class AlignHandler(BaseHTTPRequestHandler):
