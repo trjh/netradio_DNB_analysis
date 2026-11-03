@@ -1346,6 +1346,11 @@ class TestRunRequestWorkerPath(_Env):
         with mock.patch.dict(os.environ, {"NETRADIO_ALIGN_WORKER": "0"}):
             self.assertFalse(align_inspect.worker_enabled())
         with mock.patch.dict(os.environ, {"NETRADIO_ALIGN_WORKER": ""}):
+            self.assertFalse(align_inspect.worker_enabled())
+        with mock.patch.dict(os.environ, {"NETRADIO_ALIGN_WORKER": "1"}):
+            self.assertTrue(align_inspect.worker_enabled())
+        env = {k: v for k, v in os.environ.items() if k != "NETRADIO_ALIGN_WORKER"}
+        with mock.patch.dict(os.environ, env, clear=True):
             self.assertTrue(align_inspect.worker_enabled())
 
 

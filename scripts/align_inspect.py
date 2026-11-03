@@ -64,6 +64,7 @@ import subprocess
 import threading
 
 import cache_budget
+import envfile
 
 MAX_WIN_S = 30.0
 MAX_RADIUS_S = 2.0
@@ -153,8 +154,12 @@ def register_cache():
     call it again to re-read the environment. Returns the cache's record, or
     None when the policy is dark (NETRADIO_CACHE_ROOT unset) or its directory
     is refused."""
-    return cache_budget.register("streamalign", max_age=STREAMALIGN_CACHE_MAX_AGE_DAYS,
-                                 refill="re-decode", rank=3)
+    try:
+        return cache_budget.register("streamalign", max_age=STREAMALIGN_CACHE_MAX_AGE_DAYS,
+                                     refill="re-decode", rank=3)
+    except cache_budget.CacheRefused as exc:
+        print(exc)              # refused: decodes then run without the cache
+        return None
 
 
 def _contained(path, root):
@@ -606,10 +611,9 @@ _worker = WorkerClient()
 
 
 def worker_enabled():
-    """The keep-warm worker is on by default; NETRADIO_ALIGN_WORKER=0 disables it
-    (leaving only the always-there one-shot subprocess path)."""
-    return os.environ.get("NETRADIO_ALIGN_WORKER", "").strip().lower() not in (
-        "0", "false", "no", "off")
+    """The keep-warm worker is on by default; NETRADIO_ALIGN_WORKER=0 (or off,
+    or empty) disables it (leaving only the always-there one-shot subprocess path)."""
+    return envfile.flag("NETRADIO_ALIGN_WORKER", True)
 
 
 def run_request(params, mp3_dir, op="slice", runner=None, worker=None):

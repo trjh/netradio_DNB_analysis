@@ -222,14 +222,22 @@ def register_caches():
     # variable families as read.
     # The age limit applies only while the bucket is configured: with no bucket, the local
     # file is the signature's only home, and `_chroma_pinned` holds every one of them anyway.
-    cache_budget.register("chroma",
-                         max_age=CHROMA_CACHE_MAX_AGE_DAYS if sigstore.enabled() else None,
-                         pinned=_chroma_pinned,
-                         refill="bucket:chroma/", rank=4)
-    cache_budget.register("candidates", cap=CANDIDATES_CACHE_CAP, order="by-score",
-                         score=_excerpt_score, max_age=KEEP_TTL_DAYS,
-                         pinned=_excerpt_pinned,
-                         refill="on-play", rank=10)
+    # A refused directory raises; it is printed and that cache stays unregistered, which the
+    # harvester's start refuses (its directory reads None).
+    try:
+        cache_budget.register("chroma",
+                             max_age=CHROMA_CACHE_MAX_AGE_DAYS if sigstore.enabled() else None,
+                             pinned=_chroma_pinned,
+                             refill="bucket:chroma/", rank=4)
+    except cache_budget.CacheRefused as exc:
+        print(exc)
+    try:
+        cache_budget.register("candidates", cap=CANDIDATES_CACHE_CAP, order="by-score",
+                             score=_excerpt_score, max_age=KEEP_TTL_DAYS,
+                             pinned=_excerpt_pinned,
+                             refill="on-play", rank=10)
+    except cache_budget.CacheRefused as exc:
+        print(exc)
     CACHE = _CACHE_AT_IMPORT = cache_budget.dir_of(CHROMA_CACHE)
     KEEP = _KEEP_AT_IMPORT = cache_budget.dir_of(CANDIDATES_CACHE)
 
@@ -1796,7 +1804,10 @@ def migrate_query_shape(state):
     for m in state.get("matches") or []:
         dropped += 1
         path = m.get("audio") if isinstance(m, dict) else None
-        if path:
+        # A dark or refused `candidates` cache deletes nothing, and never raises (an
+        # unregistered name is a KeyError while the policy is on): this runs before the start's
+        # dark check.
+        if path and cache_budget.registered(CANDIDATES_CACHE):
             cache_budget.remove(CANDIDATES_CACHE, path, "query-shape-changed")
     state["matches"] = []
     state["kept"] = 0                 # no row names an excerpt any more
@@ -2328,9 +2339,12 @@ def evict_overfull(state, num):
         if not path:
             continue
         # Through the policy's one door: the removal is recorded with its reason, refuses a
-        # path outside the cache, and -- while the policy is dark -- deletes nothing (a refused
-        # `kept` count is honest either way: the row is gone, and the file stays where it is).
-        if cache_budget.remove(CANDIDATES_CACHE, path, "board-overfull"):
+        # path outside the cache, and -- while the policy is dark, or `candidates` is refused --
+        # deletes nothing (a refused `kept` count is honest either way: the row is gone, and the
+        # file stays where it is). An unregistered name would raise KeyError, so it is asked
+        # `registered()` first: `--rescan` reaches here with no dark check.
+        if (cache_budget.registered(CANDIDATES_CACHE)
+                and cache_budget.remove(CANDIDATES_CACHE, path, "board-overfull")):
             state["kept"] -= 1
 
 
@@ -2400,7 +2414,8 @@ def drop_ruled_excerpts(state, ruled):
         # The row stops carrying its audio whatever the policy answers (already gone, dark,
         # pinned): the ruling is the reason the audio existed, and that reason is spent. The
         # removal itself is the policy's to make and to record.
-        cache_budget.remove(CANDIDATES_CACHE, path, "ruled-on")
+        if cache_budget.registered(CANDIDATES_CACHE):
+            cache_budget.remove(CANDIDATES_CACHE, path, "ruled-on")
         state["kept"] = max(0, state.get("kept", 0) - 1)
         dropped += 1
     return dropped

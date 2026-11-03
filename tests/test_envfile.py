@@ -148,6 +148,24 @@ class TheEnvironmentWins(Case):
         self.assertEqual(envfile.get(self.path, "ABSENT", "dflt", environ={}), "dflt")
 
 
+class TheFlag(unittest.TestCase):
+    def test_set_values_read_on_or_off_and_anything_else_is_the_default(self):
+        for value, want in (("1", True), (" TRUE ", True), ("yes", True), ("On", True),
+                            ("0", False), ("false", False), ("NO", False), ("off", False),
+                            ("", False), ("maybe", None)):
+            for default in (False, True):
+                got = envfile.flag("K", default, environ={"K": value})
+                self.assertIs(got, default if want is None else want, (value, default))
+
+    def test_unset_is_the_default(self):
+        self.assertIs(envfile.flag("K", environ={}), False)
+        self.assertIs(envfile.flag("K", True, environ={}), True)
+
+    def test_it_reads_the_real_environment_by_default(self):
+        with mock.patch.dict(os.environ, {"NETRADIO_FLAG_TEST": "yes"}):
+            self.assertIs(envfile.flag("NETRADIO_FLAG_TEST"), True)
+
+
 class TheLint(Case):
     def test_it_names_the_lines_a_sourced_shell_would_read_differently(self):
         found = [(n, k) for n, k, _ in envfile.lint(self.path)]
