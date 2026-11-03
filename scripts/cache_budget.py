@@ -479,11 +479,13 @@ def _drop_own_row():
         try:
             while not (locked := _try_lock(dfd)) and time.monotonic() < deadline:
                 time.sleep(0.05)
-        except OSError:
-            pass
-        if not locked:
-            print("cache_budget: the registry lock at %s was not had within %ss; the directory"
-                  " stays" % (where, REGISTRY_LOCK_S))
+            if not locked:
+                print("cache_budget: the registry lock at %s was not had within %ss; the"
+                      " directory stays" % (where, REGISTRY_LOCK_S))
+        except OSError as exc:      # no lock to be had here (no flock): clean up as before
+            print("cache_budget: registry lock not taken: %s" % exc)
+            os.close(dfd)
+            dfd = None
     try:
         for fname in ("%d.json" % pid, "%d.lock" % pid):
             try:
@@ -495,7 +497,7 @@ def _drop_own_row():
                 os.close(fd)
             except OSError:
                 pass
-        if locked:              # never remove the directory mid-registration
+        if locked or dfd is None:   # never remove it mid-registration; no lock: as before
             try:
                 os.rmdir(where)     # only when no other process has a row there
             except OSError:

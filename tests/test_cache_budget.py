@@ -1365,6 +1365,24 @@ class RegistryFile(CacheBudgetBase):
         self.assertEqual(os.listdir(where), [], "the row and its lock file still go")
         self.assertTrue(os.path.isdir(where), "the directory stays while another holds it")
 
+    def test_a_registry_lock_error_still_removes_the_empty_directory(self):
+        self.cache("a")
+        where = cb.registry_dir()
+
+        def no_flock(fd):
+            raise OSError(45, "Operation not supported")
+        real = cb._try_lock
+        cb._try_lock = no_flock
+        try:
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                cb._drop_own_row()
+        finally:
+            cb._try_lock = real
+        self.assertIn("registry lock not taken", out.getvalue())
+        self.assertNotIn("within", out.getvalue())
+        self.assertFalse(os.path.exists(where), "no lock to be had: cleaned up as before")
+
+
 
 
 if __name__ == "__main__":
