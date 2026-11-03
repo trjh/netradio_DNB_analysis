@@ -1348,6 +1348,24 @@ class RegistryFile(CacheBudgetBase):
         self.assertFalse(cb.registered("a"))
         self.assertEqual(cb.refusals()["a"]["reason"], "lock")
 
+    def test_a_registry_lock_held_too_long_never_holds_the_exit(self):
+        import fcntl
+        self.cache("a")
+        where = cb.registry_dir()
+        held = os.open(where, os.O_RDONLY)
+        self.addCleanup(os.close, held)
+        fcntl.flock(held, fcntl.LOCK_EX)
+        self.addCleanup(setattr, cb, "REGISTRY_LOCK_S", cb.REGISTRY_LOCK_S)
+        cb.REGISTRY_LOCK_S = 0.2
+        started = time.monotonic()
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            cb._drop_own_row()
+        self.assertLess(time.monotonic() - started, 5)
+        self.assertIn("registry lock", out.getvalue())
+        self.assertEqual(os.listdir(where), [], "the row and its lock file still go")
+        self.assertTrue(os.path.isdir(where), "the directory stays while another holds it")
+
+
 
 if __name__ == "__main__":
     unittest.main()
