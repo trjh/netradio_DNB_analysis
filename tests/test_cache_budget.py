@@ -568,9 +568,13 @@ class RegistryAndEvictionRun(CacheBudgetBase):
     def test_off_the_floor_needs_a_cap_and_no_rank(self):
         with self.assertRaises(ValueError):
             self.cache("ranked", cap=KB, floor=False, rank=3)
-        with self.assertRaises(cb.CacheRefused):
-            self.cache("uncapped", cap=None, floor=False)
-        self.assertIn("uncapped", cb.refusals())
+        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as out:
+            rec = self.cache("uncapped", cap=None, floor=False)   # no cap: back under the floor
+        self.assertIn("stays under the disk floor", out.getvalue())
+        self.assertTrue(rec["floor"])
+        self.assertNotIn("uncapped", cb.refusals())
+        self.base = 90 * KB
+        self.assertFalse(cb.reserve("uncapped", KB))
 
     def test_a_breached_floor_evicts_by_the_ranking_each_cache_in_its_own_order(self):
         first = self.cache("first", rank=1)
@@ -1019,6 +1023,16 @@ class HeadroomAndOverflow(CacheBudgetBase):
         self.assertEqual(self.names(other), [])
         self.assertEqual(self.names(rec), ["new"])
 
+    def test_commit_off_the_floor_past_it_evicts_nothing_elsewhere(self):
+        other = self.cache("other", rank=1)
+        rec = self.cache("small", cap=10 * KB, floor=False)
+        self.file(other, "o1", 5 * KB)
+        new = self.file(rec, "new", 5 * KB)
+        self.base = 75 * KB                              # 85 %: past the floor
+        cb.commit("small", new)
+        self.assertEqual(self.names(other), ["o1"])      # its landing runs no floor pass
+        self.assertEqual(self.names(rec), ["new"])
+
     def test_commit_under_the_cap_and_the_floor_evicts_nothing(self):
         rec = self.cache("c", cap=4 * KB)
         self.file(rec, "a")
@@ -1189,6 +1203,12 @@ class RegistryFile(CacheBudgetBase):
             import fcntl
             fcntl.flock(fd, fcntl.LOCK_EX)
         return where
+
+    def test_the_published_row_says_whether_the_cache_is_off_the_floor(self):
+        self.cache("on", cap=2 * KB)
+        self.cache("off", cap=2 * KB, floor=False)
+        rows = {c["name"]: c for c in self.own_row()["caches"]}
+        self.assertEqual((rows["on"]["floor"], rows["off"]["floor"]), (True, False))
 
     def test_register_writes_this_process_s_rows_and_holds_its_lock(self):
         self.cache("a", cap=2 * KB)

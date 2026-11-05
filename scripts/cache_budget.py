@@ -28,7 +28,9 @@ cache's name in upper case:
                needs a cap and rank None, so its cap alone bounds it and the floor never evicts
                it either. For a cache of small files that matter to the user: evicting them
                frees too little to bring a volume back under the floor, and losing them costs
-               more than the bytes they hold
+               more than the bytes they hold. Its cap is then its only bound on the disk, and
+               the environment can raise it. A cap of `none` puts the cache back under the floor
+               (printed at registration); it never stops the registration
     companions function(path) -> [paths] of the files that belong to an entry and go with it,
                or None. A companion is part of its entry, not an entry of its own: its bytes
                count with the entry's, it is never a candidate alone, and an eviction or a
@@ -331,10 +333,10 @@ def _register(name, cache_dir, cap, headroom, max_age, order, pinned, refill, ra
         "floor": bool(floor),
     }
     if not rec["floor"] and rec["cap"] is None:
-        message = ("cache_budget: not registering %r: floor=False needs a cap, and its cap is "
-                   "none" % name)
-        _REFUSED[name] = {"name": name, "reason": "refused", "message": message}
-        raise CacheRefused(message)
+        # Off the floor the cap is the only bound on the disk: with no cap it stays under the floor.
+        print("cache_budget: %r has no cap, so it stays under the disk floor (floor=False needs "
+              "a cap)" % name)
+        rec["floor"] = True
     with _mutex:
         _REGISTRY[name] = rec
         _REFUSED.pop(name, None)
@@ -1085,8 +1087,8 @@ def reserve(name, nbytes=None):
 
 def commit(name, path):
     """Record an entry that has landed, its companions' bytes counted with it. If the cache is now
-    over its cap, or the volume past the floor, run the eviction at once: other entries go, in the
-    cache's order, never this one. A companion's path protects the entry it belongs to, so a
+    over its cap, or the volume past the floor (unless the cache is off the floor), run the eviction
+    at once: other entries go, in the cache's order, never this one. A companion's path protects the entry it belongs to, so a
     writer that lands the companion last may commit either. Nothing while dark; a name that is
     not registered raises KeyError."""
     rec = _rec_of(name)
@@ -1102,7 +1104,7 @@ def commit(name, path):
         _record("admit", name, _rel(rec, path), nbytes)
         size = sum(e[1] for e in _scan(rec))
         over = rec["cap"] is not None and size > rec["cap"]
-        if over or _disk_pct(rec["dir"]) > disk_max_pct():
+        if over or (rec.get("floor", True) and _disk_pct(rec["dir"]) > disk_max_pct()):
             _run([rec], protect={path})
 
 
