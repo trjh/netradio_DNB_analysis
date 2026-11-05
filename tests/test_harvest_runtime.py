@@ -31,10 +31,10 @@ sys.path.insert(0, SCRIPTS)
 
 import cache_budget                                # noqa: E402  (the machine's one cache policy)
 
-try:
-    import harvest
-except Exception:                       # librosa/numba absent -> not this test's job
-    harvest = None
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # sibling test helpers
+from optional_imports import import_or_skip      # noqa: E402
+
+harvest = import_or_skip("harvest")     # None only when an audio library is missing
 
 
 # The Audacity-era tools. `pipeclient.py` still calls `raw_input`, so it has not run since Python 2;
