@@ -83,7 +83,8 @@ has registered, unless it is the same cache: the same name and the same director
 `NETRADIO_READ_ONLY` the rows are read but never written or deleted. The lock on the registry
 directory is waited on for at most `REGISTRY_LOCK_S` seconds (a directory on a hung mount would
 otherwise hold every start): past that, the registration is skipped, printed and kept in
-`refusals()`, and the cache runs without the policy.
+`refusals()`, and the cache runs without the policy. An exiting process waits as long, then
+deletes its row and leaves the directory.
 
 The read API, for modules that show or plan around the caches: `names()`, `settings(name)` (the
 registry row, no scan), `usage(name)` (one scan), `entries(name)` (one scan, every entry with its
@@ -460,7 +461,9 @@ def _publish():
 
 
 def _drop_own_row():
-    """Delete this process's registry file and release its lock (at exit, or on a new root)."""
+    """Delete this process's registry file and release its lock (at exit, or on a new root).
+    The directory's lock is waited on for at most REGISTRY_LOCK_S, so a hung holder never holds
+    an exit: past that, the row and its lock file still go, and only the directory stays."""
     where, fd = _own_row["dir"], _own_row["fd"]
     _own_row.update(dir=None, fd=None)
     if where is None:
@@ -468,9 +471,21 @@ def _drop_own_row():
     pid = os.getpid()
     try:
         dfd = os.open(where, os.O_RDONLY)
-        fcntl.flock(dfd, fcntl.LOCK_EX)         # never remove the directory mid-registration
     except OSError:
         dfd = None
+    locked = False
+    if dfd is not None:
+        deadline = time.monotonic() + REGISTRY_LOCK_S
+        try:
+            while not (locked := _try_lock(dfd)) and time.monotonic() < deadline:
+                time.sleep(0.05)
+            if not locked:
+                print("cache_budget: the registry lock at %s was not had within %ss; the"
+                      " directory stays" % (where, REGISTRY_LOCK_S))
+        except OSError as exc:      # no lock to be had here (no flock): clean up as before
+            print("cache_budget: registry lock not taken: %s" % exc)
+            os.close(dfd)
+            dfd = None
     try:
         for fname in ("%d.json" % pid, "%d.lock" % pid):
             try:
@@ -482,10 +497,11 @@ def _drop_own_row():
                 os.close(fd)
             except OSError:
                 pass
-        try:
-            os.rmdir(where)     # only when no other process has a row there
-        except OSError:
-            pass
+        if locked or dfd is None:   # never remove it mid-registration; no lock: as before
+            try:
+                os.rmdir(where)     # only when no other process has a row there
+            except OSError:
+                pass
     finally:
         if dfd is not None:
             os.close(dfd)
