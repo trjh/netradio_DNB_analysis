@@ -734,7 +734,9 @@ class ConcurrentStartTests(LauncherTestCase):
         self.assertEqual(len(results), 2)
         winners = [r for r in results if r.returncode == 0]
         self.assertEqual(len(winners), 1,
-                         "exactly one start should succeed: %s" % [r.stderr for r in results])
+                         "exactly one start should succeed: %s"
+                         % [{"rc": r.returncode, "stdout": r.stdout, "stderr": r.stderr}
+                            for r in results])
         # The invariant that matters: whatever is up is what the pidfile names, so `status`
         # can see it and `stop` can stop it.
         self.assertTrue(os.path.exists(self.pidfile), "the live harvester lost its pidfile")
