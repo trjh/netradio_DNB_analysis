@@ -135,14 +135,21 @@ class TheCommandLine(unittest.TestCase):
         self.assertEqual(out.stdout.count("\n"), 1)
         self.assertIn("off", out.stdout)
 
-    def test_env_file_value_reads_the_launchers_way(self):
+    def test_the_environment_wins_then_the_env_file(self):
         tmp = tempfile.mkdtemp(prefix="rulings-env-")
         self.addCleanup(shutil.rmtree, tmp, True)
         path = os.path.join(tmp, "env")
         with open(path, "w") as fh:
-            fh.write("# c\nOTHER=1\n  NETRADIO_RULINGS_STAMP = \"require\" \nNETRADIO_RULINGS_STAMP=off\n")
-        self.assertEqual(rulings_stamp.env_file_value(path), "require")
-        self.assertIsNone(rulings_stamp.env_file_value(os.path.join(tmp, "none")))
+            fh.write("# c\nOTHER=1\nNETRADIO_RULINGS_STAMP=bogus\n")
+        err = io.StringIO()
+        with unittest.mock.patch.object(rulings_stamp, "ENV_FILE", path), \
+             contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            with unittest.mock.patch.dict(os.environ, {"NETRADIO_RULINGS_STAMP": "off"}):
+                self.assertEqual(rulings_stamp.main(), 0)      # the environment's `off` wins
+            env = {k: v for k, v in os.environ.items() if k != "NETRADIO_RULINGS_STAMP"}
+            with unittest.mock.patch.dict(os.environ, env, clear=True):
+                self.assertEqual(rulings_stamp.main(), rulings_stamp.EXIT_REFUSED)   # .env's
+        self.assertIn("bogus", err.getvalue())
 
     def test_a_refusal_exits_two(self):
         out = self.run_it({"NETRADIO_RULINGS_STAMP": "no-such-mode"})

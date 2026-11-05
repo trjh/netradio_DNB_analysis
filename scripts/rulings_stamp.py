@@ -32,10 +32,12 @@ gives a missing file or setting.
 
     .venv/bin/python scripts/rulings_stamp.py      # exit 0: off or matching; exit 2: refused
 
-Run by itself it reads the checkout's `.env` for the setting (the file wins, as it does for the
-launcher) and prints one line on success saying which it was.
+Run by itself it takes the setting from the environment, else from the checkout's `.env`
+(`envfile.get`, the launcher's grammar and order), and prints one line on success saying which it
+was.
 
-Standard library only, so the launcher can run it cheaply before it starts anything.
+Standard library only (with `envfile.py` beside it), so the launcher can run it cheaply before it
+starts anything.
 """
 
 import hashlib
@@ -44,6 +46,8 @@ import os
 import re
 import sys
 
+import envfile
+
 SETTING = "NETRADIO_RULINGS_STAMP"
 STAMP_NAME = "rulings-stamp.json"
 EXIT_REFUSED = 2          # the harvester's code for a missing file or setting
@@ -51,6 +55,7 @@ EXIT_REFUSED = 2          # the harvester's code for a missing file or setting
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RULINGS = os.path.join(_ROOT, "data", "rulings.json")
 STAMP = os.path.join(_ROOT, ".harvest", STAMP_NAME)
+ENV_FILE = os.path.join(_ROOT, ".env")
 
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 
@@ -113,31 +118,8 @@ def check(rulings=RULINGS, stamp=STAMP, environ=None):
     return refusal(rulings, stamp)
 
 
-def env_file_value(path=None, key=SETTING):
-    """`key`'s value in the checkout's `.env`, read the way the launcher's `.env` reader does
-    (trimmed lines, `#` comments, split on the first `=`, quotes stripped, first line wins),
-    or None when the file or the key is absent."""
-    path = path or os.path.join(_ROOT, ".env")
-    try:
-        with open(path, encoding="utf-8") as fh:
-            lines = fh.read().splitlines()
-    except OSError:
-        return None
-    for line in lines:
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        name, value = (part.strip() for part in line.split("=", 1))
-        if name == key:
-            return value.strip('"').strip("'")
-    return None
-
-
 def main():
-    environ = dict(os.environ)
-    from_file = env_file_value()
-    if from_file is not None:
-        environ[SETTING] = from_file          # the file wins, as the launcher's load does
+    environ = {SETTING: envfile.get(ENV_FILE, SETTING)}    # the environment wins, then .env
     why = check(environ=environ)
     if why:
         print("refusing to start the harvester: " + why, file=sys.stderr)

@@ -2770,7 +2770,7 @@ def run(args):
     why = rulings_stamp.check(RULINGS, os.path.join(STATE_DIR, rulings_stamp.STAMP_NAME))
     if why:
         print("refusing to start: " + why)
-        return rulings_stamp.EXIT_REFUSED
+        return EXIT_CONFIG
     # THE RETIRED SET IS A FILE ANOTHER PROCESS WRITES: every key this search must never
     # propose again lives in the rulings file, so without it the run has no way to know what
     # it has already been told to stop looking at -- and a search that has forgotten every
