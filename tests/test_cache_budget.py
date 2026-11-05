@@ -536,6 +536,42 @@ class RegistryAndEvictionRun(CacheBudgetBase):
         self.assertFalse(cb.reserve("a", 3 * KB))
         self.assertTrue(rec)
 
+    def test_a_cache_off_the_floor_is_admitted_past_it_up_to_its_cap(self):
+        small = self.cache("small", cap=4 * KB, floor=False)
+        other = self.cache("other", cap=10 * KB)
+        self.base = 90 * KB                         # 90 % used: past the floor
+        self.assertFalse(cb.reserve("other", KB))   # an ordinary cache is still refused
+        self.assertTrue(cb.reserve("small", KB))
+        self.assertTrue(cb.reserve("small", None))
+        for i, n in enumerate("abcd"):
+            self.file(small, n, age_s=400 - i * 100)
+        self.assertTrue(cb.reserve("small", KB))    # the cap still binds: the oldest goes
+        self.assertEqual(self.names(small), ["b", "c", "d"])
+        self.assertTrue(other)
+        self.assertEqual({(e["cache"], e["event"], e["reason"]) for e in self.events()},
+                         {("other", "refuse", "floor"), ("small", "evict", "cap")})
+
+    def test_a_cache_off_the_floor_gives_up_nothing_to_it(self):
+        first = self.cache("first", rank=1)
+        small = self.cache("small", cap=10 * KB, floor=False)
+        self.file(first, "f1", 4 * KB, age_s=300)
+        self.file(small, "s1", 4 * KB, age_s=900)
+        os.environ["NETRADIO_DISK_MAX_PCT"] = "50"
+        self.base = 60 * KB
+        summary = cb.run_eviction()
+        self.assertEqual(self.names(first), [])
+        self.assertEqual(self.names(small), ["s1"])
+        self.assertEqual(summary["evicted"]["small"], 0)
+        self.assertFalse(cb.settings("small")["floor"])
+        self.assertTrue(cb.settings("first")["floor"])
+
+    def test_off_the_floor_needs_a_cap_and_no_rank(self):
+        with self.assertRaises(ValueError):
+            self.cache("ranked", cap=KB, floor=False, rank=3)
+        with self.assertRaises(cb.CacheRefused):
+            self.cache("uncapped", cap=None, floor=False)
+        self.assertIn("uncapped", cb.refusals())
+
     def test_a_breached_floor_evicts_by_the_ranking_each_cache_in_its_own_order(self):
         first = self.cache("first", rank=1)
         second = self.cache("second", rank=2, order="newest-added")
@@ -1065,7 +1101,8 @@ class ReadApi(CacheBudgetBase):
         cb._scan = lambda rec: self.fail("settings() scanned the cache")
         self.assertEqual(cb.settings("c"), {
             "name": "c", "dir": os.path.join(self.tmp, "c"), "cap": 3 * KB, "headroom": KB,
-            "max_age_days": 2, "order": "oldest-added", "refill": "re-decode", "rank": 5})
+            "max_age_days": 2, "order": "oldest-added", "refill": "re-decode", "rank": 5,
+            "floor": True})
         self.assertIsNone(cb.settings("nobody"))
         self.assertEqual(cb.names(), ["c"])
         self.assertTrue(cb.volume()["enabled"])
