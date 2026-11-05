@@ -353,8 +353,8 @@ def _scrub(message):
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     dry = "--dry-run" in argv
-    from align_server import load_env    # the align tool's own .env loader
-    load_env()
+    import envfile                       # the repo's one `.env` reader
+    envfile.load(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
     payload, status = handle_compile({"dry_run": dry})
     if status != 200:
         print("ERROR: %s" % payload.get("error"), file=sys.stderr)

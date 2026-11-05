@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify the ORIGINALS against AcoustID: confirm what each source file actually is.
 
-    set -a && . ./.env && set +a          # needs ACOUSTID_DEV_API_KEY
+    eval "$(python3 scripts/envfile.py --export .env)"          # needs ACOUSTID_DEV_API_KEY
     . .venv/bin/activate && python scripts/acoustid_check.py            # all of sources/
     . .venv/bin/activate && python scripts/acoustid_check.py --mismatch # only disagreements
     . .venv/bin/activate && python scripts/acoustid_check.py --file 013-*.mp3
@@ -116,7 +116,7 @@ def main(argv=None):
     key = os.environ.get("ACOUSTID_DEV_API_KEY")
     if not key:
         sys.exit("ACOUSTID_DEV_API_KEY is unset. It belongs in .env (gitignored -- this "
-                 "repo is PUBLIC), then: set -a && . ./.env && set +a")
+                 "repo is PUBLIC), then: eval \"$(python3 scripts/envfile.py --export .env)\"")
     sources = os.environ.get("NETRADIO_SOURCES_DIR")
     if not sources or not os.path.isdir(sources):
         sys.exit("NETRADIO_SOURCES_DIR is unset or missing (see .env.example)")

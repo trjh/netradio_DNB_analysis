@@ -31,10 +31,10 @@ sys.path.insert(0, SCRIPTS)
 
 import cache_budget                                # noqa: E402  (the machine's one cache policy)
 
-try:
-    import harvest
-except Exception:                       # librosa/numba absent -> not this test's job
-    harvest = None
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # sibling test helpers
+from optional_imports import import_or_skip      # noqa: E402
+
+harvest = import_or_skip("harvest")     # None only when an audio library is missing
 
 
 # The Audacity-era tools. `pipeclient.py` still calls `raw_input`, so it has not run since Python 2;
@@ -438,6 +438,24 @@ class TheHarvestersCachesOnThePolicy(unittest.TestCase):
         self.assertEqual([(e["entry"], e["reason"]) for e in removals],
                          [(os.path.basename(paths[-1]), "board-overfull")],
                          "through the policy's door, recorded with its reason")
+
+    def test_a_refused_candidates_cache_never_raises_and_deletes_nothing(self):
+        """With the policy on and `candidates` refused (its directory overlaps a cache another
+        live process registered), an unregistered name would raise KeyError. The board trim, the
+        query-shape migration and the ruled-on drop run before the start's dark check or without
+        one (`--rescan`), so each asks `registered()` first and leaves the files alone."""
+        path = self._excerpt("MT4-0.0100-aa.wav", 100)
+        cache_budget._REGISTRY.pop(harvest.CANDIDATES_CACHE)
+        self.assertTrue(cache_budget.enabled())
+        matches = [{"mystery": 4, "cost": 0.01 * i, "url": "u%d" % i, "audio": path, "key": "k"}
+                   for i in range(harvest.KEEP_TOP + 1)]
+        state = {"matches": list(matches), "kept": len(matches)}
+        harvest.evict_overfull(state, 4)
+        self.assertEqual(len(state["matches"]), harvest.KEEP_TOP)
+        self.assertIsNotNone(harvest.migrate_query_shape(
+            {"matches": [dict(m) for m in matches], "scored": {}}))
+        harvest.drop_ruled_excerpts({"matches": [dict(m) for m in matches]}, {"k": "match"})
+        self.assertTrue(os.path.exists(path), "a refused cache deletes nothing")
 
     def test_the_boards_provenance_note_is_pinned(self):
         """PROVENANCE.txt's name parses to no cost, so the by-score order counts it as an
