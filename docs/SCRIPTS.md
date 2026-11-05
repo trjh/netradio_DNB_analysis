@@ -25,6 +25,7 @@ eval "$(python3 scripts/envfile.py --export .env)"
 
 ```bash
 .venv/bin/python3 -m unittest discover -s tests    # the full suite (or: make test)
+make test-container                                # the suite with ffmpeg, in an Ubuntu 26.04 container (CI skips the audio tests)
 ```
 
 The suite is hermetic on a fresh clone: it parses only committed evidence (the 2017 notes
