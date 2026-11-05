@@ -87,11 +87,10 @@ class SheetIdTests(unittest.TestCase):
     def test_main_refuses_before_any_download(self):
         # main() loads the checkout's .env first; point that at a missing file so the
         # test does not depend on this machine's .env, and make any download fail loudly
-        import align_server
-        real_load, real_dl = align_server.load_env, b.download_xlsx
-        self.addCleanup(setattr, align_server, "load_env", real_load)
+        real_env, real_dl = b.ENV_FILE, b.download_xlsx
+        self.addCleanup(setattr, b, "ENV_FILE", real_env)
         self.addCleanup(setattr, b, "download_xlsx", real_dl)
-        align_server.load_env = lambda path=None: None
+        b.ENV_FILE = REPO / "no-such-dir" / ".env"
         b.download_xlsx = lambda sheet: self.fail("downloaded with no sheet ID")
         with self.assertRaises(SystemExit) as ctx:
             b.main([])
@@ -100,7 +99,6 @@ class SheetIdTests(unittest.TestCase):
     def test_main_reads_the_id_and_extra_skips_from_dotenv(self):
         # a tab named only in .env's NETRADIO_SHEET_SKIP_TABS is skipped, like SECRETS
         import tempfile
-        import align_server
         tmp = tempfile.TemporaryDirectory(prefix="backup-sheet-")
         self.addCleanup(tmp.cleanup)
         saved = os.environ.pop("NETRADIO_SHEET_SKIP_TABS", None)
@@ -111,11 +109,11 @@ class SheetIdTests(unittest.TestCase):
         env = Path(tmp.name) / ".env"
         env.write_text("NETRADIO_SHEET_ID=from-dotenv\nNETRADIO_SHEET_SKIP_TABS=Private\n",
                        encoding="utf-8")
-        real_load, real_dl, real_out = align_server.load_env, b.download_xlsx, b.OUT_DIR
-        self.addCleanup(setattr, align_server, "load_env", real_load)
+        real_env, real_dl, real_out = b.ENV_FILE, b.download_xlsx, b.OUT_DIR
+        self.addCleanup(setattr, b, "ENV_FILE", real_env)
         self.addCleanup(setattr, b, "download_xlsx", real_dl)
         self.addCleanup(setattr, b, "OUT_DIR", real_out)
-        align_server.load_env = lambda path=None: real_load(str(env))
+        b.ENV_FILE = env
         b.OUT_DIR = Path(tmp.name) / "out"
         asked = []
 

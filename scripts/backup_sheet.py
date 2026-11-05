@@ -28,6 +28,7 @@ from xml.etree import ElementTree as ET
 
 REPO = Path(__file__).resolve().parents[1]
 OUT_DIR = REPO / "data" / "sheet"
+ENV_FILE = REPO / ".env"
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 RNS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
@@ -134,10 +135,10 @@ def main(argv=None):
     parser.add_argument("--sheet", default=None,
                         help="Google Sheet ID (default: NETRADIO_SHEET_ID)")
     args = parser.parse_args(argv)
-    from align_server import load_env    # the checkout's .env; real env vars win
-    load_env()
+    import envfile                        # the checkout's .env; real env vars win
+    envfile.load(str(ENV_FILE))
     args.sheet = sheet_id(args.sheet)
-    skip = skip_tabs()                    # after load_env, so a skip named in .env counts
+    skip = skip_tabs()                    # after the load, so a skip named in .env counts
 
     zf = download_xlsx(args.sheet)
     strings = shared_strings(zf)
