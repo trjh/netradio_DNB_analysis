@@ -119,6 +119,22 @@ align-check:          ## verify the venv can do the librosa-backed work, and the
 test:                 ## run the test suite
 	.venv/bin/python -m unittest discover -s tests
 
+# The suite with ffmpeg, on Ubuntu 26.04, in a throwaway container: the audio tests CI skips.
+# It runs as a plain user (root ignores the permission failures some tests make), with --init
+# to reap the processes the launcher tests stop.
+# It runs the committed tree (git archive HEAD), streamed in on stdin, so it works against a
+# remote Docker host or context too (no bind mount). DOCKER="docker --context <name>" or
+# DOCKER=podman picks the engine. The image stays; remove it with `$(DOCKER) rmi ubuntu:26.04`.
+DOCKER ?= docker
+test-container:       ## run the suite with ffmpeg in an Ubuntu 26.04 container (the committed tree; DOCKER= picks the engine)
+	git archive --format=tar HEAD | $(DOCKER) run --rm -i --init ubuntu:26.04 bash -c '\
+	  set -e; mkdir /src; cd /src; tar xf -; \
+	  export DEBIAN_FRONTEND=noninteractive; \
+	  apt-get update -qq </dev/null >/dev/null; \
+	  apt-get install -y -qq --no-install-recommends ffmpeg git make python3 python3-numpy python3-pyflakes </dev/null >/dev/null; \
+	  chown -R ubuntu: /src; \
+	  exec setpriv --reuid=ubuntu --regid=ubuntu --init-groups env HOME=/home/ubuntu python3 -m unittest discover -s tests'
+
 # The environment contract's one check (scripts/env_check.py): every NETRADIO_* name set in
 # .env that no code reads (a stale name, a typo), and every name the code reads that .env
 # leaves unset, with the code's default. Names only, never values. Runs against .env by
