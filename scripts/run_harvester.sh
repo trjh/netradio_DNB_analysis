@@ -242,17 +242,63 @@ cmd_start() {
   # The lock first, then the real work: everything between "is one already running" and
   # "the pidfile names mine" has to be one start's alone.
   mkdir -p "$STATE_DIR"
-  if ! ( set -C; : >"$LOCK" ) 2>/dev/null; then
-    echo "another start is in flight — leaving it to that one" >&2
-    echo "  (if none is, remove $LOCK)" >&2
+  # Anything at the path refuses first: a file, the directory an older launcher used, and a
+  # FIFO, device or symlink, which a noclobber redirect would open without creating anything.
+  if [ -e "$LOCK" ] || [ -L "$LOCK" ]; then
+    lock_refusal
     return 1
   fi
-  trap 'rm -f "$LOCK"' EXIT INT TERM
+  # Released on every way out, set BEFORE the lock is taken so no signal falls between the two;
+  # HELD keeps a start that never got the lock from removing someone else's. An interrupt also
+  # ends the start: carrying on after the lock is gone would let a second start in beside it.
+  HELD=0
+  trap 'release_lock' EXIT
+  trap 'release_lock; trap - EXIT; exit 130' INT
+  trap 'release_lock; trap - EXIT; exit 143' TERM
+  # The lock file holds the taker's pid, so a refusal can say who holds it.
+  local err
+  if ! err="$( { ( set -C; printf '%s\n' "$$" >"$LOCK" ); } 2>&1 )"; then
+    trap - EXIT INT TERM
+    if [ -e "$LOCK" ] || [ -L "$LOCK" ]; then
+      lock_refusal                  # another start took it between the check and the open
+    else
+      echo "cannot take the start lock $LOCK: ${err:-unknown error}" >&2
+    fi
+    return 1
+  fi
+  HELD=1
   local rc=0
   start_locked || rc=$?
   trap - EXIT INT TERM
-  rm -f "$LOCK"
+  release_lock
   return "$rc"
+}
+
+release_lock() {
+  # Only the start that took the lock removes it. A signal between the lock's creation and
+  # HELD=1 leaves it behind; the next start's refusal names its pid as gone.
+  if [ "${HELD:-0}" = 1 ]; then
+    rm -f "$LOCK"
+    HELD=0
+  fi
+}
+
+lock_refusal() {
+  local holder="" state
+  # Read only a regular file: reading a FIFO would block the refusal for good.
+  if [ -f "$LOCK" ] && [ ! -L "$LOCK" ]; then
+    holder="$(head -n 1 "$LOCK" 2>/dev/null | tr -cd '0-9' || true)"
+  fi
+  echo "another start is in flight — leaving it to that one" >&2
+  if [ -n "$holder" ]; then
+    if kill -0 "$holder" 2>/dev/null; then state="running"; else state="gone"; fi
+    echo "  (the lock names pid $holder, $state)" >&2
+  fi
+  if [ -d "$LOCK" ] && [ ! -L "$LOCK" ]; then
+    echo "  (if no start is running, remove it: rmdir $LOCK)" >&2
+  else
+    echo "  (if no start is running, remove it: rm -f $LOCK)" >&2
+  fi
 }
 
 start_locked() {

@@ -731,13 +731,66 @@ class ConcurrentStartTests(LauncherTestCase):
         self.assertEqual(self.start().returncode, 0)
         self.assertFalse(os.path.exists(os.path.join(self.state_dir, "harvester.start.lock")))
 
-    def test_the_lock_is_taken_by_bash_not_by_mkdir(self):
-        # uutils `mkdir` 0.10.0 reports success to both of two racing calls; the lock must not
-        # depend on any external tool's exit code.
-        with open(self.script) as fh:
-            body = fh.read()
-        start = body.index("cmd_start() {")
-        self.assertNotIn("mkdir \"$LOCK", body[start:body.index("\n}\n", start)])
+    def test_a_mkdir_that_always_succeeds_does_not_open_the_lock(self):
+        # Ubuntu 26.04's uutils `mkdir` 0.10.0 reports success to both of two racing calls. A
+        # `mkdir` that succeeds whatever is asked stands in for it: a held lock must still refuse.
+        self.fake_interpreter()
+        fakebin = os.path.join(self.root, "fakebin")
+        os.makedirs(fakebin)
+        real = shutil.which("mkdir")
+        with open(os.path.join(fakebin, "mkdir"), "w") as fh:
+            fh.write('#!/bin/sh\ncase " $* " in *" -p "*) exec %s "$@" ;; esac\nexit 0\n' % real)
+        os.chmod(os.path.join(fakebin, "mkdir"), 0o755)
+        os.makedirs(self.state_dir, exist_ok=True)
+        open(os.path.join(self.state_dir, "harvester.start.lock"), "w").close()
+        out = self.run_cmd("start", env={"PATH": fakebin + os.pathsep + os.environ["PATH"]})
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("another start is in flight", out.stderr)
+        self.assertFalse(os.path.exists(self.pidfile))
+
+    def test_the_lock_is_released_after_a_failed_start(self):
+        self.fake_interpreter(body="#!/bin/sh\nexit 2\n")
+        self.assertNotEqual(self.run_cmd("start").returncode, 0)
+        self.assertFalse(os.path.lexists(os.path.join(self.state_dir, "harvester.start.lock")))
+
+    def test_a_refusal_names_the_lock_s_holder(self):
+        self.fake_interpreter()
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(os.path.join(self.state_dir, "harvester.start.lock"), "w") as fh:
+            fh.write("%d\n" % os.getpid())
+        out = self.run_cmd("start")
+        self.assertIn("the lock names pid %d, running" % os.getpid(), out.stderr)
+        self.assertIn("rm -f", out.stderr)
+
+    def test_a_leftover_lock_directory_is_told_to_rmdir(self):
+        self.fake_interpreter()
+        os.makedirs(os.path.join(self.state_dir, "harvester.start.lock"))
+        self.assertIn("rmdir", self.run_cmd("start").stderr)
+
+    def test_a_term_mid_start_ends_the_start_and_releases_the_lock(self):
+        self.fake_interpreter()
+        lock = os.path.join(self.state_dir, "harvester.start.lock")
+        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": self.root}
+        proc = subprocess.Popen([self.script, "start"], env=env, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True)
+        deadline = time.time() + 10               # mid-start: the harvester is launched and
+        while not os.path.exists(self.pidfile) and time.time() < deadline:   # registered, and
+            time.sleep(0.01)                          # the launcher is still checking on it
+        self.assertTrue(os.path.exists(lock), "the start should still hold its lock")
+        proc.send_signal(signal.SIGTERM)
+        proc.communicate(timeout=30)
+        if os.path.exists(self.pidfile):
+            self._started.append(self.read_pid())      # its harvester, if it got that far
+        self.assertEqual(proc.returncode, 143)
+        self.assertFalse(os.path.lexists(lock))
+
+    def test_a_fifo_at_the_lock_path_refuses_without_hanging(self):
+        self.fake_interpreter()
+        os.makedirs(self.state_dir, exist_ok=True)
+        os.mkfifo(os.path.join(self.state_dir, "harvester.start.lock"))
+        out = self.run_cmd("start")
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("another start is in flight", out.stderr)
 
     def test_two_starts_at_once_leave_one_harvester_and_one_pidfile(self):
         self.fake_interpreter()
