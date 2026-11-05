@@ -43,13 +43,17 @@ STATE_DIR="$ROOT/.harvest"
 STATE="$STATE_DIR/state.json"
 LEDGER="$STATE_DIR/ledger.json"
 PIDFILE="$STATE_DIR/harvester.pid"          # this launcher's own; nothing else writes it
-# `start` runs under this lock directory. The pidfile alone cannot make two simultaneous
+# `start` runs under this lock file. The pidfile alone cannot make two simultaneous
 # starts resolve to one — both would look, both would see nothing, and both would launch;
 # harvest.py's flock would then kill the loser's child, and the loser's cleanup could carry
 # off the WINNER's pidfile with it, leaving a harvester running for weeks that `status`
-# calls DOWN and `stop` cannot stop. `mkdir` is atomic, so exactly one start gets past it.
-# A start holds it for about a second.
-LOCKDIR="$STATE_DIR/harvester.start.lock"
+# calls DOWN and `stop` cannot stop. The lock is taken by bash itself: a `noclobber`
+# redirect creates the file with an exclusive open, so exactly one start gets past it, and
+# anything already at the path (a file, or the directory an older launcher used) refuses.
+# Not `mkdir`: the uutils `mkdir` some systems ship reports success to both of two racing
+# calls (`mkdir (uutils coreutils) 0.10.0`: 104 races in 300). A start holds it for about a
+# second.
+LOCK="$STATE_DIR/harvester.start.lock"
 LOG="$STATE_DIR/harvest.log"
 # The log rotation, one generation: at a start, a harvest.log at or over the cap becomes
 # harvest.log.1 and a fresh harvest.log is opened. Between runs, not during one — a run
@@ -238,16 +242,16 @@ cmd_start() {
   # The lock first, then the real work: everything between "is one already running" and
   # "the pidfile names mine" has to be one start's alone.
   mkdir -p "$STATE_DIR"
-  if ! mkdir "$LOCKDIR" 2>/dev/null; then
+  if ! ( set -C; : >"$LOCK" ) 2>/dev/null; then
     echo "another start is in flight — leaving it to that one" >&2
-    echo "  (if none is, remove $LOCKDIR)" >&2
+    echo "  (if none is, remove $LOCK)" >&2
     return 1
   fi
-  trap 'rmdir "$LOCKDIR" 2>/dev/null || true' EXIT INT TERM
+  trap 'rm -f "$LOCK"' EXIT INT TERM
   local rc=0
   start_locked || rc=$?
   trap - EXIT INT TERM
-  rmdir "$LOCKDIR" 2>/dev/null || true
+  rm -f "$LOCK"
   return "$rc"
 }
 

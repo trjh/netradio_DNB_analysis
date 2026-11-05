@@ -696,7 +696,7 @@ class ConcurrentStartTests(LauncherTestCase):
     launch, and the second one's pidfile write buries the first one's. `harvest.py` would
     then refuse the loser at its own flock -- no data is ever corrupted -- but the loser's
     cleanup could carry off the WINNER's registration, leaving a harvester running for
-    weeks that `status` calls DOWN and `stop` cannot stop. The lock directory is what makes
+    weeks that `status` calls DOWN and `stop` cannot stop. The start lock is what makes
     that impossible; these two tests are its ends.
     """
 
@@ -709,11 +709,35 @@ class ConcurrentStartTests(LauncherTestCase):
 
     def test_a_start_is_refused_while_another_holds_the_lock(self):
         self.fake_interpreter()
+        os.makedirs(self.state_dir, exist_ok=True)
+        lock = os.path.join(self.state_dir, "harvester.start.lock")
+        open(lock, "w").close()
+        out = self.run_cmd("start")
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("another start is in flight", out.stderr)
+        self.assertFalse(os.path.exists(self.pidfile))
+        self.assertTrue(os.path.exists(lock), "a refused start must not take the other's lock")
+
+    def test_a_lock_directory_left_by_an_older_launcher_still_refuses(self):
+        self.fake_interpreter()
         os.makedirs(os.path.join(self.state_dir, "harvester.start.lock"))
         out = self.run_cmd("start")
         self.assertNotEqual(out.returncode, 0)
         self.assertIn("another start is in flight", out.stderr)
         self.assertFalse(os.path.exists(self.pidfile))
+
+    def test_the_lock_is_released_after_a_start(self):
+        self.fake_interpreter()
+        self.assertEqual(self.start().returncode, 0)
+        self.assertFalse(os.path.exists(os.path.join(self.state_dir, "harvester.start.lock")))
+
+    def test_the_lock_is_taken_by_bash_not_by_mkdir(self):
+        # uutils `mkdir` 0.10.0 reports success to both of two racing calls; the lock must not
+        # depend on any external tool's exit code.
+        with open(self.script) as fh:
+            body = fh.read()
+        start = body.index("cmd_start() {")
+        self.assertNotIn("mkdir \"$LOCK", body[start:body.index("\n}\n", start)])
 
     def test_two_starts_at_once_leave_one_harvester_and_one_pidfile(self):
         self.fake_interpreter()
@@ -721,11 +745,7 @@ class ConcurrentStartTests(LauncherTestCase):
         guard = threading.Lock()
 
         def go():
-            # Diagnosis only: a timestamped bash trace of each start (time, pid, subshell level).
-            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": self.root,
-                   "PS4": "+ ${EPOCHREALTIME} $$ ${BASHPID} ${BASH_SUBSHELL} "}
-            out = subprocess.run(["bash", "-x", self.script, "start"], capture_output=True,
-                                 text=True, env=env, timeout=120)
+            out = self.run_cmd("start")
             with guard:
                 results.append(out)
 
@@ -737,9 +757,6 @@ class ConcurrentStartTests(LauncherTestCase):
 
         self.assertEqual(len(results), 2)
         winners = [r for r in results if r.returncode == 0]
-        if len(winners) != 1:
-            for r in results:
-                print("\n===== one start: rc %s =====\n%s\n%s" % (r.returncode, r.stdout, r.stderr))
         self.assertEqual(len(winners), 1,
                          "exactly one start should succeed: %s"
                          % [{"rc": r.returncode, "stdout": r.stdout, "stderr": r.stderr}
