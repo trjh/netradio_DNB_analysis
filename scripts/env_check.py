@@ -3,7 +3,7 @@
 
     python3 scripts/env_check.py [.env]        # make env-check
 
-Reports two lists:
+Reports three lists:
 
   * **set but unread** -- every `NETRADIO_*` name the file sets that no code reads: a stale
     name, a retired rule's variable, or a typo. These make the check fail (exit 1).
@@ -13,6 +13,10 @@ Reports two lists:
     and age limit the registering code passes, which a bare name cannot state; caches whose
     registration departs from the generic cap (4 GB) or age (none) are named in the tool's
     own table so the list states the default the code really uses.
+  * **lines read differently from a sourced shell file** -- a line starting `export ` (the
+    name is not read), a value holding ` #` (the comment is part of the value), and a value a
+    shell would expand (`$`, a backtick, `~name`), found by `envfile.lint`: every reader shares one grammar (scripts/lib/env.sh, scripts/envfile.py)
+    and none executes the file. These make the check fail too. Not checked in a `.example` file.
 
 Only names are printed, never values: a `.env` holds credentials and machine paths.
 
@@ -32,6 +36,9 @@ import os
 import re
 import sys
 import tokenize
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import envfile  # noqa: E402  (the repo's one .env reader)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP_DIRS = {".git", ".worktree", ".venv", "Archive", "tests", "node_modules", "__pycache__",
@@ -62,7 +69,6 @@ WHOLE_NAME = re.compile(r"^NETRADIO_[A-Z0-9_]*[A-Z0-9]$")
 DEFAULT = re.compile(r"""["'](NETRADIO_[A-Z0-9_]+)["']\s*,\s*("[^"\n]*"|'[^'\n]*'|-?[0-9][0-9.]*)""")
 SHELL_DEFAULT = re.compile(r"\$\{(NETRADIO_[A-Z0-9_]+):-([^}\n]*)\}")
 REGISTER = re.compile(r"""cache_budget\.register\(\s*["']([a-z_]+)["']""")
-SET_LINE = re.compile(r"^\s*(?:export\s+)?(NETRADIO_[A-Z0-9_]+)\s*=")
 EXAMPLE_LINE = re.compile(r"^\s*#?\s*(?:export\s+)?(NETRADIO_[A-Z0-9_]+)=")
 
 
@@ -169,15 +175,22 @@ def read_names(root=None):
 
 
 def set_names(env_file):
-    """The `NETRADIO_*` names the file sets (a `.example` file: also the commented-out ones)."""
-    line = EXAMPLE_LINE if env_file.endswith(".example") else SET_LINE
+    """The `NETRADIO_*` names the file sets: as envfile reads it, or, for a `.example` file, every
+    line naming one, the commented-out ones included."""
+    if not env_file.endswith(".example"):
+        return {k for k in envfile.read(env_file) if re.match(r"^NETRADIO_[A-Z0-9_]+$", k)}
     out = set()
     with open(env_file, encoding="utf-8") as fh:
         for text in fh:
-            m = line.match(text)
+            m = EXAMPLE_LINE.match(text)
             if m:
                 out.add(m.group(1))
     return out
+
+
+def oddities(env_file):
+    """envfile.lint's [(line, name, problem)] for a real `.env`; none for a `.example` file."""
+    return [] if env_file.endswith(".example") else envfile.lint(env_file)
 
 
 def check(env_file, root=None):
@@ -203,7 +216,11 @@ def main(argv=None):
     print("\nread by the code but unset (%d), with the default:" % len(unset))
     for name, default in unset:
         print("  %-44s %s" % (name, default if default is not None else "(no default stated in the code)"))
-    return 1 if unread else 0
+    odd = oddities(env_file)
+    print("\nlines read differently from a sourced shell file (%d):" % len(odd))
+    for number, name, problem in odd:
+        print("  line %d, %s: %s" % (number, name, problem))
+    return 1 if unread or odd else 0
 
 
 if __name__ == "__main__":

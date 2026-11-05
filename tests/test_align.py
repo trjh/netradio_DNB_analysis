@@ -9,6 +9,7 @@ loopback-only-without-auth route gate.
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import threading
@@ -1346,6 +1347,11 @@ class TestRunRequestWorkerPath(_Env):
         with mock.patch.dict(os.environ, {"NETRADIO_ALIGN_WORKER": "0"}):
             self.assertFalse(align_inspect.worker_enabled())
         with mock.patch.dict(os.environ, {"NETRADIO_ALIGN_WORKER": ""}):
+            self.assertFalse(align_inspect.worker_enabled())
+        with mock.patch.dict(os.environ, {"NETRADIO_ALIGN_WORKER": "1"}):
+            self.assertTrue(align_inspect.worker_enabled())
+        env = {k: v for k, v in os.environ.items() if k != "NETRADIO_ALIGN_WORKER"}
+        with mock.patch.dict(os.environ, env, clear=True):
             self.assertTrue(align_inspect.worker_enabled())
 
 
@@ -1504,6 +1510,50 @@ class TestPlacedProvider(_Env):
         finally:
             if acquired:
                 align_inspect._run_lock.release()
+
+    def test_the_listing_says_why_a_list_is_empty(self):
+        # "ok" is the only state that means "these are all the placed pairs"; busy and
+        # failed carry an empty list the page must not read as "nothing placed".
+        with _root(""):
+            self.assertEqual(align_inspect.placed_listing(self.mp3)["state"], "dark")
+        ok = align_inspect.placed_listing(self.mp3, runner=self._runner(self._op_payload()))
+        self.assertEqual((ok["state"], len(ok["sets"])), ("ok", 1))
+        acquired = align_inspect._run_lock.acquire()
+        try:
+            busy = align_inspect.placed_listing(
+                self.mp3, runner=mock.Mock(side_effect=AssertionError("must not run")))
+        finally:
+            if acquired:
+                align_inspect._run_lock.release()
+        self.assertEqual(busy, {"state": "busy", "sets": []})
+        timeout = mock.Mock(side_effect=subprocess.TimeoutExpired("placed", 120))
+        self.assertEqual(align_inspect.placed_listing(self.mp3, runner=timeout)["state"],
+                         "failed")
+        error = self._runner({"error": "no labels"})
+        self.assertEqual(align_inspect.placed_listing(self.mp3, runner=error)["state"],
+                         "failed")
+        again = align_inspect.placed_listing(self.mp3, runner=self._runner(self._op_payload()))
+        self.assertEqual(again["state"], "ok", "the next answer clears it")
+
+    def test_a_failed_listing_says_why_once_in_the_log(self):
+        # The page says "the server log has the same line": every failed case prints its
+        # reason, once per distinct reason, and carries it in `error` for the page.
+        import contextlib
+        import io
+        align_inspect._placed_logged[0] = None
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            first = align_inspect.placed_listing(self.mp3, runner=self._runner({"error": "no labels"}))
+            align_inspect.placed_listing(self.mp3, runner=self._runner({"error": "no labels"}))
+            timeout = mock.Mock(side_effect=subprocess.TimeoutExpired("placed", 120))
+            timed = align_inspect.placed_listing(self.mp3, runner=timeout)
+        self.assertIn("no labels", first["error"])
+        self.assertIn("timed out", timed["error"])
+        log = out.getvalue()
+        self.assertEqual(log.count("no labels"), 1, log)
+        self.assertEqual(log.count("timed out"), 1, log)
+        self.assertNotIn("error", align_inspect.placed_listing(
+            self.mp3, runner=self._runner(self._op_payload())))
 
     def test_worker_answer_short_circuits_the_subprocess(self):
         worker = self._StubWorker(result=self._op_payload())

@@ -42,17 +42,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-load_env() {
-  # The repo's .env, read the way every make target reads it: the file wins. An ABSENT
-  # .env is a normal state, not an error — a fresh clone has none and every value below
-  # has a default — so this returns quietly.
-  [ -f "$ROOT/.env" ] || return 0
-  set -a
-  # shellcheck disable=SC1091   # machine-local, never committed
-  . "$ROOT/.env"
-  set +a
-}
-load_env
+# The repo's .env, read through scripts/lib/env.sh (read, never executed) as run_align.sh reads
+# it: every name the environment does not already hold is exported, so the harvester sees it, and
+# a variable already set wins over the file. An ABSENT .env is a normal state, not an error -- a
+# fresh clone has none and every value below has a default.
+# shellcheck source=scripts/lib/env.sh
+. "$ROOT/scripts/lib/env.sh"
+env_load "$ROOT/.env"
 
 STATE_DIR="$ROOT/.harvest"
 STATE="$STATE_DIR/state.json"
@@ -78,7 +74,8 @@ LOG_MAX_BYTES="${NETRADIO_HARVEST_LOG_MAX_BYTES:-10485760}"
 # buys: a `kill -9` instead would leave state.json still naming the file it was signing
 # (`current`) for a process that no longer exists.
 STOP_WAIT_S="${NETRADIO_HARVEST_STOP_WAIT_S:-30}"
-PYTHON="${NETRADIO_PYTHON:-$ROOT/.venv/bin/python}"
+# .env is read, not sourced, so a leading ~ is ours to expand (env.sh's env_home).
+PYTHON="$(env_home "${NETRADIO_PYTHON:-}")"; PYTHON="${PYTHON:-$ROOT/.venv/bin/python}"
 # Set by `start --accept-ledger-rebuild` (or `restart --accept-ledger-rebuild`, which takes
 # the same one argument): harvest.py --run refuses to start when its rebuilt ledger differs
 # from the recorded one past a threshold, and this is the operator's override for that one
@@ -140,7 +137,8 @@ alert_line() {
   # The standing signature alert: the harvester writes a `sig_alert` block into
   # .harvest/state.json, and prints one status line while the block is there and nothing
   # at all otherwise. Two kinds: `ledger` (the ledger and its rebuild from the bucket
-  # listing differ past the threshold, so the start was refused) and `store` (more signed
+  # listing differ past the threshold, or, with `unreadable` set, the ledger file exists
+  # and cannot be read; either way nothing is signed) and `store` (more signed
   # rows lost their objects than the cap allows, so nothing was changed on that side). A
   # block with no `kind` is the store shape. Read with grep and sed, like the other lines:
   # the file is flattened to one line, and the block holds no nested braces.
@@ -151,7 +149,12 @@ alert_line() {
   [ -n "$block" ] || return 0
   kind="$(alert_field "$block" kind '"\([^"]*\)"')"
   at="$(alert_field "$block" at '"\([^"]*\)"')"
-  if [ "$kind" = "ledger" ]; then
+  if printf '%s' "$block" | grep -q '"unreadable"[[:space:]]*:[[:space:]]*true'; then
+    # The unreadable-ledger alert is kind `ledger` too, but carries no counts: there is no
+    # ledger to compare a rebuild with. A start refuses on it, and a running loop stops.
+    printf '  alert:  the ledger cannot be read, nothing is signed: restore it from a backup, '
+    printf 'repair it, fix its permissions, or move it aside (since %s)\n' "${at:-?}"
+  elif [ "$kind" = "ledger" ]; then
     printf '  alert:  the ledger and its rebuild differ on %s of %s keys, start refused (since %s)\n' \
       "$(alert_field "$block" differ '\([0-9]*\)')" \
       "$(alert_field "$block" keys '\([0-9]*\)')" "${at:-?}"
@@ -198,8 +201,8 @@ ledger_line() {
   delayed="$(ledger_count '"status"[[:space:]]*:[[:space:]]*"delayed"')"
   if [ "$rows" -eq 0 ]; then
     # No rows is "nothing signed yet" only for a ledger that really is empty, `{}`. A file
-    # that is empty or garbled reads as no rows too, and harvest.py treats a ledger it cannot
-    # parse as empty, so `status` is where that has to show.
+    # that is empty or garbled reads as no rows too; harvest.py refuses to start on it, and
+    # `status` must say so rather than call it empty.
     # `tr` runs in the C locale: under UTF-8 it stops at the first byte that is not UTF-8,
     # and a `{}` followed by one would read as empty.
     if [ "$(LC_ALL=C tr -d '[:space:]' <"$LEDGER" 2>/dev/null | head -c 3 || true)" = '{}' ]
@@ -291,6 +294,22 @@ start_locked() {
   echo "$pid" >"$PIDFILE"
   sleep 1
   if ! is_harvester "$pid"; then
+    # The harvester is this shell's child, so `wait` hands back its exit code: harvest.py
+    # gives each kind of refusal its own, and naming it here tells a caller which kind it was
+    # without reading the log. Only a process that is gone (or a zombie) is waited for: a
+    # live one would hold `start` for as long as it runs.
+    local code="" pstate
+    pstate="$(ps -p "$pid" -o stat= 2>/dev/null || true)"
+    case "$pstate" in
+      ''|Z*) code=0; wait "$pid" 2>/dev/null || code=$? ;;
+    esac
+    case "$code" in
+      # 1 is the ledger's refusal, and also any Python crash (a SyntaxError after a bad pull,
+      # an exception in the start-up reconcile): the log tells the two apart, this line cannot.
+      1) echo "the harvester refused to start (its ledger) or crashed: see the log (exit 1)" >&2 ;;
+      2) echo "the harvester refused to start: a file or setting it needs is missing (exit 2)" >&2 ;;
+      3) echo "the harvester refused to start: another ledger/state writer holds the lock (exit 3)" >&2 ;;
+    esac
     echo "the harvester exited immediately — see the end of $LOG" >&2
     # Withdraw OUR OWN registration and nobody else's. The lock above should make that
     # distinction moot; this is the second lock on the same door, because the failure it

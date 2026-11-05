@@ -114,6 +114,29 @@ class EnvVarsLoading(unittest.TestCase):
         self.assertNotIn(".env_vars is the old name", r.stderr + r.stdout)
 
 
+    def test_the_makefile_reads_the_sources_dir_through_env_sh(self):
+        """The Makefile reads `.env` by the shared grammar (quotes stripped, never included or
+        executed), and a variable already in the environment wins over the file."""
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        repo = os.path.dirname(LABELS)
+        shutil.copy(os.path.join(repo, "Makefile"), d)
+        os.makedirs(os.path.join(d, "scripts", "lib"))
+        shutil.copy(os.path.join(repo, "scripts", "lib", "env.sh"),
+                    os.path.join(d, "scripts", "lib", "env.sh"))
+        marker = os.path.join(d, "ran")
+        with open(os.path.join(d, ".env"), "w") as fh:
+            fh.write('NETRADIO_SOURCES_DIR="/tmp/from file"\n$(shell touch %s)\n' % marker)
+        env = {k: v for k, v in os.environ.items() if k != "NETRADIO_SOURCES_DIR"}
+        r = subprocess.run(["make", "-n", "align-check"], cwd=d, capture_output=True, text=True,
+                           env=env)
+        self.assertIn('test -d "/tmp/from file"', r.stdout, r.stderr)
+        self.assertFalse(os.path.exists(marker), "the file is never included")
+        env["NETRADIO_SOURCES_DIR"] = "/tmp/from-env"
+        r = subprocess.run(["make", "-n", "align-check"], cwd=d, capture_output=True, text=True,
+                           env=env)
+        self.assertIn('test -d "/tmp/from-env"', r.stdout, r.stderr)
+
 class TheHangGuard(unittest.TestCase):
     """publish.py runs `sort_tsv.py <file>` as a subprocess with no terminal. If prep_next
     ever blocks on input() there, publish hangs forever. Drive the real binary with a

@@ -10,7 +10,7 @@
 > **Fits in:** [this repo's README](https://github.com/trjh/netradio_DNB_analysis/blob/main/README.md) (its master index) ·
 > [PLAN_labels_layout.md](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_labels_layout.md) §3 (the spec this implements) ·
 > [PLAN_align_tool.md](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/PLAN_align_tool.md) (the tool) ·
-> [RUNBOOK_align_workflow.md](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/RUNBOOK_align_workflow.md) §4–§5 (the workflow step).
+> [RUNBOOK_align_workflow.md](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/RUNBOOK_align_workflow.md) §5–§6 (the workflow step).
 >
 > Decision points (`DP-nn`) are listed in [`docs/DECISIONS.md`](https://github.com/trjh/netradio_DNB_analysis/blob/main/docs/DECISIONS.md).
 
@@ -203,7 +203,7 @@ Listed as open questions, deliberately unanswered.
   — the writer must emit the post-DP-26 grammar, not the legacy one.
 - **Does Audacity still sit in the loop at all**, or does write-back plus the
   existing `sort_tsv.py` path make the manual import step unnecessary? This may
-  shrink `RUNBOOK_align_workflow.md` §5 rather than just rewording it.
+  shrink `RUNBOOK_align_workflow.md` §6 rather than just rewording it.
 
 ### A.5 Status (of the original ask)
 

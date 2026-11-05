@@ -75,6 +75,9 @@ class LauncherTestCase(unittest.TestCase):
         os.makedirs(os.path.join(self.root, "scripts"))
         self.script = os.path.join(self.root, "scripts", "run_harvester.sh")
         shutil.copy2(SCRIPT, self.script)
+        os.makedirs(os.path.join(self.root, "scripts", "lib"))
+        shutil.copy2(os.path.join(os.path.dirname(SCRIPT), "lib", "env.sh"),
+                     os.path.join(self.root, "scripts", "lib", "env.sh"))
         self.state_dir = os.path.join(self.root, ".harvest")
         self.pidfile = os.path.join(self.state_dir, "harvester.pid")
         self.log = os.path.join(self.state_dir, "harvest.log")
@@ -143,6 +146,21 @@ class StartTests(LauncherTestCase):
         self.assertTrue(os.path.exists(self.pidfile))
         self.assertTrue(self.alive(self.read_pid()))
         self.assertIn("harvester UP", out.stdout)
+
+    def test_a_refusal_at_start_is_named_by_its_exit_code(self):
+        # harvest.py exits 2 for a missing file or setting and 3 for a held lock; a start
+        # that sees the process gone names the kind, so a caller need not read the log.
+        # 1 is the ledger's refusal or any crash, so its line names both and points at the log.
+        for code, words in ((1, "refused to start (its ledger) or crashed: see the log"),
+                            (2, "a file or setting it needs is missing"),
+                            (3, "another ledger/state writer holds the lock")):
+            with self.subTest(code=code):
+                self.fake_interpreter(body="#!/bin/sh\nexit %d\n" % code)
+                out = self.start()
+                self.assertEqual(out.returncode, 1, out.stderr)
+                self.assertIn(words, out.stderr)
+                self.assertIn("(exit %d)" % code, out.stderr)
+                self.assertFalse(os.path.exists(self.pidfile))
 
     def test_a_stale_pidfile_is_cleared_and_the_start_goes_ahead(self):
         """The ordinary aftermath of a crash or a reboot: a pid that names nothing."""
@@ -234,10 +252,12 @@ class HarvestTakesWhatTheLauncherForwards(LauncherTestCase):
         from unittest import mock
         sys.path.insert(0, os.path.join(os.path.dirname(HERE), "scripts"))
         self.addCleanup(sys.path.remove, sys.path[0])
-        try:
-            import harvest
-        except Exception as exc:        # librosa/numba absent -> not this test's job
-            self.skipTest("harvest.py does not import here: %s" % exc)
+        sys.path.insert(0, HERE)                     # sibling test helpers
+        self.addCleanup(sys.path.remove, HERE)
+        from optional_imports import import_or_skip
+        harvest = import_or_skip("harvest")   # any error but a missing library fails here
+        if harvest is None:
+            self.skipTest("harvest.py needs the audio libraries (.venv) -- skipping")
 
         class Parsed(Exception):
             pass
@@ -288,7 +308,8 @@ class HarvestTakesWhatTheLauncherForwards(LauncherTestCase):
 
 
 class EnvFileTests(LauncherTestCase):
-    """The repo's .env is read, and its absence is not an error."""
+    """The repo's .env is read through scripts/lib/env.sh: never executed, a variable already set
+    wins over it, and its absence is not an error."""
 
     def test_the_env_file_supplies_the_interpreter(self):
         fake = self.fake_interpreter(path="elsewhere/python")   # NOT at .venv/bin/python
@@ -297,6 +318,33 @@ class EnvFileTests(LauncherTestCase):
         out = self.start()
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn(fake, out.stdout)
+
+    def test_a_leading_tilde_in_the_interpreter_is_expanded(self):
+        # A sourced .env expanded `~` on assignment; read, it stays literal until the launcher
+        # expands it (HOME is the scratch root here).
+        fake = self.fake_interpreter(path="venvs/x/bin/python")
+        with open(os.path.join(self.root, ".env"), "w") as fh:
+            fh.write("NETRADIO_PYTHON=~/venvs/x/bin/python\n")
+        out = self.start()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn(fake, out.stdout)
+
+    def test_the_environment_wins_over_the_file(self):
+        fake = self.fake_interpreter(path="elsewhere/python")
+        with open(os.path.join(self.root, ".env"), "w") as fh:
+            fh.write("NETRADIO_PYTHON=/no/such/python\n")
+        out = self.start(env={"NETRADIO_PYTHON": fake})
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn(fake, out.stdout)
+
+    def test_the_file_is_read_never_executed(self):
+        self.fake_interpreter()
+        marker = os.path.join(self.root, "ran")
+        with open(os.path.join(self.root, ".env"), "w") as fh:
+            fh.write("NETRADIO_X=$(touch %s)\ntouch %s\n" % (marker, marker))
+        out = self.start()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertFalse(os.path.exists(marker))
 
     def test_no_env_file_is_a_normal_state(self):
         self.assertFalse(os.path.exists(os.path.join(self.root, ".env")))
@@ -459,6 +507,20 @@ class StatusTests(LauncherTestCase):
         self.assertIn("  alert:  the ledger and its rebuild differ on 30 of 120 keys, start "
                       "refused (since 2026-09-03T09:00:00Z)", out.stdout)
 
+    def test_an_unreadable_ledger_alert_says_what_to_do_not_a_rebuild_count(self):
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
+            json.dump({"sig_alert": {"at": "2026-10-27T09:00:00Z", "kind": "ledger",
+                                     "unreadable": True,
+                                     "why": "the ledger (x) exists but cannot be read"}},
+                      fh, indent=2)
+        out = self.run_cmd("status")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("  alert:  the ledger cannot be read, nothing is signed: restore it from "
+                      "a backup, repair it, fix its permissions, or move it aside "
+                      "(since 2026-10-27T09:00:00Z)", out.stdout)
+        self.assertNotIn("rebuild differ", out.stdout)
+
     def test_no_alert_line_without_a_standing_alert(self):
         os.makedirs(self.state_dir, exist_ok=True)
         with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
@@ -540,8 +602,8 @@ class StatusTests(LauncherTestCase):
 
     def test_a_garbled_ledger_is_not_reported_as_nothing_signed(self):
         """A ledger the counter finds no rows in is "nothing signed yet" only when it really
-        is `{}`. harvest.py treats a ledger it cannot parse as empty, so `status` is where a
-        garbled one has to show."""
+        is `{}`. harvest.py refuses to start on a ledger it cannot parse, and `status` must
+        not call a garbled one empty."""
         for data in (b"not json at all\n", bytes(range(256)), b"", b"{}x"):
             with self.subTest(data=data[:12]):
                 self.write_raw(data)

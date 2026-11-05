@@ -372,6 +372,9 @@ says what each hints row means. Here is the whole flow on one page:
 # Pass 2 — verify / hand-tune in the browser, at the /align URL the server prints
 open "$(scripts/run_align.sh status | grep -o 'http://[^ ]*/align' | head -1)"
 
+# Listen-through — the whole pair, L/R, with notes: /align/review in the browser, or the Mac app
+make review-app-run
+
 # Export — compile labels/automated + labels/review -> labels/summary (one label set per audio file)
 make compile-summary ARGS=--dry-run     # preview
 make compile-summary                    # write (or press "⟳ compile summaries" on /align)
@@ -386,7 +389,8 @@ then `streamalign sync-audit` to re-grade every folded-in point against the audi
 
 Detail:
 [RUNBOOK_align_workflow.md](./docs/RUNBOOK_align_workflow.md)
-§1–§6.
+§0–§8. Beyond the flow above, it covers finding the tracks that still lack precise labels
+(§0), seeding a capture that has no placement (§1) and working offline (§8).
 
 **Q:** How do the review notes and summaries reach `main`?
 
@@ -407,6 +411,19 @@ the last merge. A PR that changes only `data/rulings.json` holds no free text, s
 `make review-sync-automerge` merges it for you. **What to do next:** review and merge any other
 PR by hand, then run `make review-sync-postmerge` (the scripts print it with this checkout's
 path) so the hourly commits start again on a fresh branch.
+
+**Q:** How do I tell whether the server's commits are failing?
+
+**A:** Ask the running server, or read its log:
+
+```bash
+curl -s http://127.0.0.1:8766/api/align/sync-status   # the committer's state; `errors` names each failing step
+grep review-sync logs/align.log                        # one line per new failure, one when it clears
+```
+
+**What you get:** an empty `errors` object while commits and pushes work. The `/align` page shows
+a red line while any failure stands. `python3 scripts/review_sync.py status` starts a new process,
+so its `errors` are always empty; use the route.
 
 **Q:** How do I keep the align server on the code I just pulled?
 

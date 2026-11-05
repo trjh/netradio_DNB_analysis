@@ -64,6 +64,7 @@
   #status { color:var(--dim); font-size:12px; }
   #status.err { color:#e66; }
   #notEnabled { color:#e6b352; }
+  #syncNote { color:#e66; font-size:12px; margin:4px 0; }
 </style>
 </head>
 <body>
@@ -75,6 +76,7 @@ this page draws, nudges (<kbd>←</kbd>/<kbd>→</kbd> ±1 smp, <kbd>shift</kbd>
 See <code>docs/PLAN_align_tool.md</code> §5.3.
 Whole-pair listening lives on the <a href="/align/review">/align/review</a> page (DP-22).</div>
 
+<div id="syncNote" style="display:none"></div>
 <div id="notEnabled" style="display:none">
   <section>The align inspector's DSP is not configured on this server: it needs the
   checkout's <code>.venv</code> (<code>make venv</code>) and the originals
@@ -1465,8 +1467,32 @@ addEventListener("resize", () => requestAnimationFrame(() => {
   if (!slice) { drawCtx(); if ($("ovBox").open && ov) drawOv(); }
 }));
 
+// The review-note committer runs inside the server; its failures reach only the server log
+// and this route. Shown as one line while any is standing; checked again every minute, so a
+// failure that clears goes away by itself.
+// One check at a time: the next is scheduled only when this one ends, and a fetch that hangs
+// is abandoned after 20 s.
+async function loadSyncStatus() {
+  const el = $("syncNote");
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const r = await fetch("/api/align/sync-status", {signal: ctl.signal});
+    if (!r.ok) return;
+    const errs = (await r.json()).errors || {};
+    const ops = Object.keys(errs);
+    el.textContent = ops.length
+      ? "review notes not syncing — " +
+        ops.map(op => `${op} failing since ${errs[op].at}: ${errs[op].detail}`).join("; ")
+      : "";
+    el.style.display = ops.length ? "" : "none";
+  } catch (e) { /* a missed check is retried on the next one */ }
+  finally { clearTimeout(timer); setTimeout(loadSyncStatus, 60000); }
+}
+
 loadPrefs();
 loadSources().catch(err => { $("tool").style.display = ""; status(String(err), true); });
+loadSyncStatus();
 </script>
 </body>
 </html>

@@ -29,11 +29,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from streamalign import mystery  # noqa: E402  (light: os/re/json only)
 
-try:
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # sibling test helpers
+from optional_imports import import_or_skip  # noqa: E402
+
+harvest = import_or_skip("harvest")  # None only when an audio library is missing
+if harvest:
     import numpy as np              # noqa: F401
-    import harvest
-except Exception:                   # audio deps absent -> the harvest-side tests skip
-    harvest = None
 
 # queries() itself does a lazy `import librosa` before any of our seams run, so the
 # query-key test needs the real thing even with the chroma computation patched out.
