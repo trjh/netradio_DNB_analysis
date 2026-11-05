@@ -834,6 +834,8 @@ class RulingsStampTests(LauncherTestCase):
     def setUp(self):
         super().setUp()
         shutil.copy2(STAMP_SRC, os.path.join(self.root, "scripts", "rulings_stamp.py"))
+        shutil.copy2(os.path.join(os.path.dirname(STAMP_SRC), "envfile.py"),   # its .env reader
+                     os.path.join(self.root, "scripts", "envfile.py"))
         os.makedirs(os.path.join(self.root, "data"))
         self.rulings = os.path.join(self.root, "data", "rulings.json")
         self.stamp = os.path.join(self.state_dir, "rulings-stamp.json")
