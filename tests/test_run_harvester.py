@@ -721,7 +721,11 @@ class ConcurrentStartTests(LauncherTestCase):
         guard = threading.Lock()
 
         def go():
-            out = self.run_cmd("start")
+            # Diagnosis only: a timestamped bash trace of each start (time, pid, subshell level).
+            env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": self.root,
+                   "PS4": "+ ${EPOCHREALTIME} $$ ${BASHPID} ${BASH_SUBSHELL} "}
+            out = subprocess.run(["bash", "-x", self.script, "start"], capture_output=True,
+                                 text=True, env=env, timeout=120)
             with guard:
                 results.append(out)
 
@@ -733,6 +737,9 @@ class ConcurrentStartTests(LauncherTestCase):
 
         self.assertEqual(len(results), 2)
         winners = [r for r in results if r.returncode == 0]
+        if len(winners) != 1:
+            for r in results:
+                print("\n===== one start: rc %s =====\n%s\n%s" % (r.returncode, r.stdout, r.stderr))
         self.assertEqual(len(winners), 1,
                          "exactly one start should succeed: %s"
                          % [{"rc": r.returncode, "stdout": r.stdout, "stderr": r.stderr}
