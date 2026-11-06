@@ -30,7 +30,17 @@ cd "$ROOT"
 # The venv's interpreter, as scripts/run_harvester.sh uses: a bare `python3.14` on PATH can be an
 # asdf shim, which exits at once in this checkout because it pins no Python version, and the
 # server died before it bound the port (2026-10-21).
-PYTHON="${NETRADIO_PYTHON:-$ROOT/.venv/bin/python}"
+# NETRADIO_PYTHON (the environment, else .env; a leading ~ expanded) wins. Without .venv the
+# server still runs on python3, without the DSP's packages, and the start says so.
+PYTHON="$(env_home "$(env_get "$ROOT/.env" NETRADIO_PYTHON)")"
+PYTHON_NOTE=""
+if [ -z "$PYTHON" ]; then
+  PYTHON="$ROOT/.venv/bin/python"
+  if [ ! -x "$PYTHON" ]; then
+    PYTHON="$(command -v python3 || true)"
+    PYTHON_NOTE="no .venv in this checkout (make venv): running on ${PYTHON:-no python3 found}, without the DSP's packages"
+  fi
+fi
 # the port: real env wins, else .env (align_server.py reads the same chain), else 8766
 NETRADIO_ALIGN_PORT="$(env_get "$ROOT/.env" NETRADIO_ALIGN_PORT)"
 PORT="${NETRADIO_ALIGN_PORT:-8766}"
@@ -58,11 +68,14 @@ clear_port() {   # a stale process from an earlier run may still hold the port: 
 launch() {
   clear_port
   mkdir -p "$(dirname "$LOG")"
+  [ -n "$PYTHON_NOTE" ] && echo "WARNING: $PYTHON_NOTE" >&2
   echo "starting align inspector on :$PORT (python: $PYTHON)"
   nohup "$PYTHON" scripts/align_server.py >| "$LOG" 2>&1 &
-  echo $! > "$PIDFILE"
+  local child=$!
+  echo "$child" > "$PIDFILE"
   for _ in $(seq 1 20); do
     [ -n "$(port_pids)" ] && break
+    kill -0 "$child" 2>/dev/null || break      # it died: no point waiting out the ten seconds
     sleep 0.5
   done
   if [ -z "$(port_pids)" ]; then
