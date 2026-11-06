@@ -5,9 +5,11 @@
 # tmp repos with their own identity, and the only hard non-stdlib needs are
 # numpy (the label/engine math) and pyflakes — the undefined-name guard in
 # tests/test_harvest_runtime.py FAILS (never skips) without a linter, by design.
-# ffmpeg is installed so the cheap synthetic-audio tests (sync-audit, hints,
-# inspect-slice) actually run; the librosa/chroma tests keep self-skipping
-# (numba wheels lag new Pythons — see requirements-streamalign.txt).
+# ffmpeg is not installed: its apt install is the slow, flaky step, so the
+# synthetic-audio tests (sync-audit, hints, inspect-slice) self-skip here and
+# run on occasion in a container instead (`make test-container`). The
+# librosa/chroma tests self-skip too (numba wheels lag new Pythons — see
+# requirements-streamalign.txt).
 name: tests
 
 on:
@@ -24,8 +26,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Install ffmpeg (the synthetic-audio tests decode real WAVs)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Install numpy + pyflakes (the guard fails, never skips, without a linter)
         run: python -m pip install "numpy>=2" pyflakes
       - name: Run the full suite

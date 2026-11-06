@@ -326,7 +326,13 @@ class BranchPRFlowTests(unittest.TestCase):
             self.assertNotIn("main", c)
 
     def test_gh_success_opens_pr_no_fallback(self):
-        _, seam, out = self._publish(gh_rc=0)
+        # gh is present whether or not this machine has it: the seam answers the call
+        orig_which = publish.shutil.which
+        publish.shutil.which = lambda name: "/usr/bin/gh" if name == "gh" else orig_which(name)
+        try:
+            _, seam, out = self._publish(gh_rc=0)
+        finally:
+            publish.shutil.which = orig_which
         self.assertTrue(any(c[:2] == ["gh", "pr"] for c in seam.calls))
         self.assertNotIn("open a PR by hand", out)
 
