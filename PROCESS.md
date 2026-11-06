@@ -64,7 +64,7 @@ Also open an already-placed **overlapping** neighbour, if there is one.
 ```bash
 make venv        # ONCE per machine: .venv, every dependency incl. librosa
 
-set -a && . ./.env && set +a
+eval "$(python3 scripts/envfile.py --export .env)"
 . .venv/bin/activate && python -m streamalign hints <stem>
 # -> labels/automated/<stem>.hints.tsv    Audacity: File ▸ Import ▸ Labels
 ```

@@ -1,5 +1,6 @@
 #!/usr/bin/python3
-"""publish.py — one-command, hard-gated publish of hand labels (ROADMAP G5 / A4).
+"""publish.py — one-command, hard-gated publish of hand labels
+(docs/PLAN_labelling_process.md, Proposal D).
 
 Takes valid edited `<stem>.labels.tsv` files all the way to an open pull request with no
 manual sub-steps: validate → sort → branch → commit → push → open PR. The whole thing is
@@ -23,7 +24,9 @@ The hard gate (Proposal D) refuses to publish on:
     missing `COMPLETE`, a missing `LABELTRACK` marker (when the file uses them), or a file
     with no start-sync / no `file end … COMPLETE` at all (e.g. a half-labelled tail capture);
   * seed/engine files — `*.starter.labels.tsv` (seed-only) and `*.auto.labels.tsv` (engine)
-    are never hand-published.
+    are never hand-published;
+  * a `sort_tsv.py --test` run that exits non-zero, whatever it printed (a crash prints no
+    warning line).
 On any of these it exits non-zero, names the offending file/line, and pushes nothing.
 
 The gate REUSES `sort_tsv.py --test` (which already flags grammar/verified/COMPLETE/LABELTRACK
@@ -112,13 +115,20 @@ def gate_errors(path, python=None):
         return ["%s: file not found" % path]
 
     errors = []
-    # (a) reuse sort_tsv.py --test: any WARNING/NOTICE/ERROR is a gate failure
+    # (a) reuse sort_tsv.py --test. Its exit status decides: a non-zero exit is a gate failure
+    # whatever it printed (a traceback carries none of the signal words). Its stderr is read
+    # only for the text: any WARNING/NOTICE/ERROR line is a failure too, since a warning
+    # exits 0.
     proc = subprocess.run([python or sys.executable, SORT_TSV, path, "--test"],
                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                          text=True, check=False)
+                          text=True, errors="replace", check=False)
     for line in proc.stderr.splitlines():
         if _GATE_SIGNAL.match(line):
             errors.append("%s: %s" % (name, line.strip()))
+    if proc.returncode != 0:
+        last = [ln.strip() for ln in proc.stderr.splitlines() if ln.strip()]
+        errors.append("%s: sort_tsv.py --test exited %d%s"
+                      % (name, proc.returncode, (": " + last[-1]) if last else ""))
 
     # (b) completeness anchors
     with open(path, "r", encoding="utf-8", errors="replace") as handle:
@@ -299,9 +309,19 @@ def _open_pr(staged, branch, message, dry_run):
         _run(["git", "branch", "-D", branch], dry_run, cwd=root)
 
 
+def _setting(name):
+    """The environment's `name`, else this checkout's `.env` (envfile, the repo's one `.env`
+    reader), else ""."""
+    scripts = os.path.join(os.path.dirname(HERE), "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    import envfile
+    return envfile.get(os.path.join(os.path.dirname(HERE), ".env"), name)
+
+
 def trigger_refresh(dry_run=False):
     """POST to the Apps Script Web App if configured, else print the manual reminder."""
-    url = os.environ.get("NETRADIO_SHEET_WEBHOOK")
+    url = _setting("NETRADIO_SHEET_WEBHOOK")
     if not url:
         print("NOTE: NETRADIO_SHEET_WEBHOOK unset — click 'Reload Data' on the File Analysis "
               "tab to refresh the sheet (deploy Code.js as a Web App + set the URL to automate).")

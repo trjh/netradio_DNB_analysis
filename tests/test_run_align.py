@@ -133,7 +133,9 @@ class TheLogSetting(unittest.TestCase):
         sh = _read("scripts", "run_align.sh")
         self.assertIn('NETRADIO_ALIGN_LOG="$(env_get "$ROOT/.env" NETRADIO_ALIGN_LOG)"', sh)
         self.assertLess(sh.index("env_get \"$ROOT/.env\" NETRADIO_ALIGN_LOG"),
-                        sh.index('LOG="${NETRADIO_ALIGN_LOG:-'))
+                        sh.index('LOG="$(env_home "$NETRADIO_ALIGN_LOG")"'))
+        # .env is read, not sourced: a leading ~ is the launcher's to expand
+        self.assertIn('LOG="${LOG:-$ROOT/logs/align.log}"', sh)
 
 
 class TheCheckoutGuard(unittest.TestCase):

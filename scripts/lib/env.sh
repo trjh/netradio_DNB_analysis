@@ -9,13 +9,15 @@
 #   env_load FILE         # export every key in FILE that the environment does not already hold
 #   env_home PATH         # a leading `~` becomes $HOME, as Python's expanduser does
 #
-# It reads a `.env` exactly as the Python servers' `.env` loaders do, and never executes it:
+# It reads a `.env` exactly as envfile, the one Python reader, does (tests/test_envfile.py runs both
+# on the same files), and never executes it:
 #   - each line is trimmed; a blank line, a line starting with `#`, and a line with no `=` are
 #     skipped
 #   - the line splits on its first `=`, and both sides are trimmed
 #   - double quotes, then single quotes, are stripped from both ends of the value
 #   - the first line for a key wins (the loaders use setdefault)
 #   - `export KEY=v` is a key named "export KEY", which nothing reads
+#   - a `#` after a value is part of the value: a comment goes on a line of its own
 #   - nothing is expanded: no `$VAR`, no command substitution. A leading `~` stays as written, for
 #     the reader to expand, as the Python side does with expanduser: a script that builds a path
 #     from a value calls env_home on it first.

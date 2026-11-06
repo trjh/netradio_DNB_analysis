@@ -26,34 +26,45 @@
 # lifetime (harvest.WRITER_LOCK), so a second one refuses rather than corrupting anything;
 # `start` refuses earlier and more cheaply, by looking for the process it launched before.
 #
+# THE RULINGS FILE'S STAMP (opt-in). With NETRADIO_RULINGS_STAMP=require, `start` and `restart`
+# first run scripts/rulings_stamp.py, and refuse with its exit code (2) and its one line when
+# the stamp beside the state (.harvest/rulings-stamp.json) is absent or unreadable, or names
+# other bytes than data/rulings.json holds now. `restart` checks before it stops anything, so a
+# restart this check refuses leaves the running harvester up. The check is not atomic with the
+# stop: if the file or its stamp changes after it passes, the old harvester is stopped and the
+# new one's own check (harvest.py --run) refuses, so the harvester stays down until the writer
+# writes again. That fails safe: a start is refused, never made on rulings nobody vouched for.
+# The writer is another process, with no lock this launcher could share. Unset or `off`,
+# nothing is checked.
+#
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-load_env() {
-  # The repo's .env, read the way every make target reads it: the file wins. An ABSENT
-  # .env is a normal state, not an error — a fresh clone has none and every value below
-  # has a default — so this returns quietly.
-  [ -f "$ROOT/.env" ] || return 0
-  set -a
-  # shellcheck disable=SC1091   # machine-local, never committed
-  . "$ROOT/.env"
-  set +a
-}
-load_env
+# The repo's .env, read through scripts/lib/env.sh (read, never executed) as run_align.sh reads
+# it: every name the environment does not already hold is exported, so the harvester sees it, and
+# a variable already set wins over the file. An ABSENT .env is a normal state, not an error -- a
+# fresh clone has none and every value below has a default.
+# shellcheck source=scripts/lib/env.sh
+. "$ROOT/scripts/lib/env.sh"
+env_load "$ROOT/.env"
 
 STATE_DIR="$ROOT/.harvest"
 STATE="$STATE_DIR/state.json"
 LEDGER="$STATE_DIR/ledger.json"
 PIDFILE="$STATE_DIR/harvester.pid"          # this launcher's own; nothing else writes it
-# `start` runs under this lock directory. The pidfile alone cannot make two simultaneous
+# `start` runs under this lock file. The pidfile alone cannot make two simultaneous
 # starts resolve to one — both would look, both would see nothing, and both would launch;
 # harvest.py's flock would then kill the loser's child, and the loser's cleanup could carry
 # off the WINNER's pidfile with it, leaving a harvester running for weeks that `status`
-# calls DOWN and `stop` cannot stop. `mkdir` is atomic, so exactly one start gets past it.
-# A start holds it for about a second.
-LOCKDIR="$STATE_DIR/harvester.start.lock"
+# calls DOWN and `stop` cannot stop. The lock is taken by bash itself: a `noclobber`
+# redirect creates the file with an exclusive open, so exactly one start gets past it, and
+# anything already at the path (a file, or the directory an older launcher used) refuses.
+# Not `mkdir`: the uutils `mkdir` some systems ship reports success to both of two racing
+# calls (`mkdir (uutils coreutils) 0.10.0`: 104 races in 300). A start holds it for about a
+# second.
+LOCK="$STATE_DIR/harvester.start.lock"
 LOG="$STATE_DIR/harvest.log"
 # The log rotation, one generation: at a start, a harvest.log at or over the cap becomes
 # harvest.log.1 and a fresh harvest.log is opened. Between runs, not during one — a run
@@ -67,7 +78,8 @@ LOG_MAX_BYTES="${NETRADIO_HARVEST_LOG_MAX_BYTES:-10485760}"
 # buys: a `kill -9` instead would leave state.json still naming the file it was signing
 # (`current`) for a process that no longer exists.
 STOP_WAIT_S="${NETRADIO_HARVEST_STOP_WAIT_S:-30}"
-PYTHON="${NETRADIO_PYTHON:-$ROOT/.venv/bin/python}"
+# .env is read, not sourced, so a leading ~ is ours to expand (env.sh's env_home).
+PYTHON="$(env_home "${NETRADIO_PYTHON:-}")"; PYTHON="${PYTHON:-$ROOT/.venv/bin/python}"
 # Set by `start --accept-ledger-rebuild` (or `restart --accept-ledger-rebuild`, which takes
 # the same one argument): harvest.py --run refuses to start when its rebuilt ledger differs
 # from the recorded one past a threshold, and this is the operator's override for that one
@@ -129,7 +141,8 @@ alert_line() {
   # The standing signature alert: the harvester writes a `sig_alert` block into
   # .harvest/state.json, and prints one status line while the block is there and nothing
   # at all otherwise. Two kinds: `ledger` (the ledger and its rebuild from the bucket
-  # listing differ past the threshold, so the start was refused) and `store` (more signed
+  # listing differ past the threshold, or, with `unreadable` set, the ledger file exists
+  # and cannot be read; either way nothing is signed) and `store` (more signed
   # rows lost their objects than the cap allows, so nothing was changed on that side). A
   # block with no `kind` is the store shape. Read with grep and sed, like the other lines:
   # the file is flattened to one line, and the block holds no nested braces.
@@ -140,7 +153,12 @@ alert_line() {
   [ -n "$block" ] || return 0
   kind="$(alert_field "$block" kind '"\([^"]*\)"')"
   at="$(alert_field "$block" at '"\([^"]*\)"')"
-  if [ "$kind" = "ledger" ]; then
+  if printf '%s' "$block" | grep -q '"unreadable"[[:space:]]*:[[:space:]]*true'; then
+    # The unreadable-ledger alert is kind `ledger` too, but carries no counts: there is no
+    # ledger to compare a rebuild with. A start refuses on it, and a running loop stops.
+    printf '  alert:  the ledger cannot be read, nothing is signed: restore it from a backup, '
+    printf 'repair it, fix its permissions, or move it aside (since %s)\n' "${at:-?}"
+  elif [ "$kind" = "ledger" ]; then
     printf '  alert:  the ledger and its rebuild differ on %s of %s keys, start refused (since %s)\n' \
       "$(alert_field "$block" differ '\([0-9]*\)')" \
       "$(alert_field "$block" keys '\([0-9]*\)')" "${at:-?}"
@@ -187,8 +205,8 @@ ledger_line() {
   delayed="$(ledger_count '"status"[[:space:]]*:[[:space:]]*"delayed"')"
   if [ "$rows" -eq 0 ]; then
     # No rows is "nothing signed yet" only for a ledger that really is empty, `{}`. A file
-    # that is empty or garbled reads as no rows too, and harvest.py treats a ledger it cannot
-    # parse as empty, so `status` is where that has to show.
+    # that is empty or garbled reads as no rows too; harvest.py refuses to start on it, and
+    # `status` must say so rather than call it empty.
     # `tr` runs in the C locale: under UTF-8 it stops at the first byte that is not UTF-8,
     # and a `{}` followed by one would read as empty.
     if [ "$(LC_ALL=C tr -d '[:space:]' <"$LEDGER" 2>/dev/null | head -c 3 || true)" = '{}' ]
@@ -235,17 +253,63 @@ cmd_start() {
   # The lock first, then the real work: everything between "is one already running" and
   # "the pidfile names mine" has to be one start's alone.
   mkdir -p "$STATE_DIR"
-  if ! mkdir "$LOCKDIR" 2>/dev/null; then
-    echo "another start is in flight — leaving it to that one" >&2
-    echo "  (if none is, remove $LOCKDIR)" >&2
+  # Anything at the path refuses first: a file, the directory an older launcher used, and a
+  # FIFO, device or symlink, which a noclobber redirect would open without creating anything.
+  if [ -e "$LOCK" ] || [ -L "$LOCK" ]; then
+    lock_refusal
     return 1
   fi
-  trap 'rmdir "$LOCKDIR" 2>/dev/null || true' EXIT INT TERM
+  # Released on every way out, set BEFORE the lock is taken so no signal falls between the two;
+  # HELD keeps a start that never got the lock from removing someone else's. An interrupt also
+  # ends the start: carrying on after the lock is gone would let a second start in beside it.
+  HELD=0
+  trap 'release_lock' EXIT
+  trap 'release_lock; trap - EXIT; exit 130' INT
+  trap 'release_lock; trap - EXIT; exit 143' TERM
+  # The lock file holds the taker's pid, so a refusal can say who holds it.
+  local err
+  if ! err="$( { ( set -C; printf '%s\n' "$$" >"$LOCK" ); } 2>&1 )"; then
+    trap - EXIT INT TERM
+    if [ -e "$LOCK" ] || [ -L "$LOCK" ]; then
+      lock_refusal                  # another start took it between the check and the open
+    else
+      echo "cannot take the start lock $LOCK: ${err:-unknown error}" >&2
+    fi
+    return 1
+  fi
+  HELD=1
   local rc=0
   start_locked || rc=$?
   trap - EXIT INT TERM
-  rmdir "$LOCKDIR" 2>/dev/null || true
+  release_lock
   return "$rc"
+}
+
+release_lock() {
+  # Only the start that took the lock removes it. A signal between the lock's creation and
+  # HELD=1 leaves it behind; the next start's refusal names its pid as gone.
+  if [ "${HELD:-0}" = 1 ]; then
+    rm -f "$LOCK"
+    HELD=0
+  fi
+}
+
+lock_refusal() {
+  local holder="" state
+  # Read only a regular file: reading a FIFO would block the refusal for good.
+  if [ -f "$LOCK" ] && [ ! -L "$LOCK" ]; then
+    holder="$(head -n 1 "$LOCK" 2>/dev/null | tr -cd '0-9' || true)"
+  fi
+  echo "another start is in flight — leaving it to that one" >&2
+  if [ -n "$holder" ]; then
+    if kill -0 "$holder" 2>/dev/null; then state="running"; else state="gone"; fi
+    echo "  (the lock names pid $holder, $state)" >&2
+  fi
+  if [ -d "$LOCK" ] && [ ! -L "$LOCK" ]; then
+    echo "  (if no start is running, remove it: rmdir $LOCK)" >&2
+  else
+    echo "  (if no start is running, remove it: rm -f $LOCK)" >&2
+  fi
 }
 
 start_locked() {
@@ -280,6 +344,22 @@ start_locked() {
   echo "$pid" >"$PIDFILE"
   sleep 1
   if ! is_harvester "$pid"; then
+    # The harvester is this shell's child, so `wait` hands back its exit code: harvest.py
+    # gives each kind of refusal its own, and naming it here tells a caller which kind it was
+    # without reading the log. Only a process that is gone (or a zombie) is waited for: a
+    # live one would hold `start` for as long as it runs.
+    local code="" pstate
+    pstate="$(ps -p "$pid" -o stat= 2>/dev/null || true)"
+    case "$pstate" in
+      ''|Z*) code=0; wait "$pid" 2>/dev/null || code=$? ;;
+    esac
+    case "$code" in
+      # 1 is the ledger's refusal, and also any Python crash (a SyntaxError after a bad pull,
+      # an exception in the start-up reconcile): the log tells the two apart, this line cannot.
+      1) echo "the harvester refused to start (its ledger) or crashed: see the log (exit 1)" >&2 ;;
+      2) echo "the harvester refused to start: a file or setting it needs is missing (exit 2)" >&2 ;;
+      3) echo "the harvester refused to start: another ledger/state writer holds the lock (exit 3)" >&2 ;;
+    esac
     echo "the harvester exited immediately — see the end of $LOG" >&2
     # Withdraw OUR OWN registration and nobody else's. The lock above should make that
     # distinction moot; this is the second lock on the same door, because the failure it
@@ -289,6 +369,18 @@ start_locked() {
     return 1
   fi
   cmd_status
+}
+
+check_rulings_stamp() {
+  # The opt-in stamp check, before anything is stopped or started. Off (unset, empty, `off`)
+  # costs nothing: no interpreter runs. On, scripts/rulings_stamp.py decides and prints the
+  # reason, and its exit code (2, a missing file or setting) is this script's. With no
+  # interpreter there is nothing to check with; start_locked refuses that case by name.
+  case "${NETRADIO_RULINGS_STAMP:-}" in
+    ''|off) return 0 ;;
+  esac
+  [ -x "$PYTHON" ] || return 0
+  "$PYTHON" "$ROOT/scripts/rulings_stamp.py"
 }
 
 withdraw_pidfile() {
@@ -358,6 +450,9 @@ case "$verb" in
       1:--accept-ledger-rebuild) ACCEPT_LEDGER_REBUILD=1 ;;
       *) echo "$verb: unknown argument(s): $*" >&2; usage >&2; exit 2 ;;
     esac
+    rc=0
+    check_rulings_stamp || rc=$?
+    [ "$rc" = 0 ] || exit "$rc"
     [ "$verb" = restart ] && cmd_stop
     cmd_start
     ;;

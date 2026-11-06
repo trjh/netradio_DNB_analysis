@@ -24,12 +24,13 @@ import unittest.mock
 SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
 sys.path.insert(0, SCRIPTS)
 
-try:
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # sibling test helpers
+from optional_imports import import_or_skip  # noqa: E402
+
+harvest = import_or_skip("harvest")     # None only when an audio library is missing
+if harvest:
     import numpy as np
-    import harvest
     from streamalign import chroma_match as cm
-except Exception:                       # numpy/librosa absent -> not this test's job
-    harvest = None
 
 
 # The real alignments need librosa; CI runs without it.
@@ -253,8 +254,10 @@ class EveryOldScoreIsStale(unittest.TestCase):
                              {"mystery": 4, "key": r, "cost": 0.03, "verdict": "MATCH"}],
                  "current_query": {"mystery": 4, "query_key": "4:abc"}}
         removed = []
+        # The board is on the policy (`registered`), so its excerpt goes through `remove`.
         with unittest.mock.patch.object(harvest.cache_budget, "remove",
-                                        lambda cache, path, why: removed.append(why) or True):
+                                        lambda cache, path, why: removed.append(why) or True), \
+                unittest.mock.patch.object(harvest.cache_budget, "registered", lambda name: True):
             first = harvest.migrate_query_shape(state)
             snapshot = repr(state)
             second = harvest.migrate_query_shape(state)

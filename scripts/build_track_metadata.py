@@ -445,6 +445,16 @@ def identification_losses(out_path, new_tracks):
 
 
 def main():
+    """Build, or refuse with one line and exit 1: a label file that cannot be read (or rows that
+    never settle) stops the build the way `stream_files.py` stops, without a traceback."""
+    try:
+        return _build()
+    except stream_files.BuildRefused as exc:
+        print("REFUSING TO WRITE: %s" % exc)
+        return 1
+
+
+def _build():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", help="JSON to carry curated fields forward from")
     parser.add_argument("--out", default=str(OUT_PATH))

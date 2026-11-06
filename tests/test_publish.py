@@ -76,6 +76,20 @@ class GateTests(unittest.TestCase):
         errs = publish.gate_errors(path)
         self.assertTrue(any("WARNING" in e or "Unrecognized" in e for e in errs), errs)
 
+    def test_a_crash_with_no_signal_words_is_blocked(self):
+        # A traceback prints none of WARNING/NOTICE/ERROR, so the exit status is what decides.
+        # The stand-in for sort_tsv.py crashes the way an index error would.
+        crash = os.path.join(self.dir, "crash.py")
+        with open(crash, "w", encoding="utf-8") as handle:
+            handle.write("import sys\nsys.stderr.write('Traceback (most recent call last):\\n"
+                         "IndexError: list index out of range\\n')\nsys.exit(1)\n")
+        path = write(self.dir, "d999-000", COMPLETE_FILE)
+        old = publish.SORT_TSV
+        publish.SORT_TSV = crash
+        self.addCleanup(setattr, publish, "SORT_TSV", old)
+        errs = publish.gate_errors(path)
+        self.assertTrue(any("exited 1" in e and "IndexError" in e for e in errs), errs)
+
     def test_starter_and_auto_files_refused(self):
         sp = os.path.join(self.dir, "d999-000.starter.labels.tsv")
         ap = os.path.join(self.dir, "d999-000.auto.labels.tsv")
@@ -312,7 +326,13 @@ class BranchPRFlowTests(unittest.TestCase):
             self.assertNotIn("main", c)
 
     def test_gh_success_opens_pr_no_fallback(self):
-        _, seam, out = self._publish(gh_rc=0)
+        # gh is present whether or not this machine has it: the seam answers the call
+        orig_which = publish.shutil.which
+        publish.shutil.which = lambda name: "/usr/bin/gh" if name == "gh" else orig_which(name)
+        try:
+            _, seam, out = self._publish(gh_rc=0)
+        finally:
+            publish.shutil.which = orig_which
         self.assertTrue(any(c[:2] == ["gh", "pr"] for c in seam.calls))
         self.assertNotIn("open a PR by hand", out)
 

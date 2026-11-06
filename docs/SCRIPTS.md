@@ -17,7 +17,7 @@ Most scripts want the venv active and the machine paths from `.env`. Activating 
 the path (`netradio-scripts.pth`, written by `make venv` and `make dep`), so no `PYTHONPATH`:
 
 ```bash
-set -a && . ./.env && set +a
+eval "$(python3 scripts/envfile.py --export .env)"
 . .venv/bin/activate
 ```
 
@@ -25,6 +25,8 @@ set -a && . ./.env && set +a
 
 ```bash
 .venv/bin/python3 -m unittest discover -s tests    # the full suite (or: make test)
+make test-container                                # the suite with ffmpeg, in an Ubuntu 26.04 container (CI skips the audio tests)
+make full-suite-age                                # when make test-container last passed; OVERDUE after 14 days
 ```
 
 The suite is hermetic on a fresh clone: it parses only committed evidence (the 2017 notes
@@ -82,6 +84,7 @@ checkout's unless `.env` says otherwise (`.env.example`, "The align server").
 | `scripts/identify_by_chroma.py` | chroma-match a clip against a pool of candidate records | when you have candidate audio |
 | `scripts/identify_by_api.py` | ask the commercial catalogues (ACRCloud + AudD) to name a clip — searches ~150-160M tracks you don't own, unlike the local chroma pool | when a mystery may be a catalogued release. **Acoustic fingerprinting may be defeated by the 1998 codec/EQ like AcoustID is — it's an experiment; every hit is a lead to confirm by ear.** Needs `ACRCLOUD_*` / `AUDD_API_TOKEN` in `.env` |
 | `scripts/harvest.py` | the long-runner: sign the audio that lands in the harvest directories → chroma signature → **drop the audio** → score | continuously. See [the harvester](#the-harvester) |
+| `scripts/rulings_stamp.py` | checks the rulings file's stamp (`.harvest/rulings-stamp.json`) against `data/rulings.json`; exit 0 when the check is off or matches, 2 when it refuses. Standard library only | by `run_harvester.sh start`/`restart` and `harvest.py --run`, when `NETRADIO_RULINGS_STAMP=require`. See [the harvester](#the-harvester) |
 | `scripts/discogs_leads.py` | read the labels this DJ actually played, ask Discogs what else they released 1994–99. A lead is tested by adding its audio to a directory the harvester reads | when the pool needs new leads |
 | `scripts/acoustid_check.py` | verify the **originals** against AcoustID; catch mislabelled source files | occasionally. **Does not work on stream audio** — see `Archive/LESSON_acoustid_stream.md` |
 
@@ -104,7 +107,8 @@ own original, the change is wrong.
 |---|---|
 | `scripts/enrich_musicbrainz.py`, `enrich_mb_links.py`, `enrich_album_covers.py`, `enrich_covers_links.py` | fill artwork/links on `track-metadata.json` (network) |
 | `scripts/merge_track_sources.py`, `missing_sources.py`, `find_streaming_links.py` | source inventory: what we have, what's missing, where to get it |
-| `scripts/backup_sheet.py` | back up the Google Sheet |
+| `scripts/backup_sheet.py` | back up the Google Sheet (the ID is `NETRADIO_SHEET_ID` in `.env`); the sheet is private and the download has no login, so it refuses until it gets authenticated access |
+| `scripts/envfile.py`, `scripts/lib/env.sh` | the repo's one `.env` reader, for Python and for the shell: one grammar (read, never executed; no `export`; a `#` after a value is part of it), and a variable already set wins; `python3 scripts/envfile.py --export .env` prints the file for `eval` |
 | `scripts/cache_budget.py` | the one cache policy: a registry of size-bounded local caches, `reserve` before every write, an eviction run, one disk floor — a library the cache-holding scripts register with (dark until `NETRADIO_CACHE_ROOT` is set); the decoded-array cache in `scripts/streamalign/audio.py` registers with it |
 
 ## Retired
@@ -124,7 +128,7 @@ scripts/run_harvester.sh status                                       # pid, upd
 scripts/run_harvester.sh stop                                         # / restart [--accept-ledger-rebuild]
 make harvest-run                                                      # alias for `start`
 
-set -a && . ./.env && set +a
+eval "$(python3 scripts/envfile.py --export .env)"
 . .venv/bin/activate && python scripts/harvest.py --status
 MallocLargeCache=0 .venv/bin/python scripts/harvest.py --run
                                                      # the foreground form: no
@@ -133,6 +137,7 @@ MallocLargeCache=0 .venv/bin/python scripts/harvest.py --run
 .venv/bin/python scripts/harvest.py --pause         # / --resume
 .venv/bin/python scripts/harvest.py --purge-audio   # throw every retained excerpt away
 .venv/bin/python scripts/harvest.py --forget 7      # drop MT7's leads + pairings
+                                                     # (both refuse while the harvester runs)
 .venv/bin/python scripts/harvest.py --rescan        # score every held signature against
                                                      # every mystery it has not met yet (no
                                                      # network)
@@ -160,9 +165,9 @@ process start), writes one pidfile at `.harvest/harvester.pid` and appends to on
 at or over 10 MB by then — one generation back (`NETRADIO_HARVEST_LOG_MAX_BYTES` moves the
 cap). The rename happens between runs and never during one, so a single run's log is bounded
 by when it is next restarted. `start` refuses while a harvester is already up, clears a
-pidfile whose process is gone or is now something else, and takes a lock directory
-(`.harvest/harvester.start.lock`) so two simultaneous starts resolve to one harvester and one
-pidfile. `stop` asks for a clean exit and waits up to 30 seconds for it
+pidfile whose process is gone or is now something else, and takes a lock file
+(`.harvest/harvester.start.lock`, created by bash's exclusive `noclobber` open, not `mkdir`) so
+two simultaneous starts resolve to one harvester and one pidfile. `stop` asks for a clean exit and waits up to 30 seconds for it
 (`NETRADIO_HARVEST_STOP_WAIT_S`) before it resorts to `kill -9`. `status` prints whether it is
 up, its pid, the `updated` stamp in `.harvest/state.json` (set at the end of each signing
 pass, so it stands still while the harvester is paused, idle, or mid-decode of a long file),
@@ -172,8 +177,9 @@ normal answer**, not an error:
 before the signing pass has run once there is nothing signed and no candidates, which is
 exactly what a fresh clone looks like. A ledger that is there but cannot be read says
 `present, not readable`, and one with no rows that is not `{}` (empty or garbled) says
-`present, N bytes, no rows the counter can read`, never "nothing signed yet": `harvest.py`
-reads a ledger it cannot parse as empty, so `status` is where that shows. While the state
+`present, N bytes, no rows the counter can read`, never "nothing signed yet". `harvest.py`
+refuses to start on a ledger it cannot read, and a running loop stops when it finds one (see
+**A ledger that cannot be read** below); `status` shows the same file before the start does. While the state
 carries a standing `sig_alert` (see
 **The ledger replaces the working queue** below), `status` adds one `alert:` line with its
 numbers and since when; with no alert there is no such line. Same shape as the align server's
@@ -200,10 +206,45 @@ was started.
 **Exit codes**, for a caller that branches on them: `status` is 0 when the harvester is up
 and **1 when it is down**; `start` is 1 when it refuses (one is already running, another
 start is in flight, no interpreter) and 0 when one is now up; `stop` is 0 either way. A `2`
-is a usage error: an unknown verb, an argument to `start`/`restart` other than
-`--accept-ledger-rebuild`, or a `NETRADIO_HARVEST_*` value that is not a plain number —
+is a usage error or a refused setting: an unknown verb, an argument to `start`/`restart` other
+than `--accept-ledger-rebuild`, a refused rulings file's stamp (see below; that check runs
+before the "already running" check, so `start` against a running harvester exits 2, not 1,
+when the stamp does not match) or a
+`NETRADIO_RULINGS_STAMP` value other than `require` or `off`, or a `NETRADIO_HARVEST_*` value
+that is not a plain number —
 `NETRADIO_HARVEST_LOG_MAX_BYTES=10MB` is refused rather than quietly taken as "never
-rotate". The interpreter is `.venv/bin/python` unless `NETRADIO_PYTHON` names another one.
+rotate". `harvest.py` itself exits 0 on a clean stop and non-zero on a refusal: 1 for the
+ledger's refusal (and for any crash, so `start` says "refused (its ledger) or crashed" and
+points at the log), 2 when a file or setting it needs is missing (the rulings file, a cache, the
+directories, the ledger a rescan reads, a malformed key), and 3 when another ledger/state
+writer holds the lock. When `start` sees the harvester exit at once, it names which of these
+it was. The interpreter is `.venv/bin/python` unless `NETRADIO_PYTHON` names another one.
+
+```bash
+NETRADIO_RULINGS_STAMP=require scripts/run_harvester.sh start    # or set it in .env
+.venv/bin/python scripts/rulings_stamp.py                         # the same check, alone: reads .env, prints one line
+```
+
+**The rulings file's stamp is checked only when asked for.** With
+`NETRADIO_RULINGS_STAMP=require`, `start` and `restart` run `scripts/rulings_stamp.py`
+before they stop or start anything, and `harvest.py --run` makes the same check at its start,
+so a hand start is covered too. The check refuses, exits 2 and prints one line saying what to
+do, when the stamp `.harvest/rulings-stamp.json` is absent, unreadable, or not a JSON object
+with a lower-case hex `sha256`, when `data/rulings.json` is absent, or when the SHA-256 of the
+file's bytes differs from the stamp's. A `restart` that this check refuses leaves the running
+harvester up. The check is not atomic with the stop: a file or stamp that changes just after it
+passes is refused by `harvest.py`'s own check instead, and the harvester stays down until the
+rulings file is written again.
+The stamp is written by the process that writes the rulings file; a mismatch usually means a
+merge or a pull put an older committed copy back. The fix is to have that process write the
+file again (it writes the stamp with it), then start again. The check reads nothing else: not
+the stamp's age, not its writer's pid. The check is at the start only: a running harvester
+re-reads the rulings file every pass and follows whatever its writer puts there.
+
+The setting is off by default (unset, empty or `off`), so a harvester run with rulings kept by
+hand and no stamp starts as before. Any other value is refused with exit 2, so a misspelt
+setting cannot turn the check off. The stamp's format is in
+[HARVEST_FEED.md](HARVEST_FEED.md#the-rulings-files-stamp).
 
 **The harvester's caches live on the machine's cache policy.** The signature working cache and
 the excerpt board (`chroma` and `candidates`) are no longer fixed paths: each lives under
@@ -270,10 +311,30 @@ the reconciliation **reports** — a standing `sig_alert` of kind `store`, one t
 down by itself on the first start that finds the loss gone — and touches nothing on that
 side: a mass drop means the store broke, not the rows, and would put the whole pool back on
 the feeder's list over a configuration fault. A mass signature loss is also past the rebuild
-threshold, so the override the alert names then carries `--accept-ledger-rebuild` as well. **One writer, enforced:** both writer
-paths (`--run`, `--sign-one`) hold the same flock (`harvest.WRITER_LOCK`, under its historic
-`collector.lock` name) for their lifetime — a second writer, including the hand tool under a
-running daemon, refuses loudly instead of interleaving.
+threshold, so the override the alert names then carries `--accept-ledger-rebuild` as well. **One writer, enforced:** every
+path that writes the ledger or the state file (`--run`, `--sign-one`, `--rescan`,
+`--purge-audio`, `--forget`) holds the same flock (`harvest.WRITER_LOCK`, under its historic
+`collector.lock` name) for its lifetime — a second writer, including a hand tool under a
+running daemon, refuses loudly instead of interleaving, and the two hand tools exit non-zero.
+
+**A ledger that cannot be read refuses the start, and stops a running loop.** A
+`ledger.json` that exists and cannot be read (a write cut short, a truncated restore, a hand
+edit, a permission change) is a lost ledger, not a first start:
+
+- `--run`, `--sign-one` and `--rescan` refuse before writing the ledger, exit non-zero and
+  leave a standing `sig_alert` of kind `ledger` with `unreadable` set. The ledger file is left
+  exactly as it was. Before that check, `--run` still saves the state file's own migrations
+  and sweeps expired excerpts and stale decode job directories.
+- A running loop checks the ledger once a pass, and every sign checks it again before it
+  saves its row. A ledger torn under the run gets no row written over it: the loop raises the
+  same alert, clears `current`, saves the state and exits non-zero. The file in flight gets
+  no row, so it is signed again once the ledger reads. `--sign-one` stops the same way.
+
+`run_harvester.sh status` shows the alert as `the ledger cannot be read, nothing is signed`.
+If the file does not parse, restore it from a backup or repair it; if it cannot be saved,
+move it aside and start again, and the absent ledger is seeded from the bucket. If the file
+cannot be opened, check its permissions and the disk. The alert stands down on the first
+start that finds the ledger readable or absent.
 
 The rescan also fills in **where** each old match hit (`at_s`), which is why a lead can be
 cued to the moment it matched even for leads found before that field existed. The

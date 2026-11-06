@@ -50,12 +50,34 @@ CMDLINE_PY = (
 class LauncherTestCase(unittest.TestCase):
     """A temp repo root with the launcher in it, and nothing else."""
 
+    @classmethod
+    def setUpClass(cls):
+        # The launcher confirms a start through `ps -p <pid> -o command=`. Where `ps` cannot
+        # see this process's own children (a restricted process table, a stub `ps`), every
+        # start test would fail as "the harvester exited immediately": skip with the reason.
+        child = subprocess.Popen(["sleep", "5"])
+        try:
+            time.sleep(0.2)
+            seen = subprocess.run(["ps", "-p", str(child.pid), "-o", "command="],
+                                  capture_output=True, text=True).stdout
+        except OSError:
+            seen = ""
+        finally:
+            child.kill()
+            child.wait()
+        if "sleep" not in seen:
+            raise unittest.SkipTest("ps cannot see child processes here; the launcher's "
+                                    "start check depends on it")
+
     def setUp(self):
         self.root = os.path.realpath(tempfile.mkdtemp(prefix="run-harvester-"))
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
         os.makedirs(os.path.join(self.root, "scripts"))
         self.script = os.path.join(self.root, "scripts", "run_harvester.sh")
         shutil.copy2(SCRIPT, self.script)
+        os.makedirs(os.path.join(self.root, "scripts", "lib"))
+        shutil.copy2(os.path.join(os.path.dirname(SCRIPT), "lib", "env.sh"),
+                     os.path.join(self.root, "scripts", "lib", "env.sh"))
         self.state_dir = os.path.join(self.root, ".harvest")
         self.pidfile = os.path.join(self.state_dir, "harvester.pid")
         self.log = os.path.join(self.state_dir, "harvest.log")
@@ -124,6 +146,21 @@ class StartTests(LauncherTestCase):
         self.assertTrue(os.path.exists(self.pidfile))
         self.assertTrue(self.alive(self.read_pid()))
         self.assertIn("harvester UP", out.stdout)
+
+    def test_a_refusal_at_start_is_named_by_its_exit_code(self):
+        # harvest.py exits 2 for a missing file or setting and 3 for a held lock; a start
+        # that sees the process gone names the kind, so a caller need not read the log.
+        # 1 is the ledger's refusal or any crash, so its line names both and points at the log.
+        for code, words in ((1, "refused to start (its ledger) or crashed: see the log"),
+                            (2, "a file or setting it needs is missing"),
+                            (3, "another ledger/state writer holds the lock")):
+            with self.subTest(code=code):
+                self.fake_interpreter(body="#!/bin/sh\nexit %d\n" % code)
+                out = self.start()
+                self.assertEqual(out.returncode, 1, out.stderr)
+                self.assertIn(words, out.stderr)
+                self.assertIn("(exit %d)" % code, out.stderr)
+                self.assertFalse(os.path.exists(self.pidfile))
 
     def test_a_stale_pidfile_is_cleared_and_the_start_goes_ahead(self):
         """The ordinary aftermath of a crash or a reboot: a pid that names nothing."""
@@ -215,10 +252,12 @@ class HarvestTakesWhatTheLauncherForwards(LauncherTestCase):
         from unittest import mock
         sys.path.insert(0, os.path.join(os.path.dirname(HERE), "scripts"))
         self.addCleanup(sys.path.remove, sys.path[0])
-        try:
-            import harvest
-        except Exception as exc:        # librosa/numba absent -> not this test's job
-            self.skipTest("harvest.py does not import here: %s" % exc)
+        sys.path.insert(0, HERE)                     # sibling test helpers
+        self.addCleanup(sys.path.remove, HERE)
+        from optional_imports import import_or_skip
+        harvest = import_or_skip("harvest")   # any error but a missing library fails here
+        if harvest is None:
+            self.skipTest("harvest.py needs the audio libraries (.venv) -- skipping")
 
         class Parsed(Exception):
             pass
@@ -269,7 +308,8 @@ class HarvestTakesWhatTheLauncherForwards(LauncherTestCase):
 
 
 class EnvFileTests(LauncherTestCase):
-    """The repo's .env is read, and its absence is not an error."""
+    """The repo's .env is read through scripts/lib/env.sh: never executed, a variable already set
+    wins over it, and its absence is not an error."""
 
     def test_the_env_file_supplies_the_interpreter(self):
         fake = self.fake_interpreter(path="elsewhere/python")   # NOT at .venv/bin/python
@@ -278,6 +318,33 @@ class EnvFileTests(LauncherTestCase):
         out = self.start()
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn(fake, out.stdout)
+
+    def test_a_leading_tilde_in_the_interpreter_is_expanded(self):
+        # A sourced .env expanded `~` on assignment; read, it stays literal until the launcher
+        # expands it (HOME is the scratch root here).
+        fake = self.fake_interpreter(path="venvs/x/bin/python")
+        with open(os.path.join(self.root, ".env"), "w") as fh:
+            fh.write("NETRADIO_PYTHON=~/venvs/x/bin/python\n")
+        out = self.start()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn(fake, out.stdout)
+
+    def test_the_environment_wins_over_the_file(self):
+        fake = self.fake_interpreter(path="elsewhere/python")
+        with open(os.path.join(self.root, ".env"), "w") as fh:
+            fh.write("NETRADIO_PYTHON=/no/such/python\n")
+        out = self.start(env={"NETRADIO_PYTHON": fake})
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn(fake, out.stdout)
+
+    def test_the_file_is_read_never_executed(self):
+        self.fake_interpreter()
+        marker = os.path.join(self.root, "ran")
+        with open(os.path.join(self.root, ".env"), "w") as fh:
+            fh.write("NETRADIO_X=$(touch %s)\ntouch %s\n" % (marker, marker))
+        out = self.start()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertFalse(os.path.exists(marker))
 
     def test_no_env_file_is_a_normal_state(self):
         self.assertFalse(os.path.exists(os.path.join(self.root, ".env")))
@@ -440,6 +507,20 @@ class StatusTests(LauncherTestCase):
         self.assertIn("  alert:  the ledger and its rebuild differ on 30 of 120 keys, start "
                       "refused (since 2026-09-03T09:00:00Z)", out.stdout)
 
+    def test_an_unreadable_ledger_alert_says_what_to_do_not_a_rebuild_count(self):
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
+            json.dump({"sig_alert": {"at": "2026-10-27T09:00:00Z", "kind": "ledger",
+                                     "unreadable": True,
+                                     "why": "the ledger (x) exists but cannot be read"}},
+                      fh, indent=2)
+        out = self.run_cmd("status")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("  alert:  the ledger cannot be read, nothing is signed: restore it from "
+                      "a backup, repair it, fix its permissions, or move it aside "
+                      "(since 2026-10-27T09:00:00Z)", out.stdout)
+        self.assertNotIn("rebuild differ", out.stdout)
+
     def test_no_alert_line_without_a_standing_alert(self):
         os.makedirs(self.state_dir, exist_ok=True)
         with open(os.path.join(self.state_dir, "state.json"), "w") as fh:
@@ -521,8 +602,8 @@ class StatusTests(LauncherTestCase):
 
     def test_a_garbled_ledger_is_not_reported_as_nothing_signed(self):
         """A ledger the counter finds no rows in is "nothing signed yet" only when it really
-        is `{}`. harvest.py treats a ledger it cannot parse as empty, so `status` is where a
-        garbled one has to show."""
+        is `{}`. harvest.py refuses to start on a ledger it cannot parse, and `status` must
+        not call a garbled one empty."""
         for data in (b"not json at all\n", bytes(range(256)), b"", b"{}x"):
             with self.subTest(data=data[:12]):
                 self.write_raw(data)
@@ -634,7 +715,7 @@ class ConcurrentStartTests(LauncherTestCase):
     launch, and the second one's pidfile write buries the first one's. `harvest.py` would
     then refuse the loser at its own flock -- no data is ever corrupted -- but the loser's
     cleanup could carry off the WINNER's registration, leaving a harvester running for
-    weeks that `status` calls DOWN and `stop` cannot stop. The lock directory is what makes
+    weeks that `status` calls DOWN and `stop` cannot stop. The start lock is what makes
     that impossible; these two tests are its ends.
     """
 
@@ -647,11 +728,88 @@ class ConcurrentStartTests(LauncherTestCase):
 
     def test_a_start_is_refused_while_another_holds_the_lock(self):
         self.fake_interpreter()
+        os.makedirs(self.state_dir, exist_ok=True)
+        lock = os.path.join(self.state_dir, "harvester.start.lock")
+        open(lock, "w").close()
+        out = self.run_cmd("start")
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("another start is in flight", out.stderr)
+        self.assertFalse(os.path.exists(self.pidfile))
+        self.assertTrue(os.path.exists(lock), "a refused start must not take the other's lock")
+
+    def test_a_lock_directory_left_by_an_older_launcher_still_refuses(self):
+        self.fake_interpreter()
         os.makedirs(os.path.join(self.state_dir, "harvester.start.lock"))
         out = self.run_cmd("start")
         self.assertNotEqual(out.returncode, 0)
         self.assertIn("another start is in flight", out.stderr)
         self.assertFalse(os.path.exists(self.pidfile))
+
+    def test_the_lock_is_released_after_a_start(self):
+        self.fake_interpreter()
+        self.assertEqual(self.start().returncode, 0)
+        self.assertFalse(os.path.exists(os.path.join(self.state_dir, "harvester.start.lock")))
+
+    def test_a_mkdir_that_always_succeeds_does_not_open_the_lock(self):
+        # Ubuntu 26.04's uutils `mkdir` 0.10.0 reports success to both of two racing calls. A
+        # `mkdir` that succeeds whatever is asked stands in for it: a held lock must still refuse.
+        self.fake_interpreter()
+        fakebin = os.path.join(self.root, "fakebin")
+        os.makedirs(fakebin)
+        real = shutil.which("mkdir")
+        with open(os.path.join(fakebin, "mkdir"), "w") as fh:
+            fh.write('#!/bin/sh\ncase " $* " in *" -p "*) exec %s "$@" ;; esac\nexit 0\n' % real)
+        os.chmod(os.path.join(fakebin, "mkdir"), 0o755)
+        os.makedirs(self.state_dir, exist_ok=True)
+        open(os.path.join(self.state_dir, "harvester.start.lock"), "w").close()
+        out = self.run_cmd("start", env={"PATH": fakebin + os.pathsep + os.environ["PATH"]})
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("another start is in flight", out.stderr)
+        self.assertFalse(os.path.exists(self.pidfile))
+
+    def test_the_lock_is_released_after_a_failed_start(self):
+        self.fake_interpreter(body="#!/bin/sh\nexit 2\n")
+        self.assertNotEqual(self.run_cmd("start").returncode, 0)
+        self.assertFalse(os.path.lexists(os.path.join(self.state_dir, "harvester.start.lock")))
+
+    def test_a_refusal_names_the_lock_s_holder(self):
+        self.fake_interpreter()
+        os.makedirs(self.state_dir, exist_ok=True)
+        with open(os.path.join(self.state_dir, "harvester.start.lock"), "w") as fh:
+            fh.write("%d\n" % os.getpid())
+        out = self.run_cmd("start")
+        self.assertIn("the lock names pid %d, running" % os.getpid(), out.stderr)
+        self.assertIn("rm -f", out.stderr)
+
+    def test_a_leftover_lock_directory_is_told_to_rmdir(self):
+        self.fake_interpreter()
+        os.makedirs(os.path.join(self.state_dir, "harvester.start.lock"))
+        self.assertIn("rmdir", self.run_cmd("start").stderr)
+
+    def test_a_term_mid_start_ends_the_start_and_releases_the_lock(self):
+        self.fake_interpreter()
+        lock = os.path.join(self.state_dir, "harvester.start.lock")
+        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": self.root}
+        proc = subprocess.Popen([self.script, "start"], env=env, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True)
+        deadline = time.time() + 10               # mid-start: the harvester is launched and
+        while not os.path.exists(self.pidfile) and time.time() < deadline:   # registered, and
+            time.sleep(0.01)                          # the launcher is still checking on it
+        self.assertTrue(os.path.exists(lock), "the start should still hold its lock")
+        proc.send_signal(signal.SIGTERM)
+        proc.communicate(timeout=30)
+        if os.path.exists(self.pidfile):
+            self._started.append(self.read_pid())      # its harvester, if it got that far
+        self.assertEqual(proc.returncode, 143)
+        self.assertFalse(os.path.lexists(lock))
+
+    def test_a_fifo_at_the_lock_path_refuses_without_hanging(self):
+        self.fake_interpreter()
+        os.makedirs(self.state_dir, exist_ok=True)
+        os.mkfifo(os.path.join(self.state_dir, "harvester.start.lock"))
+        out = self.run_cmd("start")
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("another start is in flight", out.stderr)
 
     def test_two_starts_at_once_leave_one_harvester_and_one_pidfile(self):
         self.fake_interpreter()
@@ -672,7 +830,9 @@ class ConcurrentStartTests(LauncherTestCase):
         self.assertEqual(len(results), 2)
         winners = [r for r in results if r.returncode == 0]
         self.assertEqual(len(winners), 1,
-                         "exactly one start should succeed: %s" % [r.stderr for r in results])
+                         "exactly one start should succeed: %s"
+                         % [{"rc": r.returncode, "stdout": r.stdout, "stderr": r.stderr}
+                            for r in results])
         # The invariant that matters: whatever is up is what the pidfile names, so `status`
         # can see it and `stop` can stop it.
         self.assertTrue(os.path.exists(self.pidfile), "the live harvester lost its pidfile")
@@ -729,6 +889,103 @@ class UsageTests(LauncherTestCase):
             "start [--accept-ledger-rebuild]|stop|restart [--accept-ledger-rebuild]|status|help",
             out.stdout,
         )
+
+
+# A stand-in that runs the real stamp check when the launcher asks for it, and otherwise stays
+# up like FAKE_PY. The launcher runs `$PYTHON <root>/scripts/rulings_stamp.py`. The `exit 0`
+# after the sleep keeps a shell that execs its last command from replacing itself with
+# `sleep`, which would take `harvest.py` off the process's command line.
+STAMP_PY = (
+    "#!/bin/sh\n"
+    "case \"$1\" in */rulings_stamp.py) exec %s \"$@\" ;; esac\n"
+    "sleep 30\n"
+    "exit 0\n" % sys.executable
+)
+STAMP_SRC = os.path.join(os.path.dirname(HERE), "scripts", "rulings_stamp.py")
+REQUIRE = {"NETRADIO_RULINGS_STAMP": "require"}
+
+
+class RulingsStampTests(LauncherTestCase):
+    """With NETRADIO_RULINGS_STAMP=require, `start` and `restart` refuse (exit 2, one line
+    saying what to do) unless the stamp names the bytes the rulings file holds now. Off, the
+    launcher never looks."""
+
+    def setUp(self):
+        super().setUp()
+        shutil.copy2(STAMP_SRC, os.path.join(self.root, "scripts", "rulings_stamp.py"))
+        shutil.copy2(os.path.join(os.path.dirname(STAMP_SRC), "envfile.py"),   # its .env reader
+                     os.path.join(self.root, "scripts", "envfile.py"))
+        os.makedirs(os.path.join(self.root, "data"))
+        self.rulings = os.path.join(self.root, "data", "rulings.json")
+        self.stamp = os.path.join(self.state_dir, "rulings-stamp.json")
+        with open(self.rulings, "wb") as fh:
+            fh.write(b'{"u0123456789abcdef0123": "not_a_match"}\n')
+        self.fake_interpreter(body=STAMP_PY)
+
+    def write_stamp(self, text=None):
+        import hashlib
+        os.makedirs(self.state_dir, exist_ok=True)
+        if text is None:
+            with open(self.rulings, "rb") as fh:
+                text = json.dumps({"sha256": hashlib.sha256(fh.read()).hexdigest(),
+                                   "written_at": "2026-10-27T03:00:00Z",
+                                   "writer": {"pid": 1, "host": "h", "program": "p"}})
+        with open(self.stamp, "w") as fh:
+            fh.write(text)
+
+    def assertRefused(self, out, *words, todo="write it again"):
+        self.assertEqual(out.returncode, 2, out.stdout + out.stderr)
+        self.assertIn("refusing to start the harvester", out.stderr)
+        self.assertIn(todo, out.stderr, "the refusal says what to do")
+        for w in words:
+            self.assertIn(w, out.stderr)
+        self.assertFalse(os.path.exists(self.pidfile), "nothing was started")
+
+    def test_a_matching_stamp_lets_the_start_through(self):
+        self.write_stamp()
+        out = self.start(env=REQUIRE)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("harvester UP", out.stdout)
+
+    def test_an_absent_stamp_is_refused(self):
+        self.assertRefused(self.start(env=REQUIRE), "absent", self.stamp)
+
+    def test_an_unreadable_stamp_is_refused(self):
+        self.write_stamp("{not json")
+        self.assertRefused(self.start(env=REQUIRE), "unreadable")
+
+    def test_a_stamp_naming_other_bytes_is_refused(self):
+        self.write_stamp()
+        with open(self.rulings, "ab") as fh:        # a pull put other bytes in place
+            fh.write(b" ")
+        self.assertRefused(self.start(env=REQUIRE), "has changed since its last write")
+
+    def test_a_misspelt_setting_is_refused(self):
+        self.assertRefused(self.start(env={"NETRADIO_RULINGS_STAMP": "requre"}),
+                           "NETRADIO_RULINGS_STAMP", todo="`require` or `off`")
+
+    def test_the_setting_off_skips_the_check(self):
+        for env in ({}, {"NETRADIO_RULINGS_STAMP": ""}, {"NETRADIO_RULINGS_STAMP": "off"}):
+            with self.subTest(env=env):
+                out = self.start(env=env)           # no stamp at all
+                self.assertEqual(out.returncode, 0, out.stderr)
+                self.assertEqual(self.run_cmd("stop").returncode, 0)
+
+    def test_the_setting_in_env_file_is_read(self):
+        with open(os.path.join(self.root, ".env"), "w") as fh:
+            fh.write("NETRADIO_RULINGS_STAMP=require\n")
+        self.assertRefused(self.start(), "absent")
+
+    def test_a_refused_restart_leaves_the_running_harvester_up(self):
+        self.write_stamp()
+        self.assertEqual(self.start(env=REQUIRE).returncode, 0)
+        pid = self.read_pid()
+        os.unlink(self.stamp)
+        out = self.run_cmd("restart", env=REQUIRE)
+        self.assertEqual(out.returncode, 2, out.stderr)
+        self.assertIn("absent", out.stderr)
+        self.assertTrue(self.alive(pid))
+        self.assertEqual(self.read_pid(), pid)
 
 
 if __name__ == "__main__":

@@ -22,7 +22,9 @@ Two files tell the harvester what not to do:
   READS it — the keys alone — and re-reads it every pass. An empty `{}` is valid: nothing is
   ruled out. A run refuses while the file is
   absent or unreadable — a search that has forgotten every ruling hands back records already
-  rejected.
+  rejected. With `NETRADIO_RULINGS_STAMP=require`, a run also refuses unless the rulings file's
+  stamp, `.harvest/rulings-stamp.json`, names the exact bytes the file holds now (see
+  scripts/rulings_stamp.py).
 * `.harvest/PAUSED` — the pause flag, noticed within one pass.
 
 The idea
@@ -84,6 +86,7 @@ import chroma_recipe                                 # noqa: E402  (THE recipe, 
 import memwatch                                      # noqa: E402  (footprint + allocator canary)
 import selftest                                      # noqa: E402  (the canary; see run())
 import sigstore                                      # noqa: E402  (bucket = the pool's only home)
+import rulings_stamp                                 # noqa: E402  (the rulings file's stamp)
 
 HOME = _gt.REPO_ROOT
 STATE_DIR = os.path.join(HOME, ".harvest")
@@ -99,9 +102,9 @@ PAUSE = os.path.join(STATE_DIR, "PAUSED")
 RULINGS = os.path.join(HOME, "data", "rulings.json")
 
 # The directories of audio to sign: one or more absolute paths, `:`-separated, read at import
-# (the wrapper sources `.env` before any import). The loop reads the TOP LEVEL of each and
-# writes nothing into any of them -- a subdirectory is never read, so a directory's own
-# scratch can sit one level down and stay invisible. A listed directory that does not exist
+# (the launcher loads `.env`, through scripts/lib/env.sh, before any import). The loop reads the
+# TOP LEVEL of each and writes nothing into any of them -- a subdirectory is never read, so a
+# directory's own scratch can sit one level down and stay invisible. A listed directory that does not exist
 # is skipped with a row in the issues list, so a typo in `.env` is visible rather than silent.
 HARVEST_DIRS = os.environ.get("NETRADIO_HARVEST_DIRS", "")
 
@@ -222,14 +225,22 @@ def register_caches():
     # variable families as read.
     # The age limit applies only while the bucket is configured: with no bucket, the local
     # file is the signature's only home, and `_chroma_pinned` holds every one of them anyway.
-    cache_budget.register("chroma",
-                         max_age=CHROMA_CACHE_MAX_AGE_DAYS if sigstore.enabled() else None,
-                         pinned=_chroma_pinned,
-                         refill="bucket:chroma/", rank=4)
-    cache_budget.register("candidates", cap=CANDIDATES_CACHE_CAP, order="by-score",
-                         score=_excerpt_score, max_age=KEEP_TTL_DAYS,
-                         pinned=_excerpt_pinned,
-                         refill="on-play", rank=10)
+    # A refused directory raises; it is printed and that cache stays unregistered, which the
+    # harvester's start refuses (its directory reads None).
+    try:
+        cache_budget.register("chroma",
+                             max_age=CHROMA_CACHE_MAX_AGE_DAYS if sigstore.enabled() else None,
+                             pinned=_chroma_pinned,
+                             refill="bucket:chroma/", rank=4)
+    except cache_budget.CacheRefused as exc:
+        print(exc)
+    try:
+        cache_budget.register("candidates", cap=CANDIDATES_CACHE_CAP, order="by-score",
+                             score=_excerpt_score, max_age=KEEP_TTL_DAYS,
+                             pinned=_excerpt_pinned,
+                             refill="on-play", rank=10)
+    except cache_budget.CacheRefused as exc:
+        print(exc)
     CACHE = _CACHE_AT_IMPORT = cache_budget.dir_of(CHROMA_CACHE)
     KEEP = _KEEP_AT_IMPORT = cache_budget.dir_of(CANDIDATES_CACHE)
 
@@ -256,12 +267,11 @@ def _keep_dir():
     cache is dark."""
     return KEEP if KEEP is not _KEEP_AT_IMPORT else cache_budget.dir_of(CANDIDATES_CACHE)
 
-# THE ledger/state writer lock. run() and the on-demand --sign-one -- the two paths that take
-# it -- each hold this flock for their lifetime, so a second of them refuses loudly instead of
-# interleaving their writes of ledger.json and state.json. The rare hand tool --forget also
-# rewrites state.json, with no lock: use it on a stopped run, since beside a live one it can
-# interleave. The path keeps its historic name (collector.lock), so a writer still running under
-# an old binary and this one still exclude each other.
+# THE ledger/state writer lock. Every path that writes ledger.json or state.json takes it and
+# holds it for its lifetime: run(), the on-demand --sign-one, --rescan and the two hand tools
+# --purge-audio and --forget. A second of them refuses loudly instead of interleaving its writes
+# with the first. The path keeps its historic name (collector.lock), so a writer still running
+# under an old binary and this one still exclude each other.
 WRITER_LOCK = os.path.join(STATE_DIR, "collector.lock")
 
 
@@ -276,6 +286,12 @@ def acquire_writer_lock():
         fh.close()
         return None
     return fh
+
+
+# THE EXIT CODE OF A REFUSAL, so the process that started this one tells a refusal from a clean
+# stop (0) without reading the log. 1 stays the ledger's refusal, and any crash exits 1 too.
+EXIT_CONFIG = 2      # a file or setting the run needs is missing: rulings, a cache, directories
+EXIT_LOCKED = 3      # another ledger/state writer holds the lock
 
 HOP = chroma_recipe.HOP          # single source: chroma_recipe.py
 # THE QUERY: a mystery clip is asked as 120 s windows, a new one every 15 s, the last placed to
@@ -363,7 +379,7 @@ MAX_DURATION_S = 4 * 3600
 # the pause notice says "within ~20s" and a ruling must reach the search within one pass.
 PASS_GAP_S = 20.0
 
-register_caches()                 # at import: the wrapper sources .env before any import
+register_caches()                 # at import: the launcher loads .env before any import
 
 # --- the key ------------------------------------------------------------------------------------
 #
@@ -994,6 +1010,61 @@ def load_ledger():
     return ledger
 
 
+def ledger_unreadable():
+    """Why the ledger file cannot be used, or None when it can (or does not exist yet).
+
+    `load_ledger` reads a file it cannot parse as empty, and an empty ledger is the first
+    start's cue to seed from the bucket. A file that EXISTS and does not parse (a write cut
+    short by a full disk, a truncated restore, a hand edit) is not a first start: seeding over
+    it would drop every `delayed` verdict and every signed row's `size` and `mtime`, with no
+    refusal. So every writer start asks this first and refuses on an answer, and so
+    does every sign before it saves a row, and the loop once a pass. An answer that begins
+    with `LEDGER_NOT_OPENED` is an error opening or reading the file, not its content."""
+    try:
+        with open(LEDGER, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return None
+    except ValueError as exc:                # a parse error, or bytes that are not UTF-8
+        return "it is not valid JSON: %s" % exc
+    except OSError as exc:
+        return "%s: %s" % (LEDGER_NOT_OPENED, exc)
+    if not isinstance(data, dict):
+        return "it holds %s, not an object of rows" % _json_kind(data)
+    return None
+
+
+LEDGER_NOT_OPENED = "it could not be opened or read"
+
+
+def _json_kind(value):
+    """What a parsed JSON value is, in JSON's own words."""
+    if value is None:
+        return "JSON null"
+    if isinstance(value, bool):
+        return "a JSON true or false"
+    if isinstance(value, (int, float)):
+        return "a JSON number"
+    if isinstance(value, str):
+        return "a JSON string"
+    return "a JSON array"
+
+
+def ledger_unreadable_why(reason, running=False):
+    """The refusal printed for an unreadable ledger: what is wrong and what to do. `running`
+    is the loop's stop, not a start's refusal."""
+    head = ("the ledger (%s) exists but cannot be read (%s). %s: reading it as empty would "
+            "seed it again from the bucket listing and lose every delayed verdict and every "
+            "signed row's size and mtime. "
+            % (LEDGER, reason, "Stopping the run" if running else "Not starting"))
+    if reason.startswith(LEDGER_NOT_OPENED):
+        return head + ("Check the file's permissions and the disk it is on, then start "
+                       "again.")
+    return head + ("Restore it from a backup, or repair it by hand. If it cannot be saved, "
+                   "move it aside (for example to ledger.json.torn) and start again: an "
+                   "absent ledger is seeded from the bucket.")
+
+
 def _clean_row_fields(ledger):
     """Give every row's sidecar fields the types `_sidecar_row_fields` allows, in place; how
     many rows changed. A row written before those types were enforced may carry a nested
@@ -1096,13 +1167,49 @@ def _alert_kind(alert):
     return "store" if "missing" in alert else None
 
 
+def _ledger_unreadable_alert(state):
+    """True when the state's standing alert is the unreadable-ledger refusal."""
+    alert = state.get("sig_alert")
+    return isinstance(alert, dict) and bool(alert.get("unreadable"))
+
+
+def _raise_unreadable_alert(state, reason, running=False):
+    """Stand the unreadable-ledger alert in `state` (one issues row, not one per start) and
+    return the refusal's text. The caller saves the state."""
+    why = ledger_unreadable_why(reason, running)
+    first = not _ledger_unreadable_alert(state)
+    state["sig_alert"] = {"at": _now(), "kind": "ledger", "unreadable": True, "why": why}
+    if first:
+        state["issues"] = ((state.get("issues") or []) +
+                           [{"at": _now(), "issue": "ledger: " + why}])[-50:]
+    return why
+
+
+def _stop_on_unreadable_ledger(state):
+    """True, with the alert raised and the state saved, when the ledger has become
+    unreadable under a running writer. The start's check covers only the start: a restore
+    or a hand edit can tear the file mid-run, and the loop would then read it as empty."""
+    reason = ledger_unreadable()
+    if reason is None:
+        return False
+    why = _raise_unreadable_alert(state, reason, running=True)
+    state["current"] = None
+    _save(STATE, state)
+    print("!! " + why)
+    return True
+
+
 def reconcile_ledger(state=None, accept_rebuild=False):
     """Seed the ledger at first start; at every later writer start, rebuild it from the
     bucket's listing, compare, and merge the rebuild in. This replaces the old lost-signature
     recovery: the `done` lists are gone, and the listing is the only record of what is signed.
 
-      * the ledger is EMPTY -> seed one `signed` row per complete bucket key, `size` and
-        `mtime` empty: the ledger is the complete record of the pool from its first day.
+      * the ledger file EXISTS but cannot be parsed (`ledger_unreadable`) -> REFUSE the start,
+        before anything is written: a standing `sig_alert` of kind `ledger` with
+        `unreadable` set says what to do. It is never read as empty and never re-seeded.
+      * the ledger is EMPTY (absent, or `{}`) -> seed one `signed` row per complete bucket
+        key, `size` and `mtime` empty: the ledger is the complete record of the pool from its
+        first day.
       * otherwise the listing's rows are written to `ledger.rebuild.json` beside the ledger
         and compared with it (`ledger_rebuild_diff`). A difference past
         `NETRADIO_LEDGER_REBUILD_MAX_DIFF_PCT` (default 10) REFUSES the start: a standing
@@ -1138,6 +1245,18 @@ def reconcile_ledger(state=None, accept_rebuild=False):
     res = {"seeded": 0, "merged": 0, "dropped": 0, "restored": 0, "sidecar_lost": 0,
            "promoted": 0, "cleaned": 0, "reported": False, "refused": False,
            "cleared": False}
+    # A LEDGER THAT EXISTS AND DOES NOT PARSE is a lost ledger, not a first start: refuse
+    # before anything (the cleaning save, the seed) can write over it. The standing alert is
+    # kind `ledger`, like the rebuild refusal's, so the notices path shows it; it stands down
+    # on the first start that finds a readable or absent ledger.
+    unreadable = ledger_unreadable()
+    if unreadable is not None:
+        if state is None:
+            state = _load(STATE, blank_state())
+        return dict(res, refused=True, why=_raise_unreadable_alert(state, unreadable))
+    if state is not None and _ledger_unreadable_alert(state):
+        state.pop("sig_alert", None)
+        res["cleared"] = True                 # the ledger reads again (or was moved aside)
     raw = _load(LEDGER, {})
     if isinstance(raw, dict):
         res["cleaned"] = _clean_row_fields(raw)
@@ -1568,6 +1687,15 @@ def sign_file(path, issues=None, publish=True, said=None):
                                         "it comes back" % os.path.basename(path)})
             return None, None
 
+        # A LEDGER TORN DURING THE DECODE is not read as empty: the row saved over it would
+        # be a one-row ledger in place of the whole record. No row; the caller stops.
+        torn = ledger_unreadable()
+        if torn is not None:
+            if issues is not None:
+                issues.append({"at": _now(), "key": key,
+                               "issue": "the ledger cannot be read (%s) -- no row written "
+                                        "over it for %s" % (torn, os.path.basename(path))})
+            return None, None
         ledger = load_ledger()
         if not publish:
             # The canary's re-sign: no new row, ever. On success the existing row's
@@ -1796,7 +1924,10 @@ def migrate_query_shape(state):
     for m in state.get("matches") or []:
         dropped += 1
         path = m.get("audio") if isinstance(m, dict) else None
-        if path:
+        # A dark or refused `candidates` cache deletes nothing, and never raises (an
+        # unregistered name is a KeyError while the policy is on): this runs before the start's
+        # dark check.
+        if path and cache_budget.registered(CANDIDATES_CACHE):
             cache_budget.remove(CANDIDATES_CACHE, path, "query-shape-changed")
     state["matches"] = []
     state["kept"] = 0                 # no row names an excerpt any more
@@ -2328,9 +2459,12 @@ def evict_overfull(state, num):
         if not path:
             continue
         # Through the policy's one door: the removal is recorded with its reason, refuses a
-        # path outside the cache, and -- while the policy is dark -- deletes nothing (a refused
-        # `kept` count is honest either way: the row is gone, and the file stays where it is).
-        if cache_budget.remove(CANDIDATES_CACHE, path, "board-overfull"):
+        # path outside the cache, and -- while the policy is dark, or `candidates` is refused --
+        # deletes nothing (a refused `kept` count is honest either way: the row is gone, and the
+        # file stays where it is). An unregistered name would raise KeyError, so it is asked
+        # `registered()` first: `--rescan` reaches here with no dark check.
+        if (cache_budget.registered(CANDIDATES_CACHE)
+                and cache_budget.remove(CANDIDATES_CACHE, path, "board-overfull")):
             state["kept"] -= 1
 
 
@@ -2400,7 +2534,8 @@ def drop_ruled_excerpts(state, ruled):
         # The row stops carrying its audio whatever the policy answers (already gone, dark,
         # pinned): the ruling is the reason the audio existed, and that reason is spent. The
         # removal itself is the policy's to make and to record.
-        cache_budget.remove(CANDIDATES_CACHE, path, "ruled-on")
+        if cache_budget.registered(CANDIDATES_CACHE):
+            cache_budget.remove(CANDIDATES_CACHE, path, "ruled-on")
         state["kept"] = max(0, state.get("kept", 0) - 1)
         dropped += 1
     return dropped
@@ -2624,10 +2759,18 @@ def run(args):
     install_signal_handlers()
     lock = acquire_writer_lock()
     if lock is None:
-        print("another ledger/state writer is running (another harvest.py --run) -- "
+        print("another ledger/state writer holds the lock (harvest.py --run, --rescan, "
+              "--sign-one, --forget or --purge-audio) -- "
               "ONE writer, always. Not starting.")
-        return
+        return EXIT_LOCKED
     state = _load(STATE, blank_state())
+    # THE RULINGS FILE'S STAMP, when the setting asks for it: a merge or a pull can put an older
+    # committed copy of the rulings file back, and the stamp is how its writer says which bytes
+    # it wrote. Off by default (scripts/rulings_stamp.py), and the same check the launcher makes.
+    why = rulings_stamp.check(RULINGS, os.path.join(STATE_DIR, rulings_stamp.STAMP_NAME))
+    if why:
+        print("refusing to start: " + why)
+        return EXIT_CONFIG
     # THE RETIRED SET IS A FILE ANOTHER PROCESS WRITES: every key this search must never
     # propose again lives in the rulings file, so without it the run has no way to know what
     # it has already been told to stop looking at -- and a search that has forgotten every
@@ -2638,7 +2781,7 @@ def run(args):
         print("the rulings file (%s) is absent or unreadable: the search has no way to know which "
               "keys it must never propose again. Put the file back in place and start again."
               % RULINGS)
-        return
+        return EXIT_CONFIG
     # THE OLD ROWS MOVE ONTO KEYS before anything reads them: every reader joins on the key,
     # and a row still carrying its url is invisible to that join.
     moved = migrate_matches(state)
@@ -2668,7 +2811,7 @@ def run(args):
               "refused): the harvester has nowhere to keep a signature or an excerpt.\n"
               "Set NETRADIO_CACHE_ROOT in .env (see .env.example) and start again."
               % (" and the ".join(dark), "is" if len(dark) == 1 else "are"))
-        return
+        return EXIT_CONFIG
     # NO DIRECTORIES, NOTHING TO SIGN, EVER. Refuse here, naming the setting, rather than
     # idling forever over an unset variable -- the same refusal a dark cache earns. A
     # relative entry is refused by name in the issues row the gate collects, so an operator
@@ -2682,7 +2825,7 @@ def run(args):
               "`:`-separated) in .env -- see .env.example and docs/HARVEST_FEED.md -- and "
               "start again.")
         _save(STATE, state)
-        return
+        return EXIT_CONFIG
     print("# searching for Mystery Tracks %s"
           % (", ".join(str(n) for n, _, _ in qs) or "none"))
     print("# signing the top level of %d director%s, one file a pass. Ctrl-C or SIGTERM stops "
@@ -2756,6 +2899,8 @@ def run(args):
                 return _stopped(state)
             continue
 
+        if _stop_on_unreadable_ledger(state):
+            return 1
         ledger = load_ledger()
         # Re-read the rulings file every pass, before anything consumes it: a ruling in the file
         # must reach this search within one loop iteration. Unreadable is NOT "nothing ruled" --
@@ -2773,7 +2918,7 @@ def run(args):
             _save(STATE, state)
             print("!! the rulings file (%s) could not be read -- stopping this run. Put the file "
                   "back in place and start again." % RULINGS)
-            return
+            return EXIT_CONFIG
 
         # A ruling spends the excerpt: the audio existed to let the human make the call, and the
         # call has been made. Drop it now, not at the 30-day sweep.
@@ -2909,6 +3054,9 @@ def run(args):
             samples = None
             _save(STATE, state)
             return
+        if _stop_on_unreadable_ledger(state):
+            samples = None
+            return 1
 
         row = load_ledger().get(rec_file["key"]) or {}
         if row.get("status") == "signed":
@@ -3029,38 +3177,52 @@ def main():
         return 0
 
     os.makedirs(STATE_DIR, exist_ok=True)
-    if args.purge_audio:
-        print(purge_audio())
-        return
-    if args.forget:
-        state = _load(STATE, blank_state())
-        leads, pairs = forget(state, args.forget)
-        _save(STATE, state)
-        print("# forgot MT%d: dropped %d lead(s) and %d scored pairing(s)."
-              % (args.forget, leads, pairs))
-        print("# Cut a better clip and it re-enters the search by itself, against every held "
-              "signature.")
-        return
+    # THE TWO HAND TOOLS ARE WRITERS TOO: each loads the state file, changes it and saves it.
+    # The run holds its state in memory and saves it every pass, so beside a live run the
+    # run's next save undoes the tool's change (or the tool's save discards the run's pass).
+    # Each takes the writer lock and refuses while another writer holds it.
+    if args.purge_audio or args.forget:
+        lock = acquire_writer_lock()
+        if lock is None:
+            print("# a ledger/state writer is RUNNING (harvest.py --run, --rescan, --sign-one, "
+                  "--forget or --purge-audio holds the lock) -- not %s under "
+                  "it: its next save would undo the change. Stop that writer first, then "
+                  "run this again." % ("purging the excerpts" if args.purge_audio
+                                       else "forgetting MT%d" % args.forget))
+            return 1
+        with lock:                           # released as the tool ends
+            if args.purge_audio:
+                print(purge_audio())
+                return
+            state = _load(STATE, blank_state())
+            leads, pairs = forget(state, args.forget)
+            _save(STATE, state)
+            print("# forgot MT%d: dropped %d lead(s) and %d scored pairing(s)."
+                  % (args.forget, leads, pairs))
+            print("# Cut a better clip and it re-enters the search by itself, against every "
+                  "held signature.")
+            return
     if args.sign_one and not _KEY.fullmatch(args.sign_one):
         print("# %r is not a key (u + 20 hex) -- a signature filed under it would be "
               "invisible to the pool's own listing; not signing" % args.sign_one)
-        return
+        return EXIT_CONFIG
     if args.sign_one:
         # The hand tool, and a writer: it takes the same lock, reconciles the ledger the same
         # way a run does, and signs through the same sign_file. It does not score -- scoring
         # is the loop's, and the next run's rescan finds the fresh row.
         lock = acquire_writer_lock()
         if lock is None:
-            print("# a ledger/state writer is RUNNING (a harvest.py --run) -- not signing "
+            print("# a ledger/state writer is RUNNING (harvest.py --run, --rescan, --sign-one, "
+                  "--forget or --purge-audio holds the lock) -- not signing "
                   "under it. Stop the writer first if you need this now.")
-            return
+            return EXIT_LOCKED
         state = _load(STATE, blank_state())
         if not _dirs(issues=state.setdefault("issues", [])):
             print("# NETRADIO_HARVEST_DIRS is unset, empty, or names no absolute directory: "
                   "--sign-one looks for the file in the configured directories. Name them in "
                   ".env (see .env.example) and try again.")
             _save(STATE, state)
-            return
+            return EXIT_CONFIG
         rec = reconcile_ledger(state, accept_rebuild=args.accept_ledger_rebuild)
         print("# ledger: %s" % rec["why"])
         # The same save a run makes after its reconcile, and for the same reason: an alert it
@@ -3087,6 +3249,8 @@ def main():
                 _save(STATE, state)          # the scan's refusal rows, the operator's answer
             return
         sign_file(path, issues=state.setdefault("issues", []))
+        if _stop_on_unreadable_ledger(state):
+            return 1
         row = load_ledger().get(args.sign_one) or {}
         if row.get("status") == "signed":
             print("# signed %s (%s)" % (args.sign_one, _LAST_CHILD.get("seconds")))
@@ -3105,7 +3269,7 @@ def main():
         # now met every mystery" -- a completion claim about work that never ran.
         if _chroma_dir() is None:
             print("# the signature cache is dark -- set NETRADIO_CACHE_ROOT in .env first.")
-            return
+            return EXIT_CONFIG
         # The same refusal run() makes: the rescan scores the corpus, and without the rulings
         # file it cannot know which keys it must never propose -- it would score records
         # already rejected and stamp `rescan_pending` over them.
@@ -3114,27 +3278,39 @@ def main():
             print("# the rulings file (%s) is absent or unreadable -- not rescanning: without it the "
                   "rescan cannot tell a ruled-out candidate from an active one. Put the file back "
                   "in place and start again." % RULINGS)
-            return
+            return EXIT_CONFIG
         # The corpus the rescan walks is the LEDGER, so a ledger that does not exist yet means
         # the harvester has never run under this contract -- and a rescan over nothing would
         # stamp the same completion over work that never ran.
         if not os.path.exists(LEDGER):
             print("# %s does not exist yet -- start the harvester once (it seeds the ledger "
                   "from the bucket) and re-run." % LEDGER)
-            return
+            return EXIT_CONFIG
         # ONE WRITER: the rescan rewrites the state file for hours, and so does the loop. Two
         # writers means the last save wins and the other's work is silently lost, so this
         # takes the loop's lock and refuses while the loop holds it -- as --sign-one does.
         lock = acquire_writer_lock()
         if lock is None:
-            print("# a ledger/state writer is RUNNING (a harvest.py --run) -- not rescanning "
+            print("# a ledger/state writer is RUNNING (harvest.py --run, --rescan, --sign-one, "
+                  "--forget or --purge-audio holds the lock) -- not rescanning "
                   "under it: the loop scores the same pairs a chunk each pass. Stop it first "
                   "if you want the rescan finished now.")
-            return
+            return EXIT_LOCKED
         # A Ctrl-C or SIGTERM raises the stop flag instead of killing the process mid-save;
         # rescan notices it between pairs and the state is saved below.
         install_signal_handlers()
         state = _load(STATE, blank_state())
+        # A ledger that does not parse would read as an empty corpus, and the rescan would
+        # stamp that same completion over nothing. Refuse, under the lock, with the same
+        # standing alert a run's start raises.
+        unreadable = ledger_unreadable()
+        if unreadable is not None:
+            print("# " + _raise_unreadable_alert(state, unreadable))
+            _save(STATE, state)
+            return 1
+        if _ledger_unreadable_alert(state):
+            state.pop("sig_alert", None)          # the ledger reads again: stand it down
+            _save(STATE, state)
         if migrate_query_shape(state) is not None:
             _save(STATE, state)
         ledger = load_ledger()
