@@ -1,7 +1,9 @@
 # Label-tooling dependencies: the Audacity export tooling, track-metadata build, Google Sheet
 # backup. `make venv` installs this file AND requirements-streamalign.txt (the alignment engine +
 # harvester: librosa, soundfile) into the one virtualenv, `.venv`.
-pyaudacity @ git+https://github.com/bwagner/pyaudacity
+# pyaudacity is pinned to a commit, not its branch, so an installed .venv can be checked against
+# this file offline. To move it: git ls-remote https://github.com/bwagner/pyaudacity HEAD
+pyaudacity @ git+https://github.com/bwagner/pyaudacity@4c8749167cf94b17079d38be10e739615249a8ad
 pydub
 audioop-lts; python_version >= "3.13"   # pydub imports audioop, removed from the stdlib in 3.13
 numpy
