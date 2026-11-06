@@ -54,13 +54,17 @@ STATE_DIR="$ROOT/.harvest"
 STATE="$STATE_DIR/state.json"
 LEDGER="$STATE_DIR/ledger.json"
 PIDFILE="$STATE_DIR/harvester.pid"          # this launcher's own; nothing else writes it
-# `start` runs under this lock directory. The pidfile alone cannot make two simultaneous
+# `start` runs under this lock file. The pidfile alone cannot make two simultaneous
 # starts resolve to one — both would look, both would see nothing, and both would launch;
 # harvest.py's flock would then kill the loser's child, and the loser's cleanup could carry
 # off the WINNER's pidfile with it, leaving a harvester running for weeks that `status`
-# calls DOWN and `stop` cannot stop. `mkdir` is atomic, so exactly one start gets past it.
-# A start holds it for about a second.
-LOCKDIR="$STATE_DIR/harvester.start.lock"
+# calls DOWN and `stop` cannot stop. The lock is taken by bash itself: a `noclobber`
+# redirect creates the file with an exclusive open, so exactly one start gets past it, and
+# anything already at the path (a file, or the directory an older launcher used) refuses.
+# Not `mkdir`: the uutils `mkdir` some systems ship reports success to both of two racing
+# calls (`mkdir (uutils coreutils) 0.10.0`: 104 races in 300). A start holds it for about a
+# second.
+LOCK="$STATE_DIR/harvester.start.lock"
 LOG="$STATE_DIR/harvest.log"
 # The log rotation, one generation: at a start, a harvest.log at or over the cap becomes
 # harvest.log.1 and a fresh harvest.log is opened. Between runs, not during one — a run
@@ -249,17 +253,63 @@ cmd_start() {
   # The lock first, then the real work: everything between "is one already running" and
   # "the pidfile names mine" has to be one start's alone.
   mkdir -p "$STATE_DIR"
-  if ! mkdir "$LOCKDIR" 2>/dev/null; then
-    echo "another start is in flight — leaving it to that one" >&2
-    echo "  (if none is, remove $LOCKDIR)" >&2
+  # Anything at the path refuses first: a file, the directory an older launcher used, and a
+  # FIFO, device or symlink, which a noclobber redirect would open without creating anything.
+  if [ -e "$LOCK" ] || [ -L "$LOCK" ]; then
+    lock_refusal
     return 1
   fi
-  trap 'rmdir "$LOCKDIR" 2>/dev/null || true' EXIT INT TERM
+  # Released on every way out, set BEFORE the lock is taken so no signal falls between the two;
+  # HELD keeps a start that never got the lock from removing someone else's. An interrupt also
+  # ends the start: carrying on after the lock is gone would let a second start in beside it.
+  HELD=0
+  trap 'release_lock' EXIT
+  trap 'release_lock; trap - EXIT; exit 130' INT
+  trap 'release_lock; trap - EXIT; exit 143' TERM
+  # The lock file holds the taker's pid, so a refusal can say who holds it.
+  local err
+  if ! err="$( { ( set -C; printf '%s\n' "$$" >"$LOCK" ); } 2>&1 )"; then
+    trap - EXIT INT TERM
+    if [ -e "$LOCK" ] || [ -L "$LOCK" ]; then
+      lock_refusal                  # another start took it between the check and the open
+    else
+      echo "cannot take the start lock $LOCK: ${err:-unknown error}" >&2
+    fi
+    return 1
+  fi
+  HELD=1
   local rc=0
   start_locked || rc=$?
   trap - EXIT INT TERM
-  rmdir "$LOCKDIR" 2>/dev/null || true
+  release_lock
   return "$rc"
+}
+
+release_lock() {
+  # Only the start that took the lock removes it. A signal between the lock's creation and
+  # HELD=1 leaves it behind; the next start's refusal names its pid as gone.
+  if [ "${HELD:-0}" = 1 ]; then
+    rm -f "$LOCK"
+    HELD=0
+  fi
+}
+
+lock_refusal() {
+  local holder="" state
+  # Read only a regular file: reading a FIFO would block the refusal for good.
+  if [ -f "$LOCK" ] && [ ! -L "$LOCK" ]; then
+    holder="$(head -n 1 "$LOCK" 2>/dev/null | tr -cd '0-9' || true)"
+  fi
+  echo "another start is in flight — leaving it to that one" >&2
+  if [ -n "$holder" ]; then
+    if kill -0 "$holder" 2>/dev/null; then state="running"; else state="gone"; fi
+    echo "  (the lock names pid $holder, $state)" >&2
+  fi
+  if [ -d "$LOCK" ] && [ ! -L "$LOCK" ]; then
+    echo "  (if no start is running, remove it: rmdir $LOCK)" >&2
+  else
+    echo "  (if no start is running, remove it: rm -f $LOCK)" >&2
+  fi
 }
 
 start_locked() {

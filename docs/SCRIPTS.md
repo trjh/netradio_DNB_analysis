@@ -25,6 +25,8 @@ eval "$(python3 scripts/envfile.py --export .env)"
 
 ```bash
 .venv/bin/python3 -m unittest discover -s tests    # the full suite (or: make test)
+make test-container                                # the suite with ffmpeg, in an Ubuntu 26.04 container (CI skips the audio tests)
+make full-suite-age                                # when make test-container last passed; OVERDUE after 14 days
 ```
 
 The suite is hermetic on a fresh clone: it parses only committed evidence (the 2017 notes
@@ -163,9 +165,9 @@ process start), writes one pidfile at `.harvest/harvester.pid` and appends to on
 at or over 10 MB by then — one generation back (`NETRADIO_HARVEST_LOG_MAX_BYTES` moves the
 cap). The rename happens between runs and never during one, so a single run's log is bounded
 by when it is next restarted. `start` refuses while a harvester is already up, clears a
-pidfile whose process is gone or is now something else, and takes a lock directory
-(`.harvest/harvester.start.lock`) so two simultaneous starts resolve to one harvester and one
-pidfile. `stop` asks for a clean exit and waits up to 30 seconds for it
+pidfile whose process is gone or is now something else, and takes a lock file
+(`.harvest/harvester.start.lock`, created by bash's exclusive `noclobber` open, not `mkdir`) so
+two simultaneous starts resolve to one harvester and one pidfile. `stop` asks for a clean exit and waits up to 30 seconds for it
 (`NETRADIO_HARVEST_STOP_WAIT_S`) before it resorts to `kill -9`. `status` prints whether it is
 up, its pid, the `updated` stamp in `.harvest/state.json` (set at the end of each signing
 pass, so it stands still while the harvester is paused, idle, or mid-decode of a long file),

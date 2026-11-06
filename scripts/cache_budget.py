@@ -23,6 +23,14 @@ cache's name in upper case:
     refill     how an evicted entry comes back (reported, never acted on here)
     rank       integer, or None for never: the order in which caches give up entries when the
                volume is past the floor and no cache is over its cap (1 goes first)
+    floor      True (the default): `reserve` refuses a write that would take the volume past
+               the floor. False: the floor never refuses this cache's writes, and the cache
+               needs a cap and rank None, so its cap alone bounds it and the floor never evicts
+               it either. For a cache of small files that matter to the user: evicting them
+               frees too little to bring a volume back under the floor, and losing them costs
+               more than the bytes they hold. Its cap is then its only bound on the disk, and
+               the environment can raise it. A cap of `none` puts the cache back under the floor
+               (printed at registration); it never stops the registration
     companions function(path) -> [paths] of the files that belong to an entry and go with it,
                or None. A companion is part of its entry, not an entry of its own: its bytes
                count with the entry's, it is never a candidate alone, and an eviction or a
@@ -42,7 +50,9 @@ Machine-wide settings:
                                 `reserve` admits, `commit` and `run_eviction` do nothing,
                                 `status()` says so.
     NETRADIO_DISK_MAX_PCT       the floor, default 82: no volume a cache sits on is allowed past
-                                this full (used / (used + free)), whatever any cache's cap says.
+                                this full (used / (used + free)), whatever any cache's cap says,
+                                except for a cache registered with `floor=False`, which its cap
+                                alone bounds.
                                 Each volume is measured on its own: a cache on a second disk is
                                 refused and relieved by that disk's reading, never the root's.
     NETRADIO_CACHE_EVENTS_DAYS  how long a record stays in the event log, default 30.
@@ -245,7 +255,7 @@ def read_settings(name, dir=None, cap=DEFAULT_CAP, max_age=None):
 # --- the registry ---------------------------------------------------------------------------
 
 def register(name, dir=None, cap=DEFAULT_CAP, headroom=0, max_age=None, order="oldest-added",
-             pinned=None, refill="none", rank=None, score=None, companions=None):
+             pinned=None, refill="none", rank=None, score=None, companions=None, floor=True):
     """Record one cache. The environment overrides `dir`, `cap`, `headroom` and `max_age`.
 
     Returns the record, or None when the module is dark. Raises `CacheRefused` for a directory
@@ -265,6 +275,8 @@ def register(name, dir=None, cap=DEFAULT_CAP, headroom=0, max_age=None, order="o
         raise ValueError("unknown order %r" % order)
     if order == "by-score" and score is None:
         raise ValueError("order 'by-score' needs a score function")
+    if not floor and rank is not None:
+        raise ValueError("floor=False needs rank None: the floor neither refuses nor evicts it")
     cache_dir = _read_dir(name, dir)
     with _registry_locked() as got:     # no other process checks or publishes in between
         if not got:
@@ -274,7 +286,7 @@ def register(name, dir=None, cap=DEFAULT_CAP, headroom=0, max_age=None, order="o
             _REFUSED[name] = {"name": name, "reason": "lock", "message": why}
             return None
         return _register(name, cache_dir, cap, headroom, max_age, order, pinned, refill, rank,
-                         score, companions)
+                         score, companions, floor)
 
 
 def register_unless_clash(name, **settings):
@@ -296,7 +308,7 @@ def refusals():
 
 
 def _register(name, cache_dir, cap, headroom, max_age, order, pinned, refill, rank, score,
-              companions):
+              companions, floor=True):
     clash = _overlap(name, cache_dir)
     if clash:
         why, owner = clash if isinstance(clash, tuple) else (clash, None)
@@ -318,7 +330,13 @@ def _register(name, cache_dir, cap, headroom, max_age, order, pinned, refill, ra
         "rank": rank,
         "score": score,
         "companions": companions,
+        "floor": bool(floor),
     }
+    if not rec["floor"] and rec["cap"] is None:
+        # Off the floor the cap is the only bound on the disk: with no cap it stays under the floor.
+        print("cache_budget: %r has no cap, so it stays under the disk floor (floor=False needs "
+              "a cap)" % name)
+        rec["floor"] = True
     with _mutex:
         _REGISTRY[name] = rec
         _REFUSED.pop(name, None)
@@ -331,7 +349,7 @@ def _register(name, cache_dir, cap, headroom, max_age, order, pinned, refill, ra
 def _settings_of(rec):
     return {"name": rec["name"], "dir": rec["dir"], "cap": rec["cap"],
             "headroom": rec["headroom"], "max_age_days": rec["max_age"], "order": rec["order"],
-            "refill": rec["refill"], "rank": rec["rank"]}
+            "refill": rec["refill"], "rank": rec["rank"], "floor": rec.get("floor", True)}
 
 
 # --- the registry file ----------------------------------------------------------------------
@@ -652,7 +670,7 @@ def names():
 
 def settings(name):
     """The registry row of one cache, read without a scan: {name, dir, cap, headroom,
-    max_age_days, order, refill, rank}. None when it is not registered or the module is dark."""
+    max_age_days, order, refill, rank, floor}. None when it is not registered or the module is dark."""
     rec = _REGISTRY.get(name) if enabled() else None
     return _settings_of(rec) if rec else None
 
@@ -1046,7 +1064,7 @@ def reserve(name, nbytes=None):
                                    or not math.isfinite(nbytes) or nbytes < 0):
             _record("refuse", name, reason="size", op="reserve", asked=repr(nbytes))
             return False
-        if _disk_pct(rec["dir"], nbytes or 0) > disk_max_pct():
+        if rec.get("floor", True) and _disk_pct(rec["dir"], nbytes or 0) > disk_max_pct():
             _record("refuse", name, nbytes=nbytes, reason="floor", op="reserve")
             return False
         cap = rec["cap"]
@@ -1069,8 +1087,8 @@ def reserve(name, nbytes=None):
 
 def commit(name, path):
     """Record an entry that has landed, its companions' bytes counted with it. If the cache is now
-    over its cap, or the volume past the floor, run the eviction at once: other entries go, in the
-    cache's order, never this one. A companion's path protects the entry it belongs to, so a
+    over its cap, or the volume past the floor (unless the cache is off the floor), run the eviction
+    at once: other entries go, in the cache's order, never this one. A companion's path protects the entry it belongs to, so a
     writer that lands the companion last may commit either. Nothing while dark; a name that is
     not registered raises KeyError."""
     rec = _rec_of(name)
@@ -1086,7 +1104,7 @@ def commit(name, path):
         _record("admit", name, _rel(rec, path), nbytes)
         size = sum(e[1] for e in _scan(rec))
         over = rec["cap"] is not None and size > rec["cap"]
-        if over or _disk_pct(rec["dir"]) > disk_max_pct():
+        if over or (rec.get("floor", True) and _disk_pct(rec["dir"]) > disk_max_pct()):
             _run([rec], protect={path})
 
 
