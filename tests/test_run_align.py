@@ -181,6 +181,72 @@ class TheCheckoutGuard(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("stopped", r.stdout)
 
+    def test_a_server_that_dies_at_start_says_so_and_shows_its_log(self):
+        os.makedirs(os.path.join(self.root, ".git"))
+        fake = os.path.join(self.root, "fake-python")
+        with open(fake, "w") as fh:
+            fh.write("#!/bin/sh\necho 'No version is set for command python3.14' >&2\nexit 126\n")
+        os.chmod(fake, 0o755)
+        r = self._run("start", NETRADIO_PYTHON=fake)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("did not start", r.stdout)
+        self.assertIn("No version is set for command python3.14", r.stdout)
+
+
+class TheInterpreter(unittest.TestCase):
+    """Which Python the launcher picks: NETRADIO_PYTHON, else the venv's, else python3 with a
+    warning. The launcher's top half (up to its verbs) is sourced with a stub checkout guard."""
+
+    def setUp(self):
+        self.root = os.path.realpath(tempfile.mkdtemp(prefix="run-align-py-"))
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        os.makedirs(os.path.join(self.root, "scripts", "lib"))
+        shutil.copy2(os.path.join(HERE, "scripts/lib/env.sh"),
+                     os.path.join(self.root, "scripts/lib/env.sh"))
+        with open(os.path.join(self.root, "scripts/lib/checkout.sh"), "w") as fh:
+            fh.write("checkout_guard() { :; }\n")
+        top = _read("scripts", "run_align.sh").split('\ncase "${1:-start}" in', 1)[0]
+        with open(os.path.join(self.root, "scripts", "run_align.sh"), "w") as fh:
+            fh.write(top + '\nprintf "%s\\n%s\\n" "$PYTHON" "$PYTHON_NOTE"\n')
+
+    def _pick(self, **env):
+        full = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": self.root}
+        full.update(env)
+        r = subprocess.run(["bash", os.path.join(self.root, "scripts", "run_align.sh")],
+                           capture_output=True, text=True, env=full, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        python, note = (r.stdout.split("\n") + ["", ""])[:2]
+        return python, note
+
+    def test_no_venv_falls_back_to_python3_and_says_so(self):
+        python, note = self._pick()
+        self.assertEqual(python, shutil.which("python3", path=os.environ.get("PATH")))
+        self.assertIn("no .venv", note)
+
+    def test_the_venv_is_the_default(self):
+        venv = os.path.join(self.root, ".venv", "bin")
+        os.makedirs(venv)
+        os.symlink(shutil.which("python3"), os.path.join(venv, "python"))
+        python, note = self._pick()
+        self.assertEqual(python, os.path.join(venv, "python"))
+        self.assertEqual(note, "")
+
+    def test_the_setting_wins_from_dotenv_with_a_home_path(self):
+        with open(os.path.join(self.root, ".env"), "w") as fh:
+            fh.write("NETRADIO_PYTHON=~/bin/py\n")
+        python, note = self._pick()
+        self.assertEqual(python, os.path.join(self.root, "bin", "py"))
+        self.assertEqual(note, "")
+
+    def test_the_environment_wins_over_dotenv(self):
+        with open(os.path.join(self.root, ".env"), "w") as fh:
+            fh.write("NETRADIO_PYTHON=/from/dotenv\n")
+        python, _ = self._pick(NETRADIO_PYTHON="/from/env")
+        self.assertEqual(python, "/from/env")
+
+    def test_no_bare_versioned_name_on_path(self):
+        self.assertNotIn("command -v python3.14", _read("scripts", "run_align.sh"))
+
 
 if __name__ == "__main__":
     unittest.main()
