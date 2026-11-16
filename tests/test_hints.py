@@ -5,7 +5,9 @@ mistaken for, a hand label. Everything else is presentation.
 """
 
 import os
+import shutil
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -146,6 +148,20 @@ class TestCarryForwardMatchesGrammarNotSubstrings(unittest.TestCase):
     def test_real_track_and_orig_starts_match(self):
         self.assertTrue(hints._TRACK_START_RE.match("start067: ID: Aquarius - Wave Forms"))
         self.assertTrue(hints._ORIG_START_RE.match("orig067 start: 0"))
+
+
+class TestSymlinksAreIgnored(unittest.TestCase):
+    """The pipeline ignores symlinks: a symlinked label file is never read as an owner."""
+
+    def test_carry_forward_anchor_never_names_a_symlinked_owner(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        with open(os.path.join(d, "zz.labels.tsv"), "w") as fh:
+            fh.write("300.000000\t300.000000\tfile_d376-395: file start sync\n")
+        # sorts first, and points at zz: read, it would claim the link as its own
+        os.symlink(os.path.join(d, "zz.labels.tsv"), os.path.join(d, "aa.labels.tsv"))
+        owner, link_t, _rows = hints._carry_forward_anchor("d376-395", d)
+        self.assertEqual((owner, link_t), ("zz", 300.0))
 
 
 if __name__ == "__main__":

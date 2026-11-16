@@ -53,7 +53,7 @@ def _read_rows(labels_dir):
     rows = []
     if not os.path.isdir(labels_dir):
         return rows
-    for fn in sorted(n for n in os.listdir(labels_dir) if _gt.is_pipeline_label_file(n)):
+    for fn in (n for n in _gt.plain_files(labels_dir) if _gt.is_pipeline_label_file(n)):
         try:
             with open(os.path.join(labels_dir, fn), "r", encoding="utf-8",
                       errors="replace") as handle:

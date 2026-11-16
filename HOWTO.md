@@ -249,6 +249,11 @@ measured once: a recorded duration is kept. To measure every capture again from 
 run `python3 scripts/stream_files.py --remeasure`. It refuses, and writes nothing, when no working
 `ffprobe` is found, and names every capture whose original `ffprobe` could not measure.
 
+The pipeline ignores symlinks. A symlink in `labels/`, in `NETRADIO_MP3_DIR` or in
+`NETRADIO_CAPTURES_DIR` is never read, so a second name kept to view the files by timeline position
+never becomes a capture of its own, and no label file is read twice. Each capture finds its
+original by its own name only.
+
 A capture's place comes only from its labels. Where another capture's labels place it at one
 master time and its own start label says another, the other capture's placement wins. Each run
 prints one line per capture whose own start label was overridden, so a new disagreement shows. The

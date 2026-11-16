@@ -44,6 +44,7 @@ def _stem(name):
 
 
 is_pipeline_label_file = stream_files.is_pipeline_label_file
+plain_files = stream_files.plain_files
 
 
 def _read_label_rows(labels_dir):

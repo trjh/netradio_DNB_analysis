@@ -171,13 +171,15 @@ def _contained(path, root):
 
 
 def list_streams(mp3_dir):
-    """Capture stems the server can name (from its own MP3 listing)."""
+    """Capture stems the server can name (from its own MP3 listing). A symlinked MP3 is not
+    listed: the pipeline ignores symlinks (`stream_files.plain_files`)."""
     if not mp3_dir or not os.path.isdir(mp3_dir):
         return []
     out = []
     for fn in sorted(os.listdir(mp3_dir)):
+        path = os.path.join(mp3_dir, fn)
         if fn.lower().endswith(".mp3") and _STEM_RE.match(fn[:-4]) \
-                and _contained(os.path.join(mp3_dir, fn), mp3_dir):
+                and not os.path.islink(path) and _contained(path, mp3_dir):
             out.append(fn[:-4])
     return out
 
@@ -210,7 +212,8 @@ def parse_match_hints(labels_dir):
     # first, the root as fallback — a stem+orig pair seen in automated/ wins.
     scan_dirs = [d for d in (os.path.join(labels_dir, "automated"), labels_dir)
                  if os.path.isdir(d)]
-    candidates = [(d, fn) for d in scan_dirs for fn in sorted(os.listdir(d))]
+    candidates = [(d, fn) for d in scan_dirs for fn in sorted(os.listdir(d))
+                  if not os.path.islink(os.path.join(d, fn))]
     sets = []
     seen_pairs = set()
     for scan_dir, fn in candidates:
@@ -222,7 +225,7 @@ def parse_match_hints(labels_dir):
             continue
         opath = os.path.join(scan_dir, "orig%03d.%s.match.hints.tsv" % (orig, stem))
         spath = os.path.join(scan_dir, fn)
-        if not (os.path.isfile(opath)
+        if not (os.path.isfile(opath) and not os.path.islink(opath)
                 and _contained(spath, labels_dir) and _contained(opath, labels_dir)):
             continue
         # the pair is CLAIMED for this dir once both files exist — a fresh

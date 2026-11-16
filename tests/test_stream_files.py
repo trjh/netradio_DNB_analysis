@@ -38,6 +38,16 @@ class TimelineTests(LabelDirCase):
         self.write_labels("a", [(0.0, "file start sync: a.wav 100")])
         self.assertEqual(self.timeline()["a.mp3"]["master_start_seconds"], 100.0)
 
+    def test_a_symlinked_label_file_is_never_read(self):
+        self.write_labels("a", [(0.0, "file start sync: a.wav 100")])
+        # A second name for a.labels.tsv, as a view by timeline position: read, its seed row
+        # would be read twice; it must not be read at all.
+        os.symlink(os.path.join(self.labels, "a.labels.tsv"),
+                   os.path.join(self.labels, "d100_a.labels.tsv"))
+        self.assertEqual({r["path"] for r in sf.read_label_rows(self.labels)},
+                         {os.path.join(self.labels, "a.labels.tsv")})
+        self.assertEqual(sf.plain_files(self.labels), ["a.labels.tsv"])
+
     def test_trailing_anchor_is_not_subtracted(self):
         # The regression this grammar once had: the trailing number on a cross-file row is the
         # anchor it was verified against, not an offset. b starts at a's start + 50 s.
@@ -384,12 +394,25 @@ class BuildTests(LabelDirCase):
         captures = self._originals("d-14Nov10-b.au", "dnb-14Nov02-a.au", "d019-040.wav")
         self.assertEqual(sf.original_path("d201-221.14Nov10-b.mp3", captures),
                          os.path.join(captures, "d-14Nov10-b.au"))
-        self.assertEqual(sf.original_path("d198-218.14Nov02-a.mp3", captures),
+        self.assertEqual(sf.original_path("dnb-14Nov02-a.mp3", captures),
                          os.path.join(captures, "dnb-14Nov02-a.au"))
+        # A capture resolves by its own name only: no second spelling is tried.
+        self.assertIsNone(sf.original_path("d198-218.14Nov02-a.mp3", captures))
         self.assertEqual(sf.original_path("d019-040.mp3", captures),
                          os.path.join(captures, "d019-040.wav"))
         self.assertIsNone(sf.original_path("d507-000b.mp3", captures))
         self.assertIsNone(sf.original_path("d019-040.mp3", None))
+
+    def test_a_symlinked_original_is_not_an_original(self):
+        captures = self._originals("d019-040.wav")
+        os.symlink(os.path.join(captures, "d019-040.wav"), os.path.join(captures, "d020-041.wav"))
+        self.assertIsNone(sf.original_path("d020-041.mp3", captures))
+
+    def test_a_symlinked_mp3_never_becomes_a_capture(self):
+        audio = self._audio("da.mp3")
+        os.symlink(os.path.join(audio, "da.mp3"), os.path.join(audio, "d100-120.da.mp3"))
+        data = sf.build(previous={}, audio_dir=audio, prune=True, **self._inputs())
+        self.assertEqual([r["filename"] for r in data["files"]], ["da.mp3"])
 
     def test_labels_place_a_primary_capture_never_the_timing_range(self):
         # 9.1A3: the Timing range (minutes 50-70) disagrees with the labels (100 s to 180 s);

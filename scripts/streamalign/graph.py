@@ -196,7 +196,7 @@ def _filename_successor(stem, labels_dir=None):
     if not here:
         return None
     best, best_start = None, None
-    for name in os.listdir(labels_dir or _gt.LABELS_DIR):
+    for name in _gt.plain_files(labels_dir or _gt.LABELS_DIR):
         if not name.endswith(".labels.tsv"):
             continue
         other = _audio.stem_of(name[: -len(".labels.tsv")])

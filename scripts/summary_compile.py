@@ -123,13 +123,15 @@ def _render(rows):
 def _listing(dirpath):
     """The files of one controlled directory, containment-checked INSIDE that directory
     (a symlink pointing anywhere else — the hand labels one level up included — is
-    simply not listed)."""
+    simply not listed). A symlink inside the directory is not listed either: the pipeline
+    ignores symlinks."""
     if not os.path.isdir(dirpath):
         return []
     out = []
     for fn in sorted(os.listdir(dirpath)):
         path = os.path.join(dirpath, fn)
-        if os.path.isfile(path) and align_inspect._contained(path, dirpath):
+        if os.path.isfile(path) and not os.path.islink(path) \
+                and align_inspect._contained(path, dirpath):
             out.append((fn, path))
     return out
 
