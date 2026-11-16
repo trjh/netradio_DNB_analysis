@@ -255,6 +255,16 @@ class SkipDetectionTests(unittest.TestCase):
 
 
 class TrackMixTests(unittest.TestCase):
+    def test_a_symlinked_label_file_is_never_read(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        with open(os.path.join(d, "x.labels.tsv"), "w") as f:
+            f.write("10.0\t10.0\torig041 sync: 2\n")
+            f.write("11.0\t11.0\ttrack sync: 2\n")
+        # a second name for x.labels.tsv: read, it would pair the same sync point twice
+        os.symlink(os.path.join(d, "x.labels.tsv"), os.path.join(d, "d100_x.labels.tsv"))
+        self.assertEqual(len(track_mix.parse_sync_points(d).get(41, [])), 1)
+
     def test_pairs_plain_and_numbered_track_sync(self):
         import tempfile
         d = tempfile.mkdtemp()
@@ -456,6 +466,14 @@ class EmitLabelsTests(unittest.TestCase):
 
 
 class GraphTests(unittest.TestCase):
+    def test_filename_successor_ignores_a_symlinked_label_file(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        open(os.path.join(d, "d200-220.labels.tsv"), "w").close()
+        # a timeline-position name for the same file: it must not become a successor
+        os.symlink(os.path.join(d, "d200-220.labels.tsv"), os.path.join(d, "d100-120.labels.tsv"))
+        self.assertEqual(graph._filename_successor("d050-070", labels_dir=d), "d200-220")
+
     def test_filename_range(self):
         self.assertEqual(graph.filename_range("d356-375"), (356, 375))
         self.assertEqual(graph.filename_range("d425-438b"), (425, 438))

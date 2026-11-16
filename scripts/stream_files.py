@@ -44,6 +44,10 @@ MP3 that appears in NETRADIO_MP3_DIR is added. A capture leaves the list only wi
 which drops the recorded captures whose audio is not in NETRADIO_MP3_DIR. The build refuses to
 write an empty list, or a shorter one without `--prune`, and stops when an existing
 `stream-files.json` cannot be read.
+
+Symlinks are never read: not a label file, not an MP3, not an original (`plain_files()`). A
+symlink there is a second name for a file listed under its own name, so it can never become a
+capture of its own.
 """
 import argparse
 import json
@@ -118,24 +122,32 @@ def original_filename(mp3_name):
 
 
 def original_path(mp3_name, captures_dir):
-    """The path of a capture's original recording in `captures_dir`, or None when it is not
-    there. Tries `original_filename()`, then the `dnb-` spelling some 14Nov originals carry
-    (`d-14Nov02-a.au` is on disk as `dnb-14Nov02-a.au`)."""
+    """The path of a capture's original recording (`original_filename()`) in `captures_dir`, or
+    None when it is not there. A symlink is not an original: the pipeline ignores symlinks."""
     if not captures_dir:
         return None
-    name = original_filename(mp3_name)
-    names = [name] + (["dnb-" + name[2:]] if name.startswith("d-") else [])
-    for candidate in names:
-        path = os.path.join(captures_dir, candidate)
-        if os.path.isfile(path):
-            return path
+    path = os.path.join(captures_dir, original_filename(mp3_name))
+    if os.path.isfile(path) and not os.path.islink(path):
+        return path
     return None
+
+
+def plain_files(directory):
+    """The names in `directory`, sorted, without its symlinks.
+
+    The pipeline ignores symlinks. A symlink in the labels, audio or captures directory is a
+    second name for a file that is listed under its own name, kept only to view the files by
+    their timeline position; reading it would make that second name a capture of its own."""
+    directory = str(directory)
+    return sorted(n for n in os.listdir(directory)
+                  if not os.path.islink(os.path.join(directory, n)))
 
 
 def is_pipeline_label_file(name):
     """True for the label files the pipeline reads: hand `<stem>.labels.tsv` and engine
     `<stem>.auto.labels.tsv`. Seed-only `<stem>.starter.labels.tsv` only pre-positions labels
-    in Audacity and is never read."""
+    in Audacity and is never read. Callers list with `plain_files()`, so a symlinked label file
+    is never read either."""
     return name.endswith(".labels.tsv") and not name.endswith(".starter.labels.tsv")
 
 
@@ -148,7 +160,7 @@ def read_label_rows(labels_dir=LABELS_DIR):
     labels_dir = str(labels_dir)
     if not os.path.isdir(labels_dir):
         return rows
-    for fn in sorted(n for n in os.listdir(labels_dir) if is_pipeline_label_file(n)):
+    for fn in (n for n in plain_files(labels_dir) if is_pipeline_label_file(n)):
         path = os.path.join(labels_dir, fn)
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as handle:
@@ -463,7 +475,7 @@ def build(labels_dir=LABELS_DIR, tracklist_path=TRACKLIST_PATH, metadata_path=ME
     previous = previous or {}
     local = set()
     if audio_dir and os.path.isdir(audio_dir):
-        local = {f for f in os.listdir(audio_dir) if f.lower().endswith(".mp3")}
+        local = {f for f in plain_files(audio_dir) if f.lower().endswith(".mp3")}
     elif prune:
         raise BuildRefused("--prune needs NETRADIO_MP3_DIR to name a directory of the audio")
     files = sorted(local if prune else set(previous) | local)

@@ -358,6 +358,19 @@ class TheWrite(CompileCase):
         self.assertNotIn("file start d376-395.wav", self._read("d376-395.summary.tsv"))
         self.assertFalse(os.path.isfile(os.path.join(self.labels, "summary", "sneaky.summary.tsv")))
 
+    def test_a_symlink_inside_automated_is_ignored(self):
+        """A second name for a file in the same directory is not a file of its own."""
+        self._fixture()
+        rep = sc.compile_summaries()
+        before = sorted(f["id"] for f in rep["files"])
+        automated = os.path.join(self.labels, "automated")
+        real = sorted(n for n in os.listdir(automated) if n.endswith(".tsv"))[0]
+        os.symlink(os.path.join(automated, real), os.path.join(automated, "d999-999.hints.tsv"))
+        rep = sc.compile_summaries()
+        self.assertEqual(sorted(f["id"] for f in rep["files"]), before)
+        self.assertFalse(os.path.isfile(os.path.join(self.labels, "summary",
+                                                     "d999-999.summary.tsv")))
+
     def test_a_stem_shaped_like_an_original_tag_is_refused(self):
         """`orig072.hints.tsv` would compile to orig072.summary.tsv — the original's file."""
         self._fixture()

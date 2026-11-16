@@ -187,6 +187,12 @@ class TestSecurityContract(_Env):
         self.assertNotIn("escape", align_inspect.list_streams(self.mp3))
         self.assertIn("d376-395", align_inspect.list_streams(self.mp3))
 
+    def test_stream_listing_excludes_a_symlink_inside_the_directory(self):
+        # a timeline-position second name for a listed MP3 is not a capture of its own
+        os.symlink(os.path.join(self.mp3, "d376-395.mp3"), os.path.join(self.mp3, "d377-396.mp3"))
+        self.assertNotIn("d377-396", align_inspect.list_streams(self.mp3))
+        self.assertIn("d376-395", align_inspect.list_streams(self.mp3))
+
 
 class TestSubprocessSeam(_Env):
 
@@ -457,6 +463,20 @@ class TestHintsParsing(unittest.TestCase):
         self.assertIsNone(pts[2]["match_delta_s"])
         # the delta never leaks into the confidence
         self.assertAlmostEqual(pts[0]["confidence"], 5.9)
+
+    def test_a_symlinked_hints_pair_is_never_read(self):
+        summary = ("note HINT: orig072 via MATCH+PHAT: rate 1.02046 (original runs "
+                   "+2.05% vs stream), polarity not inverted, 1 anchors HINT")
+        self._write("d376-395.orig072.match.hints.tsv",
+                    [(0.0, 0.0, summary), (76.0, 76.0, "track sync: 1 confidence 5.9/10 HINT")])
+        self._write("orig072.d376-395.match.hints.tsv",
+                    [(105.992, 105.992, "orig072 sync: 1 confidence 5.9/10 HINT")])
+        # a second name for the pair, by timeline position: not a hints set of its own
+        for a, b in (("d376-395.orig072.match.hints.tsv", "d377-396.orig072.match.hints.tsv"),
+                     ("orig072.d376-395.match.hints.tsv", "orig072.d377-396.match.hints.tsv")):
+            os.symlink(os.path.join(self.labels, a), os.path.join(self.labels, b))
+        sets = align_inspect.parse_match_hints(self.labels)
+        self.assertEqual([h["stem"] for h in sets], ["d376-395"])
 
     def test_stream_side_without_orig_side_is_skipped(self):
         self._write("d376-395.orig072.match.hints.tsv",

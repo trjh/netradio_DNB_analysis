@@ -184,7 +184,7 @@ def _carry_forward_anchor(stem, labels_dir):
     from . import emit_labels as _emit
     if not os.path.isdir(labels_dir):
         return None
-    for fn in sorted(os.listdir(labels_dir)):
+    for fn in _gt.plain_files(labels_dir):
         if not fn.endswith(".labels.tsv") or fn.endswith(".starter.labels.tsv"):
             continue
         owner = _gt._stem(fn).replace(".labels", "")
