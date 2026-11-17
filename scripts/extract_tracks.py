@@ -407,7 +407,10 @@ def refresh_cuts():
         real = os.path.realpath(path)
         _refreshing.add(real)
         try:
-            if not cache_budget.reserve(STREAM_TRACKS_CACHE, got.size):
+            # the replacement takes the held cut's place, so only the growth needs room
+            # (and the held cut, pinned, is never what makes it)
+            growth = max(0, got.size - os.path.getsize(path))
+            if not cache_budget.reserve(STREAM_TRACKS_CACHE, growth):
                 report["failed"][num] = "the tracks cache refused the room"
                 continue
             why = bucketio.fetch_verified(bucket, key, path, size=got.size, sha256=got.sha256)

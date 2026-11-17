@@ -636,19 +636,34 @@ class ThePublishedCuts(unittest.TestCase):
         with open(path, "rb") as fh:
             self.assertEqual(fh.read(), b"abcd" * 10)
 
+    def _tight_cap(self):
+        os.environ["NETRADIO_STREAM_TRACKS_CACHE_GB"] = "0.00006"     # a 60,000-byte cap
+        extract_tracks.register_cache()
+
+    def test_a_replacement_that_fits_once_it_takes_the_old_cuts_place_is_admitted(self):
+        self._tight_cap()
+        self.fake.add(self.bucket, "stream/tracks/004.flac", b"n" * 45000, sha256=True)
+        path = self._hold(4, b"o" * 30000)          # 30 KB + 45 KB > the cap; 45 KB alone fits
+        with contextlib.redirect_stdout(io.StringIO()):
+            report = extract_tracks.refresh_cuts()
+        self.assertEqual(report["replaced"], [4])
+        self.assertEqual(os.path.getsize(path), 45000)
+
     def test_a_failed_replacement_never_costs_the_held_cut_even_when_room_is_needed(self):
         from bucket_fake import FakeProc
-        os.environ["NETRADIO_STREAM_TRACKS_CACHE_GB"] = "0.00006"     # 60 bytes: room is needed
-        extract_tracks.register_cache()
-        self.fake.add(self.bucket, "stream/tracks/004.flac", b"new" * 15, sha256=True)
-        path = self._hold(4, b"old" * 10)
+        self._tight_cap()
+        self.fake.add(self.bucket, "stream/tracks/004.flac", b"n" * 45000, sha256=True)
+        other = self._hold(7, b"x" * 40000)
+        os.utime(other, (1, 1))                      # the oldest entry: evicted first
+        path = self._hold(4, b"o" * 30000)           # 70 KB held, over the cap: room is needed
         self.fake.fail_next("cp-down", FakeProc(returncode=1, stderr="connection reset"))
         with contextlib.redirect_stdout(io.StringIO()):
             report = extract_tracks.refresh_cuts()
         self.assertEqual(report["replaced"], [])
-        self.assertIn(4, report["failed"])
+        self.assertIn("connection reset", report["failed"][4])
+        self.assertFalse(os.path.exists(other), "the room came from the other cut")
         with open(path, "rb") as fh:
-            self.assertEqual(fh.read(), b"old" * 10, "the held cut is untouched")
+            self.assertEqual(fh.read(), b"o" * 30000, "the held cut is untouched")
         self.assertFalse(extract_tracks._pinned_cut(path), "unpinned after the attempt")
 
     def test_reading_a_held_cut_makes_no_bucket_call(self):
