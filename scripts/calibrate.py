@@ -111,11 +111,11 @@ def build_cases(tracks, starts, src):
         cap = None
         srcs = [f for f in (entry.get("source_files") or []) if not imprecise(_audio.stem_of(f))]
         stem, cstart = _tm._select_capture(srcs, mb, me, starts)
-        if stem and _audio.find_audio_file(stem):
+        if stem and _audio.capture_nameable(stem):
             cap = (stem, cstart)
         else:                                   # only then fall back to a scan
             for stem, ms in starts.items():
-                if not _audio.find_audio_file(stem):
+                if not _audio.capture_nameable(stem):
                     continue
                 if ms <= mb and me <= ms + _audio.duration_seconds(stem):
                     cap = (stem, ms)
@@ -191,6 +191,12 @@ def main():
     meta = json.load(open(os.path.join(_gt.REPO_ROOT, "track-metadata.json")))
     tracks = meta.get("tracks", meta)
     starts = positions()
+
+    # The cuts this machine holds are compared with the audio bucket's once, here, and a cut
+    # that changed there is replaced; with no bucket set this does nothing. Importing
+    # extract_tracks registers the tracks cache this process then holds.
+    import extract_tracks
+    extract_tracks.refresh_cuts()
 
     cases = build_cases(tracks, starts, src)
     if args.limit:

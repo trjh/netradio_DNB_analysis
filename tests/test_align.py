@@ -19,6 +19,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
 
+import align_ids
 import align_inspect
 import align_server
 import cache_budget
@@ -60,6 +61,7 @@ class _Env(unittest.TestCase):
         self.addCleanup(root.stop)
         patcher = mock.patch.dict(os.environ, {
             "NETRADIO_SOURCES_DIR": "",
+            "NETRADIO_CAPTURES_DIR": "",        # the capture directory: the MP3 dir's parent
             # the one-shot path is the contract under test here; the keep-warm
             # worker has its own test classes below
             "NETRADIO_ALIGN_WORKER": "0",
@@ -184,14 +186,14 @@ class TestSecurityContract(_Env):
         outside = os.path.join(self.tmp.name, "outside.mp3")
         open(outside, "w").close()
         os.symlink(outside, os.path.join(self.mp3, "escape.mp3"))
-        self.assertNotIn("escape", align_inspect.list_streams(self.mp3))
-        self.assertIn("d376-395", align_inspect.list_streams(self.mp3))
+        self.assertNotIn("escape", align_ids.list_streams(self.mp3))
+        self.assertIn("d376-395", align_ids.list_streams(self.mp3))
 
     def test_stream_listing_excludes_a_symlink_inside_the_directory(self):
         # a timeline-position second name for a listed MP3 is not a capture of its own
         os.symlink(os.path.join(self.mp3, "d376-395.mp3"), os.path.join(self.mp3, "d377-396.mp3"))
-        self.assertNotIn("d377-396", align_inspect.list_streams(self.mp3))
-        self.assertIn("d376-395", align_inspect.list_streams(self.mp3))
+        self.assertNotIn("d377-396", align_ids.list_streams(self.mp3))
+        self.assertIn("d376-395", align_ids.list_streams(self.mp3))
 
 
 class TestSubprocessSeam(_Env):
@@ -1468,7 +1470,10 @@ class TestWorkerClient(_Env):
                                     "-m", "streamalign", "inspect-worker"])
         self.assertIn("--sources", argv)
         self.assertFalse(kw.get("shell", False))
-        self.assertEqual(kw["env"]["NETRADIO_AUDIO_DIR"], self.mp3)
+        # the DSP decodes the capture files, never the MP3s: the child is handed the capture
+        # directory (NETRADIO_CAPTURES_DIR, else the MP3 directory's parent)
+        self.assertNotEqual(kw["env"]["NETRADIO_AUDIO_DIR"], self.mp3)
+        self.assertEqual(kw["env"]["NETRADIO_AUDIO_DIR"], align_ids.captures_dir(self.mp3))
         self.assertEqual(kw["env"]["PYTHONPATH"], os.path.join(self.repo, "scripts"))
         # the ping and the request each went out as one JSON line
         self.assertEqual([json.loads(s)["op"] for s in proc.written],

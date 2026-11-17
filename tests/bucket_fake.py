@@ -156,3 +156,63 @@ class FakeAws:
 
 def timeout_error(cmd="aws", seconds=60):
     return subprocess.TimeoutExpired(cmd, seconds)
+
+
+# --- the cache isolation helper ------------------------------------------------------------
+
+AUDIO_BUCKET = "audio-test"
+
+
+def isolate_caches(test, root, bucket=AUDIO_BUCKET, fake=None):
+    """Give `test` its own cache policy under `root`: its own NETRADIO_CACHE_ROOT, an empty
+    registry (restored after), a volume that never reaches the floor, every other cache
+    setting removed, and the audio bucket named `bucket` (None: no bucket) over `fake` (a
+    `FakeAws`, installed here when given). Every change is undone by the test's cleanups, the
+    registry file this process writes under `root` included. Returns `fake`."""
+    import os
+
+    import cache_budget
+
+    names = [k for k in os.environ
+             if k.startswith("NETRADIO_") and ("CACHE" in k or k in (
+                 "NETRADIO_DISK_MAX_PCT", "NETRADIO_DOWNLOAD_ROOT", "NETRADIO_READ_ONLY",
+                 "NETRADIO_AUDIO_BUCKET", "NETRADIO_AUDIO_S3_ENDPOINT",
+                 "NETRADIO_AUDIO_AWS_PROFILE", "NETRADIO_AWS_CLI", "NETRADIO_CAPTURES_DIR"))]
+    saved = {k: os.environ.pop(k) for k in names}
+
+    def _restore_env():
+        for k in [k for k in os.environ if k.startswith("NETRADIO_")
+                  and ("CACHE" in k or k.startswith("NETRADIO_AUDIO_")
+                       or k in ("NETRADIO_DISK_MAX_PCT", "NETRADIO_AWS_CLI"))]:
+            os.environ.pop(k)
+        os.environ.update(saved)
+
+    test.addCleanup(_restore_env)
+    os.environ["NETRADIO_CACHE_ROOT"] = root
+    os.environ["NETRADIO_DISK_MAX_PCT"] = "100"
+    if bucket:
+        os.environ["NETRADIO_AUDIO_BUCKET"] = bucket
+        cli = os.path.join(root, "aws")             # resolvable, never run: the fake answers
+        os.makedirs(root, exist_ok=True)
+        with open(cli, "w") as fh:
+            fh.write("#!/bin/sh\nexit 1\n")
+        os.chmod(cli, 0o755)
+        os.environ["NETRADIO_AWS_CLI"] = cli
+    registry, stats = dict(cache_budget._REGISTRY), dict(cache_budget._STATS)
+
+    def _restore_registry():
+        cache_budget._drop_own_row()
+        cache_budget._REGISTRY.clear()
+        cache_budget._REGISTRY.update(registry)
+        cache_budget._STATS.clear()
+        cache_budget._STATS.update(stats)
+
+    test.addCleanup(_restore_registry)
+    cache_budget._REGISTRY.clear()
+    cache_budget._STATS.clear()
+    original = cache_budget._disk_usage
+    cache_budget._disk_usage = lambda _path: (10 ** 12, 0, 10 ** 12)
+    test.addCleanup(setattr, cache_budget, "_disk_usage", original)
+    if fake is not None:
+        fake.install(test)
+    return fake

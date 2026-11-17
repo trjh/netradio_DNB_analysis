@@ -245,7 +245,7 @@ def enumerate_candidates(labels_dir=None, pairs=None, conf_min=0.7,
     rejections = load_rejections(labels_dir) if skip_rejected else []
     candidates = []
     for a, b in pairs:
-        if not (_audio.find_audio_file(a) and _audio.find_audio_file(b)):
+        if not (_audio.capture_nameable(a) and _audio.capture_nameable(b)):
             continue
         try:
             edge = _solve.measure_edge_skipaware(a, b)

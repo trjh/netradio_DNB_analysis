@@ -186,7 +186,7 @@ def audit(labels_dir=None, sources_dir="sources_local", audio_dir=None,
     def _grade(rec, num, pr, rate_mc, b_native):
         """Load audio, refine the reconstructed seat, fill `rec`. Returns graded?"""
         stem = rec["stem"]
-        if not _audio.find_audio_file(stem, audio_dir):
+        if not _audio.capture_nameable(stem, audio_dir):
             rec["why"] = "capture audio missing"
             return False
         orig_path = _tm.find_original(num, sources_dir)

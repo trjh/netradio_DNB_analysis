@@ -469,7 +469,7 @@ def _select_capture(srcs, mb, me, starts, audio_dir=None):
         cap = os.path.splitext(os.path.basename(s))[0]
         if cap not in starts:
             continue
-        if not _audio.find_audio_file(cap, audio_dir):
+        if not _audio.capture_nameable(cap, audio_dir):
             continue
         cstart = starts[cap]
         cend = cstart + len(_audio.load_audio(cap, audio_dir=audio_dir)) / sr

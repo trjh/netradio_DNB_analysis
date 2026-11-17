@@ -88,12 +88,16 @@ class TestOverlapDetection(unittest.TestCase):
 
         class _FakeAudio:
             @staticmethod
-            def find_audio_file(stem, audio_dir=None):
-                return "/fake/%s.wav" % stem
+            def capture_nameable(stem, audio_dir=None):
+                return True
 
             @staticmethod
-            def duration_seconds(stem, audio_dir=None):
-                return 1200.0
+            def recorded_durations():
+                return {}
+
+            @staticmethod
+            def length_without_pull(stem, audio_dir=None, recorded=None):
+                return 1200.0, "audio"
 
             @staticmethod
             def stem_of(name):
@@ -111,12 +115,16 @@ class TestOverlapDetection(unittest.TestCase):
 
         class _FakeAudio:
             @staticmethod
-            def find_audio_file(stem, audio_dir=None):
-                return "/fake/%s.wav" % stem
+            def capture_nameable(stem, audio_dir=None):
+                return True
 
             @staticmethod
-            def duration_seconds(stem, audio_dir=None):
-                return 1200.0
+            def recorded_durations():
+                return {}
+
+            @staticmethod
+            def length_without_pull(stem, audio_dir=None, recorded=None):
+                return 1200.0, "audio"
 
             @staticmethod
             def stem_of(name):

@@ -29,7 +29,7 @@ def measure_edges(pairs, conf_min=0.7, decim=8, skip_aware=True):
     """
     edges = []
     for a, b in pairs:
-        if not _audio.find_audio_file(a) or not _audio.find_audio_file(b):
+        if not _audio.capture_nameable(a) or not _audio.capture_nameable(b):
             continue
         try:
             if skip_aware:

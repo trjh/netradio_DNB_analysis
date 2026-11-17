@@ -9,7 +9,7 @@ appended row of the §6.6 label-compatible grammar in the per-pair file
 
 - **identifiers, never paths** (the §3.3 contract): the client names a capture STEM
   and an original NUMBER, both validated against the server's own listings
-  (`align_inspect.list_streams()` / `list_originals()`); the target path is derived
+  (`align_ids.list_streams()` / `list_originals()`); the target path is derived
   HERE from the validated identifiers and realpath-containment-checked under
   `<checkout>/labels/review/`. Times are hard-capped, the rate bounded by `RATE_RANGE`, the
   anchor list bounded like `MAX_OVERVIEW_POINTS`, the free text sanitized
@@ -44,6 +44,7 @@ import re
 import threading
 import time
 
+import align_ids
 import align_inspect
 
 MODES = ("constant-rate", "re-anchor", "assumed-rate")
@@ -131,7 +132,7 @@ def validate(params, mp3_dir):
     stem = str(params.get("stem") or "")
     if not align_inspect._STEM_RE.match(stem):
         return None, "bad stem"
-    if stem not in align_inspect.list_streams(mp3_dir):
+    if stem not in align_ids.list_streams(mp3_dir):
         return None, "unknown stem"
     try:
         orig = int(params.get("orig"))

@@ -183,7 +183,7 @@ def _cmd_match_hints(args):
     from . import track_mix as _tm
 
     stem = _audio.stem_of(args.stem)
-    if not _audio.find_audio_file(stem):
+    if not _audio.capture_nameable(stem):
         print("no audio for capture %s" % stem)
         return
     stream = _audio.load_audio(stem)
@@ -283,7 +283,7 @@ def _cmd_inspect_slice(args):
     out = None
     if sum([bool(args.refine), args.context is not None, bool(args.overview)]) > 1:
         out = {"error": "--refine, --context and --overview are mutually exclusive"}
-    elif not _audio.find_audio_file(stem):
+    elif not _audio.capture_nameable(stem):
         out = {"error": "no audio for capture %s" % stem}
     elif not orig_path:
         out = {"error": "no original %03d-* under %s" % (int(args.orig), args.sources)}
@@ -379,7 +379,7 @@ def _cmd_validate(args):
     for a, b in edges:
         if a not in g or b not in g:
             continue
-        if not _audio.find_audio_file(a) or not _audio.find_audio_file(b):
+        if not _audio.capture_nameable(a) or not _audio.capture_nameable(b):
             skipped.append((a, b, "no-audio"))
             continue
         try:

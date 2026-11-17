@@ -221,7 +221,7 @@ class _AudioStub:
     lengths = {"d100-119": 1200.0, "d099-118": 1200.0}
 
     @staticmethod
-    def find_audio_file(stem, audio_dir=None):
+    def capture_nameable(stem, audio_dir=None):
         return stem in _AudioStub.lengths
 
     @staticmethod

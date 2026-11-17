@@ -44,6 +44,7 @@ import urllib.parse
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import align_ids
 import align_inspect
 import cache_budget
 import envfile
@@ -153,7 +154,7 @@ class AlignHandler(BaseHTTPRequestHandler):
             placed = align_inspect.placed_listing(_mp3_dir())
             return self._json({
                 "enabled": align_inspect.enabled(),
-                "streams": align_inspect.list_streams(_mp3_dir()),
+                "streams": align_ids.list_streams(_mp3_dir()),
                 "originals": align_inspect.list_originals(),
                 "hints": align_inspect.parse_match_hints(_labels_dir()),
                 "placed": placed["sets"],
@@ -252,7 +253,9 @@ def start_cache_policy():
     """The align server's share of the one cache policy.
 
     Register the venv's decoded-audio cache (align_inspect.register_cache — the same
-    variable family the child reads, so cap, age and directory agree), then run the
+    variable family the child reads, so cap, age and directory agree) and, on a machine
+    where no other process holds it, the MP3 directory as `stream_mp3`
+    (align_ids.register_mp3_cache), then run the
     eviction once: the start run applies the cache's age limit and cap whatever else is
     or is not running on the machine, and this server is the one process that holds this
     registration. Both steps are skipped under NETRADIO_READ_ONLY, so an align server
@@ -263,6 +266,8 @@ def start_cache_policy():
     if _read_only():
         return None
     align_inspect.register_cache()
+    # the MP3 directory, only where no other process on this machine already holds it
+    align_ids.register_mp3_cache(_mp3_dir())
     try:
         return cache_budget.run_eviction()
     except Exception as exc:   # noqa: BLE001 — an unwritable root must not kill the server

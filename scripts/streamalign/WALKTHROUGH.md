@@ -81,8 +81,11 @@ sign/scale error (which is exactly the bug caught and fixed during P1).
 
 | function | role | calls / called by |
 |---|---|---|
-| `load_audio(name)` | the workhorse: resolve → decode → cache → return float32 mono @16 kHz | calls `find_audio_file`, `_ffmpeg_decode`, `_cache_key`, `cache_budget.reserve`/`commit`/`run_eviction` (every write ages the cache); called by `align_pair`, `characterise_overlap` |
-| `find_audio_file(name)` | map a label name/stem to a real file, preferring `.wav` > `.au` > `.mp3` | uses `stem_of` |
+| `load_audio(name)` | the workhorse: resolve → decode → cache → return float32 mono @16 kHz; a capture this disk does not hold is pulled from the audio bucket first (`_load_pulled`) | calls `find_audio_file`, `_ffmpeg_decode`, `_cache_key`, `cache_budget.reserve`/`commit`/`run_eviction` (every write ages the cache); called by `align_pair`, `characterise_overlap` |
+| `find_audio_file(name)` | the local probe: a label name/stem to the capture file on this disk, `.wav` > `.au`, never the `.mp3`, never a bucket call | uses `stem_of`; asked by reports of what is on this disk |
+| `capture_nameable(name)` | can a decode of this capture be had: the disk, the `stream_master` cache, or a held listing of the audio bucket's `stream/master/` | asked by every check in front of a decode |
+| `fetch_audio_file(name)` | the pull on its own: the capture file in `stream_master`, pulled and checked by its SHA-256 metadata when absent | called by `extract_tracks.cut`, which hands the file to ffmpeg |
+| `length_without_pull(name)` | a capture's length with nothing pulled: its file here, its decoded array, else the committed `stream-files.json` | called by `hints.overlapping_neighbours`, `extract_tracks.windows` |
 | `register_cache()` | put the decoded-array cache on the machine's cache policy (`cache_budget.py`): cap, age limit, directory and eviction from `NETRADIO_STREAMALIGN_CACHE_*`, dark until `NETRADIO_CACHE_ROOT` is set | calls `cache_budget.register`; called at import (and again to re-read the environment) |
 | `_ffmpeg_decode(path)` | one ffmpeg subprocess → `np.frombuffer` (mono, normalized) | — |
 | `_cache_key(path)` | sha1 of realpath+size+mtime+params → cache filename | — |

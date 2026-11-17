@@ -8,6 +8,14 @@ The cuts land in the `stream_tracks` cache (below), as FLAC: each cut is written
 under a temporary name and renamed into its final `.flac` name once ffmpeg has it, so a
 cache eviction between the two can never leave a partial cut wearing the final name.
 
+With an audio bucket set (scripts/audio_bucket.py), each cut that lands in the cache is
+also published as `stream/tracks/<NNN>.flac`, keyed by the three-digit track number and
+never by the title (a title changes when a track is identified, and a stale object would
+stay in the bucket for good), with its SHA-256, artist and title in the object's metadata.
+A cut whose span changed replaces its object in place. With no bucket set, nothing is
+published. A capture this disk does not hold is pulled from the bucket for its cut
+(`streamalign.audio.fetch_audio_file`).
+
 Why
 ---
 Everything downstream needs a clean cut of a track AS IT PLAYED, and until now everything has
@@ -49,6 +57,7 @@ future bug will hide.
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -56,6 +65,8 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import audio_bucket                              # noqa: E402  (the audio bucket's settings)
+import bucketio                                  # noqa: E402  (every bucket call)
 import cache_budget                              # noqa: E402  (the machine's one cache policy)
 from streamalign import audio as _audio          # noqa: E402
 from streamalign import groundtruth as _gt       # noqa: E402
@@ -76,6 +87,14 @@ MIN_S = 30.0
 STREAM_TRACKS_CACHE = "stream_tracks"
 STREAM_TRACKS_CACHE_GB = 2
 STREAM_TRACKS_CACHE_MAX_AGE_DAYS = 14
+# Each cut this machine published or replaced from the bucket has a companion,
+# `<cut>.object.json`, recording the object (key, size, SHA-256, ETag); the policy evicts
+# the two together.
+OBJECT_META = ".object.json"
+
+
+def _cut_companions(path):
+    return [] if path.endswith(OBJECT_META) else [path + OBJECT_META]
 
 
 def tracks_dir():
@@ -100,7 +119,9 @@ def register_cache():
         return cache_budget.register("stream_tracks",
                                      cap=int(STREAM_TRACKS_CACHE_GB * cache_budget.GB),
                                      max_age=STREAM_TRACKS_CACHE_MAX_AGE_DAYS,
-                                     refill="re-extract", rank=8)
+                                     refill="re-extract, or audio bucket: "
+                                            "stream/tracks/<NNN>.flac",
+                                     rank=8, companions=_cut_companions)
     except cache_budget.CacheRefused as exc:
         print(exc)              # `resolve_out` then refuses to cut, naming the setting
         return None
@@ -141,11 +162,19 @@ def positions():
     for stem, note in _tl.parse().items():
         if stem not in starts and not imprecise(stem) and note.get("master_start_s") is not None:
             starts[stem] = note["master_start_s"]
-    return {s: v for s, v in starts.items() if _audio.find_audio_file(s)}
+    return {s: v for s, v in starts.items() if _audio.capture_nameable(s)}
 
 
-def windows(stem, start, audio_dir=None):
-    dur = _audio.duration_seconds(stem, audio_dir=audio_dir)
+def windows(stem, start, audio_dir=None, recorded=None):
+    """A capture's master window. Its length pulls nothing (`length_without_pull`): planning
+    every track must not pull every capture in turn, only the ones a cut then needs. A
+    length not read from the audio is named on stderr."""
+    dur, source = _audio.length_without_pull(stem, audio_dir=audio_dir, recorded=recorded)
+    if dur is None:
+        dur = _audio.duration_seconds(stem, audio_dir=audio_dir)
+    elif source == "stream-files.json":
+        print("WARNING: the length of %s is taken from stream-files.json, not measured from "
+              "its audio: the capture file is not on this disk" % stem, file=sys.stderr)
     return start, start + dur
 
 
@@ -194,7 +223,11 @@ def cut(stem, m_from, m_to, cstart, out_path):
     A refusal returns False and the caller prints the reason: the disk past its floor, or
     the cap with nothing evictable -- the two things `reserve` can refuse for.
     """
-    src = _audio.find_audio_file(stem)
+    src = _audio.find_audio_file(stem) or _audio.fetch_audio_file(stem)
+    if not src:
+        # fetch_audio_file printed why: no bucket, no such object, a refused check
+        print("  capture %s is not on this disk and could not be pulled" % stem)
+        return False
     lo = m_from - cstart
     policy = _on_policy(out_path)
     if policy and not cache_budget.reserve(STREAM_TRACKS_CACHE, None):
@@ -263,6 +296,121 @@ def safe(name):
     return "".join(c if (c.isalnum() or c in " -_&.,'()") else "_" for c in name).strip()[:90]
 
 
+# --- the published cuts ---------------------------------------------------------------------
+
+_CUT_KEY = re.compile(r"^" + re.escape(audio_bucket.TRACKS_PREFIX) + r"(\d{3})\.flac$")
+
+
+def _write_meta(path, record):
+    meta = path + OBJECT_META
+    tmp = "%s.%d.tmp" % (meta, os.getpid())
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(record, fh)
+        os.replace(tmp, meta)
+    except OSError:
+        _discard(tmp)
+
+
+def _read_meta(path):
+    try:
+        with open(path + OBJECT_META, encoding="utf-8") as fh:
+            got = json.load(fh)
+        return got if isinstance(got, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def publish(num, path, artist, title, bucket=None):
+    """Publish one landed cut as `stream/tracks/<NNN>.flac` through `bucketio.put`, which
+    stores its SHA-256 and checks the upload; the artist and title ride in the object's
+    metadata. The key is the track number alone, so a retitled track replaces its own
+    object, and a changed span replaces it in place. Returns the key, or None (nothing set,
+    or the upload refused, printed). Records the object beside the cut."""
+    bucket = bucket or audio_bucket.bucket()
+    if bucket is None:
+        return None
+    key = audio_bucket.track_key(num)
+    got, err = bucketio.put(bucket, path, key,
+                            meta={"track": "%03d" % int(num), "artist": artist or "",
+                                  "title": title or ""})
+    if got is None:
+        print("  %3s NOT PUBLISHED  %s: %s" % (num, key, err))
+        return None
+    _write_meta(path, {"key": key, "size": got.size, "sha256": got.sha256, "etag": got.etag})
+    return key
+
+
+def held_cuts(directory=None):
+    """{track number: path} of the cuts in the tracks cache, the `.flac` first per number."""
+    directory = directory or cache_budget.dir_of(STREAM_TRACKS_CACHE)
+    out = {}
+    if not directory or not os.path.isdir(directory):
+        return out
+    for fn in sorted(os.listdir(directory)):
+        m = re.match(r"^(\d{3}) - .*\.flac$", fn)
+        if m and int(m.group(1)) not in out:
+            out[int(m.group(1))] = os.path.join(directory, fn)
+    return out
+
+
+def refresh_cuts():
+    """Bring the cuts this machine holds up to the bucket's: one listing of
+    `stream/tracks/`, read once when a process that reads the cuts starts, and each held cut
+    whose size differs from its row, or whose recorded ETag differs from the row's, is
+    replaced by the bucket's object (checked by its SHA-256 metadata). A cut with no row is
+    left alone; a cut never published by this machine is compared by its size. Serving a cut
+    afterwards makes no bucket call, so a stale cut can play until the next start.
+
+    Returns {replaced: [numbers], failed: {number: reason}}; {} with no bucket set, no
+    registered cache, or a bucket that did not answer (printed)."""
+    bucket = audio_bucket.bucket()
+    directory = cache_budget.dir_of(STREAM_TRACKS_CACHE)
+    if bucket is None or not directory:
+        return {}
+    listed, err = bucketio.listing(bucket, audio_bucket.TRACKS_PREFIX, max_age=0)
+    if err is not None:
+        print("the audio bucket did not answer the stream/tracks/ listing: %s" % err)
+        return {}
+    rows = {}
+    for key, row in listed.items():
+        m = _CUT_KEY.match(key)
+        if m:
+            rows[int(m.group(1))] = (key, row)
+    report = {"replaced": [], "failed": {}}
+    for num, path in sorted(held_cuts(directory).items()):
+        if num not in rows:
+            continue
+        key, row = rows[num]
+        meta = _read_meta(path) or {}
+        try:
+            same_size = os.path.getsize(path) == row.size
+        except OSError:
+            continue
+        if same_size and (not meta.get("etag") or not row.etag or meta["etag"] == row.etag):
+            continue
+        got, err = bucketio.head(bucket, key)
+        if got is None:
+            report["failed"][num] = err or "no such object"
+            continue
+        if not cache_budget.reserve(STREAM_TRACKS_CACHE, got.size):
+            report["failed"][num] = "the tracks cache refused the room"
+            continue
+        why = bucketio.fetch_verified(bucket, key, path, size=got.size, sha256=got.sha256)
+        if why is not None:
+            report["failed"][num] = why
+            continue
+        _write_meta(path, {"key": key, "size": got.size, "sha256": got.sha256,
+                           "etag": got.etag})
+        cache_budget.commit(STREAM_TRACKS_CACHE, path)
+        report["replaced"].append(num)
+    for num in report["replaced"]:
+        print("  %3s replaced from the audio bucket (its cut changed)" % num)
+    for num, why in sorted(report["failed"].items()):
+        print("  %3s could not be replaced from the audio bucket: %s" % (num, why))
+    return report
+
+
 def resolve_out(explicit_out=None):
     """(directory, None) to cut into, or (None, the refusal to print and exit on).
 
@@ -305,8 +453,11 @@ def main():
     meta = json.load(open(os.path.join(_gt.REPO_ROOT, "track-metadata.json")))
     tracks = meta.get("tracks", meta)
     starts = positions()
-    places = {s: windows(s, v) for s, v in starts.items()}
-    print("# %d capture(s) with PRECISE timing and audio on disk\n" % len(places))
+    recorded = _audio.recorded_durations()
+    places = {s: windows(s, v, recorded=recorded) for s, v in starts.items()}
+    print("# %d capture(s) with PRECISE timing and audio on disk or in the audio bucket\n"
+          % len(places))
+    bucket = None if args.dry_run else audio_bucket.bucket()
 
     if not args.dry_run:
         os.makedirs(args.out, exist_ok=True)
@@ -363,6 +514,8 @@ def main():
             skipped += 1
             continue
         made += 1
+        if bucket is not None and _on_policy(out):
+            publish(num, out, e.get("artist"), e.get("title"), bucket=bucket)
 
     print("\n# %d extracted (%d needed reassembly across captures), %d refused"
           % (made, joined, skipped))

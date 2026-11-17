@@ -37,10 +37,11 @@ The interface:
         in a `.part` file beside `dest` and are renamed into place only after the checks pass;
         the `.part` file is always removed.
 
-    put(bucket, path, key) -> (Head, None) | (None, detail)
+    put(bucket, path, key, meta=None) -> (Head, None) | (None, detail)
         Uploads `path` with its SHA-256 stored as object metadata (always computed here, from
         the bytes being uploaded), then heads the object and requires the size and the hash to
-        match.
+        match. `meta` adds other user-metadata pairs, each value percent-encoded (S3 metadata
+        is ASCII, and the CLI's `name=value,...` form splits on commas).
 
     run(bucket, args, kind) -> (stdout, None) | (None, detail)
         The one command runner: builds and runs one `aws` command for a bucket value under the
@@ -63,6 +64,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.parse
 
 # The one seam through which every aws invocation passes: swappable in tests.
 _run = subprocess.run
@@ -306,19 +308,33 @@ def fetch_verified(bucket, key, dest, size=None, sha256=None, require_sha256=Tru
 
 # --- put ---------------------------------------------------------------------------
 
-def put(bucket, path, key):
+def _meta_arg(digest, meta):
+    """The `--metadata` value: the hash first, then each other pair, names lowercased (S3
+    lowercases them anyway) and values percent-encoded, so a comma, an equals sign or a
+    character outside ASCII in a title cannot split or break the pair."""
+    pairs = [(SHA256_META, digest)]
+    for name, value in sorted((meta or {}).items()):
+        name = str(name).strip().lower()
+        if name and name != SHA256_META and all(c.isalnum() or c in "-_" for c in name):
+            pairs.append((name, urllib.parse.quote(str(value), safe=" ")))
+    return ",".join("%s=%s" % pair for pair in pairs)
+
+
+def put(bucket, path, key, meta=None):
     """Upload `path` as `key` with its SHA-256 stored as object metadata, then head the object
     and require the size and the hash to match. Returns (Head, None), or (None, detail).
 
     The hash is always computed here, from the file being uploaded: a hash handed in could be
-    stale or wrong, and the metadata is what every later fetch trusts."""
+    stale or wrong, and the metadata is what every later fetch trusts. `meta` adds other
+    user-metadata pairs (`_meta_arg`); a name that is not letters, digits, `-` and `_`, or
+    that would replace the hash, is dropped."""
     try:
         local = os.path.getsize(path)
         digest = sha256_file(path)
     except OSError as exc:
         return None, str(exc)
     _out, err = run(bucket, ["s3", "cp", path, bucket.url(key), "--no-progress",
-                             "--metadata", "%s=%s" % (SHA256_META, digest)], "copy")
+                             "--metadata", _meta_arg(digest, meta)], "copy")
     if err is not None:
         return None, err
     _forget_listings(bucket, key)
