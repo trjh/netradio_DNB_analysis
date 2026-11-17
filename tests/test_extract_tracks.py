@@ -636,6 +636,21 @@ class ThePublishedCuts(unittest.TestCase):
         with open(path, "rb") as fh:
             self.assertEqual(fh.read(), b"abcd" * 10)
 
+    def test_a_failed_replacement_never_costs_the_held_cut_even_when_room_is_needed(self):
+        from bucket_fake import FakeProc
+        os.environ["NETRADIO_STREAM_TRACKS_CACHE_GB"] = "0.00006"     # 60 bytes: room is needed
+        extract_tracks.register_cache()
+        self.fake.add(self.bucket, "stream/tracks/004.flac", b"new" * 15, sha256=True)
+        path = self._hold(4, b"old" * 10)
+        self.fake.fail_next("cp-down", FakeProc(returncode=1, stderr="connection reset"))
+        with contextlib.redirect_stdout(io.StringIO()):
+            report = extract_tracks.refresh_cuts()
+        self.assertEqual(report["replaced"], [])
+        self.assertIn(4, report["failed"])
+        with open(path, "rb") as fh:
+            self.assertEqual(fh.read(), b"old" * 10, "the held cut is untouched")
+        self.assertFalse(extract_tracks._pinned_cut(path), "unpinned after the attempt")
+
     def test_reading_a_held_cut_makes_no_bucket_call(self):
         self._hold(4, b"x" * 10)
         extract_tracks.held_cuts()

@@ -117,7 +117,9 @@ def build_cases(tracks, starts, src):
             for stem, ms in starts.items():
                 if not _audio.capture_nameable(stem):
                     continue
-                if ms <= mb and me <= ms + _audio.duration_seconds(stem):
+                # the length pulls nothing: a scan over every capture must not pull each
+                length = _audio.length_without_pull(stem)[0]
+                if length is not None and ms <= mb and me <= ms + length:
                     cap = (stem, ms)
                     break
         # a clean extract, if extract_tracks.py has made one: the stream_tracks cache's

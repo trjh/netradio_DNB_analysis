@@ -97,6 +97,16 @@ def _cut_companions(path):
     return [] if path.endswith(OBJECT_META) else [path + OBJECT_META]
 
 
+# The cuts `refresh_cuts` is replacing: pinned, so the `reserve` for a replacement can never
+# evict the cut it replaces. A replacement that then fails its fetch or its checks leaves the
+# held cut exactly as it was (`fetch_verified` renames into place only after both pass).
+_refreshing = set()
+
+
+def _pinned_cut(path):
+    return os.path.realpath(path) in _refreshing
+
+
 def tracks_dir():
     """The tracks cache's directory: NETRADIO_STREAM_TRACKS_CACHE_DIR, else
     $NETRADIO_CACHE_ROOT/stream_tracks, else None (no --out default)."""
@@ -121,7 +131,8 @@ def register_cache():
                                      max_age=STREAM_TRACKS_CACHE_MAX_AGE_DAYS,
                                      refill="re-extract, or audio bucket: "
                                             "stream/tracks/<NNN>.flac",
-                                     rank=8, companions=_cut_companions)
+                                     rank=8, companions=_cut_companions,
+                                     pinned=_pinned_cut)
     except cache_budget.CacheRefused as exc:
         print(exc)              # `resolve_out` then refuses to cut, naming the setting
         return None
@@ -393,17 +404,22 @@ def refresh_cuts():
         if got is None:
             report["failed"][num] = err or "no such object"
             continue
-        if not cache_budget.reserve(STREAM_TRACKS_CACHE, got.size):
-            report["failed"][num] = "the tracks cache refused the room"
-            continue
-        why = bucketio.fetch_verified(bucket, key, path, size=got.size, sha256=got.sha256)
-        if why is not None:
-            report["failed"][num] = why
-            continue
-        _write_meta(path, {"key": key, "size": got.size, "sha256": got.sha256,
-                           "etag": got.etag})
-        cache_budget.commit(STREAM_TRACKS_CACHE, path)
-        report["replaced"].append(num)
+        real = os.path.realpath(path)
+        _refreshing.add(real)
+        try:
+            if not cache_budget.reserve(STREAM_TRACKS_CACHE, got.size):
+                report["failed"][num] = "the tracks cache refused the room"
+                continue
+            why = bucketio.fetch_verified(bucket, key, path, size=got.size, sha256=got.sha256)
+            if why is not None:
+                report["failed"][num] = why
+                continue
+            _write_meta(path, {"key": key, "size": got.size, "sha256": got.sha256,
+                               "etag": got.etag})
+            cache_budget.commit(STREAM_TRACKS_CACHE, path)
+            report["replaced"].append(num)
+        finally:
+            _refreshing.discard(real)
     for num in report["replaced"]:
         print("  %3s replaced from the audio bucket (its cut changed)" % num)
     for num, why in sorted(report["failed"].items()):
