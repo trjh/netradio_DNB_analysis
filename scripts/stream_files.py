@@ -111,12 +111,9 @@ def normalize_audio_filename(name):
 
 def original_filename(mp3_name):
     """The original capture's filename for a timeline key: `.au` for the 14Nov captures,
-    else `.wav`. Some keys carry a sortable prefix (`d201-221.14Nov10-b.mp3`)."""
+    else `.wav`."""
     stem = mp3_name[:-4] if mp3_name.lower().endswith(".mp3") else mp3_name
     if "14Nov" in stem:
-        if "." in stem:
-            tail = stem.split(".", 1)[1]
-            stem = ("d-" + tail) if tail.startswith("14Nov") else tail
         return stem + ".au"
     return stem + ".wav"
 
