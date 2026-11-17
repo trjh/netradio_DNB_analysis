@@ -5,6 +5,7 @@ The aws CLI never runs: `bucketio._run`, the module's one subprocess seam, is sw
 """
 
 import hashlib
+import json
 import os
 import sys
 import tempfile
@@ -29,6 +30,8 @@ class Base(unittest.TestCase):
             fh.write("#!/bin/sh\nexit 1\n")
         os.chmod(self.cli, 0o755)
         self.aws = FakeAws().install(self)
+        bucketio._digests.clear()
+        self.addCleanup(bucketio._digests.clear)
         self.bucket = bucketio.Bucket("b", aws_cli=self.cli)
 
     def file(self, name, body):
@@ -228,6 +231,29 @@ class TestFetchVerified(Base):
         err = bucketio.fetch_verified(self.bucket, "k", self.dest(), require_sha256=False)
         self.assertIn("sha256 mismatch", err)
 
+    def test_an_empty_hash_from_the_caller_is_the_callers_fault(self):
+        self.aws.add("b", "k", b"audio", sha256=True)
+        err = bucketio.fetch_verified(self.bucket, "k", self.dest(), sha256="")
+        self.assertIn("caller passed an empty sha256", err)
+        self.assertEqual(self.aws.calls, [])                          # nothing asked or copied
+
+    def test_the_clis_own_temp_file_goes_with_a_killed_copy(self):
+        # `aws s3 cp` downloads to `<target>.<random>` and renames at the end; a copy killed
+        # at its timeout leaves that file, which does not end `.part`.
+        self.aws.add("b", "k", b"audio", sha256=True)
+        real = self.aws._cp_down
+
+        def killed(args):
+            with open(args[3] + ".3fA9c0D1", "wb") as fh:
+                fh.write(b"aud")
+            raise timeout_error()
+        self.aws._cp_down = killed
+        err = bucketio.fetch_verified(self.bucket, "k", self.dest())
+        self.assertTrue(err)
+        self.assertEqual(os.listdir(os.path.join(self.tmp, "out")), [])
+        self.aws._cp_down = real
+        self.assertIsNone(bucketio.fetch_verified(self.bucket, "k", self.dest()))
+
     def test_absent_object_is_refused(self):
         err = bucketio.fetch_verified(self.bucket, "k", self.dest())
         self.assertIn("no such object", err)
@@ -256,6 +282,55 @@ class TestPut(Base):
     def test_the_hash_is_always_the_uploaded_bytes(self):
         with self.assertRaises(TypeError):
             bucketio.put(self.bucket, self.file("f", b"abc"), "p/f", sha256="not-a-sha256")
+
+    def test_the_etag_proves_the_bytes(self):
+        # The SHA-256 the head returns is only the metadata the put sent; an upload whose bytes
+        # arrived changed (same size) is caught by the ETag.
+        self.aws.stored[("b", "p/f")] = b"abd"
+        got, err = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
+        self.assertIsNone(got)
+        self.assertIn("etag mismatch", err)
+
+    def test_a_multipart_etag_is_checked_part_by_part(self):
+        body = os.urandom(bucketio.MULTIPART_PART_BYTES * 2 + 5)
+        got, err = bucketio.put(self.bucket, self.file("big", body), "p/big")
+        self.assertIsNone(err)
+        self.assertTrue(got.etag.endswith("-3"))
+        bad = bytearray(body)
+        bad[-1] ^= 1
+        self.aws.stored[("b", "p/big")] = bytes(bad)
+        got, err = bucketio.put(self.bucket, self.file("big", body), "p/big")
+        self.assertIn("etag mismatch", err)
+
+    def test_a_part_size_it_cannot_know_is_refused_not_passed(self):
+        body = os.urandom(bucketio.MULTIPART_PART_BYTES + 5)
+        path = self.file("big", body)
+        sha = hashlib.sha256(body).hexdigest()
+        self.aws.fail_next("head-object", FakeProc(stdout=json.dumps(
+            {"ContentLength": len(body), "ETag": '"0123-7"', "Metadata": {"sha256": sha}})))
+        got, err = bucketio.put(self.bucket, path, "p/big")
+        self.assertIsNone(got)
+        self.assertIn("cannot prove the bytes", err)
+
+    def test_an_unchanged_file_is_hashed_once(self):
+        path = self.file("f", b"abc")
+        calls = []
+        real = bucketio._digest_file
+
+        def counting(p):
+            calls.append(p)
+            return real(p)
+        with mock.patch.object(bucketio, "_digest_file", counting):
+            bucketio.sha256_file(path)
+            bucketio.put(self.bucket, path, "p/f")
+            bucketio.put(self.bucket, path, "p/f")
+            self.assertEqual(len(calls), 1)
+            with open(path, "ab") as fh:
+                fh.write(b"d")                                       # changed: read again
+            got, err = bucketio.put(self.bucket, path, "p/f")
+            self.assertIsNone(err)
+            self.assertEqual(got.sha256, hashlib.sha256(b"abcd").hexdigest())
+            self.assertEqual(len(calls), 2)
 
     def test_a_failed_upload_is_reported_without_a_head(self):
         self.aws.fail_next("cp-up", FakeProc(returncode=1, stderr="denied"))

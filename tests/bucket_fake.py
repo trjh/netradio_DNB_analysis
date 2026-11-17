@@ -35,12 +35,22 @@ class FakeProc:
 NOT_FOUND = ("An error occurred (404) when calling the HeadObject operation: Not Found")
 
 
+def etag(body):
+    """The ETag S3 gives an object the aws CLI uploaded with its default part size."""
+    part = bucketio.MULTIPART_PART_BYTES
+    if len(body) <= part:
+        return hashlib.md5(body).hexdigest()
+    parts = [hashlib.md5(body[i:i + part]).digest() for i in range(0, len(body), part)]
+    return "%s-%d" % (hashlib.md5(b"".join(parts)).hexdigest(), len(parts))
+
+
 class FakeAws:
     def __init__(self, page_size=None):
         self.objects = {}           # (bucket, key) -> {"body": bytes, "meta": {name: value}}
         self.calls = []             # (args, full command, timeout)
         self.page_size = page_size      # None: the call's own --max-items, as the CLI does
         self.served = {}            # (bucket, key) -> bytes a download writes instead
+        self.stored = {}            # (bucket, key) -> bytes an upload stores instead
         self._fail = {}             # operation -> [FakeProc or exception], used first
 
     # --- set-up --------------------------------------------------------------------
@@ -119,7 +129,8 @@ class FakeAws:
                 name, _, val = pair.partition("=")
                 meta[name.lower()] = val
         with open(args[2], "rb") as fh:
-            self.objects[(bucket, key)] = {"body": fh.read(), "meta": meta}
+            body = self.stored.get((bucket, key), fh.read())
+        self.objects[(bucket, key)] = {"body": body, "meta": meta}
         return FakeProc()
 
     def _cp_down(self, args):
@@ -137,7 +148,7 @@ class FakeAws:
             return FakeProc(returncode=254, stderr=NOT_FOUND)
         return FakeProc(stdout=json.dumps({
             "ContentLength": len(obj["body"]),
-            "ETag": '"%s"' % hashlib.md5(obj["body"]).hexdigest(),
+            "ETag": '"%s"' % obj.get("etag", etag(obj["body"])),
             "Metadata": obj["meta"]}))
 
     def _list_objects_v2(self, args):
@@ -148,7 +159,7 @@ class FakeAws:
         page = keys[start:start + size]
         more = start + size < len(keys)
         contents = [[k, len(self.objects[(bucket, k)]["body"]),
-                     '"%s"' % hashlib.md5(self.objects[(bucket, k)]["body"]).hexdigest()]
+                     '"%s"' % etag(self.objects[(bucket, k)]["body"])]
                     for k in page]
         return FakeProc(stdout=json.dumps([contents or None,
                                            str(start + size) if more else None]))

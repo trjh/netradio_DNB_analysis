@@ -26,6 +26,7 @@ in. Env is read lazily (config may load after import).
 
 import os
 import re
+import sys
 
 import bucketio                                     # the one bucket client: every call goes through it
 import cache_budget                                 # the chroma cache's policy: deletions go through it
@@ -46,9 +47,12 @@ _SIDECAR_NAME = re.compile(r"u[0-9a-f]{20}\.json", re.ASCII)
 _verified = {}                      # key -> (remote size, etag)
 
 
-def _bucket():
-    """The signature bucket as a `bucketio.Bucket`, built from this repo's settings, or None
-    when the store is dark (no bucket named, or no `aws` CLI to be found).
+_reported = set()                   # store errors already printed by this process
+
+
+def _define():
+    """(the signature bucket as a `bucketio.Bucket`, None), or (None, why) when it cannot be
+    defined: no bucket named, or no `aws` CLI to be found.
 
     The endpoint is optional: unset, no --endpoint-url flag is passed and the aws CLI's own
     default applies. Any S3-compatible provider is configured in `.env`, by the operator --
@@ -57,9 +61,36 @@ def _bucket():
         return bucketio.Bucket(os.environ.get("NETRADIO_SIG_BUCKET", ""),
                                endpoint=os.environ.get("NETRADIO_SIG_S3_ENDPOINT", ""),
                                profile=os.environ.get("NETRADIO_SIG_AWS_PROFILE", ""),
-                               aws_cli=os.environ.get("NETRADIO_AWS_CLI", ""))
-    except bucketio.BucketError:
+                               aws_cli=os.environ.get("NETRADIO_AWS_CLI", "")), None
+    except bucketio.BucketError as exc:
+        return None, str(exc)
+
+
+def store_error():
+    """Why the store is dark although a bucket IS named, or None. With no bucket named, dark is
+    the configured state and no error; with one named, a store that cannot be defined (an
+    `aws` CLI that does not resolve, a mistyped NETRADIO_AWS_CLI) is a misconfiguration: the
+    store stays dark, so nothing is uploaded and nothing is evicted, but it is an error, never
+    a silent local-only run."""
+    if not os.environ.get("NETRADIO_SIG_BUCKET", "").strip():
         return None
+    bucket, why = _define()
+    if bucket is not None:
+        return None
+    return ("the signature store is dark: NETRADIO_SIG_BUCKET is set, but %s "
+            "(check NETRADIO_AWS_CLI). Nothing is uploaded until it is fixed" % why)
+
+
+def _bucket():
+    """The signature bucket, or None when the store is dark. A dark store with a bucket named is
+    printed as an ERROR, once per process (`store_error`)."""
+    bucket, _why = _define()
+    if bucket is None:
+        err = store_error()
+        if err and err not in _reported:
+            _reported.add(err)
+            print("ERROR: sigstore: " + err, file=sys.stderr, flush=True)
+    return bucket
 
 
 def enabled():
