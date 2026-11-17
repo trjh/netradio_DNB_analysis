@@ -80,6 +80,9 @@ class TestListing(Base):
         self.assertEqual(listed["p/k1"].etag, hashlib.md5(b"x").hexdigest())  # quotes gone
         self.assertEqual(len(self.aws.ops("list-objects-v2")), 3)
         self.assertIn("--starting-token", self.aws.calls[1][0])
+        first = self.aws.calls[0][0]
+        # one page per command: the CLI stops after --max-items and prints a NextToken
+        self.assertEqual(first[first.index("--max-items") + 1], str(bucketio.LIST_PAGE_KEYS))
 
     def test_one_list_per_prefix_per_minute(self):
         self.aws.add("b", "p/a", b"1")
@@ -125,6 +128,22 @@ class TestHead(Base):
 
     def test_absent_is_none_none(self):
         self.assertEqual(bucketio.head(self.bucket, "k"), (None, None))
+
+    def test_only_the_head_404_means_absent(self):
+        # Other errors that mention a 404 or "Not Found" (a wrong endpoint behind a proxy, an
+        # error from another operation) are no answer, never "the object is not there".
+        for stderr in ("Not Found", "NoSuchKey", "proxy: 404 Not Found",
+                       "An error occurred (404) when calling the ListObjectsV2 operation"):
+            self.aws.fail_next("head-object", FakeProc(returncode=254, stderr=stderr))
+            got, err = bucketio.head(self.bucket, "k")
+            self.assertIsNone(got)
+            self.assertTrue(err, stderr)
+            self.aws.add("b", "k", b"audio", sha256=True)
+            self.aws.fail_next("head-object", FakeProc(returncode=254, stderr=stderr))
+            self.assertNotIn("no such object",
+                             bucketio.fetch_verified(self.bucket, "k",
+                                                     os.path.join(self.tmp, "f")))
+            del self.aws.objects[("b", "k")]
 
     def test_no_answer_is_a_detail(self):
         self.aws.fail_next("head-object", FakeProc(returncode=255, stderr="Could not connect"))
@@ -234,12 +253,9 @@ class TestPut(Base):
         self.assertEqual(cp[cp.index("--metadata") + 1], "sha256=" + digest)
         self.assertEqual(self.aws.ops(), ["cp-up", "head-object"])
 
-    def test_a_passed_hash_is_used(self):
-        path = self.file("f", b"abc")
-        digest = hashlib.sha256(b"abc").hexdigest()
-        got, err = bucketio.put(self.bucket, path, "p/f", sha256=digest.upper())
-        self.assertIsNone(err)
-        self.assertEqual(self.aws.objects[("b", "p/f")]["meta"], {"sha256": digest})
+    def test_the_hash_is_always_the_uploaded_bytes(self):
+        with self.assertRaises(TypeError):
+            bucketio.put(self.bucket, self.file("f", b"abc"), "p/f", sha256="not-a-sha256")
 
     def test_a_failed_upload_is_reported_without_a_head(self):
         self.aws.fail_next("cp-up", FakeProc(returncode=1, stderr="denied"))

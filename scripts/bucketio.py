@@ -37,9 +37,10 @@ The interface:
         in a `.part` file beside `dest` and are renamed into place only after the checks pass;
         the `.part` file is always removed.
 
-    put(bucket, path, key, sha256=None) -> (Head, None) | (None, detail)
-        Uploads `path` with its SHA-256 stored as object metadata (computed here when not
-        passed), then heads the object and requires the size and the hash to match.
+    put(bucket, path, key) -> (Head, None) | (None, detail)
+        Uploads `path` with its SHA-256 stored as object metadata (always computed here, from
+        the bytes being uploaded), then heads the object and requires the size and the hash to
+        match.
 
     run(bucket, args, kind) -> (stdout, None) | (None, detail)
         The one command runner: builds and runs one `aws` command for a bucket value under the
@@ -72,6 +73,12 @@ _run = subprocess.run
 TIMEOUTS = {"copy": 600, "head": 60, "list": 60}
 
 LISTING_MAX_AGE_S = 60          # how long a listing is held in memory by default
+
+# Keys asked for per `list-objects-v2` call. With `--max-items` set, the CLI stops after that
+# many keys and prints a NextToken to resume from, so each command is one page and the list
+# timeout bounds one page, never a whole bucket (without it, the CLI pages through
+# everything inside one process).
+LIST_PAGE_KEYS = 1000
 
 # The user-metadata name the hash is stored under. S3 lowercases user metadata names, and the
 # lookup in `head` ignores case, so another CLI version cannot turn a hash into a miss.
@@ -139,12 +146,17 @@ def run(bucket, args, kind):
     return (proc.stdout or ""), None
 
 
+_HEAD_404 = "(404) when calling the HeadObject operation"
+
+
 def bucket_said_no(detail):
     """True when a failed head is the bucket's answer (the object is not there) rather than no
-    answer at all. The CLI reports a missing object as "An error occurred (404) when calling the
-    HeadObject operation: Not Found"; a timeout, a refused connection, a 403 from bad
-    credentials or a missing CLI says nothing about the object."""
-    return "(404)" in detail or "NoSuchKey" in detail or "Not Found" in detail
+    answer at all. The CLI reports a missing object as exactly "An error occurred (404) when
+    calling the HeadObject operation: Not Found", and only that text counts; a timeout, a
+    refused connection, a 403 from bad credentials, a missing CLI or any other error says
+    nothing about the object. A HEAD carries no error body, so a bucket that does not exist
+    answers the same 404; the caller's bucket value is what names the bucket."""
+    return _HEAD_404 in detail
 
 
 def sha256_file(path):
@@ -167,6 +179,7 @@ def _list_now(bucket, prefix):
     objects, token = {}, None
     while True:
         args = ["s3api", "list-objects-v2", "--bucket", bucket.name, "--prefix", prefix,
+                "--max-items", str(LIST_PAGE_KEYS), "--page-size", str(LIST_PAGE_KEYS),
                 "--query", "[Contents[].[Key, Size, ETag], NextToken]", "--output", "json"]
         if token:
             args += ["--starting-token", token]
@@ -293,12 +306,15 @@ def fetch_verified(bucket, key, dest, size=None, sha256=None, require_sha256=Tru
 
 # --- put ---------------------------------------------------------------------------
 
-def put(bucket, path, key, sha256=None):
+def put(bucket, path, key):
     """Upload `path` as `key` with its SHA-256 stored as object metadata, then head the object
-    and require the size and the hash to match. Returns (Head, None), or (None, detail)."""
+    and require the size and the hash to match. Returns (Head, None), or (None, detail).
+
+    The hash is always computed here, from the file being uploaded: a hash handed in could be
+    stale or wrong, and the metadata is what every later fetch trusts."""
     try:
         local = os.path.getsize(path)
-        digest = (sha256 or sha256_file(path)).strip().lower()
+        digest = sha256_file(path)
     except OSError as exc:
         return None, str(exc)
     _out, err = run(bucket, ["s3", "cp", path, bucket.url(key), "--no-progress",

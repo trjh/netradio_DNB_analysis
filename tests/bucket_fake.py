@@ -6,7 +6,8 @@ It answers the four calls the module makes, with the JSON the real CLI prints (b
     s3 cp <file> s3://<bucket>/<key> [--metadata name=value]    upload
     s3 cp s3://<bucket>/<key> <file>                             download
     s3api head-object --bucket B --key K                         404 when absent
-    s3api list-objects-v2 --bucket B --prefix P [--starting-token T]   pages of `page_size`
+    s3api list-objects-v2 --bucket B --prefix P --max-items N [--starting-token T]
+                                                                 pages of N keys
 
 Every call is recorded as (args after the CLI's global flags, the full command, the timeout).
 No network, no real bucket, no process is ever started.
@@ -35,10 +36,10 @@ NOT_FOUND = ("An error occurred (404) when calling the HeadObject operation: Not
 
 
 class FakeAws:
-    def __init__(self, page_size=1000):
+    def __init__(self, page_size=None):
         self.objects = {}           # (bucket, key) -> {"body": bytes, "meta": {name: value}}
         self.calls = []             # (args, full command, timeout)
-        self.page_size = page_size
+        self.page_size = page_size      # None: the call's own --max-items, as the CLI does
         self.served = {}            # (bucket, key) -> bytes a download writes instead
         self._fail = {}             # operation -> [FakeProc or exception], used first
 
@@ -142,14 +143,15 @@ class FakeAws:
     def _list_objects_v2(self, args):
         bucket, prefix = self._opt(args, "--bucket"), self._opt(args, "--prefix") or ""
         keys = sorted(k for b, k in self.objects if b == bucket and k.startswith(prefix))
+        size = self.page_size or int(self._opt(args, "--max-items") or len(keys) or 1)
         start = int(self._opt(args, "--starting-token") or 0)
-        page = keys[start:start + self.page_size]
-        more = start + self.page_size < len(keys)
+        page = keys[start:start + size]
+        more = start + size < len(keys)
         contents = [[k, len(self.objects[(bucket, k)]["body"]),
                      '"%s"' % hashlib.md5(self.objects[(bucket, k)]["body"]).hexdigest()]
                     for k in page]
         return FakeProc(stdout=json.dumps([contents or None,
-                                           str(start + self.page_size) if more else None]))
+                                           str(start + size) if more else None]))
 
 
 def timeout_error(cmd="aws", seconds=60):
