@@ -2755,6 +2755,22 @@ def check_memory(state, key, child=None):
     return False
 
 
+def note_store_error(state):
+    """A signature bucket named but not usable (`sigstore.store_error`) is an ERROR: printed
+    at every start, and recorded in the state's `issues` once while it stands (a run that finds
+    the same error already among the issues does not record it again). Returns True when
+    `issues` changed. The store stays dark: signing goes on locally, and nothing is evicted."""
+    err = sigstore.store_error()
+    if not err:
+        return False
+    print("ERROR: " + err)
+    issues = state.setdefault("issues", [])
+    if any(isinstance(i, dict) and i.get("issue") == "store: " + err for i in issues):
+        return False
+    state["issues"] = (issues + [{"at": _now(), "issue": "store: " + err}])[-50:]
+    return True
+
+
 def run(args):
     install_signal_handlers()
     lock = acquire_writer_lock()
@@ -2826,6 +2842,8 @@ def run(args):
               "start again.")
         _save(STATE, state)
         return EXIT_CONFIG
+    if note_store_error(state):
+        _save(STATE, state)
     print("# searching for Mystery Tracks %s"
           % (", ".join(str(n) for n, _, _ in qs) or "none"))
     print("# signing the top level of %d director%s, one file a pass. Ctrl-C or SIGTERM stops "

@@ -132,9 +132,15 @@ above); the harvester reads no credentials itself. The store is **on** only when
 bucket is named and the AWS CLI resolves to an executable; with the store on, a sign whose
 upload of either object fails writes no row, and the file is signed again on a later pass.
 
+**A bucket named but not reachable is an error.** When `NETRADIO_SIG_BUCKET` is set but the
+`aws` CLI does not resolve (a mistyped `NETRADIO_AWS_CLI`, say), the store is dark as above,
+and the harvester prints an `ERROR:` line at every start and records it once in the state's
+`issues`.
+
 **Each upload carries its SHA-256.** An object is stored with the file's SHA-256 as user
 metadata (`sha256`), and the upload counts only when a HEAD of the object returns the file's
-size and that hash. A signature fetched back is checked against the hash where its object
+size, that hash, and the ETag those bytes give (their MD5, or for an upload in parts the
+multipart ETag at the CLI's default part size). A signature fetched back is checked against the hash where its object
 carries one, and against its size where it does not: objects uploaded before the hash was
 stored have none.
 

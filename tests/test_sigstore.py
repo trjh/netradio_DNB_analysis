@@ -7,7 +7,9 @@ hand-escaped: S3 quotes its etags inside JSON, and one hand-escaped quote is exa
 of fixture that passes while the real thing fails.
 """
 
+import contextlib
 import hashlib
+import io
 import json
 import os
 import sys
@@ -76,7 +78,31 @@ class TestDark(Base):
 
     def test_dark_without_a_cli(self):
         os.environ["NETRADIO_AWS_CLI"] = os.path.join(self.tmp.name, "missing")
-        self.assertFalse(sigstore.enabled())
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertFalse(sigstore.enabled())
+
+    def test_a_named_bucket_with_no_cli_is_an_error_printed_once(self):
+        # The store stays dark, but a bucket the operator named and cannot reach is an ERROR,
+        # never a silent local-only run.
+        self.addCleanup(sigstore._reported.clear)
+        sigstore._reported.clear()
+        os.environ["NETRADIO_AWS_CLI"] = os.path.join(self.tmp.name, "missing")
+        self.assertIn("NETRADIO_SIG_BUCKET is set", sigstore.store_error())
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertFalse(sigstore.enabled())
+            self.assertFalse(sigstore.enabled())
+        self.assertEqual(err.getvalue().count("ERROR: sigstore:"), 1)
+
+    def test_no_bucket_named_is_no_error(self):
+        del os.environ["NETRADIO_SIG_BUCKET"]
+        os.environ["NETRADIO_AWS_CLI"] = os.path.join(self.tmp.name, "missing")
+        self.assertIsNone(sigstore.store_error())
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            sigstore.enabled()
+        self.assertEqual(err.getvalue(), "")
+        os.environ["NETRADIO_AWS_CLI"] = self.aws_cli
+        os.environ["NETRADIO_SIG_BUCKET"] = BUCKET
+        self.assertIsNone(sigstore.store_error())
 
     def test_dark_never_evicts(self):
         del os.environ["NETRADIO_SIG_BUCKET"]

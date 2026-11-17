@@ -39,9 +39,10 @@ The interface:
 
     put(bucket, path, key, meta=None) -> (Head, None) | (None, detail)
         Uploads `path` with its SHA-256 stored as object metadata (always computed here, from
-        the bytes being uploaded), then heads the object and requires the size and the hash to
-        match. `meta` adds other user-metadata pairs, each value percent-encoded (S3 metadata
-        is ASCII, and the CLI's `name=value,...` form splits on commas).
+        the file being uploaded; never taken from the caller), then heads the object and
+        requires the size, the hash and the ETag to match. The ETag is what proves the bytes:
+        see `expected_etag`. `meta` adds other user-metadata pairs, each value percent-encoded
+        (S3 metadata is ASCII, and the CLI's `name=value,...` form splits on commas).
 
     run(bucket, args, kind) -> (stdout, None) | (None, detail)
         The one command runner: builds and runs one `aws` command for a bucket value under the
@@ -56,6 +57,7 @@ only `head-object` returns it (a listing does not).
 import collections
 import contextlib
 import dataclasses
+import glob
 import hashlib
 import json
 import os
@@ -69,6 +71,8 @@ import urllib.parse
 # The one seam through which every aws invocation passes: swappable in tests.
 _run = subprocess.run
 
+_lock = threading.Lock()        # guards the module's in-memory state
+
 # One timeout for each kind of call, defined here once. A copy moves a whole file (a two-hour
 # capture is a few hundred MB), so it gets minutes; a head and one page of a listing are a
 # metadata round trip each.
@@ -81,6 +85,11 @@ LISTING_MAX_AGE_S = 60          # how long a listing is held in memory by defaul
 # timeout bounds one page, never a whole bucket (without it, the CLI pages through
 # everything inside one process).
 LIST_PAGE_KEYS = 1000
+
+# The part size the aws CLI uses for a multipart upload unless its own configuration says
+# otherwise (`multipart_chunksize`), and the size above which it uploads in parts
+# (`multipart_threshold`). Both are the CLI's defaults, 8 MiB.
+MULTIPART_PART_BYTES = 8 * 1024 * 1024
 
 # The user-metadata name the hash is stored under. S3 lowercases user metadata names, and the
 # lookup in `head` ignores case, so another CLI version cannot turn a hash into a miss.
@@ -161,20 +170,62 @@ def bucket_said_no(detail):
     return _HEAD_404 in detail
 
 
-def sha256_file(path):
-    """The SHA-256 of a file, as lowercase hex, read in 1 MiB blocks."""
-    digest = hashlib.sha256()
+Digests = collections.namedtuple("Digests", "sha256 md5 part_md5s")
+
+_digests = collections.OrderedDict()    # (realpath, size, mtime_ns) -> Digests
+_DIGESTS_HELD = 256
+
+
+def _digest_file(path):
+    """One pass over a file: its SHA-256, its MD5, and the MD5 of each MULTIPART_PART_BYTES
+    part (what a multipart ETag is built from)."""
+    sha, md5, parts = hashlib.sha256(), hashlib.md5(), []
     with open(path, "rb") as fh:
-        for block in iter(lambda: fh.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
+        while True:
+            part = fh.read(MULTIPART_PART_BYTES)
+            if not part:
+                break
+            sha.update(part)
+            md5.update(part)
+            parts.append(hashlib.md5(part).digest())
+    return Digests(sha.hexdigest(), md5.hexdigest(), tuple(parts))
+
+
+def digests(path):
+    """The file's Digests, read once per (path, size, mtime): a file asked about again, unchanged
+    since, is not read again. A changed file has a new size or mtime, so it is read afresh."""
+    st = os.stat(path)
+    slot = (os.path.realpath(path), st.st_size, st.st_mtime_ns)
+    with _lock:
+        if slot in _digests:
+            _digests.move_to_end(slot)
+            return _digests[slot]
+    got = _digest_file(path)
+    with _lock:
+        _digests[slot] = got
+        while len(_digests) > _DIGESTS_HELD:
+            _digests.popitem(last=False)
+    return got
+
+
+def sha256_file(path):
+    """The SHA-256 of a file, as lowercase hex (held as `digests` holds it)."""
+    return digests(path).sha256
+
+
+def expected_etag(size, got):
+    """The ETag the bucket gives an object holding exactly these bytes, as the aws CLI uploads
+    them with its default settings: the plain MD5 for a file at or under the multipart
+    threshold, else the MD5 of the parts' MD5s followed by `-<number of parts>`."""
+    if size <= MULTIPART_PART_BYTES:
+        return got.md5
+    return "%s-%d" % (hashlib.md5(b"".join(got.part_md5s)).hexdigest(), len(got.part_md5s))
 
 
 # --- listing -----------------------------------------------------------------------
 
 _listings = {}                  # (bucket, prefix) -> (monotonic time, {key: Listed})
 _listing_locks = {}             # (bucket, prefix) -> Lock: one LIST at a time per prefix
-_lock = threading.Lock()
 
 
 def _list_now(bucket, prefix):
@@ -258,6 +309,8 @@ def head(bucket, key):
 def fetch_verified(bucket, key, dest, size=None, sha256=None, require_sha256=True):
     """Copy object `key` to `dest`, checked before it is renamed into place. Returns None, or
     the reason it refused. See the module docstring for the rules."""
+    if sha256 is not None and not sha256.strip():
+        return "refused: the caller passed an empty sha256 for %s" % key
     if size is None or sha256 is None:
         got, err = head(bucket, key)
         if got is None:
@@ -288,7 +341,7 @@ def fetch_verified(bucket, key, dest, size=None, sha256=None, require_sha256=Tru
         got_size = os.path.getsize(part)
         if got_size != size:
             return "size mismatch: bucket object %s, expected %s" % (got_size, size)
-        if sha256 and sha256_file(part) != sha256:
+        if sha256 and _digest_file(part).sha256 != sha256:
             return "sha256 mismatch: %s" % key
         try:
             os.replace(part, dest)
@@ -302,8 +355,13 @@ def fetch_verified(bucket, key, dest, size=None, sha256=None, require_sha256=Tru
     except OSError as exc:
         return str(exc)
     finally:
-        with contextlib.suppress(OSError):
-            os.remove(part)             # a no-op after the rename; the cleanup after a refusal
+        # The aws CLI writes a download to its own temporary name beside the target
+        # (`<target>.<random>`) and renames it at the end, so a copy killed at its timeout
+        # leaves that file behind. Its name does not end `.part`, so nothing else would ever
+        # take it away.
+        for leftover in [part] + glob.glob(glob.escape(part) + ".*"):
+            with contextlib.suppress(OSError):
+                os.remove(leftover)     # `part` itself is a no-op after the rename
 
 
 # --- put ---------------------------------------------------------------------------
@@ -325,12 +383,20 @@ def put(bucket, path, key, meta=None):
     and require the size and the hash to match. Returns (Head, None), or (None, detail).
 
     The hash is always computed here, from the file being uploaded: a hash handed in could be
-    stale or wrong, and the metadata is what every later fetch trusts. `meta` adds other
-    user-metadata pairs (`_meta_arg`); a name that is not letters, digits, `-` and `_`, or
-    that would replace the hash, is dropped."""
+    stale or wrong, and the metadata is what every later fetch trusts. It is read once per
+    unchanged file (`digests`), so a caller that asked for `sha256_file` first costs no second
+    read. `meta` adds other user-metadata pairs (`_meta_arg`); a name that is not letters,
+    digits, `-` and `_`, or that would replace the hash, is dropped.
+
+    The SHA-256 the head returns is only the metadata this call sent, echoed back; the ETag is
+    the bucket's own account of the bytes. A single-part object's ETag is its MD5. A multipart
+    object's is the MD5 of its parts' MD5s, which depends on the part size: the check assumes
+    the CLI's default part size, and a CLI configured with another one gets a refusal that says
+    so, never a pass it cannot prove."""
     try:
         local = os.path.getsize(path)
-        digest = sha256_file(path)
+        got_digests = digests(path)
+        digest = got_digests.sha256
     except OSError as exc:
         return None, str(exc)
     _out, err = run(bucket, ["s3", "cp", path, bucket.url(key), "--no-progress",
@@ -345,4 +411,12 @@ def put(bucket, path, key, meta=None):
         return None, "size mismatch: local %s, bucket %s" % (local, got.size)
     if got.sha256 != digest:
         return None, "sha256 mismatch after the upload: %s" % key
+    want = expected_etag(local, got_digests)
+    if got.etag != want:
+        if local > MULTIPART_PART_BYTES and got.etag and "-" in got.etag \
+                and got.etag.rsplit("-", 1)[1] != want.rsplit("-", 1)[1]:
+            return None, ("cannot prove the bytes of %s: uploaded in %s parts, not the %s of "
+                          "the CLI's default part size" % (key, got.etag.rsplit("-", 1)[1],
+                                                            want.rsplit("-", 1)[1]))
+        return None, "etag mismatch after the upload: %s (the bytes differ)" % key
     return got, None
