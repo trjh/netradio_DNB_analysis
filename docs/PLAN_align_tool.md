@@ -1254,12 +1254,15 @@ sources themselves converge on FLAC, and the serving route only transcodes as a 
 
   **Revised (2026-11-18), following the originals resolver:** the bucket object is now the
   reference for an original. The resolver (`scripts/sources_resolve.py`) pulls a missing
-  original from the bucket, and it pulls a lossless master as its `.flac` sibling. So once the
-  bucket holds a verified copy, a machine that is not the master needs no lossless master of
-  its own:
+  original from the bucket: an original above flac in its rule (`wav`/`au`, `wv`/`aif`/`aiff`)
+  only as its `.flac` sibling, refused (503) while the bucket holds no flac for it; a lossy one
+  as it is. So once the bucket holds an original's flac, a machine that is not the master needs
+  no lossless master of its own:
 
-  - **the server's host holds flac only**: its `wv` (and `wav`/`aif`/`aiff`) leave once the
-    bucket holds them, and a flac it lacks is pulled on demand into its `sources_flac` cache.
+  - **the server's host needs flac only**: the cache policy may evict any other original there
+    once the bucket holds a verified copy of that file (never with
+    `NETRADIO_SOURCES_FLAC_CACHE_GB=none`), and a flac it lacks is pulled on demand into its
+    `sources_flac` cache.
   - **the master machine** still holds both `wv` and `flac`, and still makes the flac sibling.
   - **the bucket** holds every original, flat under `sources/<filename>`.
 
