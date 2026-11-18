@@ -191,7 +191,7 @@ Need-to-know:
 #### 8b. Giving the harvester a new (or better) Mystery Track clip
 
 ```bash
-cp "my-extract.wav" "$NETRADIO_SOURCES_DIR/Mystery Track 8.wav"
+cp "my-extract.wav" "$NETRADIO_SOURCES_FLAC_CACHE_DIR/Mystery Track 8.wav"
 scripts/run_harvester.sh restart
 ```
 
@@ -258,8 +258,8 @@ Warnings:
 - Activate the venv first (`. .venv/bin/activate`): it puts `scripts/` on the path
   (`netradio-scripts.pth`, written by `make venv` and `make dep`). Without it:
   `No module named streamalign`.
-- `--sources` is a **flag** (default `sources_local`); `NETRADIO_SOURCES_DIR` is not read by
-  these subcommands.
+- `--sources` is a **flag** (default `sources_local`); `NETRADIO_SOURCES_FLAC_CACHE_DIR` is not
+  read by these subcommands.
 - **Don't chase the track's start/end** — records are blended; there is no objective "begins"
   frame. Anchor on moments the record plays **alone** (Pass 1 already prefers those moments).
 - Pass 1 shells out to **`sonic-annotator`** (the MATCH plugin, headless) — with it missing,

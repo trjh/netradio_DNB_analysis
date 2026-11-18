@@ -105,6 +105,6 @@ does not.
 - Don't re-run the blind search hoping the material changed. It didn't.
 - Do widen the prior's coverage: every track `tracklist-2017.txt` places is a track
   `solo_anchors` can be pointed at.
-- The originals must be reachable (`NETRADIO_SOURCES_DIR`) and `find_original` must recognise
+- The originals must be reachable (`NETRADIO_SOURCES_FLAC_CACHE_DIR`) and `find_original` must recognise
   the extension — it silently missed **every WavPack (`.wv`)** original until 2026-07, reporting
   "no original" where it meant "unsupported extension". Most of the library is `.wv`.

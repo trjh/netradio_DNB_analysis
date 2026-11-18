@@ -132,7 +132,7 @@ def record(result):
 
 def cases():
     """Solved tracks where we hold BOTH the mix and the original. The calibration set."""
-    src = os.environ.get("NETRADIO_SOURCES_DIR")
+    src = os.environ.get("NETRADIO_SOURCES_FLAC_CACHE_DIR")
     if not src or not os.path.isdir(src):
         return []
     meta = json.load(open(os.path.join(_gt.REPO_ROOT, "track-metadata.json")))
@@ -147,7 +147,8 @@ def offline():
     cs = cases()
     if not cs:
         return record({"kind": "offline", "ok": None, "when": _now(),
-                       "why": "no calibration cases -- NETRADIO_SOURCES_DIR unset or empty"})
+                       "why": "no calibration cases -- "
+                              "NETRADIO_SOURCES_FLAC_CACHE_DIR unset or empty"})
 
     # Deterministic: always the same case, so a change in the RESULT means a change in the CODE.
     subject = cs[0]
@@ -264,7 +265,8 @@ def live(c_canary, mystery_queries=None):
         # with no manual `canary.json` step.
         if not cs:
             return record({"kind": "live", "ok": None, "when": _now(),
-                           "why": "no calibration cases -- NETRADIO_SOURCES_DIR unset or empty"})
+                           "why": "no calibration cases -- "
+                                  "NETRADIO_SOURCES_FLAC_CACHE_DIR unset or empty"})
         track = cs[0]["num"]
     subject = next((c for c in cs if c["num"] == track), None)
     if subject is None:

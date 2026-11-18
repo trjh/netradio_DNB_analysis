@@ -288,7 +288,7 @@ def main():
           % (host, port,
              "enabled" if align_inspect.enabled() else
              "NOT CONFIGURED - needs .venv (make venv) and the originals "
-             "(NETRADIO_SOURCES_DIR, else sources_local/)",
+             "(NETRADIO_SOURCES_FLAC_CACHE_DIR, else sources_local/)",
              "on -> branch %s" % review_sync.branch() if review_sync.enabled()
              else "dark"))
     httpd.serve_forever()

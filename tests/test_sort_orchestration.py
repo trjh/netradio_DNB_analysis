@@ -54,16 +54,16 @@ class EnvVarsLoading(unittest.TestCase):
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, True)
         with open(os.path.join(d, ".env"), "w") as fh:
-            fh.write("# machine paths\nNETRADIO_SOURCES_DIR=/tmp/originals\n"
+            fh.write("# machine paths\nNETRADIO_SOURCES_FLAC_CACHE_DIR=/tmp/originals\n"
                      "NETRADIO_ALREADY_SET=from_file\n\nBAD LINE NO EQUALS\n")
-        os.environ.pop("NETRADIO_SOURCES_DIR", None)
+        os.environ.pop("NETRADIO_SOURCES_FLAC_CACHE_DIR", None)
         os.environ["NETRADIO_ALREADY_SET"] = "from_env"
         try:
             sort_tsv.load_env_vars(os.path.join(d, ".env"))
-            self.assertEqual(os.environ["NETRADIO_SOURCES_DIR"], "/tmp/originals")
+            self.assertEqual(os.environ["NETRADIO_SOURCES_FLAC_CACHE_DIR"], "/tmp/originals")
             self.assertEqual(os.environ["NETRADIO_ALREADY_SET"], "from_env")  # real env wins
         finally:
-            os.environ.pop("NETRADIO_SOURCES_DIR", None)
+            os.environ.pop("NETRADIO_SOURCES_FLAC_CACHE_DIR", None)
             os.environ.pop("NETRADIO_ALREADY_SET", None)
 
     def test_missing_file_is_not_an_error(self):
@@ -75,19 +75,19 @@ class EnvVarsLoading(unittest.TestCase):
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, True)
         with open(os.path.join(d, ".env_vars"), "w") as fh:
-            fh.write("NETRADIO_SOURCES_DIR=/tmp/originals\n")
+            fh.write("NETRADIO_SOURCES_FLAC_CACHE_DIR=/tmp/originals\n")
         with self.assertRaises(SystemExit) as cm:
             sort_tsv.load_env_vars(os.path.join(d, ".env"))
         self.assertIn("mv ", str(cm.exception))
         self.assertIn(".env_vars", str(cm.exception))
         # once renamed, it loads
         os.rename(os.path.join(d, ".env_vars"), os.path.join(d, ".env"))
-        os.environ.pop("NETRADIO_SOURCES_DIR", None)
+        os.environ.pop("NETRADIO_SOURCES_FLAC_CACHE_DIR", None)
         try:
             sort_tsv.load_env_vars(os.path.join(d, ".env"))
-            self.assertEqual(os.environ["NETRADIO_SOURCES_DIR"], "/tmp/originals")
+            self.assertEqual(os.environ["NETRADIO_SOURCES_FLAC_CACHE_DIR"], "/tmp/originals")
         finally:
-            os.environ.pop("NETRADIO_SOURCES_DIR", None)
+            os.environ.pop("NETRADIO_SOURCES_FLAC_CACHE_DIR", None)
 
     def test_a_env_directory_is_refused_not_read(self):
         """Before the rename `.env` was a virtualenv DIRECTORY. Opening it raised
@@ -105,7 +105,7 @@ class EnvVarsLoading(unittest.TestCase):
         self.addCleanup(shutil.rmtree, d, True)
         shutil.copy(os.path.join(os.path.dirname(LABELS), "Makefile"), d)
         with open(os.path.join(d, ".env_vars"), "w") as fh:
-            fh.write("NETRADIO_SOURCES_DIR=/tmp/originals\n")
+            fh.write("NETRADIO_SOURCES_FLAC_CACHE_DIR=/tmp/originals\n")
         r = subprocess.run(["make", "-n", "venv"], cwd=d, capture_output=True, text=True)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("mv .env_vars .env", r.stderr + r.stdout)
@@ -126,13 +126,14 @@ class EnvVarsLoading(unittest.TestCase):
                     os.path.join(d, "scripts", "lib", "env.sh"))
         marker = os.path.join(d, "ran")
         with open(os.path.join(d, ".env"), "w") as fh:
-            fh.write('NETRADIO_SOURCES_DIR="/tmp/from file"\n$(shell touch %s)\n' % marker)
-        env = {k: v for k, v in os.environ.items() if k != "NETRADIO_SOURCES_DIR"}
+            fh.write('NETRADIO_SOURCES_FLAC_CACHE_DIR="/tmp/from file"\n'
+                     '$(shell touch %s)\n' % marker)
+        env = {k: v for k, v in os.environ.items() if k != "NETRADIO_SOURCES_FLAC_CACHE_DIR"}
         r = subprocess.run(["make", "-n", "align-check"], cwd=d, capture_output=True, text=True,
                            env=env)
         self.assertIn('test -d "/tmp/from file"', r.stdout, r.stderr)
         self.assertFalse(os.path.exists(marker), "the file is never included")
-        env["NETRADIO_SOURCES_DIR"] = "/tmp/from-env"
+        env["NETRADIO_SOURCES_FLAC_CACHE_DIR"] = "/tmp/from-env"
         r = subprocess.run(["make", "-n", "align-check"], cwd=d, capture_output=True, text=True,
                            env=env)
         self.assertIn('test -d "/tmp/from-env"', r.stdout, r.stderr)

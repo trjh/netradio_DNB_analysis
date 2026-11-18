@@ -288,11 +288,11 @@ def main(argv=None):
             "  ACRCLOUD_ACCESS_SECRET=...\n"
             "then: eval \"$(python3 scripts/envfile.py --export .env)\"")
 
-    sources = os.environ.get("NETRADIO_SOURCES_DIR")
+    sources = os.environ.get("NETRADIO_SOURCES_FLAC_CACHE_DIR")
     queries = list(args.query or [])
     if args.all_mystery:
         if not sources:
-            sys.exit("--all-mystery needs NETRADIO_SOURCES_DIR")
+            sys.exit("--all-mystery needs NETRADIO_SOURCES_FLAC_CACHE_DIR")
         from streamalign import mystery as _mystery
         queries += [e["clip"] for e in _mystery.searchable(sources)]
     if not queries:

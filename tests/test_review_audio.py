@@ -42,7 +42,7 @@ class RouteCase(unittest.TestCase):
         os.makedirs(self.src_dir)
         env = mock.patch.dict(os.environ, {
             "NETRADIO_MP3_DIR": self.mp3_dir,
-            "NETRADIO_SOURCES_DIR": self.src_dir,
+            "NETRADIO_SOURCES_FLAC_CACHE_DIR": self.src_dir,
             "NETRADIO_LABELS_DIR": "",
             "NETRADIO_AUTH_USER": "",
             "NETRADIO_AUTH_PASS": "",
@@ -301,7 +301,7 @@ class TestOrigResolution(RouteCase):
         self.assertEqual(resp.getheader("X-Review-Source"), "054-bbb-real.mp3")
 
     def test_no_sources_dir_is_a_404(self):
-        with mock.patch.dict(os.environ, {"NETRADIO_SOURCES_DIR":
+        with mock.patch.dict(os.environ, {"NETRADIO_SOURCES_FLAC_CACHE_DIR":
                                           os.path.join(self.tmp, "nope")}):
             resp, _ = self.req("/api/align/audio/orig/72")
         self.assertEqual(resp.status, 404)

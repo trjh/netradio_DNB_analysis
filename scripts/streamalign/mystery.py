@@ -39,7 +39,7 @@ def current(sources_dir=None, metadata_path=None):
     `clip` is the extracted audio if it exists in `sources_dir`, else None -- a mystery with
     no clip is still a mystery, it just cannot be searched or published yet.
     """
-    sources_dir = sources_dir or os.environ.get("NETRADIO_SOURCES_DIR") or ""
+    sources_dir = sources_dir or os.environ.get("NETRADIO_SOURCES_FLAC_CACHE_DIR") or ""
     clips = {}
     if os.path.isdir(sources_dir):
         # Lossless beats lossy, and .wav beats .wv only by convention (both are lossless;

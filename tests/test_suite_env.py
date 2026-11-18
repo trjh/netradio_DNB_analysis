@@ -1,12 +1,15 @@
-"""The suite never reaches a real bucket: the audio bucket's settings are removed for the run.
+"""The suite never reaches a real bucket or a real originals directory: the audio bucket's
+settings and the `NETRADIO_SOURCES_*` settings are removed for the run.
 
 Importing this module removes them from the environment. `python -m unittest discover -s tests`
 imports every test module before it runs a single test, so the scrub is in place for every test
 whichever module happens to declare it. A run of one module (`python -m unittest test_hints`
 from tests/, say) imports only that module, so `tests/bucket_fake.py` and every test module
 that reaches bucket code import this one too. A test that needs a bucket sets the names itself,
-over `tests/bucket_fake.py`, and restores them. A shell that exported a `.env`'s lines would otherwise
-hand a test the real bucket's name, and a pull or a publish in a test would reach it.
+over `tests/bucket_fake.py`, and restores them; a test that needs an originals directory sets
+it to a temporary one. A shell that exported a `.env`'s lines would otherwise hand a test the
+real bucket's name, and a pull or a publish in a test would reach it; or the machine's real
+originals, which a test would then read or write.
 """
 
 import os
@@ -14,14 +17,21 @@ import unittest
 
 AUDIO_BUCKET_NAMES = ("NETRADIO_AUDIO_BUCKET", "NETRADIO_AUDIO_S3_ENDPOINT",
                       "NETRADIO_AUDIO_AWS_PROFILE")
+SOURCES_NAMES = ("NETRADIO_SOURCES_FLAC_CACHE_DIR", "NETRADIO_SOURCES_FLAC_CACHE_GB",
+                 "NETRADIO_SOURCES_FFMPEG", "NETRADIO_SOURCES_PEERS")
+SCRUBBED_NAMES = AUDIO_BUCKET_NAMES + SOURCES_NAMES
 
-for _name in AUDIO_BUCKET_NAMES:
+for _name in SCRUBBED_NAMES:
     os.environ.pop(_name, None)
 
 
 class TestTheAudioBucketIsScrubbed(unittest.TestCase):
     def test_no_audio_bucket_setting_reaches_a_test(self):
         for name in AUDIO_BUCKET_NAMES:
+            self.assertNotIn(name, os.environ, name)
+
+    def test_no_sources_setting_reaches_a_test(self):
+        for name in SOURCES_NAMES:
             self.assertNotIn(name, os.environ, name)
 
 
@@ -33,13 +43,15 @@ class TheBucketHelperScrubsOnItsOwn(unittest.TestCase):
         import sys
         here = os.path.dirname(os.path.abspath(__file__))
         env = dict(os.environ, NETRADIO_AUDIO_BUCKET="a-real-bucket",
+                   NETRADIO_SOURCES_FLAC_CACHE_DIR="/a/real/originals",
                    PYTHONPATH=os.path.join(os.path.dirname(here), "scripts"))
         out = subprocess.run([sys.executable, "-c",
                               "import os, bucket_fake; "
-                              "print(os.environ.get('NETRADIO_AUDIO_BUCKET'))"],
+                              "print(os.environ.get('NETRADIO_AUDIO_BUCKET'), "
+                              "os.environ.get('NETRADIO_SOURCES_FLAC_CACHE_DIR'))"],
                              cwd=here, env=env, capture_output=True, text=True, timeout=60)
         self.assertEqual(out.returncode, 0, out.stderr)
-        self.assertEqual(out.stdout.strip(), "None")
+        self.assertEqual(out.stdout.strip(), "None None")
 
 
 if __name__ == "__main__":

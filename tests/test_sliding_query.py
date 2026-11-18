@@ -384,7 +384,7 @@ class TheRescanMinute(unittest.TestCase):
 
 def _real_audio():
     """(original 071, capture d356-375) when both are on this machine, else None."""
-    sources = os.environ.get("NETRADIO_SOURCES_DIR") or ""
+    sources = os.environ.get("NETRADIO_SOURCES_FLAC_CACHE_DIR") or ""
     captures = os.environ.get("NETRADIO_MP3_DIR") or ""
     orig = sorted(glob.glob(os.path.join(sources, "071-*.flac"))
                   + glob.glob(os.path.join(sources, "071-*.wav"))) if sources else []
@@ -405,7 +405,7 @@ class OriginalSeventyOneOnD356(unittest.TestCase):
     def test_found_with_the_new_query_and_missed_with_the_old(self):
         found = _real_audio()
         if not found:
-            self.skipTest("set NETRADIO_SOURCES_DIR (original 071) and NETRADIO_MP3_DIR "
+            self.skipTest("set NETRADIO_SOURCES_FLAC_CACHE_DIR (original 071) and NETRADIO_MP3_DIR "
                           "(capture d356-375) to run the real-audio check")
         orig, cap = found
         import chroma_recipe
