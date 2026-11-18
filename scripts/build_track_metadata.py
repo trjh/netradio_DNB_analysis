@@ -75,26 +75,6 @@ def owning_file_for_label_path(path):
     return normalize_audio_filename(label_stem(path))
 
 
-def original_audio_name(stem):
-    """The ORIGINAL capture filename for a label stem (.wav, or .au for 14Nov).
-
-    Track metadata in this repo is about the original files + tracks; a reader that
-    plays transcoded (.mp3) copies keeps its own original->transcoded mapping.
-    """
-    if "14Nov" in stem:
-        if "." in stem:
-            tail = stem.split(".", 1)[1]
-            stem = ("d-" + tail) if tail.startswith("14Nov") else tail
-        return stem + ".au"
-    return stem + ".wav"
-
-
-def original_from_mp3(mp3_name):
-    """Original capture filename for a normalized .mp3 timeline key."""
-    stem = mp3_name[:-4] if mp3_name.lower().endswith(".mp3") else mp3_name
-    return original_audio_name(stem)
-
-
 ID_ROW_RE = re.compile(r"^ID0*(\d+):", re.I)  # bare `IDNNN:` continuation marker
 
 # Track-end markers (all anchored at the start of the label text so that
@@ -283,15 +263,17 @@ def parse_label_track_ids():
     timeline, current_by_path = parse_file_timeline(label_rows)
     track_ends = compute_track_ends(label_rows, timeline, current_by_path)
 
+    # Track metadata names the ORIGINAL capture files (.wav, .au for 14Nov), not the transcoded
+    # copies; a reader that plays the copies keeps its own original-to-copy mapping.
     def owning_original_for(path):
         owning = current_by_path.get(path) or owning_file_for_label_path(path)
-        return original_from_mp3(owning), owning
+        return stream_files.original_filename(owning), owning
 
     # File master windows keyed by ORIGINAL capture filename (the .mp3 form is an
     # internal artifact).  start_of maps original name -> master_start.
     windows, start_of = [], {}
     for mp3_key, info in timeline.items():
-        name = original_from_mp3(mp3_key)
+        name = stream_files.original_filename(mp3_key)
         s, e = info.get("master_start_seconds"), info.get("master_end_seconds")
         windows.append((name, s, e))
         start_of[name] = s
