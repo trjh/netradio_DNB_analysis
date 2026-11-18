@@ -4,6 +4,7 @@ The load-bearing one is the first class: a hint must never be able to overwrite,
 mistaken for, a hand label. Everything else is presentation.
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import os
 import shutil
 import sys
@@ -88,12 +89,16 @@ class TestOverlapDetection(unittest.TestCase):
 
         class _FakeAudio:
             @staticmethod
-            def find_audio_file(stem, audio_dir=None):
-                return "/fake/%s.wav" % stem
+            def capture_nameable(stem, audio_dir=None):
+                return True
 
             @staticmethod
-            def duration_seconds(stem, audio_dir=None):
-                return 1200.0
+            def recorded_durations():
+                return {}
+
+            @staticmethod
+            def length_without_pull(stem, audio_dir=None, recorded=None):
+                return 1200.0, "audio"
 
             @staticmethod
             def stem_of(name):
@@ -111,12 +116,16 @@ class TestOverlapDetection(unittest.TestCase):
 
         class _FakeAudio:
             @staticmethod
-            def find_audio_file(stem, audio_dir=None):
-                return "/fake/%s.wav" % stem
+            def capture_nameable(stem, audio_dir=None):
+                return True
 
             @staticmethod
-            def duration_seconds(stem, audio_dir=None):
-                return 1200.0
+            def recorded_durations():
+                return {}
+
+            @staticmethod
+            def length_without_pull(stem, audio_dir=None, recorded=None):
+                return 1200.0, "audio"
 
             @staticmethod
             def stem_of(name):

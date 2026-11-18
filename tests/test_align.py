@@ -6,6 +6,7 @@ the numeric knobs, the fixed-argv subprocess shape, the one-at-a-time lock, and 
 loopback-only-without-auth route gate.
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import json
 import os
 import re
@@ -19,6 +20,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
 
+import align_ids
 import align_inspect
 import align_server
 import cache_budget
@@ -60,6 +62,8 @@ class _Env(unittest.TestCase):
         self.addCleanup(root.stop)
         patcher = mock.patch.dict(os.environ, {
             "NETRADIO_SOURCES_DIR": "",
+            "NETRADIO_CAPTURES_DIR": "",        # the capture directory: the MP3 dir's parent
+            "NETRADIO_AUDIO_DIR": "",           # unset: an explicit one is kept (_child_env)
             # the one-shot path is the contract under test here; the keep-warm
             # worker has its own test classes below
             "NETRADIO_ALIGN_WORKER": "0",
@@ -184,14 +188,14 @@ class TestSecurityContract(_Env):
         outside = os.path.join(self.tmp.name, "outside.mp3")
         open(outside, "w").close()
         os.symlink(outside, os.path.join(self.mp3, "escape.mp3"))
-        self.assertNotIn("escape", align_inspect.list_streams(self.mp3))
-        self.assertIn("d376-395", align_inspect.list_streams(self.mp3))
+        self.assertNotIn("escape", align_ids.list_streams(self.mp3))
+        self.assertIn("d376-395", align_ids.list_streams(self.mp3))
 
     def test_stream_listing_excludes_a_symlink_inside_the_directory(self):
         # a timeline-position second name for a listed MP3 is not a capture of its own
         os.symlink(os.path.join(self.mp3, "d376-395.mp3"), os.path.join(self.mp3, "d377-396.mp3"))
-        self.assertNotIn("d377-396", align_inspect.list_streams(self.mp3))
-        self.assertIn("d376-395", align_inspect.list_streams(self.mp3))
+        self.assertNotIn("d377-396", align_ids.list_streams(self.mp3))
+        self.assertIn("d376-395", align_ids.list_streams(self.mp3))
 
 
 class TestSubprocessSeam(_Env):
@@ -1468,11 +1472,23 @@ class TestWorkerClient(_Env):
                                     "-m", "streamalign", "inspect-worker"])
         self.assertIn("--sources", argv)
         self.assertFalse(kw.get("shell", False))
-        self.assertEqual(kw["env"]["NETRADIO_AUDIO_DIR"], self.mp3)
+        # the DSP decodes the capture files, never the MP3s: the child is handed the capture
+        # directory (NETRADIO_CAPTURES_DIR, else the MP3 directory's parent)
+        self.assertNotEqual(kw["env"]["NETRADIO_AUDIO_DIR"], self.mp3)
+        self.assertEqual(kw["env"]["NETRADIO_AUDIO_DIR"], align_ids.captures_dir(self.mp3))
         self.assertEqual(kw["env"]["PYTHONPATH"], os.path.join(self.repo, "scripts"))
         # the ping and the request each went out as one JSON line
         self.assertEqual([json.loads(s)["op"] for s in proc.written],
                          ["ping", "slice"])
+
+    def test_child_env_keeps_an_explicit_audio_dir_when_no_captures_dir_is_named(self):
+        mine = os.path.join(self.tmp.name, "my-captures")
+        with mock.patch.dict(os.environ, {"NETRADIO_AUDIO_DIR": mine}):
+            self.assertEqual(align_inspect._child_env(self.mp3)["NETRADIO_AUDIO_DIR"], mine)
+            named = os.path.join(self.tmp.name, "named")
+            with mock.patch.dict(os.environ, {"NETRADIO_CAPTURES_DIR": named}):
+                self.assertEqual(align_inspect._child_env(self.mp3)["NETRADIO_AUDIO_DIR"],
+                                 named, "a named capture directory still wins")
 
     def test_worker_reused_across_requests(self):
         proc = _FakeProc([PING_OK, '{"a": 1}\n', '{"b": 2}\n'])

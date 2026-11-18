@@ -6,9 +6,11 @@ module is deliberately **DSP-free**: no venv, no worker, and — since the decis
 plain file serving:
 
 - **identifiers, never paths**: the client names a capture STEM (validated against
-  `align_inspect.list_streams()`) or an original NUMBER (validated against the
+  `align_ids.list_streams()`) or an original NUMBER (validated against the
   sources-dir listing, the same namespace `list_originals()` reads); this module maps
   them to paths itself, realpath-containment-checked under the configured roots;
+  a capture only the audio bucket holds is pulled whole, checked, before it is served
+  (`align_ids.ensure_stream`);
 - **hard caps**: any file over `MAX_REVIEW_BYTES` (~600 MB) is refused with 413 —
   a review pair is a song, not an archive;
 - **flac-first resolution** (the DP-23 mainline) for originals, in §6.8's order:
@@ -34,6 +36,7 @@ otherwise it is a JSON-able error body.
 
 import os
 
+import align_ids
 import align_inspect
 
 MAX_REVIEW_BYTES = 600 * 1024 * 1024   # the §3.3-style cap: refuse anything larger
@@ -54,11 +57,16 @@ def _ok(path, ctype, source=None):
 def stream_delivery(stem, mp3_dir):
     """GET /api/align/audio/stream/<stem> → the capture MP3, identifier-validated.
 
-    `stem` must appear in `list_streams()` (which itself applies `_STEM_RE` and the
-    containment check) — never a client-supplied path; the path is then rebuilt here
-    and containment-checked again (defence in depth, the /audio idiom)."""
-    if not stem or stem not in align_inspect.list_streams(mp3_dir):
+    `stem` must appear in `align_ids.list_streams()` (which itself applies the stem
+    pattern and the containment check, and names the audio bucket's MP3s too) — never a
+    client-supplied path. A stem only the bucket holds is pulled once
+    (`align_ids.ensure_stream`; a failed pull answers with its own status); the path is then
+    rebuilt here and containment-checked again (defence in depth, the /audio idiom)."""
+    if not stem or stem not in align_ids.list_streams(mp3_dir):
         return 404, {"error": "unknown stem"}
+    failed = align_ids.ensure_stream(stem, mp3_dir)
+    if failed is not None:
+        return failed[0], {"error": failed[1]}
     path = os.path.join(mp3_dir, stem + ".mp3")
     if not align_inspect._contained(path, mp3_dir) or not os.path.isfile(path):
         return 404, {"error": "unknown stem"}

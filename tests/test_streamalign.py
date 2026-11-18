@@ -7,6 +7,7 @@ and run everywhere: they stub the decode and drive `cache_budget` against a
 temporary root.
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import json
 import os
 import re
@@ -409,8 +410,12 @@ class TrackMixTests(unittest.TestCase):
             SR = sr
 
             @staticmethod
-            def find_audio_file(stem, audio_dir=None):
+            def capture_nameable(stem, audio_dir=None):
                 return stem in lengths
+
+            @staticmethod
+            def length_without_pull(stem, audio_dir=None):
+                return None, None           # no length without a decode: load_audio measures
 
             @staticmethod
             def load_audio(stem, audio_dir=None):
@@ -653,10 +658,8 @@ class FindAudioFileTests(unittest.TestCase):
         self.assertTrue(audio.find_audio_file("a", self.dir).endswith("a.wav"))
         self.assertTrue(audio.find_audio_file("b.au", self.dir).endswith("b.au"))
 
-    def test_wav_preferred_over_au_then_mp3(self):
-        # the preference order is unchanged: .wav, then .au, then the transcode.
-        # All three steps are pinned: .wav over both, and .au over the transcode --
-        # without the second pair the order could be .wav > .mp3 > .au and still pass.
+    def test_wav_preferred_over_au_and_the_mp3_never(self):
+        # .wav, then .au; the transcode is never a capture file, whatever the label names
         self._touch("c.wav")
         self._touch("c.au")
         self._touch("c.mp3")
@@ -667,21 +670,21 @@ class FindAudioFileTests(unittest.TestCase):
         self.assertTrue(audio.find_audio_file("f", self.dir).endswith("f.au"))
         self.assertTrue(audio.find_audio_file("f.mp3", self.dir).endswith("f.au"))
 
-    def test_a_directory_holding_only_the_mp3_still_resolves(self):
-        # a machine can hold only the transcodes, so a stem with no capture
-        # file on disk must resolve the .mp3, not fail
+    def test_a_directory_holding_only_the_mp3_resolves_nothing(self):
+        # the lossless-only rule: a transcode is not a capture file, so a stem whose
+        # only file here is its MP3 has no capture file on this disk
         self._touch("d.mp3")
-        self.assertTrue(audio.find_audio_file("d", self.dir).endswith("d.mp3"))
-        self.assertTrue(audio.find_audio_file("d.mp3", self.dir).endswith("d.mp3"))
+        self.assertIsNone(audio.find_audio_file("d", self.dir))
+        self.assertIsNone(audio.find_audio_file("d.mp3", self.dir))
 
-    def test_load_audio_decodes_the_mp3_when_it_is_all_there_is(self):
+    def test_load_audio_never_decodes_the_mp3(self):
+        # with no audio bucket set (the suite scrubs it), the miss fails as it always did
         self._touch("e.mp3")
-        with mock.patch.object(
-                audio, "_ffmpeg_decode",
-                return_value=np.zeros(20 * 1000, dtype="float32")) as decode:
-            signal = audio.load_audio("e", audio_dir=self.dir)
-        self.assertEqual(len(signal), 20 * 1000)
-        self.assertTrue(decode.call_args[0][0].endswith("e.mp3"))
+        with mock.patch.dict(os.environ, {"NETRADIO_AUDIO_BUCKET": ""}), \
+                mock.patch.object(audio, "_ffmpeg_decode") as decode:
+            with self.assertRaises(FileNotFoundError):
+                audio.load_audio("e", audio_dir=self.dir)
+        decode.assert_not_called()
 
 
 class CachePolicyTests(unittest.TestCase):

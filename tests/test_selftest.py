@@ -14,6 +14,7 @@ each other. Winning by nothing is not winning.
 No network and no audio: `fetch` is injected, and the local-file paths are stubbed.
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import os
 import shutil
 import sys

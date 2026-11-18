@@ -70,7 +70,7 @@ def _measure(pairs):
     """[{a,b,offset_s,conf}] for pairs whose audio is present."""
     out = []
     for a, b in pairs:
-        if not (_audio.find_audio_file(a) and _audio.find_audio_file(b)):
+        if not (_audio.capture_nameable(a) and _audio.capture_nameable(b)):
             continue
         r = _align.align_pair(a, b)
         out.append({"a": a, "b": b, "offset_s": r["offset_seconds"], "conf": r["confidence"]})

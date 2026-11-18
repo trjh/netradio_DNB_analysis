@@ -6,6 +6,7 @@ skipped, EOF ends the loop), and the single-slot pair cache that reloads only wh
 the (stem, orig, rate) trio changes. Loaders are monkeypatched; no ffmpeg runs.
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import io
 import json
 import os

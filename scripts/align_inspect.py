@@ -34,9 +34,10 @@ everything about that boundary:
   of `hints` so the review page can interleave both into one selectable list.
 
 The same identifier/caps contract now also covers the align server's whole-file
-review-audio GETs (DP-22 §6.8) — resolved DSP-free in `review_audio.py` against this
-module's namespaces (`list_streams()` / the sources-dir listing); the venv is never
-involved in serving audio.
+review-audio GETs (DP-22 §6.8) — resolved DSP-free in `review_audio.py` against the
+capture namespace (`align_ids.list_streams()`, which names the stems of this disk's MP3s
+and of the audio bucket's) and the sources-dir listing; the venv is never involved in
+serving audio.
 
 The routes themselves (in `align_server.py`) bind loopback unless told otherwise, and
 require Basic Auth when it is configured: compute-on-demand is never exposed by accident.
@@ -49,10 +50,11 @@ environment — and the server agree on cap, age and directory. It is a call fro
 `align_server.main`, not at this module's import: the align server loads `.env`
 after its imports, and the registration reads the environment once, at call time.
 
-The child's `NETRADIO_AUDIO_DIR` is the MP3 directory: the inspector's DSP decodes
-have been the transcode tiles since the server landed, and that is kept deliberately.
-Switching the DSP to the lossless captures waits on a decision about timing (the
-transcode's encoder delay against the labels' clock).
+The child's `NETRADIO_AUDIO_DIR` is the capture directory (`align_ids.captures_dir`:
+NETRADIO_CAPTURES_DIR, else the parent of the MP3 directory), so the inspector's DSP
+decodes the lossless capture files the labels were placed on, never the lossy MP3
+transcodes. A capture the disk does not hold is pulled from the audio bucket by the
+child's own decode (`streamalign.audio.load_audio`).
 """
 
 import json
@@ -63,6 +65,7 @@ import re
 import subprocess
 import threading
 
+import align_ids
 import cache_budget
 import envfile
 
@@ -79,7 +82,7 @@ SUBPROCESS_TIMEOUT_S = 120
 WORKER_PING_TIMEOUT_S = 30   # first ping pays the numpy import
 STREAMALIGN_CACHE_MAX_AGE_DAYS = 14   # an align session is days, not months (decision made 2026-09-16)
 
-_STEM_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_STEM_RE = align_ids.STEM_RE          # the capture stem pattern lives with the identifiers
 _ORIG_FILE_RE = re.compile(r"^(\d{3})-(.+)\.(mp3|flac|m4a|opus|wav|wv|aif|aiff|mp4|ogg)$",
                            re.IGNORECASE)
 _HINTS_NAME_RE = re.compile(r"^([A-Za-z0-9._-]+)\.orig(\d{3})\.match\.hints\.tsv$")
@@ -163,25 +166,25 @@ def register_cache():
         return None
 
 
-def _contained(path, root):
-    """True if `path` resolves inside `root` (the realpath-containment check)."""
-    rp = os.path.realpath(path)
-    rr = os.path.realpath(root)
-    return rp == rr or rp.startswith(rr + os.sep)
+_contained = align_ids.contained
 
 
-def list_streams(mp3_dir):
-    """Capture stems the server can name (from its own MP3 listing). A symlinked MP3 is not
-    listed: the pipeline ignores symlinks (`stream_files.plain_files`)."""
-    if not mp3_dir or not os.path.isdir(mp3_dir):
-        return []
-    out = []
-    for fn in sorted(os.listdir(mp3_dir)):
-        path = os.path.join(mp3_dir, fn)
-        if fn.lower().endswith(".mp3") and _STEM_RE.match(fn[:-4]) \
-                and not os.path.islink(path) and _contained(path, mp3_dir):
-            out.append(fn[:-4])
-    return out
+def _child_env(mp3_dir):
+    """The DSP child's environment: this process's, with the scripts on the path and
+    NETRADIO_AUDIO_DIR the capture directory (never the MP3 one: see the module docstring).
+    NETRADIO_CAPTURES_DIR, when set, names it. Unset, an explicit NETRADIO_AUDIO_DIR is
+    kept, and only an unset one takes the parent of the MP3 directory."""
+    env = dict(os.environ)
+    # PYTHONPATH is redundant once the venv carries netradio-scripts.pth (`make venv`/
+    # `make dep`, 2026-09-17); kept so a venv built by hand still works.
+    env["PYTHONPATH"] = os.path.join(repo_root(), "scripts")
+    named = os.environ.get("NETRADIO_CAPTURES_DIR", "").strip()
+    if not named and os.environ.get("NETRADIO_AUDIO_DIR", "").strip():
+        return env
+    captures = align_ids.captures_dir(mp3_dir)
+    if captures:
+        env["NETRADIO_AUDIO_DIR"] = captures
+    return env
 
 
 def list_originals():
@@ -378,7 +381,7 @@ def placed_listing(mp3_dir, runner=None, worker=None):
     """
     if not enabled():
         return {"state": "dark", "sets": []}
-    streams = set(list_streams(mp3_dir))
+    streams = set(align_ids.list_streams(mp3_dir))
     if not streams:
         return {"state": "ok", "sets": []}
     if not _run_lock.acquire(blocking=False):
@@ -394,11 +397,7 @@ def placed_listing(mp3_dir, runner=None, worker=None):
                 payload = None
         if not isinstance(payload, dict) or payload.get("error"):
             argv = [_venv_python(), "-m", "streamalign", "placed"]
-            env = dict(os.environ)
-            # PYTHONPATH is redundant once the venv carries netradio-scripts.pth (`make venv`/
-            # `make dep`, 2026-09-17); kept so a venv built by hand still works.
-            env["PYTHONPATH"] = os.path.join(repo_root(), "scripts")
-            env["NETRADIO_AUDIO_DIR"] = mp3_dir or ""   # env parity with run_request
+            env = _child_env(mp3_dir)       # env parity with run_request
             run = runner or subprocess.run
             proc = run(argv, cwd=repo_root(), env=env, shell=False,
                        capture_output=True, timeout=SUBPROCESS_TIMEOUT_S)
@@ -464,7 +463,7 @@ def _validated(params, mp3_dir, op="slice"):
     stem = str(params.get("stem") or "")
     if not _STEM_RE.match(stem):
         return None, "bad stem"
-    if stem not in list_streams(mp3_dir):
+    if stem not in align_ids.list_streams(mp3_dir):
         return None, "unknown stem"
     try:
         orig = int(params.get("orig"))
@@ -585,9 +584,7 @@ class WorkerClient:
     def _spawn(self, mp3_dir):
         argv = [_venv_python(), "-m", "streamalign", "inspect-worker",
                 "--sources", sources_dir()]
-        env = dict(os.environ)
-        env["PYTHONPATH"] = os.path.join(repo_root(), "scripts")   # redundant with the .pth; see run_request
-        env["NETRADIO_AUDIO_DIR"] = mp3_dir or ""
+        env = _child_env(mp3_dir)
         self._proc = self._popen(argv, cwd=repo_root(), env=env, shell=False,
                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                  stderr=subprocess.DEVNULL, text=True, bufsize=1)
@@ -690,11 +687,7 @@ def run_request(params, mp3_dir, op="slice", runner=None, worker=None):
             except WorkerError:
                 pass                       # one-shot fallback below
         argv = build_argv(clean, op=op)
-        env = dict(os.environ)
-        # PYTHONPATH is redundant once the venv carries netradio-scripts.pth (`make venv`/
-        # `make dep`, 2026-09-17); kept so a venv built by hand still works.
-        env["PYTHONPATH"] = os.path.join(repo_root(), "scripts")
-        env["NETRADIO_AUDIO_DIR"] = mp3_dir or ""
+        env = _child_env(mp3_dir)
         run = runner or subprocess.run
         proc = run(argv, cwd=repo_root(), env=env, shell=False,
                    capture_output=True, timeout=SUBPROCESS_TIMEOUT_S)

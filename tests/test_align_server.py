@@ -6,6 +6,7 @@ compute routes relaying the validator's answers, 404s. Runs against a live
 in-process server on an ephemeral port, with no checkout configured (dark).
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import ast
 import http.client
 import json

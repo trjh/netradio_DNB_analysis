@@ -473,7 +473,7 @@ class TheTracksCache(unittest.TestCase):
         with unittest.mock.patch.object(sys, "argv", argv), \
                 unittest.mock.patch.object(extract_tracks, "positions",
                                           lambda: {"d000-018": 0.0}), \
-                unittest.mock.patch.object(extract_tracks, "windows", lambda s, v: []), \
+                unittest.mock.patch.object(extract_tracks, "windows", lambda s, v, **_kw: []), \
                 unittest.mock.patch.object(extract_tracks, "plan",
                                           lambda mb, me, places: (pieces, None)), \
                 unittest.mock.patch.object(extract_tracks, "cut",
@@ -501,3 +501,267 @@ class TheTracksCache(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ThePublishedCuts(unittest.TestCase):
+    """Each landed cut is published as `stream/tracks/<NNN>.flac` (keyed by the track number,
+    never the title) with its SHA-256, artist and title in the object's metadata; a held cut
+    that changed in the bucket is replaced at the start of a process that reads the cuts.
+    All over tests/bucket_fake.py."""
+
+    def setUp(self):
+        import shutil
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from bucket_fake import AUDIO_BUCKET, FakeAws, isolate_caches
+        self.bucket = AUDIO_BUCKET
+        self.tmp = tempfile.mkdtemp(prefix="published-cuts-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.fake = isolate_caches(self, os.path.join(self.tmp, "root"), fake=FakeAws())
+        extract_tracks.register_cache()
+        self.cuts = cache_budget.dir_of(extract_tracks.STREAM_TRACKS_CACHE)
+        self.repo = os.path.join(self.tmp, "repo")
+        os.makedirs(self.repo)
+        self.body = b"fLaC" * 100
+
+    def _metadata(self, title):
+        with open(os.path.join(self.repo, "track-metadata.json"), "w") as fh:
+            json.dump({"tracks": {"4": {"artist": "Dead Calm", "title": title,
+                                        "master_begin_seconds": 0.0,
+                                        "master_end_seconds": 120.0}}}, fh)
+
+    def _run(self, title="Urban Style", out=None):
+        self._metadata(title)
+        argv = ["extract_tracks.py", "--only", "4"] + (["--out", out] if out else [])
+        body = self.body
+
+        def fake_cut(stem, m_from, m_to, cstart, out_path):
+            with open(out_path, "wb") as fh:
+                fh.write(body)
+            if extract_tracks._on_policy(out_path):
+                cache_budget.commit(extract_tracks.STREAM_TRACKS_CACHE, out_path)
+            return True
+
+        with unittest.mock.patch.object(sys, "argv", argv), \
+                unittest.mock.patch.object(extract_tracks._gt, "REPO_ROOT", self.repo), \
+                unittest.mock.patch.object(extract_tracks, "positions",
+                                          lambda: {"d000-018": 0.0}), \
+                unittest.mock.patch.object(extract_tracks, "windows", lambda s, v, **_kw: []), \
+                unittest.mock.patch.object(extract_tracks, "plan",
+                                          lambda mb, me, places: ([("d000-018", 0.0, 120.0)],
+                                                                  None)), \
+                unittest.mock.patch.object(extract_tracks, "cut", fake_cut), \
+                contextlib.redirect_stdout(io.StringIO()) as buf:
+            extract_tracks.main()
+        return buf.getvalue()
+
+    def _tracks(self):
+        return {k: v for (b, k), v in self.fake.objects.items()
+                if b == self.bucket and k.startswith("stream/tracks/")}
+
+    def test_a_cut_is_published_under_its_track_number_with_its_title(self):
+        self._run()
+        objects = self._tracks()
+        self.assertEqual(list(objects), ["stream/tracks/004.flac"])
+        meta = objects["stream/tracks/004.flac"]["meta"]
+        import hashlib
+        import urllib.parse
+        self.assertEqual(meta["sha256"], hashlib.sha256(self.body).hexdigest())
+        self.assertEqual(urllib.parse.unquote(meta["title"]), "Urban Style")
+        self.assertEqual(urllib.parse.unquote(meta["artist"]), "Dead Calm")
+        self.assertEqual(meta["track"], "004")
+        held = extract_tracks.held_cuts()
+        self.assertTrue(os.path.isfile(held[4] + extract_tracks.OBJECT_META))
+
+    def test_retitling_a_track_publishes_no_second_object(self):
+        self._run("Urban Style")
+        self._run("Urban Style, Revisited = again")
+        objects = self._tracks()
+        self.assertEqual(list(objects), ["stream/tracks/004.flac"])
+        import urllib.parse
+        self.assertEqual(urllib.parse.unquote(objects["stream/tracks/004.flac"]["meta"]["title"]),
+                         "Urban Style, Revisited = again")
+
+    def test_a_changed_span_replaces_the_object_in_place(self):
+        self._run()
+        self.body = b"fLaC" * 150
+        self._run()
+        objects = self._tracks()
+        self.assertEqual(list(objects), ["stream/tracks/004.flac"])
+        self.assertEqual(objects["stream/tracks/004.flac"]["body"], self.body)
+
+    def test_nothing_is_published_with_no_audio_bucket_set(self):
+        os.environ.pop("NETRADIO_AUDIO_BUCKET")
+        self._run()
+        self.assertEqual(self.fake.calls, [])
+        self.assertEqual(len(extract_tracks.held_cuts()), 1, "the cut is still written locally")
+
+    def test_a_cut_into_a_directory_of_ones_own_is_not_published(self):
+        self._run(out=os.path.join(self.tmp, "mine"))
+        self.assertEqual(self._tracks(), {})
+
+    def _hold(self, num, body, etag=None):
+        path = os.path.join(self.cuts, "%03d - A - B.flac" % num)
+        os.makedirs(self.cuts, exist_ok=True)
+        with open(path, "wb") as fh:
+            fh.write(body)
+        if etag:
+            with open(path + extract_tracks.OBJECT_META, "w") as fh:
+                json.dump({"etag": etag}, fh)
+        return path
+
+    def test_refresh_reads_one_listing_and_replaces_a_cut_whose_size_differs(self):
+        self.fake.add(self.bucket, "stream/tracks/004.flac", b"new" * 50, sha256=True)
+        self.fake.add(self.bucket, "stream/tracks/005.flac", b"same" * 10, sha256=True)
+        stale = self._hold(4, b"old" * 10)
+        same = self._hold(5, b"same" * 10)
+        alone = self._hold(6, b"mine")
+        with contextlib.redirect_stdout(io.StringIO()):
+            report = extract_tracks.refresh_cuts()
+        self.assertEqual(report["replaced"], [4])
+        with open(stale, "rb") as fh:
+            self.assertEqual(fh.read(), b"new" * 50)
+        with open(same, "rb") as fh:
+            self.assertEqual(fh.read(), b"same" * 10)
+        with open(alone, "rb") as fh:
+            self.assertEqual(fh.read(), b"mine")
+        self.assertEqual(self.fake.ops("list-objects-v2"), ["list-objects-v2"])
+        self.assertEqual(self.fake.ops("cp-down"), ["cp-down"])
+
+    def test_refresh_replaces_a_cut_of_the_same_size_whose_object_changed(self):
+        self.fake.add(self.bucket, "stream/tracks/004.flac", b"abcd" * 10, sha256=True)
+        path = self._hold(4, b"wxyz" * 10, etag="an-older-etag")
+        with contextlib.redirect_stdout(io.StringIO()):
+            report = extract_tracks.refresh_cuts()
+        self.assertEqual(report["replaced"], [4])
+        with open(path, "rb") as fh:
+            self.assertEqual(fh.read(), b"abcd" * 10)
+
+    def _tight_cap(self):
+        os.environ["NETRADIO_STREAM_TRACKS_CACHE_GB"] = "0.00006"     # a 60,000-byte cap
+        extract_tracks.register_cache()
+
+    def test_a_replacement_that_fits_once_it_takes_the_old_cuts_place_is_admitted(self):
+        self._tight_cap()
+        self.fake.add(self.bucket, "stream/tracks/004.flac", b"n" * 45000, sha256=True)
+        path = self._hold(4, b"o" * 30000)          # 30 KB + 45 KB > the cap; 45 KB alone fits
+        with contextlib.redirect_stdout(io.StringIO()):
+            report = extract_tracks.refresh_cuts()
+        self.assertEqual(report["replaced"], [4])
+        self.assertEqual(os.path.getsize(path), 45000)
+
+    def test_a_failed_replacement_never_costs_the_held_cut_even_when_room_is_needed(self):
+        from bucket_fake import FakeProc
+        self._tight_cap()
+        self.fake.add(self.bucket, "stream/tracks/004.flac", b"n" * 45000, sha256=True)
+        other = self._hold(7, b"x" * 40000)
+        os.utime(other, (1, 1))                      # the oldest entry: evicted first
+        path = self._hold(4, b"o" * 30000)           # 70 KB held, over the cap: room is needed
+        self.fake.fail_next("cp-down", FakeProc(returncode=1, stderr="connection reset"))
+        with contextlib.redirect_stdout(io.StringIO()):
+            report = extract_tracks.refresh_cuts()
+        self.assertEqual(report["replaced"], [])
+        self.assertIn("connection reset", report["failed"][4])
+        self.assertFalse(os.path.exists(other), "the room came from the other cut")
+        with open(path, "rb") as fh:
+            self.assertEqual(fh.read(), b"o" * 30000, "the held cut is untouched")
+        self.assertFalse(extract_tracks._pinned_cut(path), "unpinned after the attempt")
+
+    def test_reading_a_held_cut_makes_no_bucket_call(self):
+        self._hold(4, b"x" * 10)
+        extract_tracks.held_cuts()
+        self.assertEqual(self.fake.calls, [])
+
+    def test_refresh_with_no_audio_bucket_set_does_nothing(self):
+        os.environ.pop("NETRADIO_AUDIO_BUCKET")
+        self._hold(4, b"x" * 10)
+        self.assertEqual(extract_tracks.refresh_cuts(), {})
+        self.assertEqual(self.fake.calls, [])
+
+    # A failed publish never lets the bucket's older cut win; an unchanged cut is not
+    # uploaded again; NETRADIO_READ_ONLY stops every publish and refresh; a cut held only in
+    # the bucket is fetched by number into the name `main` cuts it to.
+
+    def _cut_path(self):
+        return extract_tracks.held_cuts()[4]
+
+    def test_a_failed_publish_keeps_the_fresh_cut_at_the_next_refresh(self):
+        from bucket_fake import FakeProc
+        self._run()                                      # published: the record holds it
+        old = self._tracks()["stream/tracks/004.flac"]["body"]
+        self.body = b"fLaC" * 150                       # a label edit moved the span
+        self.fake.fail_next("cp-up", FakeProc(returncode=1, stderr="connection reset"))
+        out = self._run()
+        self.assertIn("NOT PUBLISHED", out)
+        self.assertEqual(self._tracks()["stream/tracks/004.flac"]["body"], old)
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            report = extract_tracks.refresh_cuts()
+        self.assertEqual(report["replaced"], [])
+        self.assertEqual(report["unpublished"], [4])
+        self.assertIn("local cut not published", buf.getvalue())
+        with open(self._cut_path(), "rb") as fh:
+            self.assertEqual(fh.read(), self.body, "the fresh cut is kept")
+        self.assertEqual(self.fake.ops("cp-down"), [])
+
+    def test_a_cut_changed_with_no_publish_is_kept_at_the_next_refresh(self):
+        self._run()
+        path = self._cut_path()
+        with open(path, "wb") as fh:                     # re-cut, never published
+            fh.write(b"fLaC" * 170)
+        with contextlib.redirect_stdout(io.StringIO()):
+            report = extract_tracks.refresh_cuts()
+        self.assertEqual(report["unpublished"], [4])
+        self.assertEqual(os.path.getsize(path), 4 * 170)
+
+    def test_an_unchanged_cut_is_not_uploaded_again(self):
+        self._run()
+        self.assertEqual(self.fake.ops("cp-up"), ["cp-up"])
+        self._run()
+        self.assertEqual(self.fake.ops("cp-up"), ["cp-up"], "the second run uploads nothing")
+        self.body = b"fLaC" * 120
+        self._run()
+        self.assertEqual(self.fake.ops("cp-up"), ["cp-up", "cp-up"], "a change is uploaded")
+
+    def test_read_only_publishes_nothing(self):
+        os.environ["NETRADIO_READ_ONLY"] = "1"
+        self.addCleanup(os.environ.pop, "NETRADIO_READ_ONLY", None)
+        self._run()
+        self.assertEqual(self.fake.calls, [])
+        self.assertEqual(len(extract_tracks.held_cuts()), 1, "the cut is still written locally")
+
+    def test_read_only_refreshes_nothing(self):
+        self.fake.add(self.bucket, "stream/tracks/004.flac", b"new" * 50, sha256=True)
+        path = self._hold(4, b"old" * 10)
+        os.environ["NETRADIO_READ_ONLY"] = "1"
+        self.addCleanup(os.environ.pop, "NETRADIO_READ_ONLY", None)
+        self.assertEqual(extract_tracks.refresh_cuts(), {})
+        self.assertEqual(self.fake.calls, [])
+        with open(path, "rb") as fh:
+            self.assertEqual(fh.read(), b"old" * 10)
+
+    def test_a_cut_held_only_in_the_bucket_is_fetched_under_mains_name(self):
+        self.addCleanup(extract_tracks._bucket_cuts.clear)
+        self.fake.add(self.bucket, "stream/tracks/004.flac", self.body, sha256=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            extract_tracks.refresh_cuts()
+        self.assertTrue(extract_tracks.listed_cut(4))
+        self.assertFalse(extract_tracks.listed_cut(5))
+        self.assertEqual(self.fake.ops("cp-down"), [], "the refresh fetches no absent cut")
+        path = extract_tracks.fetch_cut(4, "Dead Calm - Urban/Style")
+        self.assertEqual(os.path.basename(path), "004 - Dead Calm - Urban_Style.flac")
+        with open(path, "rb") as fh:
+            self.assertEqual(fh.read(), self.body)
+        self.assertEqual(extract_tracks._read_meta(path)["key"], "stream/tracks/004.flac")
+        self.assertEqual(extract_tracks.held_cuts(), {4: path})
+        self.assertFalse(extract_tracks._pinned_cut(path))
+        self.assertIsNone(extract_tracks.fetch_cut(5, "Not - Listed"))
+
+    def test_a_fetch_refused_its_room_leaves_nothing(self):
+        self.addCleanup(extract_tracks._bucket_cuts.clear)
+        os.environ["NETRADIO_STREAM_TRACKS_CACHE_GB"] = "0.000001"     # a 1,000-byte cap
+        extract_tracks.register_cache()
+        self.fake.add(self.bucket, "stream/tracks/004.flac", b"n" * 5000, sha256=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            extract_tracks.refresh_cuts()
+            self.assertIsNone(extract_tracks.fetch_cut(4, "A - B"))
+        self.assertEqual(extract_tracks.held_cuts(), {})
+        self.assertEqual(self.fake.ops("cp-down"), [])

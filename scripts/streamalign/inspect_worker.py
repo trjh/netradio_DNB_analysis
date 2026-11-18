@@ -73,7 +73,7 @@ def _resolve(stem, orig_num, sources_dir):
     from . import track_mix as _tm
 
     stem = _audio.stem_of(str(stem))
-    if not _audio.find_audio_file(stem):
+    if not _audio.capture_nameable(stem):
         raise ValueError("no audio for capture %s" % stem)
     orig_path = _tm.find_original(int(orig_num), sources_dir)
     if not orig_path:

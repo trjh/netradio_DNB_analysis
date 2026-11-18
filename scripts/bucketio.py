@@ -37,11 +37,12 @@ The interface:
         in a `.part` file beside `dest` and are renamed into place only after the checks pass;
         the `.part` file is always removed.
 
-    put(bucket, path, key) -> (Head, None) | (None, detail)
+    put(bucket, path, key, meta=None) -> (Head, None) | (None, detail)
         Uploads `path` with its SHA-256 stored as object metadata (always computed here, from
         the file being uploaded; never taken from the caller), then heads the object and
         requires the size, the hash and the ETag to match. The ETag is what proves the bytes:
-        see `expected_etag`.
+        see `expected_etag`. `meta` adds other user-metadata pairs, each value percent-encoded
+        (S3 metadata is ASCII, and the CLI's `name=value,...` form splits on commas).
 
     run(bucket, args, kind) -> (stdout, None) | (None, detail)
         The one command runner: builds and runs one `aws` command for a bucket value under the
@@ -65,6 +66,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.parse
 
 # The one seam through which every aws invocation passes: swappable in tests.
 _run = subprocess.run
@@ -364,14 +366,27 @@ def fetch_verified(bucket, key, dest, size=None, sha256=None, require_sha256=Tru
 
 # --- put ---------------------------------------------------------------------------
 
-def put(bucket, path, key):
+def _meta_arg(digest, meta):
+    """The `--metadata` value: the hash first, then each other pair, names lowercased (S3
+    lowercases them anyway) and values percent-encoded, so a comma, an equals sign or a
+    character outside ASCII in a title cannot split or break the pair."""
+    pairs = [(SHA256_META, digest)]
+    for name, value in sorted((meta or {}).items()):
+        name = str(name).strip().lower()
+        if name and name != SHA256_META and all(c.isalnum() or c in "-_" for c in name):
+            pairs.append((name, urllib.parse.quote(str(value), safe=" ")))
+    return ",".join("%s=%s" % pair for pair in pairs)
+
+
+def put(bucket, path, key, meta=None):
     """Upload `path` as `key` with its SHA-256 stored as object metadata, then head the object
     and require the size and the hash to match. Returns (Head, None), or (None, detail).
 
     The hash is always computed here, from the file being uploaded: a hash handed in could be
     stale or wrong, and the metadata is what every later fetch trusts. It is read once per
     unchanged file (`digests`), so a caller that asked for `sha256_file` first costs no second
-    read.
+    read. `meta` adds other user-metadata pairs (`_meta_arg`); a name that is not letters,
+    digits, `-` and `_`, or that would replace the hash, is dropped.
 
     The SHA-256 the head returns is only the metadata this call sent, echoed back; the ETag is
     the bucket's own account of the bytes. A single-part object's ETag is its MD5. A multipart
@@ -385,7 +400,7 @@ def put(bucket, path, key):
     except OSError as exc:
         return None, str(exc)
     _out, err = run(bucket, ["s3", "cp", path, bucket.url(key), "--no-progress",
-                             "--metadata", "%s=%s" % (SHA256_META, digest)], "copy")
+                             "--metadata", _meta_arg(digest, meta)], "copy")
     if err is not None:
         return None, err
     _forget_listings(bucket, key)

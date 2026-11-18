@@ -6,6 +6,7 @@ detection / ffmpeg layers (the captures live on a local disk, not in the repo), 
 the _Stub pattern in test_streamalign.py.
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import json
 import os
 import shutil
@@ -221,7 +222,7 @@ class _AudioStub:
     lengths = {"d100-119": 1200.0, "d099-118": 1200.0}
 
     @staticmethod
-    def find_audio_file(stem, audio_dir=None):
+    def capture_nameable(stem, audio_dir=None):
         return stem in _AudioStub.lengths
 
     @staticmethod

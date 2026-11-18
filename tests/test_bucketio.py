@@ -283,6 +283,17 @@ class TestPut(Base):
         with self.assertRaises(TypeError):
             bucketio.put(self.bucket, self.file("f", b"abc"), "p/f", sha256="not-a-sha256")
 
+    def test_other_metadata_rides_beside_the_hash_percent_encoded(self):
+        path = self.file("f", b"abc")
+        got, err = bucketio.put(self.bucket, path, "p/f",
+                                meta={"Title": "a, b = c \u00e9", "sha256": "forged",
+                                      "bad name": "x"})
+        self.assertIsNone(err)
+        digest = hashlib.sha256(b"abc").hexdigest()
+        meta = self.aws.objects[("b", "p/f")]["meta"]
+        self.assertEqual(meta, {"sha256": digest, "title": "a%2C b %3D c %C3%A9"})
+        self.assertEqual(got.sha256, digest, "a caller cannot replace the hash")
+
     def test_the_etag_proves_the_bytes(self):
         # The SHA-256 the head returns is only the metadata the put sent; an upload whose bytes
         # arrived changed (same size) is caught by the ETag.

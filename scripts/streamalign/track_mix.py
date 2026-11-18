@@ -461,18 +461,25 @@ def _select_capture(srcs, mb, me, starts, audio_dir=None):
     `srcs[0]` often starts after (or ends before) the track's region — slicing it then
     yields an empty mix (the track 8/12/20/27/38 nan cases). Walk the candidates and
     take the first placed, audio-present capture whose [start, end] fully covers
-    [mb, me]; fall back to the one with the largest overlap. Returns (cap, cstart) or
-    (None, reason)."""
+    [mb, me]; fall back to the one with the largest overlap. A capture's length comes from
+    `length_without_pull` (a capture not on this disk is measured by its recorded length),
+    and only a capture with no length there is decoded, pulled if it must be. Returns
+    (cap, cstart) or (None, reason)."""
     sr = _audio.SR
     best, best_overlap, reason = None, 0.0, "no placed capture with audio"
     for s in srcs:
         cap = os.path.splitext(os.path.basename(s))[0]
         if cap not in starts:
             continue
-        if not _audio.find_audio_file(cap, audio_dir):
+        if not _audio.capture_nameable(cap, audio_dir):
             continue
         cstart = starts[cap]
-        cend = cstart + len(_audio.load_audio(cap, audio_dir=audio_dir)) / sr
+        # the length pulls nothing when it can be had without (`length_without_pull`): a
+        # caller that selects for every track must not pull every candidate capture
+        length = _audio.length_without_pull(cap, audio_dir=audio_dir)[0]
+        if length is None:
+            length = len(_audio.load_audio(cap, audio_dir=audio_dir)) / sr
+        cend = cstart + length
         if cstart <= mb and cend >= me:
             return cap, cstart                      # fully contains the span
         overlap = max(0.0, min(cend, me) - max(cstart, mb))

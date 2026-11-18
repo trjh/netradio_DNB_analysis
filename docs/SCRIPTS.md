@@ -92,8 +92,8 @@ checkout's unless `.env` says otherwise (`.env.example`, "The align server").
 
 | Script | What | When |
 |---|---|---|
-| `scripts/extract_tracks.py` | cut every well-defined track **out of the mix**, reassembling across captures. Refuses anything it cannot place precisely. | once; **re-run whenever a capture gains precise timing or a track's span changes** |
-| `scripts/calibrate.py` | score every known mix track against every known original → `docs/CALIBRATION.md` | **whenever the matcher changes.** It is the regression test for the whole matching stack |
+| `scripts/extract_tracks.py` | cut every well-defined track **out of the mix**, reassembling across captures. Refuses anything it cannot place precisely. With an audio bucket set, publishes each cut as `stream/tracks/<NNN>.flac` (a cut unchanged since its last publish is not uploaded again; nothing is published under `NETRADIO_READ_ONLY`). | once; **re-run whenever a capture gains precise timing or a track's span changes** |
+| `scripts/calibrate.py` | score every known mix track against every known original → `docs/CALIBRATION.md`. With an audio bucket set, it first replaces a held cut that changed in the bucket, and fetches a cut it does not hold when that case is scored | **whenever the matcher changes.** It is the regression test for the whole matching stack |
 | `scripts/selftest.py` | the **canary**: score the canary's signature (named by `NETRADIO_CANARY_KEY`) against the canary's mix and the current mysteries, demanding cost, rank **and** margin; `--offline` re-runs one calibration case from local files | by the harvester, whenever the feeder puts the canary's file back (re-signed and compared first). Its result is recorded in the harvester's state file. See [below](#the-canary-does-the-matcher-still-work) |
 
 `calibrate.py` is not a one-off. It is how we know that the true-match and non-match populations
@@ -110,7 +110,9 @@ own original, the change is wrong.
 | `scripts/backup_sheet.py` | back up the Google Sheet (the ID is `NETRADIO_SHEET_ID` in `.env`); the sheet is private and the download has no login, so it refuses until it gets authenticated access |
 | `scripts/envfile.py`, `scripts/lib/env.sh` | the repo's one `.env` reader, for Python and for the shell: one grammar (read, never executed; no `export`; a `#` after a value is part of it), and a variable already set wins; `python3 scripts/envfile.py --export .env` prints the file for `eval` |
 | `scripts/cache_budget.py` | the one cache policy: a registry of size-bounded local caches, `reserve` before every write, an eviction run, one disk floor — a library the cache-holding scripts register with (dark until `NETRADIO_CACHE_ROOT` is set); the decoded-array cache in `scripts/streamalign/audio.py` registers with it |
-| `scripts/bucketio.py` | the one S3-compatible bucket client, a library: list a prefix, head one object, fetch one object through a `.part` file and verify it by size and SHA-256, upload one with its SHA-256 as object metadata; every call through the `aws` CLI under one timeout per kind of call. The caller passes the bucket in; the module reads no setting. `scripts/sigstore.py` stores the signatures through it |
+| `scripts/bucketio.py` | the one S3-compatible bucket client, a library: list a prefix, head one object, fetch one object through a `.part` file and verify it by size and SHA-256, upload one with its SHA-256 as object metadata; every call through the `aws` CLI under one timeout per kind of call. The caller passes the bucket in; the module reads no setting. `scripts/sigstore.py` stores the signatures through it, and the audio pulls and publishes below go through it too |
+| `scripts/audio_bucket.py` | the audio bucket's settings (`NETRADIO_AUDIO_BUCKET`, `_S3_ENDPOINT`, `_AWS_PROFILE`) and its three key prefixes: `stream/master/` (capture files, pulled by `streamalign/audio.py` for a decode), `stream/mp3/` (pulled by the align server) and `stream/tracks/` (the cuts `extract_tracks.py` publishes). Unset, nothing is pulled or published |
+| `scripts/align_ids.py` | the align server's capture identifiers: `list_streams` (this disk's MP3 stems plus the audio bucket's, from a listing held about a minute) and `ensure_stream` (pull a stem's MP3 whole, checked by its SHA-256 metadata, one lock per stem) |
 
 ## Retired
 

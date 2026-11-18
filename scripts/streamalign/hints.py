@@ -50,6 +50,7 @@ Rather than emit an empty file, this says so, in a question.
 
 import os
 import re
+import sys
 
 from . import audio as _audio
 from . import groundtruth as _gt
@@ -121,26 +122,57 @@ def write_hints(rows, path):
     return path
 
 
-def overlapping_neighbours(stem, starts, audio_dir=None, min_overlap_s=MIN_OVERLAP_S):
+def overlapping_neighbours(stem, starts, audio_dir=None, min_overlap_s=MIN_OVERLAP_S,
+                           warn=None):
     """Placed captures that share real audio with `stem`: [(other, overlap_s, seed_offset_s)].
 
     `seed_offset_s` follows the engine's convention `master_start(b) - master_start(a)`,
     i.e. where `other` sits inside `stem`'s local timeline. Captures that merely *abut*
     `stem` (the common case in the tail of the stream) share no audio and are excluded --
     correlating them would return noise, not an offset.
+
+    Every placed capture a decode could reach counts (`capture_nameable`), including one
+    evicted from this disk to the audio bucket. The scan pulls nothing and decodes nothing
+    that is not on this disk: a capture's length comes from its file here, else from its
+    decoded array, else from the committed `stream-files.json` (`length_without_pull`). A
+    length taken from `stream-files.json` rather than from the audio is reported, loudly,
+    through `warn` (default: a line on stderr per capture). Only the neighbours returned are
+    decoded later, and pulled if absent.
     """
-    if stem not in starts or not _audio.find_audio_file(stem, audio_dir):
+    if warn is None:
+        def warn(msg):
+            print(msg, file=sys.stderr, flush=True)
+    if stem not in starts or not _audio.capture_nameable(stem, audio_dir):
+        return []
+    recorded = _audio.recorded_durations()
+    measured_from_file = []
+
+    def _length(name):
+        seconds, source = _audio.length_without_pull(name, audio_dir=audio_dir,
+                                                     recorded=recorded)
+        if source == "stream-files.json":
+            measured_from_file.append(name)
+        return seconds
+
+    a_len = _length(stem)
+    if a_len is None:
         return []
     a0 = starts[stem]
-    a1 = a0 + _audio.duration_seconds(stem, audio_dir=audio_dir)
+    a1 = a0 + a_len
     out = []
     for other, b0 in starts.items():
-        if other == stem or not _audio.find_audio_file(other, audio_dir):
+        if other == stem or not _audio.capture_nameable(other, audio_dir):
             continue
-        b1 = b0 + _audio.duration_seconds(other, audio_dir=audio_dir)
+        b_len = _length(other)
+        if b_len is None:
+            continue
+        b1 = b0 + b_len
         overlap = min(a1, b1) - max(a0, b0)
         if overlap > min_overlap_s:
             out.append((other, overlap, b0 - a0))
+    for name in measured_from_file:
+        warn("WARNING: the length of %s is taken from stream-files.json, not measured from "
+             "its audio: the capture file is not on this disk" % name)
     return sorted(out, key=lambda t: -t[1])
 
 
@@ -211,10 +243,13 @@ def build_hints(stem, labels_dir=None, audio_dir=None, decim=8):
     labels_dir = labels_dir or _gt.LABELS_DIR
     rows, diag = [], {"stem": stem, "questions": 0, "neighbours": [], "skips": 0}
 
-    audio_path = _audio.find_audio_file(stem, audio_dir)
-    if not audio_path:
-        raise SystemExit("no audio found for %s (looked for %s.wav/.au/.mp3)" % (stem, stem))
-    duration = _audio.duration_seconds(stem, audio_dir=audio_dir)
+    if not _audio.capture_nameable(stem, audio_dir):
+        raise SystemExit("no audio found for %s (looked for %s.wav/.au on this disk and in "
+                         "the audio bucket)" % (stem, stem))
+    try:
+        duration = _audio.duration_seconds(stem, audio_dir=audio_dir)
+    except _audio.CapturePullError as exc:
+        raise SystemExit(str(exc)) from None    # one line, as a missing capture always was
     diag["duration"] = duration
 
     starts = _gt.resolve_starts(labels_dir)
@@ -247,7 +282,7 @@ def build_hints(stem, labels_dir=None, audio_dir=None, decim=8):
     # past the end of the owner's own audio, the anchor inherits that error exactly.
     if carried:
         owner, link_t, _ = carried
-        if _audio.find_audio_file(owner, audio_dir):
+        if _audio.capture_nameable(owner, audio_dir):
             owner_dur = _audio.duration_seconds(owner, audio_dir=audio_dir)
             slack = link_t - owner_dur
             if slack > 0.05:

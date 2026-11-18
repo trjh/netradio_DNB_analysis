@@ -364,6 +364,23 @@ is UP; the URL the app uses matches the host in `status`;
 `curl -s <that-url>/api/align/sources | head -c 200` returns `"enabled": true` with non-empty
 `streams`/`originals`.
 
+**Q:** A capture file is not on this disk. Can the align tools still decode it?
+
+**A:** Yes, when `.env` names an audio bucket (`NETRADIO_AUDIO_BUCKET`, with its endpoint and
+profile; see `.env.example`). A decode of a capture this disk does not hold pulls its object from
+the bucket's `stream/master/` into the `stream_master` cache, checks it against the object's
+SHA-256 metadata, and decodes it; the pulled file is evicted like any cache entry afterwards. The
+review page's stream audio pulls a missing MP3 from `stream/mp3/` the same way. With no bucket
+set, a missing capture is reported missing, as before. Every decode reads the capture files
+(`.wav`/`.au`), never the MP3s, and so does the `/align` inspector: the labels were placed on
+the capture files. A solve or skip review that cannot pull a capture names the pair it skipped
+on stderr. The track cuts work the same way: `extract_tracks.py` publishes each changed cut to
+`stream/tracks/`, and `calibrate.py` fetches a cut this machine does not hold when it needs it.
+Under `NETRADIO_READ_ONLY`, no cut is published or refreshed.
+
+**What to do next:** nothing to run. `python -m streamalign groundtruth` still lists which
+captures are on this disk; it never pulls.
+
 **Q:** What is the align flow, end to end?
 
 **A:** Pass 1 and Pass 2 are the "Seat an original track inside a capture" answer above, which

@@ -6,6 +6,7 @@ and the extract directory's listing is stubbed to a fixed order, so the choice i
 thing under test.
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import os
 import shutil
 import sys
@@ -72,3 +73,65 @@ class TheCleanExtractChoice(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipIf(calibrate is None, "calibrate.py needs the librosa venv (.venv) — skipping")
+class ACutHeldOnlyInTheBucket(unittest.TestCase):
+    """A machine that holds no cut for a track, while the audio bucket's `stream/tracks/` does,
+    scores the bucket's cut: `build_cases` records it, and `mix_query` fetches it for that case
+    alone (never every listed cut at start: --limit cuts the list after `build_cases`)."""
+
+    def setUp(self):
+        from bucket_fake import AUDIO_BUCKET, FakeAws, isolate_caches
+        import extract_tracks
+        self.et = extract_tracks
+        self.tmp = tempfile.mkdtemp(prefix="calibrate-bucket-cut-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.fake = isolate_caches(self, os.path.join(self.tmp, "root"), fake=FakeAws())
+        self.addCleanup(extract_tracks._bucket_cuts.clear)
+        extract_tracks.register_cache()
+        self.src = os.path.join(self.tmp, "sources")
+        os.makedirs(self.src)
+        open(os.path.join(self.src, "004-Some Original.mp3"), "wb").close()
+        self.body = b"fLaC" * 300
+        self.fake.add(AUDIO_BUCKET, "stream/tracks/004.flac", self.body, sha256=True)
+
+    def test_the_cut_is_fetched_when_its_case_is_scored_and_lands_under_its_name(self):
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.et.refresh_cuts()
+        tracks = {"4": {"master_begin_seconds": 0, "master_end_seconds": 90,
+                        "artist": "Dead Calm", "title": "Urban Style"}}
+        cases = calibrate.build_cases(tracks, {}, self.src)
+        self.assertEqual(len(cases), 1)
+        self.assertIsNone(cases[0]["extract"])
+        self.assertTrue(cases[0]["extract_in_bucket"])
+        self.assertEqual(self.fake.ops("cp-down"), [], "nothing is fetched to build the list")
+        seen = []
+
+        def load(path, **_kw):
+            seen.append(path)
+            return calibrate.np.zeros(100 * calibrate._audio.SR, dtype="float32")
+
+        with mock.patch.object(calibrate._audio, "load_audio", load):
+            mix = calibrate.mix_query(cases[0])
+        self.assertIsNotNone(mix)
+        want = os.path.join(calibrate.cache_budget.dir_of(self.et.STREAM_TRACKS_CACHE),
+                            "004 - Dead Calm - Urban Style.flac")
+        self.assertEqual(seen, [want])
+        with open(want, "rb") as fh:
+            self.assertEqual(fh.read(), self.body)
+        self.assertTrue(os.path.isfile(want + self.et.OBJECT_META))
+        self.assertEqual(self.fake.ops("cp-down"), ["cp-down"])
+        self.assertIn("004 - Dead Calm - Urban Style.flac",
+                      [os.path.basename(e["path"]) if isinstance(e, dict)
+                       else os.path.basename(e[0])
+                       for e in calibrate.cache_budget.entries(self.et.STREAM_TRACKS_CACHE)],
+                      "the fetched cut is an entry of the tracks cache")
+
+    def test_with_no_listing_held_no_case_is_made_from_the_bucket(self):
+        tracks = {"4": {"master_begin_seconds": 0, "master_end_seconds": 90,
+                        "artist": "A", "title": "B"}}
+        self.assertEqual(calibrate.build_cases(tracks, {}, self.src), [])
+        self.assertEqual(self.fake.calls, [])
