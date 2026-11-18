@@ -142,7 +142,8 @@ status() {
     200)
       case "$body" in
         *'"enabled": true'*|*'"enabled":true'*) echo "  DSP: enabled" ;;
-        *) echo "  DSP: NOT CONFIGURED — build .venv (make venv) and point NETRADIO_SOURCES_DIR at the originals (else sources_local/)" ;;
+        *) echo "  DSP: NOT CONFIGURED — build .venv (make venv) and point" \
+                "NETRADIO_SOURCES_FLAC_CACHE_DIR at the originals (else sources_local/)" ;;
       esac
       case "$body" in
         *'"streams": []'*|*'"streams":[]'*)

@@ -6,10 +6,10 @@
     . .venv/bin/activate && python scripts/acoustid_check.py --mismatch # only disagreements
     . .venv/bin/activate && python scripts/acoustid_check.py --file 013-*.mp3
 
-It fingerprints each file in `NETRADIO_SOURCES_DIR` the way AcoustID actually wants it -- the
-fingerprint from the START of the recording, paired with its FULL duration -- and reports what
-AcoustID says the file is. Where that disagrees with the filename, it says so: a mislabelled
-source file silently poisons every downstream alignment and ID that trusts it.
+It fingerprints each file in `NETRADIO_SOURCES_FLAC_CACHE_DIR` the way AcoustID actually wants
+it -- the fingerprint from the START of the recording, paired with its FULL duration -- and
+reports what AcoustID says the file is. Where that disagrees with the filename, it says so: a
+mislabelled source file silently poisons every downstream alignment and ID that trusts it.
 
 Found on the first run: `013-DJ Addiction - Senses.mp3` is really Blame's "J-Walkin'" (the same
 record as `021`), and `022-Castillo - Junkle I.flac` is by *Callisto*, not "Castillo".
@@ -117,9 +117,9 @@ def main(argv=None):
     if not key:
         sys.exit("ACOUSTID_DEV_API_KEY is unset. It belongs in .env (gitignored -- this "
                  "repo is PUBLIC), then: eval \"$(python3 scripts/envfile.py --export .env)\"")
-    sources = os.environ.get("NETRADIO_SOURCES_DIR")
+    sources = os.environ.get("NETRADIO_SOURCES_FLAC_CACHE_DIR")
     if not sources or not os.path.isdir(sources):
-        sys.exit("NETRADIO_SOURCES_DIR is unset or missing (see .env.example)")
+        sys.exit("NETRADIO_SOURCES_FLAC_CACHE_DIR is unset or missing (see .env.example)")
 
     names = sorted(f for f in os.listdir(sources)
                    if f.rsplit(".", 1)[-1].lower() in AUDIO_EXTS)

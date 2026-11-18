@@ -199,7 +199,7 @@ A new single-file vanilla-JS page served by the server: no build step, no framew
   no-auth-LAN server):** the request schema is **identifier-based, never path-based** — the client
   names a stream STEM and an original ID the server already knows (from its own file/label listings);
   the server maps them to paths itself and **realpath-containment-checks** every resolved path under
-  the configured roots (`NETRADIO_MP3_DIR` / `NETRADIO_SOURCES_DIR`) before use. Numeric params
+  the configured roots (`NETRADIO_MP3_DIR` / `NETRADIO_SOURCES_FLAC_CACHE_DIR`) before use. Numeric params
   (window seconds, search radius) are validated with hard caps (window ≤ 30 s, radius ≤ 2 s) so a
   request can't buy unbounded ffmpeg/FFT work. The subprocess is a **fixed executable + fixed
   argument list, `shell=False`**, values passed as discrete argv entries — nothing client-supplied is
@@ -214,7 +214,7 @@ A new single-file vanilla-JS page served by the server: no build step, no framew
   direct commit (M5/§2.3). ✅ R4.
 
 **Costs / new surface:**
-- Needs the **originals** readable by the server (new `NETRADIO_SOURCES_DIR` / reuse
+- Needs the **originals** readable by the server (new `NETRADIO_SOURCES_FLAC_CACHE_DIR` / reuse
   `NETRADIO_AUDIO_DIR`, pointing at the analysis repo's `sources_local/`); the stream MP3s it already
   serves with Range. *(Approved, Q3 — on the server's host.)*
 - The refine endpoint depends on the streamalign venv (numpy + ffmpeg) as a **subprocess** — dark, and
@@ -266,7 +266,7 @@ built**. Deliver it in two tracks, cheapest-relief-first, and use the free oracl
   switchable inverse-sum/sum** lanes; Web Audio sample-accurate offset; keyboard nudge (ms +
   sample); polarity toggle; slow + looped playback; `POST /api/align/refine` (shelling out to the
   venv) for snap-to-best + a plotted residual curve, with the live null as verification. Originals
-  read via `NETRADIO_SOURCES_DIR`; the whole page is **dark** when sources/venv are unset.
+  read via `NETRADIO_SOURCES_FLAC_CACHE_DIR`; the whole page is **dark** when sources/venv are unset.
   *(Re-shaped by §5 into the per-sync-point inspector.)*
 - **Phase 3 — Emit anchors back into the pipeline, cleanly.** From either tool, export
   `track sync: N` + `origNNN sync: N` pairs (rounded onto the 0.001 s grid) as a `.starter`-style
@@ -609,7 +609,7 @@ alternatives (a) + (c).
 2. **Hybrid vs. web-first:** ✅ **avoid `mod-script-pipe`** — a process stepping in and out of
    Audacity via the pipe would be clunky, and that tooling seems crash-prone. Moot in practice:
    the §5 tooling comes first; §4's Phases 0–1 are dropped.
-3. **Originals path:** ✅ yes — `NETRADIO_SOURCES_DIR` pointing at the analysis repo's
+3. **Originals path:** ✅ yes — `NETRADIO_SOURCES_FLAC_CACHE_DIR` pointing at the analysis repo's
    `sources_local/`, and the refine endpoint as a **subprocess** to the streamalign venv (server
    stays stdlib). On the server's host, for this tooling, this is fine.
 4. **Slow playback pitch:** ✅ pitch-dropping slowdown is just fine.

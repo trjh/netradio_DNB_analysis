@@ -61,7 +61,7 @@ class _Env(unittest.TestCase):
         root.start()
         self.addCleanup(root.stop)
         patcher = mock.patch.dict(os.environ, {
-            "NETRADIO_SOURCES_DIR": "",
+            "NETRADIO_SOURCES_FLAC_CACHE_DIR": "",
             "NETRADIO_CAPTURES_DIR": "",        # the capture directory: the MP3 dir's parent
             "NETRADIO_AUDIO_DIR": "",           # unset: an explicit one is kept (_child_env)
             # the one-shot path is the contract under test here; the keep-warm

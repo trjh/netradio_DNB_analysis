@@ -19,9 +19,10 @@ endif
 # `make venv UV_PYTHON=/path/to/python3.14`.
 UV_PYTHON ?= 3.13
 
-# Machine-specific paths and credentials (NETRADIO_SOURCES_DIR, ...) live in `.env`, gitignored
-# since this repo is PUBLIC. `VAR=value` lines in one grammar, read by scripts/lib/env.sh and
-# scripts/envfile.py and never executed or included. Optional: a missing file reads as empty.
+# Machine-specific paths and credentials (NETRADIO_SOURCES_FLAC_CACHE_DIR, ...) live in `.env`,
+# gitignored since this repo is PUBLIC. `VAR=value` lines in one grammar, read by
+# scripts/lib/env.sh and scripts/envfile.py and never executed or included. Optional: a missing
+# file reads as empty.
 #
 # Until 2026-09 `.env` was the general virtualenv DIRECTORY and the variables lived in
 # `.env_vars`. `-include` of a directory stops make dead with "Is a directory", so say what
@@ -39,11 +40,12 @@ endif
 # The one value a recipe here reads itself: the environment's, else the file's (env.sh), and
 # exported to the recipes only when it has one, so an empty export never hides the file from a
 # script that reads `.env` itself. The environment wins, an empty value included, as it does for
-# envfile.get and env_get: a caller that exports NETRADIO_SOURCES_DIR= gets it unset here even
-# when `.env` sets it.
-NETRADIO_SOURCES_DIR ?= $(shell bash -c '. scripts/lib/env.sh; env_value .env NETRADIO_SOURCES_DIR')
-ifneq (,$(NETRADIO_SOURCES_DIR))
-export NETRADIO_SOURCES_DIR
+# envfile.get and env_get: a caller that exports NETRADIO_SOURCES_FLAC_CACHE_DIR= gets it unset
+# here even when `.env` sets it.
+NETRADIO_SOURCES_FLAC_CACHE_DIR ?= $(shell bash -c \
+  '. scripts/lib/env.sh; env_value .env NETRADIO_SOURCES_FLAC_CACHE_DIR')
+ifneq (,$(NETRADIO_SOURCES_FLAC_CACHE_DIR))
+export NETRADIO_SOURCES_FLAC_CACHE_DIR
 endif
 
 #########################################
@@ -109,11 +111,12 @@ align-check:          ## verify the venv can do the librosa-backed work, and the
 	  || { echo "venv missing/incomplete — run: make venv"; exit 1; }
 	@.venv/bin/python -c "import streamalign; print('streamalign from', streamalign.__path__[0])" \
 	  || { echo "scripts/ is not on the venv's sys.path. Run: make scripts-pth"; exit 1; }
-	@test -n "$(NETRADIO_SOURCES_DIR)" \
-	  || { echo "NETRADIO_SOURCES_DIR unset — set it in .env (see .env.example)"; exit 1; }
-	@test -d "$(NETRADIO_SOURCES_DIR)" \
-	  && echo "originals OK: $(NETRADIO_SOURCES_DIR)" \
-	  || { echo "NETRADIO_SOURCES_DIR does not resolve: $(NETRADIO_SOURCES_DIR)"; exit 1; }
+	@test -n "$(NETRADIO_SOURCES_FLAC_CACHE_DIR)" \
+	  || { echo "NETRADIO_SOURCES_FLAC_CACHE_DIR unset — set it in .env (see .env.example)"; exit 1; }
+	@test -d "$(NETRADIO_SOURCES_FLAC_CACHE_DIR)" \
+	  && echo "originals OK: $(NETRADIO_SOURCES_FLAC_CACHE_DIR)" \
+	  || { echo "NETRADIO_SOURCES_FLAC_CACHE_DIR does not resolve:" \
+	       "$(NETRADIO_SOURCES_FLAC_CACHE_DIR)"; exit 1; }
 
 # unittest, not pytest: pytest is in neither requirements file, and CI runs unittest too.
 test:                 ## run the test suite (then: how long since the full suite, make test-container, passed)
