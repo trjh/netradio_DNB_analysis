@@ -488,7 +488,7 @@ def align_track(track_num, track_metadata, sources_dir, labels_dir=None,
         return {"error": "no master span / source_files"}
     try:
         orig_path = sources_resolve.resolve(track_num, sources_dir)
-    except sources_resolve.Ambiguous as exc:
+    except sources_resolve.Unresolved as exc:
         return {"error": str(exc)}
     if not orig_path:
         return {"error": "no original audio"}

@@ -34,8 +34,9 @@ labels; Audacity stays the place where a label becomes final. §8 covers working
   `NETRADIO_AUTH_PASS` for Basic Auth.
 - The original on disk as `sources_local/NNN-Artist - Title.<ext>`, or in the audio bucket's
   `sources/`, from which a reader pulls it — no original, no alignment (as of 2026-10-20, some
-  originals are still missing). One file per rung per number: two `.flac` (or two lossy files)
-  under one number stop every reader with an error naming both.
+  originals are still missing). Two versions of one track at one rung (two `.flac`, or two lossy
+  files, under one number) take the version recorded in `source-versions.json` at the top of this repo, one entry per track: `{"017": "<file name>"}`. With none recorded,
+  every reader that needs one original stops with an error that names both and says what to add.
 - For the Mac listen-through (§4): `make review-app` builds the app and runs its selftest
   (`swiftc` from the Command Line Tools; no Xcode).
 

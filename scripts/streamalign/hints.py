@@ -571,7 +571,7 @@ def _anchor_rows(stem, duration, diag, audio_dir=None):
             continue
         try:
             orig_path = sources_resolve.resolve(num, sources)
-        except sources_resolve.Ambiguous as exc:
+        except sources_resolve.Unresolved as exc:
             rows.append(_hint(track["local_s"], track["local_s"],
                               "no anchor search for track %03d (%s): %s"
                               % (num, track["name"], exc)))

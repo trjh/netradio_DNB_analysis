@@ -68,8 +68,8 @@ def _classify(filenames, sources_dir, artist=None, title=None):
     A usable original is a file the resolver counts as one (`sources_resolve.rank`) whose
     name matches the track's artist/title; among those the resolver's best rung wins, then
     the largest within that rung (so an uncompressed clip outranks a full flac, as it does in
-    every reader). Two files at one rung are not refused here: an
-    inventory reports what is held, and the readers refuse the pick. A `.null`/zero-byte
+    every reader). Two versions at one rung are not refused here: an
+    inventory reports what is held, and the readers use the recorded choice. A `.null`/zero-byte
     stub is a placeholder. Audio files that share only the `NNN-` prefix but don't
     match the track are ignored (not counted as "have"). When there is a single audio
     file and no placeholder competing, it's trusted even without a name match (handles

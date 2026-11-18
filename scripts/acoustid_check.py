@@ -123,11 +123,10 @@ def main(argv=None):
         sys.exit("NETRADIO_SOURCES_FLAC_CACHE_DIR is unset or missing (see .env.example)")
 
     # One file per stem, chosen by the one resolver: a master and its flac are one record,
-    # and a stem only the audio bucket holds is pulled when it is checked.
+    # and a stem only the audio bucket holds is pulled when it is checked. A stem with two
+    # versions and no recorded choice keeps both: each is checked.
     chosen, refused = sources_resolve.originals(sources)
-    for names in refused.values():
-        print("  ????  two files where one is expected, keep one: %s" % ", ".join(names))
-    names = sorted(chosen.values())
+    names = sorted(set(chosen.values()) | {n for ns in refused.values() for n in ns})
     if args.file:
         names = [f for f in names if any(fnmatch.fnmatch(f, p) for p in args.file)]
 

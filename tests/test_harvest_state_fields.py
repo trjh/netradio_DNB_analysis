@@ -224,7 +224,9 @@ class QueryKeysArePublished(unittest.TestCase):
         self.assertEqual(len(refused), 1)
         self.assertEqual(refused[0]["clips"],
                          ["Mystery Track 6 (longer).wav", "Mystery Track 6.wav"])
-        self.assertIn("two clips, keep one", refused[0]["why"])
+        self.assertIn("two clips, choose one", refused[0]["why"])
+        self.assertIn('add "Mystery Track 6": "<file name>" to source-versions.json',
+                      refused[0]["why"])
 
 
 @unittest.skipUnless(harvest, "harvest deps unavailable")

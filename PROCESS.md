@@ -200,9 +200,11 @@ Warnings:
   harvester can run a month without ever looking for it. `skipped_queries` in
   `.harvest/state.json` lists what it cannot search and why; `query_clips` names the clip file
   each searched mystery uses.
-- **One clip per rung.** The clip is picked by the originals rule (`.wav`/`.au`, then `.wv`/`.aif`,
-  then `.flac`, then a lossy file). Two clips at the rung that wins (say two `.wav`) are refused:
-  the mystery leaves the search, and `skipped_queries` names both files ("two clips, keep one").
+- **Two clips at one rung: choose one.** The clip is picked by the originals rule (`.wav`/`.au`,
+  then `.wv`/`.aif`, then `.flac`, then a lossy file). Two clips at the rung that wins (say two
+  `.wav`) take the one recorded in `source-versions.json` at the top of this repo
+  (`{"Mystery Track 8": "<file name>"}`). With none recorded, the mystery leaves the search, and
+  `skipped_queries` names both files ("two clips, choose one") with the line to add.
 - **Full-length extract, not a snippet.** A short query drives every cost down until
   unrelated records tie (MT7's 23 s clip → five "confident" false positives within 0.0007).
 - The number is the **mystery's** number (4, 6, 7, 8…), *not* the master track number.
@@ -265,8 +267,10 @@ Warnings:
 - `--sources` is a **flag**; its default is `NETRADIO_SOURCES_FLAC_CACHE_DIR`, else
   `sources_local/`. Every subcommand finds an original through one resolver
   (`scripts/sources_resolve.py`): the `.wav`/`.au`, else the lossless master (`.wv`/`.aif`), else
-  the `.flac`, else a lossy file. Two files at one rung under one number stop with an error naming
-  both: keep one. An original this disk lacks is pulled from the audio bucket when one is set.
+  the `.flac`, else a lossy file. Two files at one rung under one number are two versions: the
+  one recorded in `source-versions.json` at the top of this repo, one entry per track: `{"017": "<file name>"}` is used. With none recorded, a reader that needs one original
+  stops with an error that names both and says what to add; listings keep both. An original this
+  disk lacks is pulled from the audio bucket when one is set.
 - **Don't chase the track's start/end** — records are blended; there is no objective "begins"
   frame. Anchor on moments the record plays **alone** (Pass 1 already prefers those moments).
 - Pass 1 shells out to **`sonic-annotator`** (the MATCH plugin, headless) — with it missing,

@@ -193,7 +193,7 @@ def audit(labels_dir=None, sources_dir=None, audio_dir=None,
             return False
         try:
             orig_path = sources_resolve.resolve(num, sources_dir)
-        except sources_resolve.Ambiguous as exc:
+        except sources_resolve.Unresolved as exc:
             rec["why"] = str(exc)
             return False
         if not orig_path:

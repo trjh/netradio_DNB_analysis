@@ -21,8 +21,9 @@ plain file serving:
   renamed into place. An original this disk does not hold at all is pulled the same way. A
   pick with no playable form to be had (no bucket, no such object) is refused with 503;
   there is no transcoder on this route (decision made 2026-08-11);
-- **two files where one is expected are refused**: when two files share the winning rung
-  under one number, the route answers 409 naming both, and never picks one (2026-10-28).
+- **two versions need a recorded choice**: when two files share the winning rung under one
+  number, the route serves the one recorded in `source-versions.json` (2026-11-18); with none
+  recorded it answers 409 naming both and saying what to add, and never picks one.
 
 The served route exposes the resolved filename in an `X-Review-Source` header
 (percent-encoded there: header values are latin-1 on the wire).
@@ -84,7 +85,9 @@ def orig_delivery(num):
     key = ("track", int(num))
     names = sources_resolve.group(sources_resolve.local_names(src_dir)).get(key, [])
     try:
-        chosen = sources_resolve.choose(names, "original %03d" % num)
+        pulled = sources_resolve.pull_recorded(key, names, src_dir)
+        chosen = (os.path.basename(pulled) if pulled
+                  else sources_resolve.choose(names, "track %03d" % num, key))
         if chosen is None:
             path, failed = sources_resolve.pull_stem(key, src_dir)
             if path is None:
@@ -92,7 +95,7 @@ def orig_delivery(num):
                     return 404, {"error": "unknown orig"}
                 return failed[0], {"error": failed[1]}
             chosen = os.path.basename(path)
-    except sources_resolve.Ambiguous as exc:
+    except sources_resolve.Unresolved as exc:
         return 409, {"error": str(exc), "files": exc.names}
 
     base, ext = os.path.splitext(chosen)

@@ -90,6 +90,11 @@ class Base(unittest.TestCase):
         os.makedirs(self.src)
         self.fake = isolate_caches(self, os.path.join(self.tmp, "root"), fake=FakeAws())
         os.environ["NETRADIO_SOURCES_FLAC_CACHE_DIR"] = self.src
+        self.root_dir = os.path.join(self.tmp, "checkout")
+        os.makedirs(self.root_dir)
+        patcher = mock.patch.object(sources_resolve, "ROOT_DIR", self.root_dir)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.assertIsNotNone(sources_resolve.register_cache())
         sources_resolve._verified.clear()
         self.addCleanup(sources_resolve._verified.clear)
@@ -97,8 +102,14 @@ class Base(unittest.TestCase):
     def add(self, name, body=FLAC, sha256=True):
         self.fake.add(AUDIO_BUCKET, "sources/" + name, body, sha256=sha256)
 
+    @contextlib.contextmanager
     def quiet(self):
-        return contextlib.redirect_stdout(io.StringIO())
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            yield
+
+    def record(self, choices):
+        with open(os.path.join(self.root_dir, "source-versions.json"), "w") as fh:
+            json.dump(choices, fh)
 
 
 class ThePull(Base):
@@ -181,6 +192,71 @@ class ThePull(Base):
         self.assertEqual(refused[("track", 83)], ["083-two.mp3", "083-two2.mp3"])
 
 
+class TheVersions(Base):
+    """Two files at the winning rung can be two real versions: the recorded choice picks one,
+    and with none the refusal says exactly how to record it (2026-11-18)."""
+
+    TIED = ("017-Erykah Badu - On & On (Blu Mar Ten Remix) - 6.41.FkIPqQEjxw.opus",
+            "017-Erykah Badu - On & On (Blu Mar Ten Remix) - 7.52.JCv3Vs_CFjQ.opus")
+
+    def setUp(self):
+        super().setUp()
+        for name in self.TIED:
+            touch(self.src, name)
+
+    def test_a_tie_with_a_recorded_choice_resolves_to_it(self):
+        self.record({"017": self.TIED[1]})
+        self.assertEqual(sources_resolve.resolve(17), os.path.join(self.src, self.TIED[1]))
+        self.assertEqual(sources_resolve.originals()[0][("track", 17)], self.TIED[1])
+
+    def test_a_tie_without_a_choice_refuses_saying_how_to_choose(self):
+        with self.assertRaises(sources_resolve.Ambiguous) as caught:
+            sources_resolve.resolve(17)
+        self.assertEqual(
+            str(caught.exception),
+            "track 017 has 2 versions: %s, %s. Choose one: add \"017\": \"<file name>\" to "
+            "source-versions.json in this repo" % self.TIED)
+
+    def test_a_recorded_name_that_matches_no_file_is_an_error_naming_the_setting(self):
+        self.record({"017": "017-not-here.opus"})
+        with self.assertRaises(sources_resolve.VersionError) as caught:
+            sources_resolve.resolve(17)
+        self.assertIn("source-versions.json", str(caught.exception))
+        self.assertIn("017-not-here.opus", str(caught.exception))
+        self.assertIn('"017"', str(caught.exception))
+
+    def test_listing_keeps_both_versions(self):
+        chosen, refused = sources_resolve.originals()
+        self.assertNotIn(("track", 17), chosen)
+        self.assertEqual(refused[("track", 17)], sorted(self.TIED))
+        self.assertEqual(sources_resolve.list_originals(),
+                         [{"num": 17, "name": os.path.splitext(sorted(self.TIED)[0])[0][4:]}])
+
+    def test_a_recorded_version_this_disk_lacks_is_pulled_never_its_sibling(self):
+        os.remove(os.path.join(self.src, self.TIED[1]))
+        self.record({"017": self.TIED[1]})
+        self.add(self.TIED[1], b"seven-fifty-two")
+        path = sources_resolve.resolve(17)
+        self.assertEqual(path, os.path.join(self.src, self.TIED[1]))
+        with open(path, "rb") as fh:
+            self.assertEqual(fh.read(), b"seven-fifty-two")
+
+    def test_a_record_that_does_not_read_is_an_error(self):
+        with open(os.path.join(self.root_dir, "source-versions.json"), "w") as fh:
+            fh.write("[1, 2")
+        with self.assertRaises(sources_resolve.VersionError):
+            sources_resolve.resolve(17)
+
+
+class TheSeed(unittest.TestCase):
+    def test_the_committed_record_names_the_7_52_version_of_017(self):
+        with open(sources_resolve.versions_path(), encoding="utf-8") as fh:
+            record = json.load(fh)
+        self.assertEqual(record["017"],
+                         "017-Erykah Badu - On & On (Blu Mar Ten Remix) - 7.52.JCv3Vs_CFjQ.opus")
+        self.assertEqual(sources_resolve.stem_key(record["017"]), ("track", 17))
+
+
 class TheMessages(Base):
     """A pull's failure is said on stderr, never stdout: in the inspector's DSP child stdout is
     the JSON channel. A master the bucket holds with no FLAC copy has its own reason."""
@@ -213,7 +289,7 @@ class TheMessages(Base):
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             self.assertEqual(mystery.searchable(self.src, meta), [])
-        self.assertIn("two clips, keep one", err.getvalue())
+        self.assertIn("two clips, choose one", err.getvalue())
         self.assertIn("Mystery Track 6 v2.wav", err.getvalue())
 
 
@@ -396,8 +472,11 @@ class ThePool(Base):
                 mock.patch.object(identify_by_chroma, "chroma", lambda y: "c"), \
                 self.quiet():
             pool = identify_by_chroma.load_pool(self.src)
-        self.assertEqual([n for n, _ in pool], ["070-pair.wv", "072-only-there.flac"])
-        self.assertEqual(sorted(loaded), ["070-pair.wv", "072-only-there.flac"])
+        self.assertEqual([n for n, _ in pool],
+                         ["070-pair.wv", "071-a.mp3", "071-b.mp3", "072-only-there.flac"],
+                         "two versions with no recorded choice are both in the pool")
+        self.assertEqual(sorted(loaded),
+                         ["070-pair.wv", "071-a.mp3", "071-b.mp3", "072-only-there.flac"])
 
 
 class TheAcoustidListing(Base):
@@ -405,6 +484,8 @@ class TheAcoustidListing(Base):
         import acoustid_check
         touch(self.src, "070-pair.wv")
         touch(self.src, "070-pair.flac")
+        touch(self.src, "071-a.mp3")
+        touch(self.src, "071-b.mp3")
         self.add("072-only-there.flac")
         seen = []
 
@@ -415,7 +496,8 @@ class TheAcoustidListing(Base):
         self.addCleanup(os.environ.pop, "ACOUSTID_DEV_API_KEY", None)
         with mock.patch.object(acoustid_check, "fingerprint", fake_fingerprint), self.quiet():
             acoustid_check.main([])
-        self.assertEqual(seen, ["070-pair.wv", "072-only-there.flac"])
+        self.assertEqual(seen, ["070-pair.wv", "071-a.mp3", "071-b.mp3", "072-only-there.flac"],
+                         "two versions with no recorded choice are both checked")
 
 
 if __name__ == "__main__":
