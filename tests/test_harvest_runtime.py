@@ -953,6 +953,33 @@ class TheLiveCanaryMustNotCrashTheHarvester(unittest.TestCase):
 
 
 @unittest.skipIf(harvest is None, "needs the librosa venv")
+class ANamedBucketThatCannotBeUsedIsAnError(unittest.TestCase):
+    """A signature bucket named in the settings but with no `aws` CLI to reach it leaves the
+    store dark, and the start says so as an ERROR and records it once in `issues`."""
+
+    def test_the_error_is_printed_and_recorded_once(self):
+        err = "the signature store is dark: NETRADIO_SIG_BUCKET is set, but no aws CLI"
+        state = {"issues": [{"at": "earlier", "issue": "something else"}]}
+        with unittest.mock.patch.object(harvest.sigstore, "store_error", lambda: err), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertTrue(harvest.note_store_error(state))
+            state["issues"].append({"at": "later", "issue": "another"})
+            self.assertFalse(harvest.note_store_error(state))     # standing: not again
+        self.assertEqual(out.getvalue().count("ERROR: " + err), 2)  # but printed every start
+        self.assertEqual([i["issue"] for i in state["issues"]].count("store: " + err), 1)
+
+    def test_no_error_records_nothing(self):
+        state = {}
+        with unittest.mock.patch.object(harvest.sigstore, "store_error", lambda: None), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertFalse(harvest.note_store_error(state))
+        self.assertEqual((state, out.getvalue()), ({}, ""))
+
+    def test_the_run_asks(self):
+        import inspect
+        self.assertIn("note_store_error(state)", inspect.getsource(harvest.run))
+
+
 class TheRunTakesTheWriterLock(unittest.TestCase):
     """The writer lock is harvest.py's own: the two writers are run() and the hand tool
     --sign-one, and each must keep taking the lock, one at a time, or two processes interleave

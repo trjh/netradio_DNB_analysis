@@ -10,28 +10,26 @@ archive.
 Rules that keep this safe:
 
   * **Never evict what isn't verified remote.** "Uploaded" means a HEAD of the object returns
-    the local file's exact size — not that a put command exited 0 once.
+    the local file's exact size — not that a put command exited 0 once. A put also stores the
+    file's SHA-256 as object metadata and checks it; signatures uploaded before that carry
+    none, so the eviction check stays the size.
   * **Never evict what is still wanted.** Fully-scored is judged against the CURRENT mystery
     set; a new or re-cut mystery makes old signatures wanted again, and `fetch()` brings any of
     them back on demand (a signature is ~55KB; re-fetching it is nothing).
   * **Dark unless configured** (`NETRADIO_SIG_BUCKET`), like every optional integration; with
     the store dark, nothing is ever deleted and the harvester behaves exactly as before.
 
-Speaks S3 through the aws CLI — an external tool exactly like ffmpeg, so this repo
-keeps its zero-pip-dependency posture for storage too. Env is read lazily (config may load
-after import).
+Every bucket call goes through `bucketio`, the repo's one bucket client, which speaks S3
+through the aws CLI. This module reads the signature bucket's settings and passes the bucket
+in. Env is read lazily (config may load after import).
 """
 
 import os
 import re
-import shutil
-import subprocess
-import tempfile
+import sys
 
+import bucketio                                     # the one bucket client: every call goes through it
 import cache_budget                                 # the chroma cache's policy: deletions go through it
-
-# The one seam through which every aws invocation passes — swappable in tests.
-_run = subprocess.run
 
 PREFIX = "chroma/"                  # bucket prefix for signatures (same keys as the local cache)
 
@@ -46,38 +44,57 @@ _KEY_NAME = re.compile(r"u[0-9a-f]{20}\.npy", re.ASCII)
 _SIDECAR_NAME = re.compile(r"u[0-9a-f]{20}\.json", re.ASCII)
 
 # Session memory: keys HEAD-verified this run, so eviction sweeps don't re-HEAD every pass.
-_verified = {}                      # key -> remote size
+_verified = {}                      # key -> (remote size, etag)
+
+
+_reported = set()                   # store errors already printed by this process
+
+
+def _define():
+    """(the signature bucket as a `bucketio.Bucket`, None), or (None, why) when it cannot be
+    defined: no bucket named, or no `aws` CLI to be found.
+
+    The endpoint is optional: unset, no --endpoint-url flag is passed and the aws CLI's own
+    default applies. Any S3-compatible provider is configured in `.env`, by the operator --
+    this repo names none."""
+    try:
+        return bucketio.Bucket(os.environ.get("NETRADIO_SIG_BUCKET", ""),
+                               endpoint=os.environ.get("NETRADIO_SIG_S3_ENDPOINT", ""),
+                               profile=os.environ.get("NETRADIO_SIG_AWS_PROFILE", ""),
+                               aws_cli=os.environ.get("NETRADIO_AWS_CLI", "")), None
+    except bucketio.BucketError as exc:
+        return None, str(exc)
+
+
+def store_error():
+    """Why the store is dark although a bucket IS named, or None. With no bucket named, dark is
+    the configured state and no error; with one named, a store that cannot be defined (an
+    `aws` CLI that does not resolve, a mistyped NETRADIO_AWS_CLI) is a misconfiguration: the
+    store stays dark, so nothing is uploaded and nothing is evicted, but it is an error, never
+    a silent local-only run."""
+    if not os.environ.get("NETRADIO_SIG_BUCKET", "").strip():
+        return None
+    bucket, why = _define()
+    if bucket is not None:
+        return None
+    return ("the signature store is dark: NETRADIO_SIG_BUCKET is set, but %s "
+            "(check NETRADIO_AWS_CLI). Nothing is uploaded until it is fixed" % why)
 
 
 def _bucket():
-    return os.environ.get("NETRADIO_SIG_BUCKET", "").strip()
-
-
-def _endpoint():
-    """Optional. Unset -> no --endpoint-url flag: the aws CLI's own default applies. Any
-    S3-compatible provider is configured HERE, by the operator -- this repo names none."""
-    return os.environ.get("NETRADIO_SIG_S3_ENDPOINT", "").strip()
-
-
-def _profile():
-    return os.environ.get("NETRADIO_SIG_AWS_PROFILE", "").strip()
-
-
-def _aws_cli():
-    return os.environ.get("NETRADIO_AWS_CLI", "") or shutil.which("aws") or ""
+    """The signature bucket, or None when the store is dark. A dark store with a bucket named is
+    printed as an ERROR, once per process (`store_error`)."""
+    bucket, _why = _define()
+    if bucket is None:
+        err = store_error()
+        if err and err not in _reported:
+            _reported.add(err)
+            print("ERROR: sigstore: " + err, file=sys.stderr, flush=True)
+    return bucket
 
 
 def enabled():
-    return bool(_bucket()) and bool(_aws_cli())
-
-
-def _base_cmd():
-    cmd = [_aws_cli()]
-    if _endpoint():
-        cmd += ["--endpoint-url", _endpoint()]
-    if _profile():
-        cmd += ["--profile", _profile()]
-    return cmd
+    return _bucket() is not None
 
 
 def _head(key):
@@ -85,29 +102,19 @@ def _head(key):
 
     One call answers both questions the callers ask, because they always arrive together:
     a put verifies its size and records the etag the ledger's row carries, and the eviction
-    sweep asks for the size alone. The ETag comes back quoted by the S3 API (it is an MD5
-    in quotes for un-multipart objects), so the quotes are stripped here, once.
+    sweep asks for the size alone. `bucketio.head` strips the quotes the S3 API puts around
+    an ETag.
 
     Cached per session once seen (an immutable object's size and ETag do not change)."""
     if key in _verified:
         return _verified[key]
-    cmd = _base_cmd() + ["s3api", "head-object", "--bucket", _bucket(),
-                         "--key", PREFIX + key, "--query", "[ContentLength, ETag]",
-                         "--output", "json"]
-    try:
-        proc = _run(cmd, capture_output=True, text=True, timeout=60)
-    except (OSError, subprocess.TimeoutExpired):
+    bucket = _bucket()
+    if bucket is None:
         return (None, None)
-    if proc.returncode != 0:
+    got, _err = bucketio.head(bucket, PREFIX + key)
+    if got is None:
         return (None, None)
-    import json
-    try:
-        size, etag = json.loads(proc.stdout or "[null, null]")
-    except ValueError:
-        return (None, None)
-    if size is None:
-        return (None, None)
-    _verified[key] = (size, (etag or "").strip('"') or None)
+    _verified[key] = (got.size, got.etag)
     return _verified[key]
 
 
@@ -119,112 +126,70 @@ def verified_size(key):
 
 
 def put(path, key):
-    """Upload one object and VERIFY it landed (remote size == local size).
+    """Upload one object and VERIFY it landed: `bucketio.put` stores the file's SHA-256 as
+    object metadata, then heads the object and requires the size and the hash to match.
 
     Returns the object's ETag on success, or None on any failure. A non-empty string is
     truthy, so a caller that only asks whether the object landed keeps reading the result
     as a bool; the ledger is the caller that wants the etag itself (its `uploaded_etag`
     is the mark a feeder reads)."""
-    if not enabled():
+    bucket = _bucket()
+    if bucket is None:
         return None
-    try:
-        local = os.path.getsize(path)
-    except OSError:
+    _verified.pop(key, None)                      # a fresh HEAD, never a stale cache entry
+    got, _err = bucketio.put(bucket, path, PREFIX + key)
+    if got is None:
         return None
-    cmd = _base_cmd() + ["s3", "cp", path, "s3://%s/%s%s" % (_bucket(), PREFIX, key),
-                         "--no-progress"]
-    try:
-        proc = _run(cmd, capture_output=True, text=True, timeout=300)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if proc.returncode != 0:
-        return None
-    _verified.pop(key, None)                      # force a fresh HEAD, not a stale cache entry
-    size, etag = _head(key)
-    return etag if size == local else None
+    _verified[key] = (got.size, got.etag)
+    return got.etag
 
 
 def fetch(key, dest_dir):
     """Bring one signature back into the working cache. Returns its local path, or None.
 
-    Downloads through a TEMPORARY name and renames into place only on success -- a copy that
-    times out or dies mid-stream must never leave a partial file under the final name, because
-    "the final name exists" is exactly what callers use to mean "this signature is held", and a
-    poisoned entry would suppress every later retry."""
-    if not enabled():
+    `bucketio.fetch_verified` heads the object, downloads it to a unique `.part` name beside
+    the final one and renames it into place only once the size matches (and the SHA-256, on
+    an object that carries one). A copy that times out or dies mid-stream never leaves a
+    partial file under the final name, because "the final name exists" is exactly what
+    callers use to mean "this signature is held", and a poisoned entry would suppress every
+    later retry. The `.part` name is the cache policy's write-in-progress mark: a bucket pull
+    lands inside the registered `chroma` cache, and a policy run answering another writer's
+    `reserve` must hold a fresh download, not evict it out from under the rename.
+
+    `require_sha256=False`: signatures uploaded before `put` stored the hash carry none, and
+    they are checked by size, as they always were."""
+    bucket = _bucket()
+    if bucket is None:
         return None
     os.makedirs(dest_dir, exist_ok=True)
     dest = os.path.join(dest_dir, key)
-    # A UNIQUE temp per invocation (mkstemp), same directory so the final rename stays atomic.
-    # PID alone is not enough -- two threads of one process fetching the same key must not
-    # share a pathname. The name ENDS .part, the cache policy's write-in-progress mark: a
-    # bucket pull lands inside the registered `chroma` cache, and a policy run answering
-    # another writer's `reserve` must hold a fresh download, not evict it out from under the
-    # replace (past an hour it reads as a download that died part-way, and is evicted).
-    fd, tmp = tempfile.mkstemp(dir=dest_dir, prefix=key + ".", suffix=".part")
-    os.close(fd)
-    cmd = _base_cmd() + ["s3", "cp", "s3://%s/%s%s" % (_bucket(), PREFIX, key), tmp,
-                         "--no-progress"]
-    try:
-        try:
-            proc = _run(cmd, capture_output=True, text=True, timeout=300)
-        except (OSError, subprocess.TimeoutExpired):
-            return None
-        if proc.returncode != 0 or not os.path.exists(tmp) or os.path.getsize(tmp) == 0:
-            return None
-        try:
-            os.replace(tmp, dest)
-        except OSError:
-            # Racing replace: if someone else already published the file, that IS success --
-            # the object is immutable, any complete copy is the right copy.
-            return dest if os.path.exists(dest) else None
-        return dest
-    finally:
-        try:
-            os.unlink(tmp)                    # no-op if the replace consumed it
-        except OSError:
-            pass
+    err = bucketio.fetch_verified(bucket, PREFIX + key, dest, require_sha256=False)
+    return None if err else dest
 
 
 def list_objects():
     """Every signature and sidecar object in the bucket: {name: etag}, or None on failure —
     callers must treat 'unknown' differently from 'empty'. The ETags ride along because the
     ledger's rows record them: one listing answers both "what is in the pool" and "which
-    object each row points at".
+    object each row points at". Asked fresh every call (`max_age=0`): the harvester holds
+    its own copy for as long as it wants one.
 
     Both key shapes are admitted -- `<key>.npy` and `<key>.json` -- so a caller can tell a
     complete entry (both objects) from a legacy signature-only one (the sidecar the contract
     now requires was never written). Callers that want only the signatures filter to `.npy`
     themselves."""
-    if not enabled():
+    bucket = _bucket()
+    if bucket is None:
         return None
-    objects, token = {}, None
-    while True:
-        cmd = _base_cmd() + ["s3api", "list-objects-v2", "--bucket", _bucket(),
-                             "--prefix", PREFIX, "--query", "[Contents[].[Key, ETag], NextToken]",
-                             "--output", "json"]
-        if token:
-            cmd += ["--starting-token", token]
-        try:
-            proc = _run(cmd, capture_output=True, text=True, timeout=120)
-        except (OSError, subprocess.TimeoutExpired):
-            return None
-        if proc.returncode != 0:
-            return None
-        import json
-        try:
-            contents, token = json.loads(proc.stdout or "[[], null]")
-        except (ValueError, TypeError):
-            return None
-        for entry in contents or []:
-            try:
-                name, etag = entry[0][len(PREFIX):], entry[1]
-            except (TypeError, IndexError):
-                continue                    # a shape the contract does not describe: skip it
-            if _KEY_NAME.fullmatch(name) or _SIDECAR_NAME.fullmatch(name):
-                objects[name] = (etag or "").strip('"') or None
-        if not token:
-            return objects
+    listed, _err = bucketio.listing(bucket, PREFIX, max_age=0)
+    if listed is None:
+        return None
+    objects = {}
+    for full, entry in listed.items():
+        name = full[len(PREFIX):] if full.startswith(PREFIX) else ""
+        if _KEY_NAME.fullmatch(name) or _SIDECAR_NAME.fullmatch(name):
+            objects[name] = entry.etag
+    return objects
 
 
 def evictable(path, key, scored, qkeys):

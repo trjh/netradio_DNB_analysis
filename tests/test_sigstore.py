@@ -1,62 +1,53 @@
 """sigstore: dark-by-default, verified puts, safe eviction, etags for the ledger. All offline.
 
-The aws CLI never runs: the module's one subprocess seam (`sigstore._run`) is swapped for a
-scripted recorder — the same reason the seam exists in the module. The fakes speak the JSON the
-real CLI prints, built with `json.dumps` in the fixtures so the quoting is never hand-escaped:
-S3 quotes its etags inside JSON, and one hand-escaped quote is exactly the kind of fixture that
-passes while the real thing fails.
+The aws CLI never runs: every bucket call goes through `bucketio`, whose one subprocess seam
+(`bucketio._run`) is swapped for `bucket_fake.FakeAws`. The fake holds objects in memory and
+speaks the JSON the real CLI prints, built with `json.dumps` so the quoting is never
+hand-escaped: S3 quotes its etags inside JSON, and one hand-escaped quote is exactly the kind
+of fixture that passes while the real thing fails.
 """
 
+import contextlib
+import hashlib
+import io
 import json
 import os
 import sys
 import tempfile
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                "scripts"))
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "scripts"))
+sys.path.insert(0, HERE)
 
 import sigstore  # noqa: E402
 import cache_budget  # noqa: E402  (evict_cold deletes through the chroma cache's policy)
+from bucket_fake import FakeAws, FakeProc  # noqa: E402
+
+BUCKET = "test-bucket"
 
 
-class FakeProc:
-    def __init__(self, returncode=0, stdout="", stderr=""):
-        self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
-
-
-class Recorder:
-    def __init__(self):
-        self.calls = []
-        self.results = []            # popped per call; empty -> success, no output
-
-    def __call__(self, cmd, **kwargs):
-        self.calls.append(cmd)
-        return self.results.pop(0) if self.results else FakeProc()
+def md5(body):
+    return hashlib.md5(body).hexdigest()
 
 
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.aws = os.path.join(self.tmp.name, "aws")
-        with open(self.aws, "w") as fh:
+        self.aws_cli = os.path.join(self.tmp.name, "aws")
+        with open(self.aws_cli, "w") as fh:
             fh.write("#!/bin/sh\n")
-        os.chmod(self.aws, 0o755)
-        self.rec = Recorder()
-        self._orig_run = sigstore._run
-        sigstore._run = self.rec
-        self.addCleanup(setattr, sigstore, "_run", self._orig_run)
+        os.chmod(self.aws_cli, 0o755)
+        self.aws = FakeAws().install(self)
         sigstore._verified.clear()
         self._env = {}
         for k in ("NETRADIO_SIG_BUCKET", "NETRADIO_SIG_S3_ENDPOINT",
                   "NETRADIO_SIG_AWS_PROFILE", "NETRADIO_AWS_CLI"):
             self._env[k] = os.environ.pop(k, None)
         self.addCleanup(self._restore)
-        os.environ["NETRADIO_SIG_BUCKET"] = "test-bucket"
-        os.environ["NETRADIO_AWS_CLI"] = self.aws
+        os.environ["NETRADIO_SIG_BUCKET"] = BUCKET
+        os.environ["NETRADIO_AWS_CLI"] = self.aws_cli
 
     def _restore(self):
         for k, v in self._env.items():
@@ -71,6 +62,9 @@ class Base(unittest.TestCase):
             fh.write(b"x" * size)
         return path, name
 
+    def _remote(self, key, body, sha256=False):
+        self.aws.add(BUCKET, sigstore.PREFIX + key, body, sha256=sha256)
+
 
 class TestDark(Base):
     def test_dark_without_bucket(self):
@@ -79,7 +73,36 @@ class TestDark(Base):
         path, key = self._sig()
         self.assertIsNone(sigstore.put(path, key))
         self.assertIsNone(sigstore.list_objects())
-        self.assertEqual(self.rec.calls, [])
+        self.assertIsNone(sigstore.fetch(key, self.tmp.name))
+        self.assertEqual(self.aws.calls, [])
+
+    def test_dark_without_a_cli(self):
+        os.environ["NETRADIO_AWS_CLI"] = os.path.join(self.tmp.name, "missing")
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertFalse(sigstore.enabled())
+
+    def test_a_named_bucket_with_no_cli_is_an_error_printed_once(self):
+        # The store stays dark, but a bucket the operator named and cannot reach is an ERROR,
+        # never a silent local-only run.
+        self.addCleanup(sigstore._reported.clear)
+        sigstore._reported.clear()
+        os.environ["NETRADIO_AWS_CLI"] = os.path.join(self.tmp.name, "missing")
+        self.assertIn("NETRADIO_SIG_BUCKET is set", sigstore.store_error())
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertFalse(sigstore.enabled())
+            self.assertFalse(sigstore.enabled())
+        self.assertEqual(err.getvalue().count("ERROR: sigstore:"), 1)
+
+    def test_no_bucket_named_is_no_error(self):
+        del os.environ["NETRADIO_SIG_BUCKET"]
+        os.environ["NETRADIO_AWS_CLI"] = os.path.join(self.tmp.name, "missing")
+        self.assertIsNone(sigstore.store_error())
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            sigstore.enabled()
+        self.assertEqual(err.getvalue(), "")
+        os.environ["NETRADIO_AWS_CLI"] = self.aws_cli
+        os.environ["NETRADIO_SIG_BUCKET"] = BUCKET
+        self.assertIsNone(sigstore.store_error())
 
     def test_dark_never_evicts(self):
         del os.environ["NETRADIO_SIG_BUCKET"]
@@ -93,22 +116,31 @@ class TestPut(Base):
     def test_put_verifies_size_and_returns_the_etag(self):
         # The etag is what the harvester's ledger row records: a put is not just "it landed",
         # it is "this is the object it landed as". S3 quotes its etags inside the JSON; the
-        # quotes come off once, in the module.
+        # quotes come off once, in bucketio.
         path, key = self._sig(size=100)
-        self.rec.results = [FakeProc(), FakeProc(stdout=json.dumps([100, '"etag-1"']))]
-        self.assertEqual(sigstore.put(path, key), "etag-1")
-        self.assertIn("s3://test-bucket/chroma/" + key, self.rec.calls[0])
+        self.assertEqual(sigstore.put(path, key), md5(b"x" * 100))
+        self.assertIn("s3://test-bucket/chroma/" + key, self.aws.calls[0][0])
+        self.assertEqual(self.aws.ops(), ["cp-up", "head-object"])
+        self.assertEqual(sigstore.verified_size(key), 100)
+
+    def test_put_writes_the_sha256_metadata(self):
+        path, key = self._sig(size=100)
+        sigstore.put(path, key)
+        self.assertEqual(self.aws.objects[(BUCKET, sigstore.PREFIX + key)]["meta"],
+                         {"sha256": hashlib.sha256(b"x" * 100).hexdigest()})
 
     def test_put_fails_on_size_mismatch(self):
         path, key = self._sig(size=100)
-        self.rec.results = [FakeProc(), FakeProc(stdout=json.dumps([99, "etag-1"]))]
+        self.aws.fail_next("head-object", FakeProc(stdout=json.dumps(
+            {"ContentLength": 99, "ETag": '"etag-1"', "Metadata": {}})))
         self.assertFalse(sigstore.put(path, key))
+        self.assertIsNone(sigstore.verified_size(key))
 
     def test_put_fails_on_cp_error(self):
         path, key = self._sig()
-        self.rec.results = [FakeProc(returncode=1, stderr="denied")]
+        self.aws.fail_next("cp-up", FakeProc(returncode=1, stderr="denied"))
         self.assertIsNone(sigstore.put(path, key))
-        self.assertEqual(len(self.rec.calls), 1)                       # no HEAD after failed cp
+        self.assertEqual(self.aws.ops(), ["cp-up"])                    # no HEAD after failed cp
 
     def test_a_put_without_a_bucket_returns_none(self):
         # None (not False) is the contract: a caller reading the result as a bool still works,
@@ -116,59 +148,63 @@ class TestPut(Base):
         del os.environ["NETRADIO_SIG_BUCKET"]
         path, key = self._sig()
         self.assertIsNone(sigstore.put(path, key))
-        self.assertEqual(self.rec.calls, [])
+        self.assertEqual(self.aws.calls, [])
 
 
 class TestRemote(Base):
     def test_head_caches_per_session(self):
         _, key = self._sig()
-        self.rec.results = [FakeProc(stdout=json.dumps([55, "e-55"]))]
-        self.assertEqual(sigstore._head(key)[0], 55)
+        self._remote(key, b"x" * 55)
+        self.assertEqual(sigstore._head(key), (55, md5(b"x" * 55)))
         self.assertEqual(sigstore._head(key)[0], 55)                # cached
-        self.assertEqual(len(self.rec.calls), 1)
+        self.assertEqual(len(self.aws.calls), 1)
 
     def test_absent_object_is_none_and_not_cached(self):
         _, key = self._sig()
-        self.rec.results = [FakeProc(returncode=254, stderr="Not Found"),
-                            FakeProc(stdout=json.dumps([55, "e-55"]))]
         self.assertIsNone(sigstore._head(key)[0])
+        self._remote(key, b"x" * 55)
         self.assertEqual(sigstore._head(key)[0], 55)                # re-asked, now present
 
     def test_a_head_without_a_size_is_none(self):
-        # A shape the contract does not describe (a torn [null, ...]) is an absence, not a
+        # A shape the contract does not describe (no ContentLength) is an absence, not a
         # crash -- and it is never cached, so the next ask re-asks.
         _, key = self._sig()
-        self.rec.results = [FakeProc(stdout=json.dumps([None, "e"])),
-                            FakeProc(stdout=json.dumps([7, "e"]))]
+        self._remote(key, b"x" * 7)
+        self.aws.fail_next("head-object", FakeProc(stdout=json.dumps({"ETag": '"e"'})))
         self.assertIsNone(sigstore._head(key)[0])
         self.assertEqual(sigstore._head(key)[0], 7)
 
     def test_the_listing_carries_the_etags(self):
         # The ledger's rows record the etags, and one listing answers both questions: what is
         # in the pool, and which object each row points at.
+        self.aws.page_size = 2
         k1 = "u" + "1" * 20 + ".npy"
-        k2 = "u" + "2" * 20 + ".npy"
-        page1 = json.dumps([[["chroma/" + k1, '"e-1"'],
-                             ["chroma/_recipe.json", '"x"'],
-                             ["chroma/_canary/manifest.json", '"x"'],
-                             ["chroma/upload.npy", '"x"'],
-                             ["chroma/u123.npy", '"x"']], "TOK"])
-        page2 = json.dumps([[["chroma/" + k2, "e-2"]], None])
-        self.rec.results = [FakeProc(stdout=page1), FakeProc(stdout=page2)]
+        k2 = "u" + "2" * 20 + ".json"
+        for name in (k1, k2, "_recipe.json", "_canary/manifest.json", "upload.npy",
+                     "u123.npy"):
+            self._remote(name, name.encode())
         objects = sigstore.list_objects()
-        self.assertEqual(objects, {k1: "e-1", k2: "e-2"})
-        self.assertIn("--starting-token", self.rec.calls[1])
+        self.assertEqual(objects, {k1: md5(k1.encode()), k2: md5(k2.encode())})
+        self.assertIn("--starting-token", self.aws.calls[1][0])
+
+    def test_the_listing_is_asked_fresh_every_time(self):
+        # The harvester holds its own copy of the listing for as long as it wants; a second
+        # cache here would hide an object a put just landed.
+        sigstore.list_objects()
+        sigstore.list_objects()
+        self.assertEqual(len(self.aws.ops("list-objects-v2")), 2)
 
     def test_the_listing_admits_only_keys_shapes(self):
         # The scan refuses any stem that is not `u` + 20 hex, so an object named any other way
         # could never be satisfied by a local file: admitting it would seed a ledger row that
         # no feeder can cover, and the pool's count would disagree with the scan.
-        page = json.dumps([[["chroma/upload.npy", '"x"'],
-                            ["chroma/u123.npy", '"x"'],
-                            ["chroma/" + "u" + "g" * 20 + ".npy", '"x"'],
-                            ["chroma/_recipe.json", '"x"']], None])
-        self.rec.results = [FakeProc(stdout=page)]
+        for name in ("upload.npy", "u123.npy", "u" + "g" * 20 + ".npy", "_recipe.json"):
+            self._remote(name, b"x")
         self.assertEqual(sigstore.list_objects(), {})
+
+    def test_a_failed_listing_is_none(self):
+        self.aws.fail_next("list-objects-v2", FakeProc(returncode=255, stderr="AccessDenied"))
+        self.assertIsNone(sigstore.list_objects())
 
 
 # The cache-policy names only (the same set tests/test_cache_budget.py saves and restores):
@@ -218,9 +254,9 @@ class TestEvict(Base):
         p2, k2 = self._sig("u" + "2" * 20 + ".npy", size=10)    # missing one mystery -> stays
         p3, k3 = self._sig("u" + "3" * 20 + ".npy", size=10)    # scored, NOT verified -> stays
         scored = {"qA": [k1, k2, k3], "qB": [k1, k3]}
-        # HEADs happen in sorted(name) order for eligible files: k1 verified(10); k3 size-mismatch
-        self.rec.results = [FakeProc(stdout=json.dumps([10, "e"])),
-                            FakeProc(stdout=json.dumps([11, "e"]))]
+        # The bucket holds k1 at its local size, and k3 at another size.
+        self._remote(k1, b"x" * 10)
+        self._remote(k3, b"x" * 11)
         n, freed = sigstore.evict_cold(self.tmp.name, scored, ["qA", "qB"])
         self.assertEqual((n, freed), (1, 10))
         self.assertFalse(os.path.exists(p1))
@@ -246,7 +282,7 @@ class TestEvict(Base):
         with open(stray, "wb") as fh:
             fh.write(b"x" * 10)
         key = os.path.basename(stray)
-        self.rec.results = [FakeProc(stdout=json.dumps([10, "e"]))]
+        self._remote(key, b"x" * 10)
         n, freed = sigstore.evict_cold(elsewhere, {"qA": [key]}, ["qA"])
         self.assertEqual((n, freed), (0, 0))
         self.assertTrue(os.path.exists(stray), "nothing outside the cache is deleted")
@@ -279,37 +315,45 @@ class TestEvict(Base):
     def test_fetch_downloads_via_temp_then_renames(self):
         dest_dir = os.path.join(self.tmp.name, "cache")
         key = "u" + "4" * 20 + ".npy"
-
-        def fake_cp(cmd, **kw):
-            self.rec.calls.append(cmd)
-            with open(cmd[-2], "wb") as fh:            # cp writes the TEMP destination arg
-                fh.write(b"z")
-            return FakeProc()
-        sigstore._run = fake_cp
+        self._remote(key, b"z")
         out = sigstore.fetch(key, dest_dir)
         self.assertEqual(out, os.path.join(dest_dir, key))
         self.assertTrue(os.path.exists(out))
-        self.assertIn(".part", self.rec.calls[0][-2])              # download went via a temp name
-        self.assertTrue(self.rec.calls[0][-2].endswith(".part"),
+        target = self.aws.calls[-1][0][3]                      # cp's destination argument
+        self.assertTrue(target.endswith(".part"),
                         "the temp is the cache policy's write-in-progress mark, so no eviction "
                         "run takes an active download")
+        self.assertEqual(os.path.dirname(target), dest_dir)
         self.assertEqual([n for n in os.listdir(dest_dir)], [key]) # no temp left behind
+
+    def test_an_older_signature_with_no_sha256_is_checked_by_size(self):
+        """Signatures uploaded before put stored the hash carry none. They are fetched, and
+        checked by their size; a copy of another size is refused."""
+        dest_dir = os.path.join(self.tmp.name, "cache")
+        key = "u" + "3" * 20 + ".npy"
+        self._remote(key, b"old-signature")                     # no sha256 metadata
+        self.assertEqual(sigstore.fetch(key, dest_dir), os.path.join(dest_dir, key))
+        os.remove(os.path.join(dest_dir, key))
+        self.aws.served[(BUCKET, sigstore.PREFIX + key)] = b"old-signatur"
+        self.assertIsNone(sigstore.fetch(key, dest_dir))
+        self.assertEqual(os.listdir(dest_dir), [])
+
+    def test_a_signature_with_a_sha256_is_checked_by_it(self):
+        dest_dir = os.path.join(self.tmp.name, "cache")
+        key = "u" + "2" * 20 + ".npy"
+        self._remote(key, b"signature", sha256=True)
+        self.aws.served[(BUCKET, sigstore.PREFIX + key)] = b"SIGNATURE"   # same size
+        self.assertIsNone(sigstore.fetch(key, dest_dir))
+        self.assertEqual(os.listdir(dest_dir), [])
+        del self.aws.served[(BUCKET, sigstore.PREFIX + key)]
+        self.assertEqual(sigstore.fetch(key, dest_dir), os.path.join(dest_dir, key))
 
     def test_failed_fetch_leaves_no_partial_and_retry_succeeds(self):
         """The P2 regression: an interrupted copy must not poison the cache entry."""
         dest_dir = os.path.join(self.tmp.name, "cache")
         key = "u" + "5" * 20 + ".npy"
-        state = {"n": 0}
-
-        def flaky_cp(cmd, **kw):
-            self.rec.calls.append(cmd)
-            state["n"] += 1
-            with open(cmd[-2], "wb") as fh:
-                fh.write(b"par")                        # partial bytes hit the disk either way
-            if state["n"] == 1:
-                return FakeProc(returncode=1, stderr="timeout")     # ...but the copy FAILED
-            return FakeProc()
-        sigstore._run = flaky_cp
+        self._remote(key, b"z")
+        self.aws.fail_next("cp-down", FakeProc(returncode=1, stderr="timeout"))
         self.assertIsNone(sigstore.fetch(key, dest_dir))
         self.assertEqual(os.listdir(dest_dir), [])      # nothing under the final name, no temp
         out = sigstore.fetch(key, dest_dir)             # the retry is not suppressed
@@ -320,16 +364,17 @@ class TestEvict(Base):
         import threading
         dest_dir = os.path.join(self.tmp.name, "cache")
         key = "u" + "6" * 20 + ".npy"
+        self._remote(key, b"z")
         gate = threading.Barrier(2)
         temps, results, errors = [], [], []
+        real = self.aws._cp_down
 
-        def slow_cp(cmd, **kw):
-            temps.append(cmd[-2])
-            with open(cmd[-2], "wb") as fh:
-                fh.write(b"z")
+        def slow_cp(args):
+            temps.append(args[3])
+            proc = real(args)
             gate.wait(timeout=5)               # both copies "finish" at the same moment
-            return FakeProc()
-        sigstore._run = slow_cp
+            return proc
+        self.aws._cp_down = slow_cp
 
         def go():
             try:
@@ -347,17 +392,14 @@ class TestEvict(Base):
     def test_no_endpoint_flag_unless_configured(self):
         """The neutrality P2: this public module names no provider."""
         path, key = self._sig()
-        self.rec.results = [FakeProc(), FakeProc(stdout=json.dumps([100, "e"]))]
         sigstore.put(path, key)
-        self.assertNotIn("--endpoint-url", self.rec.calls[0])
+        self.assertNotIn("--endpoint-url", self.aws.calls[0][1])
         os.environ["NETRADIO_SIG_S3_ENDPOINT"] = "https://s3.example.test"
-        sigstore._verified.clear()
-        self.rec.results = [FakeProc(), FakeProc(stdout=json.dumps([100, "e"]))]
+        os.environ["NETRADIO_SIG_AWS_PROFILE"] = "sig"
         sigstore.put(path, key)
-        cmd = self.rec.calls[-2]
-        self.assertIn("--endpoint-url", cmd)
+        cmd = self.aws.calls[-2][1]
         self.assertEqual(cmd[cmd.index("--endpoint-url") + 1], "https://s3.example.test")
-
+        self.assertEqual(cmd[cmd.index("--profile") + 1], "sig")
 
 if __name__ == "__main__":
     unittest.main()

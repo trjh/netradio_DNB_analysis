@@ -112,7 +112,8 @@ the four-hour backstop applies to it.
 The harvester uploads every signature, with its sidecar beside it, to one S3-compatible
 signature bucket. The bucket is what makes a signature durable: the local cache is bounded
 and evicts cold entries, and the bucket is the record the ledger is reconciled against. The
-upload, the HEAD, and the listing are all through the AWS CLI (`aws`), so the bucket is
+upload, the HEAD, and the listing are all through the AWS CLI (`aws`), by way of
+`scripts/bucketio.py`, the repo's one bucket client, so the bucket is
 **configured, not assumed** — the harvester does not run a signer that promises an upload it
 cannot make.
 
@@ -130,6 +131,18 @@ AWS credentials are the CLI's own concern (environment, `~/.aws/credentials`, or
 above); the harvester reads no credentials itself. The store is **on** only when both a
 bucket is named and the AWS CLI resolves to an executable; with the store on, a sign whose
 upload of either object fails writes no row, and the file is signed again on a later pass.
+
+**A bucket named but not reachable is an error.** When `NETRADIO_SIG_BUCKET` is set but the
+`aws` CLI does not resolve (a mistyped `NETRADIO_AWS_CLI`, say), the store is dark as above,
+and the harvester prints an `ERROR:` line at every start and records it once in the state's
+`issues`.
+
+**Each upload carries its SHA-256.** An object is stored with the file's SHA-256 as user
+metadata (`sha256`), and the upload counts only when a HEAD of the object returns the file's
+size, that hash, and the ETag those bytes give (their MD5, or for an upload in parts the
+multipart ETag at the CLI's default part size). A signature fetched back is checked against the hash where its object
+carries one, and against its size where it does not: objects uploaded before the hash was
+stored have none.
 
 **A dark store is a local-only sign, and it is visible.** With the store off — no bucket, or
 no `aws` resolvable — the harvester still signs, but the row carries no `uploaded_etag` and

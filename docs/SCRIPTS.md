@@ -110,6 +110,7 @@ own original, the change is wrong.
 | `scripts/backup_sheet.py` | back up the Google Sheet (the ID is `NETRADIO_SHEET_ID` in `.env`); the sheet is private and the download has no login, so it refuses until it gets authenticated access |
 | `scripts/envfile.py`, `scripts/lib/env.sh` | the repo's one `.env` reader, for Python and for the shell: one grammar (read, never executed; no `export`; a `#` after a value is part of it), and a variable already set wins; `python3 scripts/envfile.py --export .env` prints the file for `eval` |
 | `scripts/cache_budget.py` | the one cache policy: a registry of size-bounded local caches, `reserve` before every write, an eviction run, one disk floor — a library the cache-holding scripts register with (dark until `NETRADIO_CACHE_ROOT` is set); the decoded-array cache in `scripts/streamalign/audio.py` registers with it |
+| `scripts/bucketio.py` | the one S3-compatible bucket client, a library: list a prefix, head one object, fetch one object through a `.part` file and verify it by size and SHA-256, upload one with its SHA-256 as object metadata; every call through the `aws` CLI under one timeout per kind of call. The caller passes the bucket in; the module reads no setting. `scripts/sigstore.py` stores the signatures through it |
 
 ## Retired
 
