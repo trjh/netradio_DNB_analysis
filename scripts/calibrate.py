@@ -85,6 +85,13 @@ def positions():
     return starts
 
 
+def _bucket_cut(num):
+    """True when `extract_tracks.refresh_cuts` listed a cut for `num` in the audio bucket.
+    False when that module was never imported (no refresh ran, so no listing is held)."""
+    extract_tracks = sys.modules.get("extract_tracks")
+    return bool(extract_tracks and extract_tracks.listed_cut(num))
+
+
 def build_cases(tracks, starts, src):
     """Every track where we hold BOTH the mix and the original.
 
@@ -144,11 +151,15 @@ def build_cases(tracks, starts, src):
                 ex = os.path.join(exdir, flac[0])
             elif matches:
                 ex = os.path.join(exdir, matches[0])
-        if cap or ex:
+        # no cut held here, but the audio bucket's last listing has one: `mix_query` fetches
+        # it when the case is scored (never here: --limit cuts the list after this)
+        in_bucket = ex is None and _bucket_cut(int(num))
+        if cap or ex or in_bucket:
             cases.append({"num": int(num), "orig": orig,
                           "cap": cap[0] if cap else None,
                           "cstart": cap[1] if cap else 0,
-                          "extract": ex, "mb": mb, "me": me,
+                          "extract": ex, "extract_in_bucket": in_bucket,
+                          "mb": mb, "me": me,
                           "name": "%s - %s" % (entry.get("artist") or "?",
                                                entry.get("title") or "?")})
     cases.sort(key=lambda c: c["num"])
@@ -163,8 +174,13 @@ def mix_query(case):
     Urban Style scored 0.0337 from a solo window and 0.0846 from a master_begin one, same track,
     same original, same matcher. Shared with `selftest.py` for the same reason as `build_cases`.
     """
+    if not case.get("extract") and case.get("extract_in_bucket"):
+        import extract_tracks
+        case["extract"] = extract_tracks.fetch_cut(case["num"], case["name"])
     if case.get("extract"):
         y = _audio.load_audio(case["extract"])
+    elif not case.get("cap"):
+        return None                 # the bucket's cut could not be fetched, and no capture
     else:
         capa = _audio.load_audio(case["cap"])
         lo = case["mb"] - case["cstart"]
@@ -195,7 +211,8 @@ def main():
     starts = positions()
 
     # The cuts this machine holds are compared with the audio bucket's once, here, and a cut
-    # that changed there is replaced; with no bucket set this does nothing. Importing
+    # that changed there is replaced; a cut held only in the bucket is fetched when its case
+    # is scored. With no bucket set, or NETRADIO_READ_ONLY set, this does nothing. Importing
     # extract_tracks registers the tracks cache this process then holds.
     import extract_tracks
     extract_tracks.refresh_cuts()

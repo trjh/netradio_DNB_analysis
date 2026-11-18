@@ -373,7 +373,10 @@ SHA-256 metadata, and decodes it; the pulled file is evicted like any cache entr
 review page's stream audio pulls a missing MP3 from `stream/mp3/` the same way. With no bucket
 set, a missing capture is reported missing, as before. Every decode reads the capture files
 (`.wav`/`.au`), never the MP3s, and so does the `/align` inspector: the labels were placed on
-the capture files.
+the capture files. A solve or skip review that cannot pull a capture names the pair it skipped
+on stderr. The track cuts work the same way: `extract_tracks.py` publishes each changed cut to
+`stream/tracks/`, and `calibrate.py` fetches a cut this machine does not hold when it needs it.
+Under `NETRADIO_READ_ONLY`, no cut is published or refreshed.
 
 **What to do next:** nothing to run. `python -m streamalign groundtruth` still lists which
 captures are on this disk; it never pulls.

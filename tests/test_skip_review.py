@@ -6,6 +6,7 @@ detection / ffmpeg layers (the captures live on a local disk, not in the repo), 
 the _Stub pattern in test_streamalign.py.
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import json
 import os
 import shutil

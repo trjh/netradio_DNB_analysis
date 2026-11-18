@@ -676,3 +676,92 @@ class ThePublishedCuts(unittest.TestCase):
         self._hold(4, b"x" * 10)
         self.assertEqual(extract_tracks.refresh_cuts(), {})
         self.assertEqual(self.fake.calls, [])
+
+    # A failed publish never lets the bucket's older cut win; an unchanged cut is not
+    # uploaded again; NETRADIO_READ_ONLY stops every publish and refresh; a cut held only in
+    # the bucket is fetched by number into the name `main` cuts it to.
+
+    def _cut_path(self):
+        return extract_tracks.held_cuts()[4]
+
+    def test_a_failed_publish_keeps_the_fresh_cut_at_the_next_refresh(self):
+        from bucket_fake import FakeProc
+        self._run()                                      # published: the record holds it
+        old = self._tracks()["stream/tracks/004.flac"]["body"]
+        self.body = b"fLaC" * 150                       # a label edit moved the span
+        self.fake.fail_next("cp-up", FakeProc(returncode=1, stderr="connection reset"))
+        out = self._run()
+        self.assertIn("NOT PUBLISHED", out)
+        self.assertEqual(self._tracks()["stream/tracks/004.flac"]["body"], old)
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            report = extract_tracks.refresh_cuts()
+        self.assertEqual(report["replaced"], [])
+        self.assertEqual(report["unpublished"], [4])
+        self.assertIn("local cut not published", buf.getvalue())
+        with open(self._cut_path(), "rb") as fh:
+            self.assertEqual(fh.read(), self.body, "the fresh cut is kept")
+        self.assertEqual(self.fake.ops("cp-down"), [])
+
+    def test_a_cut_changed_with_no_publish_is_kept_at_the_next_refresh(self):
+        self._run()
+        path = self._cut_path()
+        with open(path, "wb") as fh:                     # re-cut, never published
+            fh.write(b"fLaC" * 170)
+        with contextlib.redirect_stdout(io.StringIO()):
+            report = extract_tracks.refresh_cuts()
+        self.assertEqual(report["unpublished"], [4])
+        self.assertEqual(os.path.getsize(path), 4 * 170)
+
+    def test_an_unchanged_cut_is_not_uploaded_again(self):
+        self._run()
+        self.assertEqual(self.fake.ops("cp-up"), ["cp-up"])
+        self._run()
+        self.assertEqual(self.fake.ops("cp-up"), ["cp-up"], "the second run uploads nothing")
+        self.body = b"fLaC" * 120
+        self._run()
+        self.assertEqual(self.fake.ops("cp-up"), ["cp-up", "cp-up"], "a change is uploaded")
+
+    def test_read_only_publishes_nothing(self):
+        os.environ["NETRADIO_READ_ONLY"] = "1"
+        self.addCleanup(os.environ.pop, "NETRADIO_READ_ONLY", None)
+        self._run()
+        self.assertEqual(self.fake.calls, [])
+        self.assertEqual(len(extract_tracks.held_cuts()), 1, "the cut is still written locally")
+
+    def test_read_only_refreshes_nothing(self):
+        self.fake.add(self.bucket, "stream/tracks/004.flac", b"new" * 50, sha256=True)
+        path = self._hold(4, b"old" * 10)
+        os.environ["NETRADIO_READ_ONLY"] = "1"
+        self.addCleanup(os.environ.pop, "NETRADIO_READ_ONLY", None)
+        self.assertEqual(extract_tracks.refresh_cuts(), {})
+        self.assertEqual(self.fake.calls, [])
+        with open(path, "rb") as fh:
+            self.assertEqual(fh.read(), b"old" * 10)
+
+    def test_a_cut_held_only_in_the_bucket_is_fetched_under_mains_name(self):
+        self.addCleanup(extract_tracks._bucket_cuts.clear)
+        self.fake.add(self.bucket, "stream/tracks/004.flac", self.body, sha256=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            extract_tracks.refresh_cuts()
+        self.assertTrue(extract_tracks.listed_cut(4))
+        self.assertFalse(extract_tracks.listed_cut(5))
+        self.assertEqual(self.fake.ops("cp-down"), [], "the refresh fetches no absent cut")
+        path = extract_tracks.fetch_cut(4, "Dead Calm - Urban/Style")
+        self.assertEqual(os.path.basename(path), "004 - Dead Calm - Urban_Style.flac")
+        with open(path, "rb") as fh:
+            self.assertEqual(fh.read(), self.body)
+        self.assertEqual(extract_tracks._read_meta(path)["key"], "stream/tracks/004.flac")
+        self.assertEqual(extract_tracks.held_cuts(), {4: path})
+        self.assertFalse(extract_tracks._pinned_cut(path))
+        self.assertIsNone(extract_tracks.fetch_cut(5, "Not - Listed"))
+
+    def test_a_fetch_refused_its_room_leaves_nothing(self):
+        self.addCleanup(extract_tracks._bucket_cuts.clear)
+        os.environ["NETRADIO_STREAM_TRACKS_CACHE_GB"] = "0.000001"     # a 1,000-byte cap
+        extract_tracks.register_cache()
+        self.fake.add(self.bucket, "stream/tracks/004.flac", b"n" * 5000, sha256=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            extract_tracks.refresh_cuts()
+            self.assertIsNone(extract_tracks.fetch_cut(4, "A - B"))
+        self.assertEqual(extract_tracks.held_cuts(), {})
+        self.assertEqual(self.fake.ops("cp-down"), [])

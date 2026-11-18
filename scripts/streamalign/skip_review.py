@@ -239,7 +239,8 @@ def enumerate_candidates(labels_dir=None, pairs=None, conf_min=0.7,
     attributed to. Returns
       [{skipper, reference, at_s, delta_s, before_s, after_s, seed_offset_s, conf}].
     Rejected skips are omitted when `skip_rejected` (so a re-run doesn't resurface
-    them). Requires audio; raises nothing for missing files — those pairs are skipped.
+    them). Requires audio; raises nothing for missing files — those pairs are skipped, and a
+    pair whose capture could not be pulled from the audio bucket is named on stderr.
     """
     pairs = pairs if pairs is not None else _solve._dedupe(_gt.alignment_edges(labels_dir))
     rejections = load_rejections(labels_dir) if skip_rejected else []
@@ -249,6 +250,9 @@ def enumerate_candidates(labels_dir=None, pairs=None, conf_min=0.7,
             continue
         try:
             edge = _solve.measure_edge_skipaware(a, b)
+        except _audio.CapturePullError as exc:
+            _solve.skipped_pair(a, b, exc)      # a failed pull is named, never silent
+            continue
         except (FileNotFoundError, RuntimeError):
             continue
         if edge is None or edge["conf"] < conf_min:

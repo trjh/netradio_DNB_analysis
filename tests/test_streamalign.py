@@ -7,6 +7,7 @@ and run everywhere: they stub the decode and drive `cache_budget` against a
 temporary root.
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import json
 import os
 import re
@@ -411,6 +412,10 @@ class TrackMixTests(unittest.TestCase):
             @staticmethod
             def capture_nameable(stem, audio_dir=None):
                 return stem in lengths
+
+            @staticmethod
+            def length_without_pull(stem, audio_dir=None):
+                return None, None           # no length without a decode: load_audio measures
 
             @staticmethod
             def load_audio(stem, audio_dir=None):

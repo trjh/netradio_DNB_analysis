@@ -12,9 +12,12 @@ With an audio bucket set (scripts/audio_bucket.py), each cut that lands in the c
 also published as `stream/tracks/<NNN>.flac`, keyed by the three-digit track number and
 never by the title (a title changes when a track is identified, and a stale object would
 stay in the bucket for good), with its SHA-256, artist and title in the object's metadata.
-A cut whose span changed replaces its object in place. With no bucket set, nothing is
+A cut whose span changed replaces its object in place; a cut whose SHA-256 matches its last
+publish is not uploaded again. With no bucket set, or with NETRADIO_READ_ONLY set, nothing is
 published. A capture this disk does not hold is pulled from the bucket for its cut
-(`streamalign.audio.fetch_audio_file`).
+(`streamalign.audio.fetch_audio_file`). A reader of the cuts (`calibrate.py`) brings the held
+cuts up to the bucket's when it starts (`refresh_cuts`), and fetches a cut this machine does
+not hold from the bucket when a case needs it (`fetch_cut`).
 
 Why
 ---
@@ -68,6 +71,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import audio_bucket                              # noqa: E402  (the audio bucket's settings)
 import bucketio                                  # noqa: E402  (every bucket call)
 import cache_budget                              # noqa: E402  (the machine's one cache policy)
+import envfile                                   # noqa: E402  (the one reading of a switch)
 from streamalign import audio as _audio          # noqa: E402
 from streamalign import groundtruth as _gt       # noqa: E402
 from streamalign import tracklist2017 as _tl     # noqa: E402
@@ -87,9 +91,9 @@ MIN_S = 30.0
 STREAM_TRACKS_CACHE = "stream_tracks"
 STREAM_TRACKS_CACHE_GB = 2
 STREAM_TRACKS_CACHE_MAX_AGE_DAYS = 14
-# Each cut this machine published or replaced from the bucket has a companion,
-# `<cut>.object.json`, recording the object (key, size, SHA-256, ETag); the policy evicts
-# the two together.
+# Each cut this machine published, tried to publish, or fetched from the bucket has a
+# companion, `<cut>.object.json`, recording the object (key, size, SHA-256, ETag), or, after a
+# failed upload, the cut marked `"published": false`; the policy evicts the two together.
 OBJECT_META = ".object.json"
 
 
@@ -332,23 +336,49 @@ def _read_meta(path):
         return None
 
 
+def _read_only():
+    return envfile.flag("NETRADIO_READ_ONLY")
+
+
 def publish(num, path, artist, title, bucket=None):
     """Publish one landed cut as `stream/tracks/<NNN>.flac` through `bucketio.put`, which
     stores its SHA-256 and checks the upload; the artist and title ride in the object's
     metadata. The key is the track number alone, so a retitled track replaces its own
-    object, and a changed span replaces it in place. Returns the key, or None (nothing set,
-    or the upload refused, printed). Records the object beside the cut."""
+    object, and a changed span replaces it in place. Returns the key, or None (no bucket
+    set, NETRADIO_READ_ONLY set, or the upload refused, printed).
+
+    The cut's record beside it (`<cut>.object.json`) says what was last published: a cut
+    whose SHA-256, artist and title match its record is not uploaded again (a cut fetched
+    from the bucket records no artist or title, so its first publish here uploads once). A failed upload leaves a record
+    marked not published, so `refresh_cuts` never replaces the fresh local cut with the
+    older one in the bucket."""
+    if _read_only():
+        return None
     bucket = bucket or audio_bucket.bucket()
     if bucket is None:
         return None
     key = audio_bucket.track_key(num)
+    try:
+        sha = bucketio.sha256_file(path)       # `put` reuses this read: no second pass
+        size = os.path.getsize(path)
+    except OSError as exc:
+        print("  %3s NOT PUBLISHED  %s: %s" % (num, key, exc))
+        return None
+    artist, title = artist or "", title or ""
+    record = _read_meta(path) or {}
+    if record.get("published", True) and record.get("key") == key \
+            and record.get("sha256") == sha and record.get("artist") == artist \
+            and record.get("title") == title:
+        return key                              # unchanged since its last publish
     got, err = bucketio.put(bucket, path, key,
-                            meta={"track": "%03d" % int(num), "artist": artist or "",
-                                  "title": title or ""})
+                            meta={"track": "%03d" % int(num), "artist": artist,
+                                  "title": title})
     if got is None:
         print("  %3s NOT PUBLISHED  %s: %s" % (num, key, err))
+        _write_meta(path, {"key": key, "size": size, "sha256": sha, "published": False})
         return None
-    _write_meta(path, {"key": key, "size": got.size, "sha256": got.sha256, "etag": got.etag})
+    _write_meta(path, {"key": key, "size": got.size, "sha256": got.sha256, "etag": got.etag,
+                       "artist": artist, "title": title})
     return key
 
 
@@ -365,16 +395,29 @@ def held_cuts(directory=None):
     return out
 
 
+# The `stream/tracks/` rows `refresh_cuts` last listed, {track number: (key, row)}: what a
+# reader of the cuts may fetch for a track this machine does not hold (`fetch_cut`), with no
+# second listing.
+_bucket_cuts = {}
+
+
 def refresh_cuts():
     """Bring the cuts this machine holds up to the bucket's: one listing of
     `stream/tracks/`, read once when a process that reads the cuts starts, and each held cut
     whose size differs from its row, or whose recorded ETag differs from the row's, is
     replaced by the bucket's object (checked by its SHA-256 metadata). A cut with no row is
-    left alone; a cut never published by this machine is compared by its size. Serving a cut
-    afterwards makes no bucket call, so a stale cut can play until the next start.
+    left alone; a cut with no record is compared by its size. A cut whose record is marked
+    not published, or whose recorded size is not the file's, is a local change the bucket
+    never got: it is kept, and named as "local cut not published". Serving a cut afterwards
+    makes no bucket call, so a stale cut can play until the next start. The listed rows are
+    kept for `fetch_cut`.
 
-    Returns {replaced: [numbers], failed: {number: reason}}; {} with no bucket set, no
-    registered cache, or a bucket that did not answer (printed)."""
+    Returns {replaced: [numbers], failed: {number: reason}, unpublished: [numbers]}; {} with
+    no bucket set, NETRADIO_READ_ONLY set, no registered cache, or a bucket that did not
+    answer (printed)."""
+    _bucket_cuts.clear()
+    if _read_only():
+        return {}
     bucket = audio_bucket.bucket()
     directory = cache_budget.dir_of(STREAM_TRACKS_CACHE)
     if bucket is None or not directory:
@@ -388,17 +431,24 @@ def refresh_cuts():
         m = _CUT_KEY.match(key)
         if m:
             rows[int(m.group(1))] = (key, row)
-    report = {"replaced": [], "failed": {}}
+    _bucket_cuts.update(rows)
+    report = {"replaced": [], "failed": {}, "unpublished": []}
     for num, path in sorted(held_cuts(directory).items()):
         if num not in rows:
             continue
         key, row = rows[num]
-        meta = _read_meta(path) or {}
+        meta = _read_meta(path)
         try:
-            same_size = os.path.getsize(path) == row.size
+            held_size = os.path.getsize(path)
         except OSError:
             continue
-        if same_size and (not meta.get("etag") or not row.etag or meta["etag"] == row.etag):
+        if meta is not None and (meta.get("published") is False
+                                 or ("size" in meta and meta["size"] != held_size)):
+            report["unpublished"].append(num)
+            continue
+        meta = meta or {}
+        if held_size == row.size and (not meta.get("etag") or not row.etag
+                                      or meta["etag"] == row.etag):
             continue
         got, err = bucketio.head(bucket, key)
         if got is None:
@@ -409,11 +459,12 @@ def refresh_cuts():
         try:
             # the replacement takes the held cut's place, so only the growth needs room
             # (and the held cut, pinned, is never what makes it)
-            growth = max(0, got.size - os.path.getsize(path))
+            growth = max(0, got.size - held_size)
             if not cache_budget.reserve(STREAM_TRACKS_CACHE, growth):
                 report["failed"][num] = "the tracks cache refused the room"
                 continue
-            why = bucketio.fetch_verified(bucket, key, path, size=got.size, sha256=got.sha256)
+            why = bucketio.fetch_verified(bucket, key, path, size=got.size,
+                                          sha256=got.sha256 or None)
             if why is not None:
                 report["failed"][num] = why
                 continue
@@ -425,9 +476,57 @@ def refresh_cuts():
             _refreshing.discard(real)
     for num in report["replaced"]:
         print("  %3s replaced from the audio bucket (its cut changed)" % num)
+    for num in report["unpublished"]:
+        print("  %3s kept: local cut not published (re-run extract_tracks.py to publish it)"
+              % num)
     for num, why in sorted(report["failed"].items()):
         print("  %3s could not be replaced from the audio bucket: %s" % (num, why))
     return report
+
+
+def listed_cut(num):
+    """True when the last `refresh_cuts` listing had `stream/tracks/<NNN>.flac`."""
+    return int(num) in _bucket_cuts
+
+
+def fetch_cut(num, title):
+    """Fill the tracks cache with one cut this machine does not hold, from the bucket's
+    `stream/tracks/<NNN>.flac` as the last `refresh_cuts` listed it: `reserve` its size,
+    `fetch_verified` (checked by its SHA-256 metadata), the record beside it, then `commit`.
+    It lands as "<NNN> - <title>.flac", the name `main` cuts it to (`title` is the
+    "artist - title" string `main` builds). Returns the path, or None (not listed, no
+    bucket, no registered cache, or a refusal, printed). One case needs one cut, so only
+    the cut a case reads is fetched, never every listed one."""
+    entry = _bucket_cuts.get(int(num))
+    bucket = audio_bucket.bucket()
+    directory = cache_budget.dir_of(STREAM_TRACKS_CACHE)
+    if entry is None or bucket is None or not directory:
+        return None
+    key = entry[0]
+    got, err = bucketio.head(bucket, key)
+    if got is None:
+        print("  %3s could not be fetched from the audio bucket: %s"
+              % (num, err or "no such object"))
+        return None
+    path = os.path.join(directory, "%03d - %s.flac" % (int(num), safe(title)))
+    real = os.path.realpath(path)
+    _refreshing.add(real)
+    try:
+        if not cache_budget.reserve(STREAM_TRACKS_CACHE, got.size):
+            print("  %3s could not be fetched from the audio bucket: the tracks cache "
+                  "refused the room" % num)
+            return None
+        why = bucketio.fetch_verified(bucket, key, path, size=got.size,
+                                      sha256=got.sha256 or None)
+        if why is not None:
+            print("  %3s could not be fetched from the audio bucket: %s" % (num, why))
+            return None
+        _write_meta(path, {"key": key, "size": got.size, "sha256": got.sha256,
+                           "etag": got.etag})
+        cache_budget.commit(STREAM_TRACKS_CACHE, path)
+    finally:
+        _refreshing.discard(real)
+    return path if os.path.isfile(path) else None
 
 
 def resolve_out(explicit_out=None):

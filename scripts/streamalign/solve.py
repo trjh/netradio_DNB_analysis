@@ -10,12 +10,18 @@ labelled region with NO dependence on the unsolved blind-overlap-discovery probl
 Redundant edges let `score.consistency_report` cross-check the result.
 """
 
+import sys
 from collections import defaultdict, deque
 
 from . import align as _align
 from . import audio as _audio
 from . import groundtruth as _gt
 from . import skips as _skips
+
+
+def skipped_pair(a, b, exc):
+    """Name on stderr a pair a failed capture pull dropped from a measurement loop."""
+    print("skipped %s / %s: %s" % (a, b, exc), file=sys.stderr, flush=True)
 
 
 def measure_edges(pairs, conf_min=0.7, decim=8, skip_aware=True):
@@ -25,7 +31,8 @@ def measure_edges(pairs, conf_min=0.7, decim=8, skip_aware=True):
     confidence >= conf_min. `skip_aware` measures the offset over the earliest
     skip-free segment (see measure_edge_skipaware), fixing the ~1 s bias when a skip
     sits between the dominant overlap and the files' shared start; set False to use
-    align_pair's single global offset. Low-confidence pairs are dropped.
+    align_pair's single global offset. Low-confidence pairs are dropped. A pair whose
+    capture could not be pulled from the audio bucket is dropped and named on stderr.
     """
     edges = []
     for a, b in pairs:
@@ -40,6 +47,11 @@ def measure_edges(pairs, conf_min=0.7, decim=8, skip_aware=True):
             else:
                 r = _align.align_pair(a, b, decim=decim)
                 offset_s, conf = r["offset_seconds"], r["confidence"]
+        except _audio.CapturePullError as exc:
+            # named, then a membership check said yes and the pull failed: say so, or the
+            # solve loses the edge and nothing says why
+            skipped_pair(a, b, exc)
+            continue
         except (FileNotFoundError, RuntimeError):
             continue
         if conf >= conf_min:

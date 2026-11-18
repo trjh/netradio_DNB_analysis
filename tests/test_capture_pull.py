@@ -220,6 +220,100 @@ class ThePull(Base):
         self.assertIn(want, os.listdir(cache_budget.dir_of(audio.CACHE)))
 
 
+class TheEdges(Base):
+    def test_two_threads_decoding_one_bucket_only_stem_pull_once(self):
+        import threading
+        self.add()
+        gate = threading.Barrier(2)
+        errors = []
+
+        def decode():
+            try:
+                gate.wait(5)
+                audio.load_audio(STEM, audio_dir=self.audio_dir)
+            except BaseException as exc:            # surfaced below, never lost
+                errors.append(exc)
+
+        threads = [threading.Thread(target=decode) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(10)
+        self.assertEqual(errors, [])
+        self.assertEqual(self.fake.ops("cp-down"), ["cp-down"], "one pull for two decodes")
+
+    def test_a_cache_that_refuses_the_room_fails_the_load_and_leaves_nothing(self):
+        self.add()
+        with mock.patch.object(cache_budget, "reserve", return_value=False):
+            with self.assertRaises(audio.CapturePullError) as caught:
+                audio.load_audio(STEM, audio_dir=self.audio_dir)
+        self.assertIn("refused the room", str(caught.exception))
+        self.assertEqual(self.fake.ops("cp-down"), [])
+        self.assertEqual(self.decodes, [])
+        held = os.listdir(self.master_dir) if os.path.isdir(self.master_dir) else []
+        self.assertEqual(held, [], "nothing is left in stream_master")
+
+    def test_the_bucket_set_with_no_cache_root_refuses_before_any_bucket_call(self):
+        self.add()
+        os.environ.pop("NETRADIO_CACHE_ROOT")
+        self.assertIsNone(cache_budget.dir_of(audio.STREAM_MASTER))
+        with self.assertRaises(audio.CapturePullError) as caught:
+            audio.load_audio(STEM, audio_dir=self.audio_dir)
+        self.assertIn("NETRADIO_CACHE_ROOT", str(caught.exception))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertIsNone(audio.fetch_audio_file(STEM))
+        self.assertIn("NETRADIO_CACHE_ROOT", out.getvalue())
+        self.assertEqual(self.fake.calls, [], "no LIST and no head for nothing")
+
+    def test_with_no_bucket_and_no_cache_root_the_message_is_unchanged(self):
+        os.environ.pop("NETRADIO_AUDIO_BUCKET")
+        os.environ.pop("NETRADIO_CACHE_ROOT")
+        with self.assertRaises(audio.CapturePullError) as caught:
+            audio.load_audio(STEM, audio_dir=self.audio_dir)
+        self.assertIn("no audio bucket set", str(caught.exception))
+
+
+class TheLoopsNameAFailedPull(Base):
+    """A pull that fails inside a measurement loop drops the pair and says which, and why."""
+
+    def _boom(self, *_a, **_kw):
+        raise audio.CapturePullError("capture stream/master/d100-119.wav: no answer")
+
+    def test_solve_measure_edges(self):
+        from streamalign import solve
+        with mock.patch.object(audio, "capture_nameable", return_value=True), \
+                mock.patch.object(solve, "measure_edge_skipaware", self._boom), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(solve.measure_edges([("d080-099", STEM)]), [])
+        self.assertIn("skipped d080-099 / %s" % STEM, err.getvalue())
+        self.assertIn("no answer", err.getvalue())
+
+    def test_solve_measure_edges_plain(self):
+        from streamalign import solve
+        with mock.patch.object(audio, "capture_nameable", return_value=True), \
+                mock.patch.object(solve._align, "align_pair", self._boom), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(solve.measure_edges([("d080-099", STEM)], skip_aware=False), [])
+        self.assertIn("skipped d080-099 / %s" % STEM, err.getvalue())
+
+    def test_skip_review_candidates(self):
+        from streamalign import skip_review
+        with mock.patch.object(audio, "capture_nameable", return_value=True), \
+                mock.patch.object(skip_review._solve, "measure_edge_skipaware", self._boom), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            got = skip_review.enumerate_candidates(pairs=[("d080-099", STEM)], skip_rejected=False)
+        self.assertEqual(got, [])
+        self.assertIn("skipped d080-099 / %s" % STEM, err.getvalue())
+
+    def test_match_hints_says_one_line_not_a_traceback(self):
+        from streamalign import hints
+        self.add()
+        self.fake.served[(AUDIO_BUCKET, KEY)] = BODY[:-10]          # the pull fails its check
+        with self.assertRaises(SystemExit) as caught:
+            hints.build_hints(STEM, labels_dir=self.tmp, audio_dir=self.audio_dir)
+        self.assertIn("size mismatch", str(caught.exception.code))
+
+
 class TheGatesReachABucketOnlyCapture(Base):
     def test_inspect_worker_resolve(self):
         from streamalign import inspect_worker
@@ -233,10 +327,22 @@ class TheGatesReachABucketOnlyCapture(Base):
     def test_track_mix_select_capture(self):
         from streamalign import track_mix
         self.add()
-        cap, cstart = track_mix._select_capture([STEM + ".wav"], 0.5, 2.5, {STEM: 0.0},
-                                                audio_dir=self.audio_dir)
+        with mock.patch.object(audio, "recorded_durations", return_value={}):
+            cap, cstart = track_mix._select_capture([STEM + ".wav"], 0.5, 2.5, {STEM: 0.0},
+                                                    audio_dir=self.audio_dir)
         self.assertEqual((cap, cstart), (STEM, 0.0))
-        self.assertEqual(self.fake.ops("cp-down"), ["cp-down"])
+        self.assertEqual(self.fake.ops("cp-down"), ["cp-down"],
+                         "with no recorded length, the capture is pulled to measure it")
+
+    def test_track_mix_select_capture_takes_a_recorded_length_and_pulls_nothing(self):
+        from streamalign import track_mix
+        self.add()
+        with mock.patch.object(audio, "recorded_durations", return_value={STEM: 1200.0}):
+            cap, cstart = track_mix._select_capture([STEM + ".wav"], 600.0, 900.0,
+                                                    {STEM: 0.0}, audio_dir=self.audio_dir)
+        self.assertEqual((cap, cstart), (STEM, 0.0))
+        self.assertEqual(self.fake.ops("cp-down"), [], "a case list pulls no capture")
+        self.assertEqual(self.decodes, [])
 
     def test_extract_tracks_cut_pulls_before_ffmpeg_runs(self):
         import extract_tracks

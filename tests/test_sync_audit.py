@@ -6,6 +6,7 @@ find and measure the drift), and one wrong-by-20-seconds seat (must be NOT-FOUND
 never silently 'verified'). Skips without ffmpeg (the decode path is real).
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import os
 import shutil
 import sys

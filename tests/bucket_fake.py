@@ -18,6 +18,7 @@ No network, no real bucket, no process is ever started.
     fake.fail_next("head-object", FakeProc(returncode=255, stderr="Could not connect"))
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import hashlib
 import json
 import subprocess

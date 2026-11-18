@@ -259,12 +259,19 @@ def capture_nameable(name, audio_dir=None):
 
 def _locate(stem):
     """(bucket, key, Head) for `stem`'s capture object in the audio bucket. Raises
-    CapturePullError when there is no bucket, no such object, no answer, or an object with
-    no SHA-256 metadata (refused, never accepted on its size alone)."""
+    CapturePullError when there is no bucket, no registered `stream_master` cache (checked
+    before any bucket call), no such object, no answer, or an object with no SHA-256
+    metadata (refused, never accepted on its size alone)."""
     bucket = audio_bucket.bucket()
     if bucket is None:
         raise CapturePullError("no capture file for %r on this disk, and no audio bucket set"
                                % stem)
+    if not cache_budget.dir_of(STREAM_MASTER):
+        # before any bucket call: with nowhere bounded to pull to, a LIST and a head buy
+        # nothing
+        raise CapturePullError("no capture file for %r on this disk, and the stream_master "
+                               "cache is not registered (set NETRADIO_CACHE_ROOT), so there "
+                               "is nowhere bounded to pull it to" % stem)
     listed, err = _master_listing(bucket)
     if err is not None:
         raise CapturePullError("no capture file for %r on this disk; the audio bucket did "

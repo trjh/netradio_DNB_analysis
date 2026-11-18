@@ -16,6 +16,7 @@ All offline. The load-bearing pins:
     and a full HTTP round trip that lands the row and nudges review_sync.
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import http.client
 import json
 import os

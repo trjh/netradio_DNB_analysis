@@ -8,6 +8,7 @@ Covers: identifier validation (traversal → 404), Range semantics (shared
 the wv-only refusal, the size cap, read-only + auth gates.
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import base64
 import http.client
 import os

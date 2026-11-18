@@ -6,6 +6,7 @@ the numeric knobs, the fixed-argv subprocess shape, the one-at-a-time lock, and 
 loopback-only-without-auth route gate.
 """
 
+import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
 import json
 import os
 import re
@@ -62,6 +63,7 @@ class _Env(unittest.TestCase):
         patcher = mock.patch.dict(os.environ, {
             "NETRADIO_SOURCES_DIR": "",
             "NETRADIO_CAPTURES_DIR": "",        # the capture directory: the MP3 dir's parent
+            "NETRADIO_AUDIO_DIR": "",           # unset: an explicit one is kept (_child_env)
             # the one-shot path is the contract under test here; the keep-warm
             # worker has its own test classes below
             "NETRADIO_ALIGN_WORKER": "0",
@@ -1478,6 +1480,15 @@ class TestWorkerClient(_Env):
         # the ping and the request each went out as one JSON line
         self.assertEqual([json.loads(s)["op"] for s in proc.written],
                          ["ping", "slice"])
+
+    def test_child_env_keeps_an_explicit_audio_dir_when_no_captures_dir_is_named(self):
+        mine = os.path.join(self.tmp.name, "my-captures")
+        with mock.patch.dict(os.environ, {"NETRADIO_AUDIO_DIR": mine}):
+            self.assertEqual(align_inspect._child_env(self.mp3)["NETRADIO_AUDIO_DIR"], mine)
+            named = os.path.join(self.tmp.name, "named")
+            with mock.patch.dict(os.environ, {"NETRADIO_CAPTURES_DIR": named}):
+                self.assertEqual(align_inspect._child_env(self.mp3)["NETRADIO_AUDIO_DIR"],
+                                 named, "a named capture directory still wins")
 
     def test_worker_reused_across_requests(self):
         proc = _FakeProc([PING_OK, '{"a": 1}\n', '{"b": 2}\n'])

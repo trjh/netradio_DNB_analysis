@@ -171,11 +171,16 @@ _contained = align_ids.contained
 
 def _child_env(mp3_dir):
     """The DSP child's environment: this process's, with the scripts on the path and
-    NETRADIO_AUDIO_DIR the capture directory (never the MP3 one: see the module docstring)."""
+    NETRADIO_AUDIO_DIR the capture directory (never the MP3 one: see the module docstring).
+    NETRADIO_CAPTURES_DIR, when set, names it. Unset, an explicit NETRADIO_AUDIO_DIR is
+    kept, and only an unset one takes the parent of the MP3 directory."""
     env = dict(os.environ)
     # PYTHONPATH is redundant once the venv carries netradio-scripts.pth (`make venv`/
     # `make dep`, 2026-09-17); kept so a venv built by hand still works.
     env["PYTHONPATH"] = os.path.join(repo_root(), "scripts")
+    named = os.environ.get("NETRADIO_CAPTURES_DIR", "").strip()
+    if not named and os.environ.get("NETRADIO_AUDIO_DIR", "").strip():
+        return env
     captures = align_ids.captures_dir(mp3_dir)
     if captures:
         env["NETRADIO_AUDIO_DIR"] = captures

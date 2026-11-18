@@ -92,8 +92,8 @@ checkout's unless `.env` says otherwise (`.env.example`, "The align server").
 
 | Script | What | When |
 |---|---|---|
-| `scripts/extract_tracks.py` | cut every well-defined track **out of the mix**, reassembling across captures. Refuses anything it cannot place precisely. With an audio bucket set, publishes each cut as `stream/tracks/<NNN>.flac`. | once; **re-run whenever a capture gains precise timing or a track's span changes** |
-| `scripts/calibrate.py` | score every known mix track against every known original → `docs/CALIBRATION.md` | **whenever the matcher changes.** It is the regression test for the whole matching stack |
+| `scripts/extract_tracks.py` | cut every well-defined track **out of the mix**, reassembling across captures. Refuses anything it cannot place precisely. With an audio bucket set, publishes each cut as `stream/tracks/<NNN>.flac` (a cut unchanged since its last publish is not uploaded again; nothing is published under `NETRADIO_READ_ONLY`). | once; **re-run whenever a capture gains precise timing or a track's span changes** |
+| `scripts/calibrate.py` | score every known mix track against every known original → `docs/CALIBRATION.md`. With an audio bucket set, it first replaces a held cut that changed in the bucket, and fetches a cut it does not hold when that case is scored | **whenever the matcher changes.** It is the regression test for the whole matching stack |
 | `scripts/selftest.py` | the **canary**: score the canary's signature (named by `NETRADIO_CANARY_KEY`) against the canary's mix and the current mysteries, demanding cost, rank **and** margin; `--offline` re-runs one calibration case from local files | by the harvester, whenever the feeder puts the canary's file back (re-signed and compared first). Its result is recorded in the harvester's state file. See [below](#the-canary-does-the-matcher-still-work) |
 
 `calibrate.py` is not a one-off. It is how we know that the true-match and non-match populations

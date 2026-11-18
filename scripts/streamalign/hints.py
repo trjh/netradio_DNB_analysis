@@ -246,7 +246,10 @@ def build_hints(stem, labels_dir=None, audio_dir=None, decim=8):
     if not _audio.capture_nameable(stem, audio_dir):
         raise SystemExit("no audio found for %s (looked for %s.wav/.au on this disk and in "
                          "the audio bucket)" % (stem, stem))
-    duration = _audio.duration_seconds(stem, audio_dir=audio_dir)
+    try:
+        duration = _audio.duration_seconds(stem, audio_dir=audio_dir)
+    except _audio.CapturePullError as exc:
+        raise SystemExit(str(exc)) from None    # one line, as a missing capture always was
     diag["duration"] = duration
 
     starts = _gt.resolve_starts(labels_dir)
