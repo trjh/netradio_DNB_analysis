@@ -1236,7 +1236,7 @@ and AVFoundation both play FLAC natively; WavPack (`.wv`) is what neither plays.
 sources themselves converge on FLAC, and the serving route only transcodes as a *fallback*:
 
 - **DP-23 — transcode-on-sync (its own small PR, in the §6.13 build plan):**
-  `scripts/sync_sources.sh` (a second machine = master; the server's host and the archive copy =
+  the originals' sync (a second machine = master; the server's host and the archive copy =
   secondaries) gains a transcode step, so **the server's host stores FLAC-only** while the master
   may hold both `wv` and `flac`. Lossless→lossless (`wv → flac`), fixed-argv ffmpeg, idempotent (skip when the
   flac sibling exists and is newer), so a sync pass converges and stays converged. After
@@ -1246,11 +1246,25 @@ sources themselves converge on FLAC, and the serving route only transcodes as a 
   `tests/test_flac_sync.py`.
 
   **Revised (decision made 2026-09-16):** both `wv` and `flac` now go
-  to the audio-cache bucket, flat under `sources/<filename>` (no prefixes); `sync_sources.sh
-  push` targets the bucket instead of the server's host, and the master → host rsync leg retires;
+  to the audio-cache bucket, flat under `sources/<filename>` (no prefixes); the originals' sync
+  pushes to the bucket instead of the server's host, and the master → host rsync leg retires;
   the server's host pulls a flac on demand into its `sources_flac` cache, and the `wv` are no
   longer excluded from the offsite copy. The rest of this item stands as history: the flac sibling is still made on
   the master machine, and wv-only is still what a reader must never be handed.
+
+  **Revised (2026-11-18), following the originals resolver:** the bucket object is now the
+  reference for an original. The resolver (`scripts/sources_resolve.py`) pulls a missing
+  original from the bucket: an original above flac in its rule (`wav`/`au`, `wv`/`aif`/`aiff`)
+  only as its `.flac` sibling, refused (503) while the bucket holds no flac for it; a lossy one
+  as it is. So once the bucket holds an original's flac, a machine that is not the master needs
+  no lossless master of its own:
+
+  - **the server's host needs flac only**: the cache policy may evict any other original there
+    once the bucket holds a verified copy of that file (never with
+    `NETRADIO_SOURCES_FLAC_CACHE_GB=none`), and a flac it lacks is pulled on demand into its
+    `sources_flac` cache.
+  - **the master machine** still holds both `wv` and `flac`, and still makes the flac sibling.
+  - **the bucket** holds every original, flat under `sources/<filename>`.
 
 Two new **Range-supported GET routes** on `align_server`, same `_gate`, same identifier-only
 rule (the §5.3 contract extended to audio):
@@ -1497,7 +1511,7 @@ authoritative root `labels/*.labels.tsv`, and reach the
 | Step | Contents | Gate |
 |---|---|---|
 | 1 | the DP-22 design (docs only) | Local Reviewer, user merge |
-| 2 | **DP-23 — flac-canonical sources**: `scripts/sync_sources.sh` transcode-on-sync (`wv → flac`, idempotent; the server's host stores flac-only) — its own small PR (§6.8) — **BUILT** | reviewed PR |
+| 2 | **DP-23 — flac-canonical sources**: the originals' sync transcodes on sync (`wv → flac`, idempotent; the server's host stores flac-only) — its own small PR (§6.8) — **BUILT** | reviewed PR |
 | 3 | server: **audio delivery routes** — stream passthrough + the flac-first original route (wv-only **refused**, §6.8 step 3 — no transcode fallback) + capability gates + tests (§6.8) — **BUILT** | reviewed PR |
 | 4 | server: **review-note route + `review_sync.py`** + tests (`tests/test_review_notes.py`, `tests/test_review_sync.py`) (§6.6/§6.7) + the `list_placed()` provider; analysis repo: the small **`placed` op** PR (§6.5) rides beside it — **BUILT** | reviewed PRs |
 | 5 | server: **`/align/review` web page** — playback engine, scrolling waveforms, pair selection, in-waveform notes, rate/drift readouts (§6.9-a) — **BUILT**; the §6.10 gate (the user's live pass) stays open | **the web POC gate (§6.10)** |
