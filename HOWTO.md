@@ -269,7 +269,8 @@ python3 scripts/missing_sources.py                 # gap inventory + sourcing le
 ```
 
 **What you get:** an up-to-date list of which original tracks are still missing, with sourcing
-leads. Run it after `sources_local/` changes or to refresh the gap list. Related:
+leads. Run it after the originals directory changes or to refresh the gap list. It reads this
+disk only and never pulls. Related:
 `find_streaming_links.py` and `merge_track_sources.py` for streaming-link discovery/merge.
 
 ---

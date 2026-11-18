@@ -1496,8 +1496,8 @@ final class ReviewModel: ObservableObject {
                           userInfo: [NSLocalizedDescriptionKey: "no HTTP response from \(path)"])
         }
         guard http.statusCode == 206 || http.statusCode == 200 else {
-            // a JSON body is the route's own refusal (e.g. the wv-only 503
-            // naming the DP-23 sync) — deterministic: surface it, never retry
+            // a JSON body is the route's own refusal (e.g. the 503 for an original
+            // with no FLAC copy to be had) — deterministic: surface it, never retry
             var info: [String: Any] = [NSLocalizedDescriptionKey: "HTTP \(http.statusCode) from \(path)"]
             if let j = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
                let msg = j["error"] as? String {
@@ -1557,7 +1557,7 @@ final class ReviewModel: ObservableObject {
                     return dest
                 }
                 // a non-200 with a JSON body is the route's own refusal (e.g. the
-                // wv-only 503 naming the DP-23 sync) — deterministic, never retried
+                // 503 for an original with no FLAC copy to be had) — deterministic, never retried
                 var info: [String: Any] = [NSLocalizedDescriptionKey: "HTTP \(resp.statusCode) from \(path)"]
                 if let body = try? Data(contentsOf: tmp),
                    let j = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
@@ -1606,7 +1606,7 @@ final class ReviewModel: ObservableObject {
             // the route's refusal text (when present) already names the fix
             audioStatus = "audio failed to load: \(error.localizedDescription)" +
                 ((error as NSError).userInfo["alignFinal"] != nil ? "" :
-                 " — if this original is wv-only, run the DP-23 sync (scripts/sync_sources.sh)")
+                 " — if this original has no FLAC copy, make a FLAC copy beside the original")
         }
     }
 

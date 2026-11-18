@@ -69,13 +69,15 @@ class PairCache:
 
 
 def _resolve(stem, orig_num, sources_dir):
-    """(stream_src, orig_path) or ValueError -- same lookups as the one-shot CLI."""
-    from . import track_mix as _tm
+    """(stream_src, orig_path) or ValueError -- same lookups as the one-shot CLI. The
+    original comes from the one resolver, pulled from the audio bucket when this disk lacks
+    it; two files where one is expected raise its `Ambiguous`, a ValueError."""
+    import sources_resolve
 
     stem = _audio.stem_of(str(stem))
     if not _audio.capture_nameable(stem):
         raise ValueError("no audio for capture %s" % stem)
-    orig_path = _tm.find_original(int(orig_num), sources_dir)
+    orig_path = sources_resolve.resolve(int(orig_num), sources_dir)
     if not orig_path:
         raise ValueError("no original %03d-* under %s" % (int(orig_num), sources_dir))
     return stem, orig_path

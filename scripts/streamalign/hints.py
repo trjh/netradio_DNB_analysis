@@ -52,6 +52,8 @@ import os
 import re
 import sys
 
+import sources_resolve
+
 from . import audio as _audio
 from . import groundtruth as _gt
 
@@ -540,7 +542,7 @@ def _anchor_rows(stem, duration, diag, audio_dir=None):
         import librosa  # noqa: F401
     except ImportError:
         missing.append("librosa is not installed (run `make venv`)")
-    sources = os.environ.get("NETRADIO_SOURCES_FLAC_CACHE_DIR")
+    sources = sources_resolve.sources_dir()
     if not sources or not os.path.isdir(sources):
         missing.append("the originals are not reachable "
                        "(set NETRADIO_SOURCES_FLAC_CACHE_DIR in .env)")
@@ -567,7 +569,13 @@ def _anchor_rows(stem, duration, diag, audio_dir=None):
                 "search was run for it. Which track is it?" % track["name"]))
             diag["questions"] += 1
             continue
-        orig_path = _tm.find_original(num, sources)
+        try:
+            orig_path = sources_resolve.resolve(num, sources)
+        except sources_resolve.Ambiguous as exc:
+            rows.append(_hint(track["local_s"], track["local_s"],
+                              "no anchor search for track %03d (%s): %s"
+                              % (num, track["name"], exc)))
+            continue
         if not orig_path:
             rows.append(_hint(
                 track["local_s"], track["local_s"],

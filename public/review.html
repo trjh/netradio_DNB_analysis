@@ -1382,10 +1382,11 @@ function openPair(idx, restoredSel) {
 }
 
 aO.addEventListener("error", () => {
-  // the route refuses wv-only originals with a 503 JSON naming the fix (the
-  // transcode fallback is gone, §6.8) — fetch the same URL to show that refusal
-  const fallback = "original audio failed to load — if this original is " +
-    "wv-only the route refuses it: run the DP-23 flac sync to make its FLAC sibling";
+  // the route refuses an original with no FLAC copy to be had with a 503 JSON
+  // naming the fix (there is no transcode fallback, §6.8; a missing FLAC copy is
+  // pulled from the audio bucket where one is set) — fetch the same URL to show it
+  const fallback = "original audio failed to load — if this original has no " +
+    "FLAC copy, make a FLAC copy beside the original";
   if (cur) {
     fetch("/api/align/audio/orig/" + cur.orig, {headers: {"Range": "bytes=0-0"}})
       .then(r => r.ok ? null : r.json())

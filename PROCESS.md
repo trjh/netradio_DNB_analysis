@@ -198,7 +198,11 @@ scripts/run_harvester.sh restart
 Warnings:
 - **No clip = not searched.** A mystery with no clip is not in the query set at all — the
   harvester can run a month without ever looking for it. `skipped_queries` in
-  `.harvest/state.json` lists what it cannot search and why.
+  `.harvest/state.json` lists what it cannot search and why; `query_clips` names the clip file
+  each searched mystery uses.
+- **One clip per rung.** The clip is picked by the originals rule (`.wav`/`.au`, then `.wv`/`.aif`,
+  then `.flac`, then a lossy file). Two clips at the rung that wins (say two `.wav`) are refused:
+  the mystery leaves the search, and `skipped_queries` names both files ("two clips, keep one").
 - **Full-length extract, not a snippet.** A short query drives every cost down until
   unrelated records tie (MT7's 23 s clip → five "confident" false positives within 0.0007).
 - The number is the **mystery's** number (4, 6, 7, 8…), *not* the master track number.
@@ -258,8 +262,11 @@ Warnings:
 - Activate the venv first (`. .venv/bin/activate`): it puts `scripts/` on the path
   (`netradio-scripts.pth`, written by `make venv` and `make dep`). Without it:
   `No module named streamalign`.
-- `--sources` is a **flag** (default `sources_local`); `NETRADIO_SOURCES_FLAC_CACHE_DIR` is not
-  read by these subcommands.
+- `--sources` is a **flag**; its default is `NETRADIO_SOURCES_FLAC_CACHE_DIR`, else
+  `sources_local/`. Every subcommand finds an original through one resolver
+  (`scripts/sources_resolve.py`): the `.wav`/`.au`, else the lossless master (`.wv`/`.aif`), else
+  the `.flac`, else a lossy file. Two files at one rung under one number stop with an error naming
+  both: keep one. An original this disk lacks is pulled from the audio bucket when one is set.
 - **Don't chase the track's start/end** — records are blended; there is no objective "begins"
   frame. Anchor on moments the record plays **alone** (Pass 1 already prefers those moments).
 - Pass 1 shells out to **`sonic-annotator`** (the MATCH plugin, headless) — with it missing,
@@ -302,7 +309,7 @@ Need-to-know:
   place fully by hand (technique below).
 - Coverage too thin, or a rival loop-shifted seat scoring close, produces `note QUESTION:`
   rows instead of silent guesses. Answer the questions before trusting the anchors.
-- Defaults: `--meta track-metadata.json`, `--sources sources_local`. For `track-mix`,
+- Defaults: `--meta track-metadata.json`, `--sources` the originals directory (above). For `track-mix`,
   `--tracks` limits to this file's tracks; omit = re-grade all synced originals.
 - **`sort_tsv.py` does not do this step** (it covers 6–7 + the next-file offer). 8–9 are
   manual and conditional; 9 only where you have the original.

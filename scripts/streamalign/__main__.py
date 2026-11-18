@@ -18,7 +18,7 @@
       a graded / confirmed / suspect / adjacent / skipped summary. The headline
       "does the audio confirm the hand labels" check.
 
-  python3 -m streamalign track-mix --meta track-metadata.json --sources sources_local
+  python3 -m streamalign track-mix --meta track-metadata.json
       The first pass: chroma+DTW-align every synced original to its mix region, grade
       the recovered rate against the sync ground truth, and print a per-track table
       + summary (reliable / within-tolerance / flagged / no-original). Needs librosa
@@ -43,7 +43,7 @@
       context strip, --overview --point A:B ... for the whole-capture overview)
       for the /align inspector; all DSP happens here.
 
-  .venv/bin/python -m streamalign inspect-worker --sources sources_local
+  .venv/bin/python -m streamalign inspect-worker
       DP-07 keep-warm worker: JSON-lines requests on stdin (op: slice|refine|
       context|overview|placed, same fields/guards as inspect-slice/placed), one JSON
       response line each; holds the current (stem, orig, rate) pair's decoded audio
@@ -64,6 +64,8 @@ import json
 import sys
 
 import os
+
+import sources_resolve
 
 from . import align as _align
 from . import audio as _audio
@@ -98,9 +100,12 @@ def _match_hints_one(stem, stream, orig_num, args, meta, master):
 
     from . import hints as _hints
     from . import matchconv as _mc
-    from . import track_mix as _tm
 
-    orig_path = _tm.find_original(orig_num, args.sources)
+    try:
+        orig_path = sources_resolve.resolve(orig_num, args.sources)
+    except sources_resolve.Ambiguous as exc:
+        print(exc)
+        return
     if not orig_path:
         print("no original %03d-* under %s" % (int(orig_num), args.sources))
         return
@@ -180,7 +185,6 @@ def _match_hints_one(stem, stream, orig_num, args, meta, master):
 def _cmd_match_hints(args):
     from . import hints as _hints
     from . import matchconv as _mc
-    from . import track_mix as _tm
 
     stem = _audio.stem_of(args.stem)
     if not _audio.capture_nameable(stem):
@@ -204,7 +208,7 @@ def _cmd_match_hints(args):
             return
         nums, skipped = [], []
         for num, _mb, _me in overlapping:
-            (nums if _tm.find_original(num, args.sources) else skipped).append(num)
+            (nums if sources_resolve.nameable(num, args.sources) else skipped).append(num)
         if skipped:
             print("skipping %d overlapping track(s) with no original under %s: %s"
                   % (len(skipped), args.sources, " ".join("%03d" % n for n in skipped)))
@@ -276,17 +280,22 @@ def _cmd_sync_sweep(args):
 
 def _cmd_inspect_slice(args):
     from . import inspect_slice as _isl
-    from . import track_mix as _tm
 
     stem = _audio.stem_of(args.stem)
-    orig_path = _tm.find_original(args.orig, args.sources)
-    out = None
+    out = orig_path = None
     if sum([bool(args.refine), args.context is not None, bool(args.overview)]) > 1:
         out = {"error": "--refine, --context and --overview are mutually exclusive"}
     elif not _audio.capture_nameable(stem):
         out = {"error": "no audio for capture %s" % stem}
-    elif not orig_path:
-        out = {"error": "no original %03d-* under %s" % (int(args.orig), args.sources)}
+    else:
+        try:
+            orig_path = sources_resolve.resolve(args.orig, args.sources)
+        except sources_resolve.Ambiguous as exc:
+            out = {"error": str(exc)}
+        else:
+            if not orig_path:
+                out = {"error": "no original %03d-* under %s"
+                       % (int(args.orig), args.sources)}
     if out is None and args.overview:
         # DP-10: the whole-capture overview takes the sync points, not one seat
         try:
@@ -533,7 +542,9 @@ def main(argv=None):
                     help="min normalized-correlation confidence to confirm a pair")
     pt = sub.add_parser("track-mix", help="the first pass: align synced originals to the mix")
     pt.add_argument("--meta", default="track-metadata.json", help="track-metadata.json path")
-    pt.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
+    pt.add_argument("--sources", default=sources_resolve.sources_dir(),
+                    help="originals dir (NNN-*.ext; default NETRADIO_SOURCES_FLAC_CACHE_DIR, "
+                         "else sources_local/)")
     pt.add_argument("--hop", type=int, default=2048, help="chroma hop length")
     pt.add_argument("--rate-tol", type=float, default=0.005, help="rate err pass tolerance")
     pt.add_argument("--tracks", nargs="*", help="limit to these track numbers")
@@ -581,7 +592,9 @@ def main(argv=None):
                          "(auto-derived from the track's master span when omitted)")
     pm.add_argument("--csv", default=None,
                     help="pre-exported match:a_b CSV (else sonic-annotator is run)")
-    pm.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
+    pm.add_argument("--sources", default=sources_resolve.sources_dir(),
+                    help="originals dir (NNN-*.ext; default NETRADIO_SOURCES_FLAC_CACHE_DIR, "
+                         "else sources_local/)")
     pm.add_argument("--anchors", type=int, default=8, help="sync points to emit")
     pm.add_argument("--out", default=None,
                     help="output dir (default: labels/automated/)")
@@ -592,7 +605,9 @@ def main(argv=None):
                         help="grade every hand origNNN sync point against the audio "
                              "(seat confidence, hand error, inspector residuals); "
                              "--background N adds mismatch samples for calibration")
-    psa.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
+    psa.add_argument("--sources", default=sources_resolve.sources_dir(),
+                    help="originals dir (NNN-*.ext; default NETRADIO_SOURCES_FLAC_CACHE_DIR, "
+                         "else sources_local/)")
     psa.add_argument("--tracks", nargs="*", type=int, help="limit to these track numbers")
     psa.add_argument("--background", type=int, default=0,
                      help="wrong-place samples per audited point (default 0)")
@@ -611,7 +626,9 @@ def main(argv=None):
     psw.add_argument("label", help="sync point label (A, B, 1, ...)")
     psw.add_argument("--wins", nargs="*", type=float, default=[6.0, 0.6],
                      help="window sizes seconds (default: 6.0 0.6)")
-    psw.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
+    psw.add_argument("--sources", default=sources_resolve.sources_dir(),
+                    help="originals dir (NNN-*.ext; default NETRADIO_SOURCES_FLAC_CACHE_DIR, "
+                         "else sources_local/)")
     psw.add_argument("--search", type=float, default=1.5, help="seat search radius seconds")
     psw.add_argument("--json", default=None, help="write the full results JSON here")
 
@@ -625,7 +642,9 @@ def main(argv=None):
     pi.add_argument("--rate", type=float, default=1.0, help="original-seconds per stream-second")
     pi.add_argument("--invert", action="store_true", help="apply the polarity flip (M2)")
     pi.add_argument("--win", type=float, default=6.0, help="comparison window seconds (cap 30)")
-    pi.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
+    pi.add_argument("--sources", default=sources_resolve.sources_dir(),
+                    help="originals dir (NNN-*.ext; default NETRADIO_SOURCES_FLAC_CACHE_DIR, "
+                         "else sources_local/)")
     pi.add_argument("--refine", action="store_true", help="snap-to-best instead of slices")
     pi.add_argument("--radius", type=float, default=0.05, help="refine radius seconds (cap 2)")
     pi.add_argument("--engine", choices=("phat", "match"), default="phat",
@@ -651,7 +670,9 @@ def main(argv=None):
                              "inspect-slice/placed), one JSON response line each; caches "
                              "the current (stem, orig, rate) pair's decoded audio between "
                              "requests")
-    pw.add_argument("--sources", default="sources_local", help="originals dir (NNN-*.ext)")
+    pw.add_argument("--sources", default=sources_resolve.sources_dir(),
+                    help="originals dir (NNN-*.ext; default NETRADIO_SOURCES_FLAC_CACHE_DIR, "
+                         "else sources_local/)")
 
     pp = sub.add_parser("placed",
                         help="DP-22: list the hand-placed original<->capture sync pairs "

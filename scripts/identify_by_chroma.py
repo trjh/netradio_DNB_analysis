@@ -52,8 +52,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from streamalign import audio as _audio     # noqa: E402
 
-AUDIO_EXTS = ("mp3", "flac", "m4a", "opus", "wav", "wv", "aif", "aiff", "ogg")
 import chroma_recipe                              # noqa: E402  (THE recipe)
+import sources_resolve                            # noqa: E402  (the one originals rule)
 
 HOP = chroma_recipe.HOP
 QUERY_S = 120.0
@@ -83,14 +83,23 @@ def cost(query_chroma, cand_chroma):
 
 
 def load_pool(pool_dir, exclude_mystery=True):
+    """[(name, chroma)] for one original per stem in `pool_dir`, chosen by the one resolver
+    (`sources_resolve`): a stem held as a master and its flac is one candidate, not two. When
+    `pool_dir` is the originals cache, a stem only the audio bucket holds is pulled and joins
+    the pool. A stem with two files at one rung is left out, and said so."""
+    chosen, refused = sources_resolve.originals(pool_dir)
+    for key, names in sorted(refused.items(), key=lambda kv: str(kv[0])):
+        print("# pool: left out, two files where one is expected: %s" % ", ".join(names))
     out = []
-    for name in sorted(os.listdir(pool_dir)):
-        if name.rsplit(".", 1)[-1].lower() not in AUDIO_EXTS:
-            continue
+    for _key, name in sorted(chosen.items(), key=lambda kv: kv[1]):
         if exclude_mystery and name.lower().startswith("mystery"):
             continue            # these are clips OF the stream -- they self-match at ~0.002
+        path, failed = sources_resolve.path_of(name, pool_dir)
+        if path is None:
+            print("# pool: %s" % failed[1])
+            continue
         try:
-            samples = _audio.load_audio(os.path.join(pool_dir, name))
+            samples = _audio.load_audio(path)
         except Exception:
             continue
         if len(samples) < 60 * _audio.SR:

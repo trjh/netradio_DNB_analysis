@@ -42,9 +42,10 @@ import time
 import urllib.parse
 import urllib.request
 
+import sources_resolve
+
 LOOKUP = "https://api.acoustid.org/v2/lookup"
 THROTTLE_S = 0.35                 # AcoustID asks for <= 3 requests/second
-AUDIO_EXTS = ("mp3", "flac", "m4a", "opus", "wav", "wv", "aif", "aiff", "mp4", "ogg")
 
 _NOISE = re.compile(r"[^a-z0-9]+")
 
@@ -121,14 +122,22 @@ def main(argv=None):
     if not sources or not os.path.isdir(sources):
         sys.exit("NETRADIO_SOURCES_FLAC_CACHE_DIR is unset or missing (see .env.example)")
 
-    names = sorted(f for f in os.listdir(sources)
-                   if f.rsplit(".", 1)[-1].lower() in AUDIO_EXTS)
+    # One file per stem, chosen by the one resolver: a master and its flac are one record,
+    # and a stem only the audio bucket holds is pulled when it is checked.
+    chosen, refused = sources_resolve.originals(sources)
+    for names in refused.values():
+        print("  ????  two files where one is expected, keep one: %s" % ", ".join(names))
+    names = sorted(chosen.values())
     if args.file:
         names = [f for f in names if any(fnmatch.fnmatch(f, p) for p in args.file)]
 
     found = missing = bad = 0
     for name in names:
-        fp = fingerprint(os.path.join(sources, name))
+        path, failed = sources_resolve.path_of(name, sources)
+        if path is None:
+            print("  ????  %-52s (%s)" % (name[:52], failed[1]))
+            continue
+        fp = fingerprint(path)
         if not fp:
             print("  ????  %-52s (could not fingerprint)" % name[:52])
             continue

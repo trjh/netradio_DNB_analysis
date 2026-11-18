@@ -17,6 +17,8 @@ import json
 import os
 import re
 
+import sources_resolve
+
 from . import groundtruth as _gt
 
 _MYSTERY_RE = re.compile(r"mystery\s+track\s+(\d+)", re.IGNORECASE)
@@ -32,31 +34,41 @@ def _metadata(path=None):
     return data.get("tracks", data)
 
 
+def clips(sources_dir=None):
+    """({mystery number: path}, {mystery number: [names]}) for the clips in the originals
+    directory, by the one resolver (`sources_resolve`, 2026-10-28): the uncompressed file,
+    else the lossless master, else the flac, else a lossy one. A mystery whose winning rung
+    holds two files is refused, never guessed: it lands in the second map, naming both, and
+    has no clip until one is removed. Local files only: a clip is never pulled.
+
+    `.wv` earned its place the hard way: Mystery Track 4's clip was wavpack-compacted and
+    became INVISIBLE to the whole search -- the harvester ran for days looking for everything
+    except the thing it was missing a clip for. One rule for every reader of an original is
+    what keeps that from recurring."""
+    src = sources_dir or sources_resolve.sources_dir()
+    found, refused = {}, {}
+    for key, names in sources_resolve.group(sources_resolve.local_names(src)).items():
+        if key[0] != "mystery":
+            continue
+        try:
+            found[key[1]] = os.path.join(src, sources_resolve.choose(
+                names, "Mystery Track %d" % key[1]))
+        except sources_resolve.Ambiguous as exc:
+            refused[key[1]] = exc.names
+    return found, refused
+
+
 def current(sources_dir=None, metadata_path=None):
-    """[{track, number, title, clip}] for every UNSOLVED mystery, clip only where we have one.
+    """[{track, number, title, clip, clips_refused}] for every UNSOLVED mystery, clip only
+    where we have one.
 
     `track` is the master track number (e.g. 68), `number` the mystery's own number (4).
-    `clip` is the extracted audio if it exists in `sources_dir`, else None -- a mystery with
-    no clip is still a mystery, it just cannot be searched or published yet.
+    `clip` is the extracted audio if the originals directory holds one, else None -- a mystery
+    with no clip is still a mystery, it just cannot be searched or published yet.
+    `clips_refused` names the two files when the resolver refused to pick between them
+    (`clips`), else it is absent.
     """
-    sources_dir = sources_dir or os.environ.get("NETRADIO_SOURCES_FLAC_CACHE_DIR") or ""
-    clips = {}
-    if os.path.isdir(sources_dir):
-        # Lossless beats lossy, and .wav beats .wv only by convention (both are lossless;
-        # ffmpeg decodes WavPack natively, so decode was never the problem). `.wv` earned its
-        # place here the hard way: Mystery Track 4's clip was wavpack-compacted and became
-        # INVISIBLE to the whole search -- the harvester ran for days looking for everything
-        # except the thing it was missing a clip for.
-        rank = {".wav": 0, ".wv": 1, ".flac": 2, ".m4a": 3, ".mp3": 4}
-        best = {}
-        for name in os.listdir(sources_dir):
-            stem, ext = os.path.splitext(name)
-            m = _MYSTERY_RE.match(stem)
-            if m and ext.lower() in rank:
-                key = int(m.group(1))
-                if key not in best or rank[ext.lower()] < best[key]:
-                    best[key] = rank[ext.lower()]
-                    clips[key] = os.path.join(sources_dir, name)
+    found, refused = clips(sources_dir)
 
     out = []
     for num, entry in _metadata(metadata_path).items():
@@ -66,10 +78,13 @@ def current(sources_dir=None, metadata_path=None):
         if not m:
             continue                      # title no longer says "Mystery Track" -> solved
         number = int(m.group(1))
-        out.append({"track": int(num), "number": number,
-                    "title": entry.get("title"), "clip": clips.get(number),
-                    "master_begin_seconds": entry.get("master_begin_seconds"),
-                    "master_end_seconds": entry.get("master_end_seconds")})
+        row = {"track": int(num), "number": number,
+               "title": entry.get("title"), "clip": found.get(number),
+               "master_begin_seconds": entry.get("master_begin_seconds"),
+               "master_end_seconds": entry.get("master_end_seconds")}
+        if number in refused:
+            row["clips_refused"] = refused[number]
+        out.append(row)
     return sorted(out, key=lambda e: e["number"])
 
 

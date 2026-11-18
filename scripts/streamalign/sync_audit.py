@@ -38,6 +38,8 @@ import json
 
 import numpy as np
 
+import sources_resolve
+
 from . import audio as _audio
 from . import groundtruth as _gt
 from . import matchconv as _mc
@@ -163,7 +165,7 @@ def derive_seat(num, stem, label, orig_ts, starts, masters, graded_points):
             "ref_stem": s2, "correction_s": correction_s, "n_strong": len(strong)}, None
 
 
-def audit(labels_dir=None, sources_dir="sources_local", audio_dir=None,
+def audit(labels_dir=None, sources_dir=None, audio_dir=None,
           tracks=None, background=0, search_s=SEARCH_S):
     """Grade every hand sync pair. Returns {"points": [...], "background": [...]}.
 
@@ -189,7 +191,11 @@ def audit(labels_dir=None, sources_dir="sources_local", audio_dir=None,
         if not _audio.capture_nameable(stem, audio_dir):
             rec["why"] = "capture audio missing"
             return False
-        orig_path = _tm.find_original(num, sources_dir)
+        try:
+            orig_path = sources_resolve.resolve(num, sources_dir)
+        except sources_resolve.Ambiguous as exc:
+            rec["why"] = str(exc)
+            return False
         if not orig_path:
             rec["why"] = "original missing"
             return False
@@ -360,7 +366,7 @@ def exhaustive_sweep(stream, owin):
             ).astype(np.float32)
 
 
-def sweep_point(track, label, labels_dir=None, sources_dir="sources_local",
+def sweep_point(track, label, labels_dir=None, sources_dir=None,
                 audio_dir=None, wins=(6.0, 0.6), search_s=SEARCH_S):
     """One hand sync point, swept against every sample position of its capture.
 
@@ -384,7 +390,7 @@ def sweep_point(track, label, labels_dir=None, sources_dir="sources_local",
         raise ValueError("no origNNN start: bookkeeping for that point")
     rate_mc = 1.0 / float(info["rate"])
     stream = _audio.load_audio(stem, audio_dir=audio_dir)
-    orig_path = _tm.find_original(int(track), sources_dir)
+    orig_path = sources_resolve.resolve(int(track), sources_dir)
     if not orig_path:
         raise ValueError("original %s not on disk" % track)
     orig2 = _mc.resample_by_rate(_audio.load_audio(orig_path, use_cache=False), rate_mc)
