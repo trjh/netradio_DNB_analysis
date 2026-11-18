@@ -392,7 +392,7 @@ class BuildTests(LabelDirCase):
 
     def test_original_path_spellings(self):
         captures = self._originals("d-14Nov10-b.au", "dnb-14Nov02-a.au", "d019-040.wav")
-        self.assertEqual(sf.original_path("d201-221.14Nov10-b.mp3", captures),
+        self.assertEqual(sf.original_path("d-14Nov10-b.mp3", captures),
                          os.path.join(captures, "d-14Nov10-b.au"))
         self.assertEqual(sf.original_path("dnb-14Nov02-a.mp3", captures),
                          os.path.join(captures, "dnb-14Nov02-a.au"))
@@ -508,7 +508,7 @@ class BuildTests(LabelDirCase):
             sf.build(previous=previous, prune=True, **self._inputs())
 
     def test_14nov_original_names(self):
-        self.assertEqual(sf.original_filename("d201-221.14Nov10-b.mp3"), "d-14Nov10-b.au")
+        self.assertEqual(sf.original_filename("d-14Nov10-b.mp3"), "d-14Nov10-b.au")
         self.assertEqual(sf.original_filename("dnb-14Nov02-a.mp3"), "dnb-14Nov02-a.au")
         self.assertEqual(sf.original_filename("d019-040.mp3"), "d019-040.wav")
 
