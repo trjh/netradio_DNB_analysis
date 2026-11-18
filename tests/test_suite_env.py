@@ -1,5 +1,8 @@
-"""The suite never reaches a real bucket or a real originals directory: the audio bucket's
-settings and the `NETRADIO_SOURCES_*` settings are removed for the run.
+"""No test is handed a real bucket or a real originals directory through the environment: the
+audio bucket's settings and the `NETRADIO_SOURCES_*` settings are removed from the environment
+for the run. This covers the environment only. Some loaders still fill names from the
+checkout's `.env` when they run: `sort_tsv.load_env_vars`, `align_server.load_env`,
+`review_sync` and `summary_compile`.
 
 Importing this module removes them from the environment. `python -m unittest discover -s tests`
 imports every test module before it runs a single test, so the scrub is in place for every test

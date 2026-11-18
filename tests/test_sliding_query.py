@@ -406,7 +406,10 @@ class OriginalSeventyOneOnD356(unittest.TestCase):
         found = _real_audio()
         if not found:
             self.skipTest("set NETRADIO_SOURCES_FLAC_CACHE_DIR (original 071) and NETRADIO_MP3_DIR "
-                          "(capture d356-375) to run the real-audio check")
+                          "(capture d356-375) to run the real-audio check; it runs only when "
+                          "this module runs on its own, as `python -m unittest "
+                          "test_sliding_query` from tests/, because the suite's scrub removes "
+                          "the setting under discovery")
         orig, cap = found
         import chroma_recipe
         from streamalign import audio
