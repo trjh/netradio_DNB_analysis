@@ -2,11 +2,12 @@
 
     bucket = audio_bucket.bucket()       # a `bucketio.Bucket`, or None: nothing pulled or published
 
-The bucket holds three kinds of object, each keyed by the name the code already uses for it:
+The bucket holds four kinds of object, each keyed by the name the code already uses for it:
 
     stream/master/<stem>.<wav|au>     a capture file, pulled for a decode (streamalign/audio.py)
     stream/mp3/<stem>.mp3             a capture's MP3, pulled for the align server (align_ids.py)
     stream/tracks/<NNN>.flac          a track cut out of the stream (extract_tracks.py)
+    sources/<file name>               an original, flat, named as on disk (sources_resolve.py)
 
 Three settings name it, each its own value, never the signature bucket's:
 
@@ -18,7 +19,7 @@ Three settings name it, each its own value, never the signature bucket's:
 
 With no bucket named, or no `aws` CLI to be found, `bucket()` returns None and every caller
 behaves as it did before there was a bucket: a missing capture is reported missing, and a cut
-is written locally and published nowhere. Nothing in this repo assumes the bucket exists.
+is written locally and published nowhere, and a missing original is reported missing. Nothing in this repo assumes the bucket exists.
 
 This module reads settings and names keys. Every bucket call goes through `bucketio`.
 """
@@ -30,6 +31,7 @@ import bucketio
 MASTER_PREFIX = "stream/master/"
 MP3_PREFIX = "stream/mp3/"
 TRACKS_PREFIX = "stream/tracks/"
+SOURCES_PREFIX = "sources/"
 
 # The capture file extensions a master object may carry, in the order a stem resolves them.
 MASTER_EXTS = (".wav", ".au")

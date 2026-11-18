@@ -50,6 +50,7 @@ from streamalign import tracklist2017 as _tl     # noqa: E402
 
 import cache_budget                                # noqa: E402  (the machine's one cache policy)
 import chroma_recipe                              # noqa: E402  (THE recipe, single source)
+import sources_resolve                            # noqa: E402  (the one originals rule)
 
 HOP = chroma_recipe.HOP
 QUERY_S = 90.0
@@ -106,7 +107,13 @@ def build_cases(tracks, starts, src):
         mb, me = entry.get("master_begin_seconds"), entry.get("master_end_seconds")
         if mb is None or me is None or me - mb < 45:
             continue
-        orig = _tm.find_original(int(num), src)
+        # the scan pulls nothing: it reads the originals this disk holds, as its capture
+        # check does (`capture_nameable` names, the decode pulls)
+        try:
+            orig = sources_resolve.resolve(int(num), src, pull=False)
+        except sources_resolve.Unresolved as exc:
+            print("calibrate: %s; not a case" % exc)
+            continue
         if not orig:
             continue
         # THE TRACK'S OWN source_files decide which capture it lives in. Captures OVERLAP, so

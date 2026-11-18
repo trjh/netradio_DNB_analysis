@@ -319,7 +319,7 @@ class TheGatesReachABucketOnlyCapture(Base):
         from streamalign import inspect_worker
         self.add()
         with mock.patch.object(audio, "AUDIO_DIR", self.audio_dir), \
-                mock.patch("streamalign.track_mix.find_original", return_value="/o/072-x.flac"):
+                mock.patch("sources_resolve.resolve", return_value="/o/072-x.flac"):
             stem, orig = inspect_worker._resolve(STEM, 72, self.tmp)
         self.assertEqual(stem, STEM)
         self.assertEqual(self.fake.ops("cp-down"), [], "the gate names it; the decode pulls")

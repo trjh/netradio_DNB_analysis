@@ -26,6 +26,8 @@ import re
 
 import numpy as np
 
+import sources_resolve
+
 from . import audio as _audio
 from . import groundtruth as _gt
 
@@ -432,28 +434,6 @@ def chroma_dtw_rate(orig, mix, sr=_audio.SR, hop=2048):
             "reliable": is_reliable(r2, norm_cost, slope)}
 
 
-# Everything ffmpeg can decode that an original might plausibly be. `wv` (WavPack) is not
-# incidental: the acquisition toolchain (priv-audio-scripts' splitter) ENCODES TO WAVPACK, so
-# a large slice of the originals on disk are .wv -- and they were all silently invisible here,
-# which read as "no original" rather than "unsupported extension".
-_ORIG_EXTS = ("mp3", "flac", "m4a", "opus", "wav", "wv", "aif", "aiff", "mp4", "ogg")
-
-
-def find_original(track_num, sources_dir):
-    """Path to the original source file for a track number, or None.
-
-    Looks for `<NNN>-*.{mp3,flac,m4a,opus,wav,wv,aif,aiff,mp4,ogg}` in `sources_dir`.
-    Follows symlinks (many originals are symlinked into the library).
-    """
-    prefix = "%03d-" % int(track_num)
-    if not os.path.isdir(sources_dir):
-        return None
-    for fn in sorted(os.listdir(sources_dir)):
-        if fn.startswith(prefix) and fn.rsplit(".", 1)[-1].lower() in _ORIG_EXTS:
-            return os.path.join(sources_dir, fn)
-    return None
-
-
 def _select_capture(srcs, mb, me, starts, audio_dir=None):
     """Pick the source capture that actually CONTAINS the master span [mb, me].
 
@@ -506,7 +486,10 @@ def align_track(track_num, track_metadata, sources_dir, labels_dir=None,
     srcs = e.get("source_files") or []
     if mb is None or me is None or not srcs:
         return {"error": "no master span / source_files"}
-    orig_path = find_original(track_num, sources_dir)
+    try:
+        orig_path = sources_resolve.resolve(track_num, sources_dir)
+    except sources_resolve.Unresolved as exc:
+        return {"error": str(exc)}
     if not orig_path:
         return {"error": "no original audio"}
     starts = _gt.resolve_starts(labels_dir)
@@ -516,7 +499,8 @@ def align_track(track_num, track_metadata, sources_dir, labels_dir=None,
     cap_audio = _audio.load_audio(cap, audio_dir=audio_dir)
     sr = _audio.SR
     mix = cap_audio[int((mb - cstart) * sr):int((me - cstart) * sr)]
-    orig = _audio.load_audio(orig_path, audio_dir=audio_dir)
+    with sources_resolve.pinned(orig_path):         # not evicted while it is decoded
+        orig = _audio.load_audio(orig_path, audio_dir=audio_dir)
     r = chroma_dtw_rate(orig, mix, sr=sr, hop=hop)
     g = track_sync_groundtruth(labels_dir).get(int(track_num), {})
     r.update({"track": int(track_num), "capture": cap, "gt_rate": g.get("rate"),
@@ -539,7 +523,7 @@ def batch_align(track_metadata, sources_dir, labels_dir=None, audio_dir=None,
         k for k, v in gt.items() if v.get("rate") is not None)
     results, reliable, within, flagged, no_orig, errored = [], [], [], [], [], []
     for tn in nums:
-        if find_original(tn, sources_dir) is None:
+        if not sources_resolve.nameable(tn, sources_dir):
             no_orig.append(tn)
             continue
         r = align_track(tn, track_metadata, sources_dir, labels_dir=labels_dir,
