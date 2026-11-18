@@ -29,6 +29,10 @@ from optional_imports import import_or_skip  # noqa: E402
 
 np = import_or_skip("numpy")
 identify_by_chroma = import_or_skip("identify_by_chroma") if np else None
+track_mix = import_or_skip("streamalign.track_mix") if np else None
+inspect_worker = import_or_skip("streamalign.inspect_worker") if np else None
+from bucket_fake import FakeProc  # noqa: E402
+from streamalign import mystery  # noqa: E402
 
 FLAC = b"fLaC" + b"\x03" * 300
 
@@ -177,6 +181,92 @@ class ThePull(Base):
         self.assertEqual(refused[("track", 83)], ["083-two.mp3", "083-two2.mp3"])
 
 
+class TheMessages(Base):
+    """A pull's failure is said on stderr, never stdout: in the inspector's DSP child stdout is
+    the JSON channel. A master the bucket holds with no FLAC copy has its own reason."""
+
+    def test_a_failed_pull_prints_to_stderr_only(self):
+        self.add("084-x.flac")
+        self.fake.fail_next("head-object", FakeProc(returncode=255, stderr="Could not connect"))
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            self.assertIsNone(sources_resolve.resolve(84))
+        self.assertEqual(out.getvalue(), "")
+        self.assertIn("084-x.flac", err.getvalue())
+
+    def test_a_master_with_no_flac_copy_is_not_called_absent(self):
+        self.add("085-m.wv", b"wavpack")
+        path, failed = sources_resolve.pull_stem(("track", 85))
+        self.assertIsNone(path)
+        self.assertEqual(failed[0], 503)
+        self.assertIn("085-m.wv", failed[1])
+        self.assertIn("no FLAC copy", failed[1])
+        self.assertNotIn("not on this disk or in the audio bucket", failed[1])
+        self.assertEqual(self.fake.ops("cp-down"), [])
+
+    def test_a_refused_mystery_is_never_dropped_in_silence(self):
+        touch(self.src, "Mystery Track 6.wav")
+        touch(self.src, "Mystery Track 6 v2.wav")
+        meta = os.path.join(self.tmp, "track-metadata.json")
+        with open(meta, "w") as fh:
+            json.dump({"tracks": {"70": {"title": "Mystery Track 6"}}}, fh)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(mystery.searchable(self.src, meta), [])
+        self.assertIn("two clips, keep one", err.getvalue())
+        self.assertIn("Mystery Track 6 v2.wav", err.getvalue())
+
+
+@unittest.skipUnless(inspect_worker, "needs numpy and the audio stack")
+class TheWorkerChannel(Base):
+    def test_a_failed_pull_leaves_stdout_json_only_and_the_reply_carries_the_reason(self):
+        self.add("086-w.flac")
+        self.fake.fail_next("head-object", FakeProc(returncode=255, stderr="Could not connect"))
+        req = json.dumps({"op": "slice", "stem": "d000-018", "orig": 86,
+                          "stream_t": 1, "orig_t": 1}) + "\n"
+        out = io.StringIO()
+        with mock.patch.object(inspect_worker._audio, "capture_nameable", return_value=True), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            inspect_worker.serve(self.src, stdin=io.StringIO(req),
+                                 cache=inspect_worker.PairCache(loader=lambda *a: None))
+        lines = out.getvalue().splitlines()
+        self.assertEqual(len(lines), 1)
+        reply = json.loads(lines[0])
+        self.assertIn("Could not connect", reply["error"])
+
+
+@unittest.skipUnless(track_mix and inspect_worker, "needs numpy and the audio stack")
+class TheDecodePin(Base):
+    """An original is pinned while a reader decodes it."""
+
+    def test_the_inspector_pins_the_original_while_its_pair_loads(self):
+        path = touch(self.src, "087-p.flac")
+        seen = []
+        cache = inspect_worker.PairCache(
+            loader=lambda s, o, r: seen.append(sources_resolve._in_use(o)))
+        cache.get("d000-018", path, 1.0)
+        self.assertEqual(seen, [True])
+        self.assertFalse(sources_resolve._in_use(path))
+
+    def test_track_mix_pins_the_original_while_it_decodes(self):
+        path = touch(self.src, "088-p.flac")
+        seen = []
+
+        def fake_load(src, **_kw):
+            if src == path:
+                seen.append(sources_resolve._in_use(path))
+            return np.zeros(16000 * 200, dtype="float32")
+        meta = {"88": {"master_begin_seconds": 0.0, "master_end_seconds": 60.0,
+                       "source_files": ["d000-018.wav"]}}
+        with mock.patch.object(track_mix._audio, "load_audio", fake_load), \
+                mock.patch.object(track_mix._gt, "resolve_starts", return_value={}), \
+                mock.patch.object(track_mix, "_select_capture", return_value=("d000-018", 0.0)), \
+                mock.patch.object(track_mix, "chroma_dtw_rate", return_value={"rate": 1.0}), \
+                mock.patch.object(track_mix, "track_sync_groundtruth", return_value={}):
+            track_mix.align_track(88, meta, self.src)
+        self.assertEqual(seen, [True])
+
+
 class TheCache(Base):
     """Nothing the bucket does not hold verified is ever evicted."""
 
@@ -222,6 +312,21 @@ class TheCache(Base):
             self.assertTrue(os.path.exists(path))
         cache_budget.run_eviction(sources_resolve.CACHE)
         self.assertFalse(os.path.exists(path))
+
+    def test_a_definite_mismatch_is_held_and_a_failed_head_is_not(self):
+        os.environ["NETRADIO_SOURCES_FLAC_CACHE_GB"] = "none"
+        sources_resolve.register_cache()
+        body = b"m" * 200
+        path = touch(self.src, "089-mismatch.flac", body)
+        self.add("089-mismatch.flac", body, sha256=hashlib.sha256(b"else").hexdigest())
+        other = touch(self.src, "089-blip.flac", body)
+        self.add("089-blip.flac", body)
+        self.assertFalse(sources_resolve.backed(path))
+        self.assertFalse(sources_resolve.backed(path))
+        self.assertEqual(self.fake.ops("head-object"), ["head-object"])
+        self.fake.fail_next("head-object", FakeProc(returncode=255, stderr="Could not connect"))
+        self.assertFalse(sources_resolve.backed(other))
+        self.assertTrue(sources_resolve.backed(other), "a failed head is asked again")
 
     def test_the_verdict_is_held_until_the_file_changes(self):
         os.environ["NETRADIO_SOURCES_FLAC_CACHE_GB"] = "none"

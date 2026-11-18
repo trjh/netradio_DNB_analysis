@@ -30,8 +30,13 @@ NETRADIO_SOURCES_FLAC_CACHE_GB (default 4 GB; `none` where the directory is the 
 oldest-added first. A file is pinned, and so never evicted or removed, unless the bucket holds
 it verified: a `sources/<file name>` object, named in one listing of the prefix with the file's
 size, whose SHA-256 metadata (one `head` at eviction time) equals the file's own hash; a
-verdict once proved is held while neither the file nor the object changes. A file being
-served or decoded is pinned too. So nothing the bucket does not hold is ever evicted, and
+definite verdict is held while neither the file nor the object changes. A file being
+served or decoded is pinned too (`pinned()`, around each reader's decode of an original).
+
+The pull's lock and the pins cover one process only. Two processes (the align server and its
+DSP child, say) may pull the same object at once: each lands it through its own `.part` file and
+an atomic rename, so that costs a second download, never a partial file. A pin in one process
+does not stop an eviction another process runs. So nothing the bucket does not hold is ever evicted, and
 until the originals are pushed, every file here is pinned.
 
 This module imports no audio library: a caller that wants only a path can import it anywhere.
@@ -186,7 +191,8 @@ def resolve(num, src=None, pull=True):
         return None
     path, failed = pull_stem(key, src)
     if failed is not None and failed[0] != 404:
-        print("sources: %s" % failed[1], flush=True)
+        # stderr: in the inspector's DSP child stdout is the JSON channel
+        print("sources: %s" % failed[1], file=sys.stderr, flush=True)
     return path
 
 
@@ -298,7 +304,7 @@ def _in_use(path):
     return bool(probe and probe(path))
 
 
-_verified = {}              # (realpath, size, mtime_ns, etag) -> True: a verdict held
+_verified = {}              # (realpath, size, mtime_ns, etag) -> bool: a verdict held
 
 
 def backed(path, bucket=None):
@@ -306,9 +312,10 @@ def backed(path, bucket=None):
     one listing of the prefix with the file's size, whose SHA-256 metadata (one `head`) equals
     the file's own hash. False on any doubt: no bucket, no answer, no object, no metadata.
 
-    A True verdict is held for the same file (size and mtime) and the same object (the
-    listing's ETag), so a later eviction run asks the bucket once more only when either has
-    changed."""
+    A definite verdict (a match, a hash or size mismatch, or no SHA-256 metadata) is held for
+    the same file (size and mtime) and the same object (the listing's ETag), so a later
+    eviction run asks the bucket once more only when either has changed. A `head` that gets
+    no answer is never held."""
     bucket = bucket or audio_bucket.bucket()
     if bucket is None:
         return False
@@ -325,18 +332,21 @@ def backed(path, bucket=None):
         return False
     held = (os.path.realpath(path), st.st_size, st.st_mtime_ns, row.etag)
     if held in _verified:
-        return True
+        return _verified[held]
     got, err = bucketio.head(bucket, key)
-    if got is None or not got.sha256 or got.size != st.st_size:
-        return False
-    try:
-        same = bucketio.digests(path).sha256 == got.sha256
-    except OSError:
-        return False
-    if same:
-        if len(_verified) > 4096:
-            _verified.clear()
-        _verified[held] = True
+    if got is None:
+        return False                # no answer: asked again next time, never held
+    if not got.sha256 or got.size != st.st_size:
+        same = False
+    else:
+        try:
+            same = bucketio.digests(path).sha256 == got.sha256
+        except OSError:
+            return False
+    # a definite answer is held, either way, until the file or the object changes
+    if len(_verified) > 4096:
+        _verified.clear()
+    _verified[held] = same
     return same
 
 
@@ -363,7 +373,7 @@ def register_cache():
         return cache_budget.register("sources_flac", dir=sources_dir(), pinned=_pinned,
                                      refill="audio bucket: sources/<name>", rank=None)
     except cache_budget.CacheRefused as exc:     # a clash with another process's cache too
-        print("%s; the originals are read, and nothing is pulled" % exc)
+        print("%s; the originals are read, and nothing is pulled" % exc, file=sys.stderr)
         return None
 
 
@@ -428,6 +438,11 @@ def _bucket_pick(key, src):
     names = group(listing).get(key, [])
     pick = _pull_name(names, key)
     if pick is None:
+        master = choose(names, _what(key))
+        if master is not None:
+            # the cache keeps flac: a master alone in the bucket is not pulled
+            return None, (503, "%s: not on this disk; the audio bucket holds %s but no FLAC "
+                               "copy of it" % (_what(key), master))
         return None, (404, "%s: not on this disk or in the audio bucket" % _what(key))
     return pick, None
 

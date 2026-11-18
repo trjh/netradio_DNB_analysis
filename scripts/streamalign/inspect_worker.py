@@ -38,6 +38,8 @@ EOF on stdin is the shutdown signal.
 import json
 import sys
 
+import sources_resolve
+
 from . import audio as _audio
 from . import inspect_slice as _isl
 
@@ -63,7 +65,8 @@ class PairCache:
         # math assumes, silently diverging from the one-shot path (review iter 1 P2)
         key = (stream_src, orig_src, float(rate))
         if key != self._key:
-            self._pair = self._loader(stream_src, orig_src, float(rate))
+            with sources_resolve.pinned(orig_src):      # not evicted while it is decoded
+                self._pair = self._loader(stream_src, orig_src, float(rate))
             self._key = key
         return self._pair
 
@@ -71,15 +74,18 @@ class PairCache:
 def _resolve(stem, orig_num, sources_dir):
     """(stream_src, orig_path) or ValueError -- same lookups as the one-shot CLI. The
     original comes from the one resolver, pulled from the audio bucket when this disk lacks
-    it; two files where one is expected raise its `Ambiguous`, a ValueError."""
-    import sources_resolve
-
+    it; two files where one is expected raise its `Ambiguous`, a ValueError. A pull that fails
+    raises its own reason, so the reply carries it (this child's stderr is not read)."""
     stem = _audio.stem_of(str(stem))
     if not _audio.capture_nameable(stem):
         raise ValueError("no audio for capture %s" % stem)
-    orig_path = sources_resolve.resolve(int(orig_num), sources_dir)
+    orig_path = sources_resolve.resolve(int(orig_num), sources_dir, pull=False)
     if not orig_path:
-        raise ValueError("no original %03d-* under %s" % (int(orig_num), sources_dir))
+        orig_path, failed = sources_resolve.pull_stem(("track", int(orig_num)), sources_dir)
+        if not orig_path:
+            if failed and failed[0] != 404:
+                raise ValueError(failed[1])
+            raise ValueError("no original %03d-* under %s" % (int(orig_num), sources_dir))
     return stem, orig_path
 
 

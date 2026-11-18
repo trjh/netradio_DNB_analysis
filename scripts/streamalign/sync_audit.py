@@ -202,7 +202,8 @@ def audit(labels_dir=None, sources_dir=None, audio_dir=None,
         if stem not in streams:
             streams[stem] = _audio.load_audio(stem, audio_dir=audio_dir)
         if num not in origs:
-            origs[num] = _audio.load_audio(orig_path, use_cache=False)
+            with sources_resolve.pinned(orig_path):     # not evicted while it is decoded
+                origs[num] = _audio.load_audio(orig_path, use_cache=False)
         stream = streams[stem]
         orig2 = _mc.resample_by_rate(origs[num], rate_mc)
         b2_seed = b_native / rate_mc + rec.get("seat_correction_ms", 0.0) / 1000.0
@@ -393,7 +394,8 @@ def sweep_point(track, label, labels_dir=None, sources_dir=None,
     orig_path = sources_resolve.resolve(int(track), sources_dir)
     if not orig_path:
         raise ValueError("original %s not on disk" % track)
-    orig2 = _mc.resample_by_rate(_audio.load_audio(orig_path, use_cache=False), rate_mc)
+    with sources_resolve.pinned(orig_path):         # not evicted while it is decoded
+        orig2 = _mc.resample_by_rate(_audio.load_audio(orig_path, use_cache=False), rate_mc)
     placed = _inside(pr["track_ts"], (pr["orig_ts"] - start_t) / rate_mc,
                      len(stream) / SR, len(orig2) / SR, search_s=search_s)
     if placed is None:

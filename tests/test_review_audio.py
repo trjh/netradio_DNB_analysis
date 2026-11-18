@@ -387,6 +387,13 @@ class TestOrigPull(RouteCase):
         self.assertEqual(data, b"local-flac")
         self.assertEqual(self.fake.calls, [])
 
+    def test_a_master_with_no_flac_copy_in_the_bucket_says_so(self):
+        self.add("069-master.wv", b"wavpack-master")
+        resp, data = self.req("/api/align/audio/orig/69")
+        self.assertEqual(resp.status, 503)
+        self.assertIn(b"no FLAC copy", data)
+        self.assertIn(b"069-master.wv", data)
+
     def test_an_object_with_no_sha256_is_refused_never_served(self):
         self.write(self.src_dir, "065-bad.wv", b"wavpack-master")
         self.add("065-bad.flac", sha256=False)

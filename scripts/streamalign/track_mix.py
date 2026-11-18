@@ -499,7 +499,8 @@ def align_track(track_num, track_metadata, sources_dir, labels_dir=None,
     cap_audio = _audio.load_audio(cap, audio_dir=audio_dir)
     sr = _audio.SR
     mix = cap_audio[int((mb - cstart) * sr):int((me - cstart) * sr)]
-    orig = _audio.load_audio(orig_path, audio_dir=audio_dir)
+    with sources_resolve.pinned(orig_path):         # not evicted while it is decoded
+        orig = _audio.load_audio(orig_path, audio_dir=audio_dir)
     r = chroma_dtw_rate(orig, mix, sr=sr, hop=hop)
     g = track_sync_groundtruth(labels_dir).get(int(track_num), {})
     r.update({"track": int(track_num), "capture": cap, "gt_rate": g.get("rate"),

@@ -16,6 +16,7 @@ Filenames lie.)
 import json
 import os
 import re
+import sys
 
 import sources_resolve
 
@@ -89,5 +90,15 @@ def current(sources_dir=None, metadata_path=None):
 
 
 def searchable(sources_dir=None, metadata_path=None):
-    """The unsolved mysteries we actually have audio for -- what a matcher should query."""
-    return [e for e in current(sources_dir, metadata_path) if e["clip"]]
+    """The unsolved mysteries we actually have audio for -- what a matcher should query.
+
+    A mystery whose clip the resolver refused is left out, never in silence: a line on stderr
+    names both files, so every caller says why it is not searched."""
+    out = []
+    for e in current(sources_dir, metadata_path):
+        if e.get("clips_refused"):
+            print("Mystery Track %d not searched: two clips, keep one: %s"
+                  % (e["number"], ", ".join(e["clips_refused"])), file=sys.stderr)
+        if e["clip"]:
+            out.append(e)
+    return out
