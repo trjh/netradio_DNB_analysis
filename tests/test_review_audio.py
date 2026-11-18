@@ -271,7 +271,8 @@ class TestOrigResolution(RouteCase):
         self.assertEqual(resp.status, 409)
         self.assertIn(b"050-aaa.mp3", data)
         self.assertIn(b"050-bbb.mp3", data)
-        self.assertIn(b"keep one", data)
+        self.assertIn(b'Choose one: add \\"050\\": \\"<file name>\\" to source-versions.json',
+                      data)
 
     def test_the_better_rung_wins_over_a_lossy_file(self):
         # a flac and an mp3 under one number are two rungs: the flac is served

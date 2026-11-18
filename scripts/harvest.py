@@ -2639,8 +2639,10 @@ def queries(state=None):
 
     The clip is the one the originals resolver picks (`streamalign.mystery.clips`), and the state
     names it: `state["query_clips"]` maps each searched mystery to its clip's file name, beside
-    `state["query_keys"]`. A mystery held as two clips at one rung is refused, never guessed: it
-    goes into `state["skipped_queries"]` with both names in `clips` and "two clips, keep one".
+    `state["query_keys"]`. A mystery held as two clips at one rung takes the one recorded in
+    `source-versions.json`; with none recorded it is refused, never guessed: it goes into
+    `state["skipped_queries"]` with both names in `clips` and "two clips, choose one", saying
+    exactly what to add to that file.
     """
     import librosa
     out, skipped, clips = [], [], {}
@@ -2649,10 +2651,8 @@ def queries(state=None):
         if e.get("clips_refused"):
             names = e["clips_refused"]
             skipped.append({"mystery": e["number"], "clips": names,
-                            "why": "two clips, keep one: %s. The resolver never picks "
-                                   "between two files at one rung; remove one and the "
-                                   "mystery re-enters the search by itself."
-                                   % ", ".join(names)})
+                            "why": e.get("clips_refused_why")
+                            or "two clips, choose one: %s" % ", ".join(names)})
     for e in [e for e in unsolved if e["clip"]]:
         clips[e["number"]] = os.path.basename(e["clip"])
         secs = _audio.duration(e["clip"]) if hasattr(_audio, "duration") else None

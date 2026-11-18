@@ -111,7 +111,7 @@ def build_cases(tracks, starts, src):
         # check does (`capture_nameable` names, the decode pulls)
         try:
             orig = sources_resolve.resolve(int(num), src, pull=False)
-        except sources_resolve.Ambiguous as exc:
+        except sources_resolve.Unresolved as exc:
             print("calibrate: %s; not a case" % exc)
             continue
         if not orig:

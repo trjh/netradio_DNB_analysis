@@ -3,14 +3,23 @@
 Every tool that wants an original asks here, so one rule picks every file:
 
     path = sources_resolve.resolve(72)              # the original for track 072, or None
-    name = sources_resolve.choose(names, "what")    # the pick among one stem's files
+    name = sources_resolve.choose(names, "what", key)   # the pick among one stem's files
 
 **The rule** (2026-09-16; the order, 2026-10-28). For one stem, the uncompressed file
 (`.wav`/`.au`); else the lossless master (`.wv`/`.aif`/`.aiff`); else the `.flac`; else a lossy
-file (`.mp3`/`.m4a`/`.opus`/`.ogg`/`.aac`). Two candidates at the rung that wins stop with
-`Ambiguous`, which names both: the resolver never picks one silently. A stem is a track number
+file (`.mp3`/`.m4a`/`.opus`/`.ogg`/`.aac`). A stem is a track number
 (`NNN-<anything>.<ext>`), a mystery's number (`Mystery Track N...`), or else the file name less
 its extension. Any other extension is not an original (a cover image, a note, a promo video).
+
+**Versions** (2026-11-18). Two files at the rung that wins can be two real versions of a track
+(two uploads of a remix at different lengths), so the resolver never guesses between them. The
+choice is recorded by hand in `source-versions.json` at the top of this checkout, one entry per
+stem: `{"017": "<file name>"}` for a track, `{"Mystery Track 6": "<file name>"}` for a clip. With
+a recorded choice that names one of the tied files, that file is the pick. With none, a reader
+that needs exactly one original stops with `Ambiguous`, whose message names the files and says
+exactly what to add to that file. A recorded name that matches none of the stem's files is a
+`VersionError` naming the setting. Listings (the chroma pool, the acoustid check, the
+missing-sources inventory) keep every version and drop none.
 
 **The directory** is `sources_dir()`: NETRADIO_SOURCES_FLAC_CACHE_DIR, else `sources_local/` in
 this checkout. It is flat, so a person reads it the way the resolver does.
@@ -43,6 +52,7 @@ This module imports no audio library: a caller that wants only a path can import
 """
 
 import contextlib
+import json
 import os
 import re
 import sys
@@ -72,14 +82,76 @@ _MYSTERY_RE = re.compile(r"^mystery\s+track\s+(\d+)", re.IGNORECASE)
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-class Ambiguous(ValueError):
-    """Two files at the rung that wins for one stem. `names` lists them, sorted. A ValueError,
-    so a caller that reports a bad request reports this one too."""
+VERSIONS_NAME = "source-versions.json"
 
-    def __init__(self, what, names):
+
+def versions_path():
+    """The hand-kept record of which version each stem uses: `source-versions.json` at the top
+    of this checkout. Tests point ROOT_DIR elsewhere."""
+    return os.path.join(ROOT_DIR, VERSIONS_NAME)
+
+
+def choice_key(key):
+    """The key a stem's choice is recorded under: "017", "Mystery Track 6", or the stem's name."""
+    if key[0] == "track":
+        return "%03d" % key[1]
+    if key[0] == "mystery":
+        return "Mystery Track %d" % key[1]
+    return key[1]
+
+
+def how_to_choose(key):
+    """The exact step that records a choice for this stem."""
+    return ('Choose one: add "%s": "<file name>" to %s in this repo'
+            % (choice_key(key), VERSIONS_NAME))
+
+
+class Unresolved(ValueError):
+    """A stem whose one original cannot be named: `Ambiguous` or `VersionError`. `names` lists
+    the stem's files that are in question. A ValueError, so a caller that reports a bad request
+    reports this one too."""
+
+    names = []
+
+
+class Ambiguous(Unresolved):
+    """Two files at the rung that wins for one stem, and no recorded choice between them.
+    `names` lists them, sorted; the message says how to record the choice. A ValueError, so a
+    caller that reports a bad request reports this one too."""
+
+    def __init__(self, what, names, key=None):
         self.names = sorted(names)
-        super().__init__("%s: two files where one is expected, keep one: %s"
-                         % (what, ", ".join(self.names)))
+        self.key = key
+        text = "%s has %d versions: %s." % (what, len(self.names), ", ".join(self.names))
+        if key is not None:
+            text += " " + how_to_choose(key)
+        super().__init__(text)
+
+
+class VersionError(Unresolved):
+    """A recorded choice that names none of the stem's files, or a record that does not read."""
+
+    def __init__(self, text, names=()):
+        self.names = sorted(names)
+        super().__init__(text)
+
+
+def recorded_choices():
+    """{choice key: file name} from `source-versions.json`; {} when there is none. Raises
+    VersionError when it does not read as a JSON object of strings."""
+    path = versions_path()
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as exc:
+        raise VersionError("%s in this repo does not read: %s" % (VERSIONS_NAME, exc))
+    if not isinstance(data, dict) or not all(isinstance(k, str) and isinstance(v, str)
+                                             for k, v in data.items()):
+        raise VersionError("%s in this repo must map each stem to one file name, "
+                           'as {"017": "<file name>"}' % VERSIONS_NAME)
+    return data
 
 
 # --- the rule ------------------------------------------------------------------------------
@@ -124,22 +196,35 @@ def stem_key(name):
     return ("name", os.path.splitext(name)[0])
 
 
-def choose(names, what="this stem"):
+def choose(names, what="this stem", key=None):
     """The one name the rule picks among one stem's file names, or None when none is an
-    original. Raises `Ambiguous` when two share the rung that wins."""
+    original. When two share the rung that wins, the choice recorded for `key` in
+    `source-versions.json` is the pick; with none recorded, raises `Ambiguous`. A recorded name
+    that is none of `names` raises `VersionError`."""
     ranked = [(rank(n), n) for n in names if rank(n) is not None]
     if not ranked:
         return None
     best = min(r for r, _ in ranked)
     top = sorted(n for r, n in ranked if r == best)
-    if len(top) > 1:
-        raise Ambiguous(what, top)
-    return top[0]
+    picked = recorded_choices().get(choice_key(key)) if key is not None else None
+    if picked is not None and picked not in names:
+        raise VersionError('%s in this repo names "%s" for %s, but no such file: its files '
+                           "here are %s. Correct the entry \"%s\" there"
+                           % (VERSIONS_NAME, picked, what, ", ".join(sorted(names)),
+                              choice_key(key)), names)
+    if len(top) == 1:
+        return top[0]
+    if picked is None:
+        raise Ambiguous(what, top, key)
+    if picked in top:
+        return picked
+    raise VersionError('%s in this repo names "%s" for %s, but its versions at the rung that '
+                       "wins are %s" % (VERSIONS_NAME, picked, what, ", ".join(top)), top)
 
 
 def _what(key):
     if key[0] == "track":
-        return "original %03d" % key[1]
+        return "track %03d" % key[1]
     if key[0] == "mystery":
         return "Mystery Track %d" % key[1]
     return "original %s" % key[1]
@@ -184,7 +269,11 @@ def resolve(num, src=None, pull=True):
     src = src or sources_dir()
     key = ("track", int(num))
     names = group(local_names(src)).get(key, [])
-    chosen = choose(names, _what(key))
+    if pull:
+        path = pull_recorded(key, names, src)
+        if path is not None:
+            return path
+    chosen = choose(names, _what(key), key)
     if chosen:
         return os.path.join(src, chosen)
     if not pull:
@@ -194,6 +283,17 @@ def resolve(num, src=None, pull=True):
         # stderr: in the inspector's DSP child stdout is the JSON channel
         print("sources: %s" % failed[1], file=sys.stderr, flush=True)
     return path
+
+
+def pull_recorded(key, names, src=None):
+    """The path of the version recorded for this stem when this disk holds other versions but
+    not that one (evicted, say): pulled, so a sibling is never read in its place. None when
+    there is no such case, or the pull fails (`choose` then names the problem)."""
+    src = src or sources_dir()
+    recorded = recorded_choices().get(choice_key(key))
+    if not (names and recorded) or recorded in names:
+        return None
+    return fetch(recorded, src)[0]
 
 
 def nameable(num, src=None):
@@ -206,7 +306,7 @@ def nameable(num, src=None):
         return True
     try:
         return _bucket_pick(key, src)[0] is not None
-    except Ambiguous:
+    except Unresolved:
         return True
 
 
@@ -221,8 +321,8 @@ def originals(src=None, listed=True):
     local = group(local_names(src))
     for key, names in local.items():
         try:
-            chosen[key] = choose(names, _what(key))
-        except Ambiguous as exc:
+            chosen[key] = choose(names, _what(key), key)
+        except Unresolved as exc:
             refused[key] = exc.names
     if listed:
         listing = _pull_listing(src)
@@ -232,7 +332,7 @@ def originals(src=None, listed=True):
                     continue
                 try:
                     pick = _pull_name(names, key)
-                except Ambiguous as exc:
+                except Unresolved as exc:
                     refused[key] = exc.names
                     continue
                 if pick:
@@ -422,7 +522,7 @@ def _pull_name(names, key):
     """The name a pull of this stem lands, among the bucket's `names` for it: the rule's pick,
     or its `.flac` sibling when the pick is a master (the cache keeps flac). None when a
     master has no flac sibling there. Raises `Ambiguous`."""
-    pick = choose(names, _what(key))
+    pick = choose(names, _what(key), key)
     if pick is None or rank(pick) >= _FLAC_RUNG:
         return pick
     sibling = os.path.splitext(pick)[0] + ".flac"
@@ -438,7 +538,7 @@ def _bucket_pick(key, src):
     names = group(listing).get(key, [])
     pick = _pull_name(names, key)
     if pick is None:
-        master = choose(names, _what(key))
+        master = choose(names, _what(key), key)
         if master is not None:
             # the cache keeps flac: a master alone in the bucket is not pulled
             return None, (503, "%s: not on this disk; the audio bucket holds %s but no FLAC "

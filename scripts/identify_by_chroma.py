@@ -86,12 +86,12 @@ def load_pool(pool_dir, exclude_mystery=True):
     """[(name, chroma)] for one original per stem in `pool_dir`, chosen by the one resolver
     (`sources_resolve`): a stem held as a master and its flac is one candidate, not two. When
     `pool_dir` is the originals cache, a stem only the audio bucket holds is pulled and joins
-    the pool. A stem with two files at one rung is left out, and said so."""
+    the pool. A stem with two versions at one rung and no recorded choice keeps both: each is
+    a candidate record of its own, so the pool drops none (2026-11-18)."""
     chosen, refused = sources_resolve.originals(pool_dir)
-    for key, names in sorted(refused.items(), key=lambda kv: str(kv[0])):
-        print("# pool: left out, two files where one is expected: %s" % ", ".join(names))
+    names = sorted(set(chosen.values()) | {n for ns in refused.values() for n in ns})
     out = []
-    for _key, name in sorted(chosen.items(), key=lambda kv: kv[1]):
+    for name in names:
         if exclude_mystery and name.lower().startswith("mystery"):
             continue            # these are clips OF the stream -- they self-match at ~0.002
         path, failed = sources_resolve.path_of(name, pool_dir)

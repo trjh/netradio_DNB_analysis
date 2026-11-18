@@ -103,7 +103,7 @@ def _match_hints_one(stem, stream, orig_num, args, meta, master):
 
     try:
         orig_path = sources_resolve.resolve(orig_num, args.sources)
-    except sources_resolve.Ambiguous as exc:
+    except sources_resolve.Unresolved as exc:
         print(exc)
         return
     if not orig_path:
@@ -290,7 +290,7 @@ def _cmd_inspect_slice(args):
     else:
         try:
             orig_path = sources_resolve.resolve(args.orig, args.sources)
-        except sources_resolve.Ambiguous as exc:
+        except sources_resolve.Unresolved as exc:
             out = {"error": str(exc)}
         else:
             if not orig_path:
