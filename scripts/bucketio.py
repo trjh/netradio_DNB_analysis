@@ -19,8 +19,9 @@ The interface:
 
     listing(bucket, prefix, max_age=LISTING_MAX_AGE_S)
         -> ({key: Listed(size, etag, last_modified)}, None) | (None, detail)
-        The keys under one prefix, with their sizes, ETags and last-modified times (the ISO 8601
-        text S3 gives, such as "2026-11-23T10:00:00+00:00"), held in memory for `max_age`
+        The keys under one prefix, with their sizes, ETags and last-modified times (ISO 8601
+        text as the CLI prints it, such as "2026-11-23T10:00:00+00:00"; the form varies with
+        the CLI version, so parse it before comparing), held in memory for `max_age`
         seconds (about a minute by default; 0 asks the bucket every time and holds nothing). A
         listing carries no user metadata, so it gives sizes and never a SHA-256: it is what a
         membership check reads. A prefix of more than LIST_MAX_PAGES pages is an error.
@@ -51,8 +52,9 @@ The interface:
         requires the size, the hash and the ETag to match. The ETag is what proves the bytes:
         see `etag_matches`. `meta` adds other user-metadata pairs, each value percent-encoded
         (S3 metadata is ASCII, and the CLI's `name=value,...` form splits on commas). A
-        failure is a `Failure`: the detail text as a `str`, with `.kind` saying how far the
-        upload got (NOT_COPIED, NOT_PROVED or DIFFERS).
+        failure is a `Failure`: the detail text as a `str`, with `.kind` saying whether this
+        call may have left an object: NOT_COPIED (it sent nothing), NOT_PROVED (it may have,
+        unproved) or DIFFERS (it did, and the bytes are proved wrong).
 
     run(bucket, args, kind) -> (stdout, None) | (None, detail)
         The one command runner: builds and runs one `aws` command for a bucket value under the
@@ -136,10 +138,12 @@ class BucketError(ValueError):
     """A bucket value that cannot be defined: no name, or no `aws` CLI to be found."""
 
 
-# How far a failed `put` got. The kind is what a caller acts on; the text is for people.
-NOT_COPIED = "not_copied"       # the upload did not complete: the file was unreadable, or the
-                                # copy command failed (an object it may have left is unproved)
-NOT_PROVED = "not_proved"       # copied, but the bytes could not be proved either way
+# Whether a failed `put` may have left an object. The kind is what a caller acts on; the text
+# is for people.
+NOT_COPIED = "not_copied"       # nothing was sent: the file could not be read, so this call
+                                # left no object (one already at the key is still there)
+NOT_PROVED = "not_proved"       # the copy command ran: an object may be there, and its bytes
+                                # are not proved either way (this covers a copy that failed)
 DIFFERS = "differs"             # copied, and the bucket's object is proved not to be the file
 FAILURE_KINDS = (NOT_COPIED, NOT_PROVED, DIFFERS)
 
@@ -159,6 +163,9 @@ class Failure(str):
     @property
     def detail(self):
         return str(self)
+
+    def __reduce__(self):
+        return (Failure, (self.kind, str(self)))
 
 
 def bare_etag(etag):
@@ -222,7 +229,8 @@ def run(bucket, args, kind):
     except (OSError, subprocess.TimeoutExpired) as exc:
         return None, str(exc)[:200] or type(exc).__name__
     if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "aws exited %d" % proc.returncode).strip()
+        detail = ((proc.stderr or "").strip() or (proc.stdout or "").strip()
+                  or "aws exited %d" % proc.returncode)
         return None, detail[-200:]
     return (proc.stdout or ""), None
 
@@ -454,7 +462,7 @@ def _list_now(bucket, prefix):
 
 def listing(bucket, prefix, max_age=LISTING_MAX_AGE_S):
     """{key: Listed(size, etag, last_modified)} for every object under `prefix` (keys in full),
-    the ETag bare and `last_modified` S3's ISO 8601 text (None if the bucket gave none), or
+    the ETag bare and `last_modified` the CLI's ISO 8601 text (None if it gave none), or
     (None, detail) when the bucket did not answer. A failed listing is never held, so the next
     call asks again; a caller must treat "unknown" differently from "empty". With `max_age` 0
     (or less) the bucket is asked and nothing is held: no listing and no lock per prefix. A
@@ -571,26 +579,26 @@ def _fetch(bucket, key, dest, size, sha256, kind, staging_dir):
             return "size mismatch: bucket object %s, expected %s" % (got_size, size)
         if sha256 and _digest_file(part).sha256 != sha256:
             return "sha256 mismatch: %s" % key
-        try:
+        source = part
+        while True:
             try:
-                os.replace(part, dest)
-            except OSError as exc:
-                if exc.errno != errno.EXDEV:
-                    raise
-                # The staging directory is on another file system: copy beside dest first,
-                # so dest itself only ever appears by a rename.
-                fd, moved = tempfile.mkstemp(dir=folder, prefix=os.path.basename(dest) + ".",
-                                             suffix=".part")
-                os.close(fd)
-                shutil.copyfile(part, moved)
-                os.replace(moved, dest)
-        except OSError as exc:
-            # Another fetch of the same object may have won the race. A complete copy of the
-            # right size is the right copy; anything else is a failure.
-            if os.path.isfile(dest) and os.path.getsize(dest) == size:
+                os.replace(source, dest)
                 return None
-            return str(exc)
-        return None
+            except OSError as exc:
+                if exc.errno != errno.EXDEV or moved:
+                    # Another fetch of the same object may have won the race. A complete copy
+                    # of the right size is the right copy; anything else is a failure.
+                    if os.path.isfile(dest) and os.path.getsize(dest) == size:
+                        return None
+                    return str(exc)
+            # The staging directory is on another file system: copy beside dest first, so
+            # dest itself only ever appears by a rename. A failure of this copy is a
+            # failure, whatever sits at dest.
+            fd, moved = tempfile.mkstemp(dir=folder, prefix=os.path.basename(dest) + ".",
+                                         suffix=".part")
+            os.close(fd)
+            shutil.copyfile(part, moved)
+            source = moved
     except OSError as exc:
         return str(exc)
     finally:
@@ -621,7 +629,9 @@ def _meta_arg(digest, meta):
 def put(bucket, path, key, meta=None):
     """Upload `path` as `key` with its SHA-256 stored as object metadata, then head the object
     and require the size and the hash to match. Returns (Head, None), or (None, Failure): the
-    detail text, with `.kind` NOT_COPIED, NOT_PROVED or DIFFERS.
+    detail text, with `.kind` saying whether this call may have left an object: NOT_COPIED
+    (it sent nothing), NOT_PROVED (it may have, unproved) or DIFFERS (it did, and the bytes are
+    proved wrong).
 
     The hash is always computed here, from the file being uploaded: a hash handed in could be
     stale or wrong, and the metadata is what every later fetch trusts. It is read once per
@@ -644,9 +654,9 @@ def put(bucket, path, key, meta=None):
         return None, Failure(NOT_COPIED, str(exc))
     _out, err = run(bucket, ["s3", "cp", path, bucket.url(key), "--no-progress",
                              "--metadata", _meta_arg(digest, meta)], "copy")
+    _forget_listings(bucket, key)       # even a failed copy may have left an object
     if err is not None:
-        return None, Failure(NOT_COPIED, err)
-    _forget_listings(bucket, key)
+        return None, Failure(NOT_PROVED, err)
     got, err = head(bucket, key)
     if got is None:
         return None, Failure(NOT_PROVED,

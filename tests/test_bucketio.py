@@ -4,10 +4,12 @@ The aws CLI never runs: `bucketio._run`, the module's one subprocess seam, is sw
 `bucket_fake.FakeAws`, which holds objects in memory and speaks the JSON the real CLI prints.
 """
 
+import copy
 import errno
 import hashlib
 import json
 import os
+import pickle
 import sys
 import tempfile
 import unittest
@@ -488,12 +490,44 @@ class TestFailureKinds(Base):
         with self.assertRaises(ValueError):
             bucketio.Failure("maybe", "denied")
 
-    def test_not_copied(self):
-        self.aws.fail_next("cp-up", FakeProc(returncode=1, stderr="denied"))
-        _got, err = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
-        self.assertEqual((err.kind, str(err)), (bucketio.NOT_COPIED, "denied"))
+    def test_a_failure_survives_pickle_and_copy(self):
+        err = bucketio.Failure(bucketio.DIFFERS, "etag mismatch")
+        for again in (pickle.loads(pickle.dumps(err)), copy.copy(err), copy.deepcopy(err)):
+            self.assertEqual(again, "etag mismatch")
+            self.assertEqual(again.kind, bucketio.DIFFERS)
+
+    def test_a_copy_that_says_nothing_is_still_a_true_failure(self):
+        self.aws.fail_next("cp-up", FakeProc(returncode=1, stderr="  \n"))
+        got, err = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
+        self.assertIsNone(got)
+        self.assertTrue(err)
+        self.assertEqual(err, "aws exited 1")
+
+    def test_not_copied_only_when_nothing_was_sent(self):
         _got, err = bucketio.put(self.bucket, os.path.join(self.tmp, "missing"), "p/f")
         self.assertEqual(err.kind, bucketio.NOT_COPIED)
+        self.assertEqual(self.aws.calls, [])
+
+    def test_a_failed_copy_may_have_left_an_object(self):
+        self.aws.fail_next("cp-up", FakeProc(returncode=1, stderr="denied"))
+        _got, err = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
+        self.assertEqual((err.kind, str(err)), (bucketio.NOT_PROVED, "denied"))
+        self.aws.fail_next("cp-up", timeout_error())
+        _got, err = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
+        self.assertEqual(err.kind, bucketio.NOT_PROVED)
+
+    def test_a_failed_copy_drops_the_held_listing(self):
+        self.assertEqual(bucketio.listing(self.bucket, "p/"), ({}, None))     # held: empty
+        real = self.aws._cp_up
+
+        def landed_then_failed(args):
+            real(args)                          # the object lands; the answer is lost
+            return FakeProc(returncode=1, stderr="connection reset")
+        self.aws._cp_up = landed_then_failed
+        _got, err = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
+        self.assertEqual(err.kind, bucketio.NOT_PROVED)
+        listed, _ = bucketio.listing(self.bucket, "p/")
+        self.assertIn("p/f", listed)
 
     def test_not_proved_when_the_head_gives_no_answer(self):
         self.aws.fail_next("head-object", FakeProc(returncode=255, stderr="Could not connect"))
@@ -625,6 +659,29 @@ class TestStagingDir(Base):
         self.assertEqual(renames[-1], (os.path.dirname(self.dest), self.dest))
         with open(self.dest, "rb") as fh:
             self.assertEqual(fh.read(), b"audio")
+        self.assertEqual(os.listdir(self.stage), [])
+        self.assertEqual(os.listdir(os.path.dirname(self.dest)), ["f.wav"])
+
+
+    def test_a_failed_cross_device_copy_is_a_failure(self):
+        os.makedirs(os.path.dirname(self.dest))
+        with open(self.dest, "wb") as fh:
+            fh.write(b"older")                                       # same size, other bytes
+        real = os.replace
+
+        def replace(src, dst):
+            if os.path.dirname(src) == self.stage:
+                raise OSError(errno.EXDEV, "Invalid cross-device link")
+            return real(src, dst)
+
+        def full(_src, _dst):
+            raise OSError(errno.ENOSPC, "No space left on device")
+        with mock.patch.object(bucketio.os, "replace", replace), \
+                mock.patch.object(bucketio.shutil, "copyfile", full):
+            err = bucketio.fetch_verified(self.bucket, "k", self.dest, staging_dir=self.stage)
+        self.assertIn("No space left", err)
+        with open(self.dest, "rb") as fh:
+            self.assertEqual(fh.read(), b"older")
         self.assertEqual(os.listdir(self.stage), [])
         self.assertEqual(os.listdir(os.path.dirname(self.dest)), ["f.wav"])
 
