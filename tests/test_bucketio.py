@@ -356,6 +356,24 @@ class TestPut(Base):
         self.assertIsNone(got)
         self.assertIn("etag mismatch", err)
 
+    def test_a_file_changed_during_the_upload_proves_nothing(self):
+        # The digests are taken before the upload; the file is rewritten at the same size
+        # before the bytes go up. The second read sees the new bytes, which match the ETag but
+        # not the SHA-256 the put stored, so the put is refused.
+        mib = bucketio.MIB
+        path = self.file("big", os.urandom(12 * mib))
+        self.aws.part_bytes = 6 * mib
+        real = self.aws._cp_up
+
+        def rewritten(args):
+            with open(path, "wb") as fh:
+                fh.write(os.urandom(12 * mib))
+            return real(args)
+        self.aws._cp_up = rewritten
+        got, err = bucketio.put(self.bucket, path, "p/big")
+        self.assertIsNone(got)
+        self.assertIn("etag mismatch", err)
+
     def test_a_part_size_under_five_mib_is_not_tried(self):
         mib = bucketio.MIB
         body = os.urandom(12 * mib)
@@ -383,13 +401,14 @@ class TestPut(Base):
         mib = bucketio.MIB
         size = 40 * mib + 3                                          # 3 parts: 14..20 MiB
         self.assertEqual(bucketio.part_size_candidates(size, 3),
-                         [16 * mib] + [m * mib for m in (14, 15, 17, 18, 19, 20)])
+                         [m * mib for m in (16, 20, 14, 15, 17, 18, 19)])
         for p in bucketio.part_size_candidates(size, 3):
             self.assertEqual(-(-size // p), 3)
         # Two parts of a large file allow hundreds of sizes; the cap holds, round sizes first.
         many = bucketio.part_size_candidates(1000 * mib, 2)
         self.assertEqual(len(many), bucketio.MAX_PART_SIZE_CANDIDATES)
         self.assertEqual(many[:2], [512 * mib, 500 * mib])
+        self.assertIn(100 * mib, bucketio.part_size_candidates(150 * mib, 2))
         self.assertEqual(bucketio.part_size_candidates(size, 1), [])
         self.assertEqual(bucketio.part_size_candidates(size, 50), [])  # parts under 5 MiB
 

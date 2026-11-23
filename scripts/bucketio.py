@@ -103,7 +103,8 @@ MAX_PART_BYTES = 5 * 1024 * MIB     # S3's largest part
 MAX_PARTS = 10000                   # S3's most parts in one upload
 
 # The most other part sizes `etag_matches` hashes for one upload. Each costs one MD5 over the
-# file, all of them in a single read, so the check costs at most this many MD5 passes.
+# file, all of them in a single read, so the check costs at most this many MD5 passes and one
+# SHA-256 pass.
 MAX_PART_SIZE_CANDIDATES = 16
 
 # The user-metadata name the hash is stored under. S3 lowercases user metadata names, and the
@@ -244,7 +245,7 @@ def part_size_candidates(size, parts):
     bytes: whole MiB from MIN_PART_BYTES up to MAX_PART_BYTES that split the file into exactly
     `parts` parts. The default part size is left out (the caller has tried it already). At most
     MAX_PART_SIZE_CANDIDATES come back: the powers of two first, as the sizes a configuration
-    most often sets, then the rest from the smallest up.
+    most often sets, then multiples of 8, 10 and 25 MiB, then the rest from the smallest up.
 
     The count is small where it matters. Exactly `parts` parts means a part size between
     size/parts and size/(parts - 1), a range of about size / (parts * (parts - 1)) bytes: under
@@ -256,14 +257,18 @@ def part_size_candidates(size, parts):
     high = min(MAX_PART_BYTES // MIB, -(-size // ((parts - 1) * MIB)) - 1)
     found = [m * MIB for m in range(low, high + 1)
              if m * MIB != MULTIPART_PART_BYTES and -(-size // (m * MIB)) == parts]
-    found.sort(key=lambda p: (p & (p - 1) != 0, p))
+    def rank(p):
+        m = p // MIB
+        return (p & (p - 1) != 0, bool(m % 8 and m % 10 and m % 25), p)
+    found.sort(key=rank)
     return found[:MAX_PART_SIZE_CANDIDATES]
 
 
 def _etags_for_part_sizes(path, part_sizes):
-    """{part size: multipart ETag} for each part size, from one read of the file. Every part
-    size is whole MiB, so each part boundary falls on a block boundary; each block feeds one
-    running MD5 per part size."""
+    """({part size: multipart ETag}, the SHA-256 of the bytes read) for each part size, from
+    one read of the file. Every part size is whole MiB, so each part boundary falls on a block
+    boundary; each block feeds one running MD5 per part size, and the one SHA-256."""
+    sha = hashlib.sha256()
     running = {p: hashlib.md5() for p in part_sizes}
     done = {p: [] for p in part_sizes}
     offset = 0
@@ -273,6 +278,7 @@ def _etags_for_part_sizes(path, part_sizes):
             if not block:
                 break
             offset += len(block)
+            sha.update(block)
             for p in part_sizes:
                 running[p].update(block)
                 if offset % p == 0:
@@ -281,7 +287,7 @@ def _etags_for_part_sizes(path, part_sizes):
     for p in part_sizes:
         if offset % p:
             done[p].append(running[p].digest())
-    return {p: _multipart_etag(done[p]) for p in part_sizes}
+    return {p: _multipart_etag(done[p]) for p in part_sizes}, sha.hexdigest()
 
 
 def etag_matches(etag, size, got, path):
@@ -294,7 +300,9 @@ def etag_matches(etag, size, got, path):
       threshold size this way.
     - `-N`, N over 1: the default part size is tried first from the digests already held, then
       each whole-MiB part size that gives exactly N parts (`part_size_candidates`). Any one that
-      gives the same ETag proves the bytes, since a part size only changes how they were cut."""
+      gives the same ETag proves the bytes, since a part size only changes how they were cut.
+      That second read counts only when its SHA-256 equals `got.sha256`, so a file changed
+      since its digests were taken proves nothing."""
     if not etag:
         return False
     if "-" not in etag:
@@ -312,9 +320,10 @@ def etag_matches(etag, size, got, path):
     if not candidates:
         return False
     try:
-        return etag in _etags_for_part_sizes(path, candidates).values()
+        etags, sha256 = _etags_for_part_sizes(path, candidates)
     except OSError:
         return False
+    return sha256 == got.sha256 and etag in etags.values()
 
 
 # --- listing -----------------------------------------------------------------------
@@ -355,7 +364,9 @@ def listing(bucket, prefix, max_age=LISTING_MAX_AGE_S):
     """{key: Listed(size, etag)} for every object under `prefix` (keys in full), or
     (None, detail) when the bucket did not answer. A failed listing is never held, so the next
     call asks again; a caller must treat "unknown" differently from "empty". With `max_age` 0
-    (or less) the bucket is asked and nothing is held: no listing and no lock per prefix."""
+    (or less) the bucket is asked and nothing is held: no listing and no lock per prefix. A
+    listing already held for the prefix stays as it was, so a later call with the default age
+    can still read the older one."""
     if max_age <= 0:
         return _list_now(bucket, prefix)
     slot = (bucket, prefix)
@@ -491,8 +502,8 @@ def put(bucket, path, key, meta=None):
     The SHA-256 the head returns is only the metadata this call sent, echoed back; the ETag is
     the bucket's own account of the bytes. A single-part object's ETag is its MD5. A multipart
     object's is the MD5 of its parts' MD5s, which depends on the part size the CLI chose:
-    `etag_matches` accepts any whole-MiB part size that gives the same number of parts and the
-    same ETag. An ETag no such part size explains is a refusal, never a pass it cannot prove."""
+    `etag_matches` accepts a whole-MiB part size (the likeliest MAX_PART_SIZE_CANDIDATES are
+    tried) that gives the same number of parts and the same ETag. An ETag no such part size explains is a refusal, never a pass it cannot prove."""
     try:
         local = os.path.getsize(path)
         got_digests = digests(path)
