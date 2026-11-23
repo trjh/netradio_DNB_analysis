@@ -232,6 +232,13 @@ def _multipart_etag(part_md5s):
     return "%s-%d" % (hashlib.md5(b"".join(part_md5s)).hexdigest(), len(part_md5s))
 
 
+def expected_etag(size, got):
+    """The ETag of `size` bytes with Digests `got` uploaded in the CLI's default 8 MiB parts."""
+    if size <= MULTIPART_PART_BYTES:
+        return got.md5
+    return _multipart_etag(got.part_md5s)
+
+
 def part_size_candidates(size, parts):
     """The part sizes, in bytes, that could have built a `parts`-part ETag for a file of `size`
     bytes: whole MiB from MIN_PART_BYTES up to MAX_PART_BYTES that split the file into exactly

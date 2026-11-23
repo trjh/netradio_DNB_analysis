@@ -411,6 +411,17 @@ class TestPut(Base):
         self.assertIsNone(err)
         self.assertEqual(len(opened), 2)          # the upload, then one read for every size
 
+    def test_expected_etag_is_the_default_part_size_etag(self):
+        part = bucketio.MULTIPART_PART_BYTES
+        small = b"abc"
+        got = bucketio.digests(self.file("s", small))
+        self.assertEqual(bucketio.expected_etag(len(small), got), hashlib.md5(small).hexdigest())
+        big = os.urandom(part * 2 + 5)
+        got = bucketio.digests(self.file("b", big))
+        parts = [hashlib.md5(big[i:i + part]).digest() for i in range(0, len(big), part)]
+        self.assertEqual(bucketio.expected_etag(len(big), got),
+                         hashlib.md5(b"".join(parts)).hexdigest() + "-3")
+
     def test_an_unchanged_file_is_hashed_once(self):
         path = self.file("f", b"abc")
         calls = []
