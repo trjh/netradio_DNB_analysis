@@ -607,7 +607,7 @@ def check_output_name(path):
 
 def load_env_vars(path=None):
     """Fold the repo-root `.env` into os.environ so the engine steps see e.g.
-    NETRADIO_SOURCES_DIR (the Makefile sources it; a bare `python3 sort_tsv.py` did not).
+    NETRADIO_SOURCES_FLAC_CACHE_DIR (the Makefile sources it; a bare `python3 sort_tsv.py` did not).
 
     Read through envfile, the repo's one `.env` reader (scripts/lib/env.sh's grammar: quotes
     stripped, never executed). Real environment variables win, never clobbered. A missing file is fine -- unless

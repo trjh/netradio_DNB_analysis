@@ -126,19 +126,20 @@ def main(argv=None):
     ap.add_argument("--all-mystery", action="store_true",
                     help="identify every `Mystery Track*` clip in the sources dir")
     ap.add_argument("--pool", default=None,
-                    help="directory of candidate records (default: NETRADIO_SOURCES_DIR)")
+                    help="directory of candidate records "
+                         "(default: NETRADIO_SOURCES_FLAC_CACHE_DIR)")
     ap.add_argument("--show-all", action="store_true", help="print the ranking even when gated")
     args = ap.parse_args(argv)
 
-    sources = os.environ.get("NETRADIO_SOURCES_DIR")
+    sources = os.environ.get("NETRADIO_SOURCES_FLAC_CACHE_DIR")
     pool_dir = args.pool or sources
     if not pool_dir or not os.path.isdir(pool_dir):
-        sys.exit("no pool: set NETRADIO_SOURCES_DIR in .env, or pass --pool")
+        sys.exit("no pool: set NETRADIO_SOURCES_FLAC_CACHE_DIR in .env, or pass --pool")
 
     queries = list(args.query or [])
     if args.all_mystery:
         if not sources:
-            sys.exit("--all-mystery needs NETRADIO_SOURCES_DIR")
+            sys.exit("--all-mystery needs NETRADIO_SOURCES_FLAC_CACHE_DIR")
         # From track-metadata.json, not a filename glob -- sources/ still holds clips of
         # mysteries that have since been solved, and re-querying those is worse than useless.
         from streamalign import mystery as _mystery

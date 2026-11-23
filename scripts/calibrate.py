@@ -201,9 +201,9 @@ def main():
     ap.add_argument("--limit", type=int, default=None)
     args = ap.parse_args()
 
-    src = os.environ.get("NETRADIO_SOURCES_DIR")
+    src = os.environ.get("NETRADIO_SOURCES_FLAC_CACHE_DIR")
     if not src or not os.path.isdir(src):
-        sys.exit("NETRADIO_SOURCES_DIR is unset (see .env.example)")
+        sys.exit("NETRADIO_SOURCES_FLAC_CACHE_DIR is unset (see .env.example)")
     out = sys.stdout if args.out == "-" else open(args.out, "w", buffering=1)
 
     meta = json.load(open(os.path.join(_gt.REPO_ROOT, "track-metadata.json")))

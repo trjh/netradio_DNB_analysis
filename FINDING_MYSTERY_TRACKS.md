@@ -60,7 +60,7 @@ in `sources/`, which is exactly the trap §1b describes: **the filename is not t
 **The video is built locally** — no website:
 
 ```bash
-bash scripts/mkmysteryvideo.sh "$NETRADIO_SOURCES_DIR/Mystery Track 6.wav" 6
+bash scripts/mkmysteryvideo.sh "$NETRADIO_SOURCES_FLAC_CACHE_DIR/Mystery Track 6.wav" 6
 ```
 
 It reproduces the format of the Mystery Track 3 upload from ffmpeg primitives: a generated
@@ -123,7 +123,7 @@ Say you've just cut Mystery Track 8 out of its capture. Two things make it searc
 **neither is optional**:
 
 **1. Save the clip with the exact name `Mystery Track <N>.wav`** into the originals dir
-(`$NETRADIO_SOURCES_DIR`). The number in the filename is how the tools find it.
+(`$NETRADIO_SOURCES_FLAC_CACHE_DIR`). The number in the filename is how the tools find it.
 
 **2. Make sure `track-metadata.json` still calls it a mystery** — its `title` must contain
 `Mystery Track <N>`. **This is the authority, not the filename.** A track whose title has been
@@ -150,7 +150,7 @@ eval "$(python3 scripts/envfile.py --export .env)"
 python3 scripts/identify_by_api.py --query "Mystery Track 8.wav" --windows 8
 
 # 4. build the video to post
-bash scripts/mkmysteryvideo.sh "$NETRADIO_SOURCES_DIR/Mystery Track 8.wav" 8
+bash scripts/mkmysteryvideo.sh "$NETRADIO_SOURCES_FLAC_CACHE_DIR/Mystery Track 8.wav" 8
 ```
 
 **Also worth a hands-on spot-check:** play the clean clip into **Shazam**, **SoundHound**, and

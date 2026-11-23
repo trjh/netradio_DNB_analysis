@@ -126,7 +126,7 @@ def _venv_python():
 
 
 def sources_dir():
-    override = _env("NETRADIO_SOURCES_DIR")
+    override = _env("NETRADIO_SOURCES_FLAC_CACHE_DIR")
     if override:
         return override
     repo = repo_root()

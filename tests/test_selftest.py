@@ -94,7 +94,7 @@ class OfflineCanary(unittest.TestCase):
         self.assertIn("true-match range", r["why"])
 
     def test_no_calibration_data_is_skipped_not_failed(self):
-        """An unset NETRADIO_SOURCES_DIR must not look like a broken matcher."""
+        """An unset NETRADIO_SOURCES_FLAC_CACHE_DIR must not look like a broken matcher."""
         with mock.patch.object(selftest, "cases", return_value=[]):
             r = selftest.offline()
         self.assertIsNone(r["ok"])                     # None = skipped, not False = broken
@@ -138,7 +138,7 @@ class LiveCanary(unittest.TestCase):
                          "the name comes from the calibration case when canary.json is absent")
 
     def test_no_calibration_cases_is_skipped_not_failed(self):
-        """With no calibration cases at all (NETRADIO_SOURCES_DIR unset), the re-score is
+        """With no calibration cases at all (NETRADIO_SOURCES_FLAC_CACHE_DIR unset), the re-score is
         "not checked" -- not a failure. The same state a missing canary reads, and one a
         reader can tell apart from a PASS or a FAIL."""
         with mock.patch.object(selftest, "cases", return_value=[]):

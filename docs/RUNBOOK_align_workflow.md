@@ -28,7 +28,7 @@ labels; Audacity stays the place where a label becomes final. §8 covers working
 - The server finds this checkout from its own location; no setting names it.
 - This repo's `.env`: `NETRADIO_LABELS_DIR` (default `labels/`) and `NETRADIO_MP3_DIR` (the
   capture MP3s the server plays; unset, the inspector and the review page list no captures);
-  `NETRADIO_SOURCES_DIR` (the originals; the converter defaults to `sources_local/`, but
+  `NETRADIO_SOURCES_FLAC_CACHE_DIR` (the originals; the converter defaults to `sources_local/`, but
   `make align-check` fails when it is unset); for the align
   server, `NETRADIO_ALIGN_HOST` / `NETRADIO_ALIGN_PORT`, and `NETRADIO_AUTH_USER` /
   `NETRADIO_AUTH_PASS` for Basic Auth.

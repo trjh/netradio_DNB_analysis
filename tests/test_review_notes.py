@@ -50,7 +50,7 @@ class _Env(unittest.TestCase):
         root.start()
         self.addCleanup(root.stop)
         patcher = mock.patch.dict(os.environ, {
-            "NETRADIO_SOURCES_DIR": "",
+            "NETRADIO_SOURCES_FLAC_CACHE_DIR": "",
             "NETRADIO_MP3_DIR": self.mp3,
             "NETRADIO_READ_ONLY": "",
             "NETRADIO_AUTH_USER": "",
@@ -540,7 +540,7 @@ class TestRoute(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         repo = _fake_checkout(tmp.name)
         mp3 = _fake_mp3_dir(tmp.name)
-        with mock.patch.dict(os.environ, {"NETRADIO_SOURCES_DIR": "",
+        with mock.patch.dict(os.environ, {"NETRADIO_SOURCES_FLAC_CACHE_DIR": "",
                                           "NETRADIO_MP3_DIR": mp3,
                                           "NETRADIO_READ_ONLY": "",
                                           "NETRADIO_AUTH_USER": "",
