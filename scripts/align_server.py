@@ -13,8 +13,8 @@ per-point inspector, and `/align/review`, the DP-22 whole-song L/R review POC �
 overview), `sync-status` (the review-note committer's state and errors) and two whole-file
 review-audio GETs
 (DP-22 §6.8: `/api/align/audio/stream/<stem>` + `/api/align/audio/orig/<NNN>`,
-Range-supported via `rangeserve.py`, resolved DSP-free in `review_audio.py`;
-wv-only originals refused pending the DP-23 sync).
+Range-supported via `rangeserve.py`, resolved DSP-free in `review_audio.py` by the one
+resolver, `sources_resolve.py`, which pulls a missing flac from the audio bucket).
 Every piece of DSP happens in this checkout's venv
 via `align_inspect.py` (identifier-based requests, hard caps, fixed-argv subprocess
 with a keep-warm worker in front of it, single-flight lock — see that module's
@@ -25,8 +25,8 @@ Exposure model: binds loopback by default (`NETRADIO_ALIGN_HOST` to change), so 
 only way in from another machine is a proxy you put in front of it, or a bind you choose.
 Basic Auth is required on every route when `NETRADIO_AUTH_USER`/`NETRADIO_AUTH_PASS` are set.
 
-At start, after `load_env`, the server puts the venv's decoded-audio cache
-on the one cache policy and runs the eviction once
+At start, after `load_env`, the server puts the venv's decoded-audio cache and the originals
+directory (`sources_flac`) on the one cache policy and runs the eviction once
 (`start_cache_policy()`) — so the cache's age limit and cap are applied even when nothing
 else on the machine runs the policy — skipped under `NETRADIO_READ_ONLY`, so a copy started
 from a worktree never evicts from a live cache.
@@ -52,6 +52,7 @@ import rangeserve
 import review_audio
 import review_notes
 import review_sync
+import sources_resolve
 import summary_compile
 
 # This module sits in scripts/; the checkout root is one level up, and the pages are under its
@@ -177,8 +178,8 @@ class AlignHandler(BaseHTTPRequestHandler):
 
     def _serve_review_audio(self, path):
         """The DP-22 §6.8 whole-file audio GETs — identifier-only, Range-supported,
-        DSP-free (pure resolution in `review_audio.py`; wv-only pairs are REFUSED
-        with a 503 naming the DP-23 sync — no transcode fallback exists). Errors
+        DSP-free (pure resolution in `review_audio.py`, by the one resolver: a missing flac
+        is pulled from the audio bucket, and no transcode fallback exists). Errors
         come back as JSON; a 200 streams the resolved file through
         `rangeserve.serve` and names it in X-Review-Source."""
         if path.startswith(self.AUDIO_STREAM):
@@ -204,8 +205,10 @@ class AlignHandler(BaseHTTPRequestHandler):
             headers["X-Review-Source-Rev"] = "%d-%d" % (st.st_mtime_ns, st.st_size)
         except OSError:
             pass
-        return rangeserve.serve(self, result["path"], result["ctype"],
-                                extra_headers=headers)
+        # pinned while it is served: no eviction in this process removes the file mid-response
+        with sources_resolve.pinned(result["path"]):
+            return rangeserve.serve(self, result["path"], result["ctype"],
+                                    extra_headers=headers)
 
     POST_OPS = {"/api/align/slice": "slice",
                 "/api/align/refine": "refine",
@@ -253,7 +256,8 @@ def start_cache_policy():
     """The align server's share of the one cache policy.
 
     Register the venv's decoded-audio cache (align_inspect.register_cache — the same
-    variable family the child reads, so cap, age and directory agree) and, on a machine
+    variable family the child reads, so cap, age and directory agree), the originals
+    directory as `sources_flac` (sources_resolve.register_cache) and, on a machine
     where no other process holds it, the MP3 directory as `stream_mp3`
     (align_ids.register_mp3_cache), then run the
     eviction once: the start run applies the cache's age limit and cap whatever else is
@@ -266,6 +270,7 @@ def start_cache_policy():
     if _read_only():
         return None
     align_inspect.register_cache()
+    sources_resolve.register_cache()
     # the MP3 directory, only where no other process on this machine already holds it
     align_ids.register_mp3_cache(_mp3_dir())
     try:

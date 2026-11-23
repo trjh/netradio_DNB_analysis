@@ -23,6 +23,7 @@ REPO = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 
 import align_inspect  # noqa: E402
+import sources_resolve  # noqa: E402
 from streamalign import mystery  # noqa: E402
 
 OLD = "NETRADIO_SOURCES" + "_DIR"
@@ -80,6 +81,14 @@ class OnlyTheOldNameFindsNoOriginals(unittest.TestCase):
         self.metadata = os.path.join(self.tmp, "track-metadata.json")
         with open(self.metadata, "w") as fh:
             json.dump({"tracks": {"68": {"title": "Mystery Track 4"}}}, fh)
+        self.setUp_root()
+
+    def setUp_root(self):
+        # with the new name unset the readers fall back to the checkout's sources_local/;
+        # point that at an empty directory, so a checkout that has one does not answer here
+        patcher = mock.patch.object(sources_resolve, "ROOT_DIR", self.tmp)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _env(self, **names):
         env = {k: v for k, v in os.environ.items() if k not in (OLD, NEW)}

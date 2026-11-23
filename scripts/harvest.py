@@ -2636,16 +2636,32 @@ def queries(state=None):
     every cost down until the matcher cannot tell anything apart -- the ranking goes degenerate, and
     a degenerate match looks exactly like a real one. Better to search for nothing than to search
     for everything. The mystery comes back into the query set by itself once a longer clip is cut.
+
+    The clip is the one the originals resolver picks (`streamalign.mystery.clips`), and the state
+    names it: `state["query_clips"]` maps each searched mystery to its clip's file name, beside
+    `state["query_keys"]`. A mystery held as two clips at one rung takes the one recorded in
+    `source-versions.json`; with none recorded it is refused, never guessed: it goes into
+    `state["skipped_queries"]` with both names in `clips` and "two clips, choose one", saying
+    exactly what to add to that file.
     """
     import librosa
-    out, skipped = [], []
-    for e in _mystery.searchable():
+    out, skipped, clips = [], [], {}
+    unsolved = _mystery.current()
+    for e in unsolved:
+        if e.get("clips_refused"):
+            names = e["clips_refused"]
+            skipped.append({"mystery": e["number"], "clips": names,
+                            "why": e.get("clips_refused_why")
+                            or "two clips, choose one: %s" % ", ".join(names)})
+    for e in [e for e in unsolved if e["clip"]]:
+        clips[e["number"]] = os.path.basename(e["clip"])
         secs = _audio.duration(e["clip"]) if hasattr(_audio, "duration") else None
         if secs is None:
             y_full = _audio.load_audio(e["clip"])
             secs = len(y_full) / float(_audio.SR)
         if secs < MIN_QUERY_S:
-            skipped.append({"mystery": e["number"], "clip_s": round(secs),
+            skipped.append({"mystery": e["number"], "clip": clips.pop(e["number"]),
+                            "clip_s": round(secs),
                             "why": "the clip is %ds, below the %ds floor -- a query that short "
                                    "drives every cost down and the matcher stops being able to "
                                    "tell records apart (MT7's 23s clip produced five 'confident' "
@@ -2669,6 +2685,9 @@ def queries(state=None):
         # A reader joins this map to state["scored"] for a live "compared: N of pool"
         # count, instead of guessing among stale fingerprints.
         state["query_keys"] = {str(n): qkey for n, _, qkey in out}
+        # The file each searched mystery's clip IS, chosen by the one resolver: a reader
+        # shows this name rather than guessing among the clips on disk.
+        state["query_clips"] = {str(n): clips[n] for n, _, _ in out}
     for s in skipped:
         print("# NOT searching MT%d -- %s" % (s["mystery"], s["why"]))
     return out

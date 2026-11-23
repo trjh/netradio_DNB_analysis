@@ -68,6 +68,7 @@ import threading
 import align_ids
 import cache_budget
 import envfile
+import sources_resolve
 
 MAX_WIN_S = 30.0
 MAX_RADIUS_S = 2.0
@@ -83,8 +84,6 @@ WORKER_PING_TIMEOUT_S = 30   # first ping pays the numpy import
 STREAMALIGN_CACHE_MAX_AGE_DAYS = 14   # an align session is days, not months (decision made 2026-09-16)
 
 _STEM_RE = align_ids.STEM_RE          # the capture stem pattern lives with the identifiers
-_ORIG_FILE_RE = re.compile(r"^(\d{3})-(.+)\.(mp3|flac|m4a|opus|wav|wv|aif|aiff|mp4|ogg)$",
-                           re.IGNORECASE)
 _HINTS_NAME_RE = re.compile(r"^([A-Za-z0-9._-]+)\.orig(\d{3})\.match\.hints\.tsv$")
 _SUMMARY_RE = re.compile(r"rate ([0-9.]+) .*polarity (INVERTED|not inverted)")
 # the optional ` verified` token is DP-01's machine-measured mark -- Pass-1
@@ -126,6 +125,9 @@ def _venv_python():
 
 
 def sources_dir():
+    """The originals directory, by the resolver's rule (`sources_resolve.sources_dir`) over
+    this module's checkout: NETRADIO_SOURCES_FLAC_CACHE_DIR, else `sources_local/`, else None
+    when there is no checkout."""
     override = _env("NETRADIO_SOURCES_FLAC_CACHE_DIR")
     if override:
         return override
@@ -188,16 +190,13 @@ def _child_env(mp3_dir):
 
 
 def list_originals():
-    """[{num, name}] from the sources dir listing (the only original namespace)."""
+    """[{num, name}] for every original the tool can name, one row per track number: the
+    originals directory, plus what the audio bucket holds that a pull would land there
+    (`sources_resolve.list_originals`, the one resolver)."""
     src = sources_dir()
-    if not src or not os.path.isdir(src):
+    if not src:
         return []
-    out = []
-    for fn in sorted(os.listdir(src)):
-        m = _ORIG_FILE_RE.match(fn)
-        if m and _contained(os.path.join(src, fn), src):
-            out.append({"num": int(m.group(1)), "name": m.group(2)})
-    return out
+    return sources_resolve.list_originals(src)
 
 
 def parse_match_hints(labels_dir):

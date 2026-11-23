@@ -100,7 +100,7 @@ class TestHandle(unittest.TestCase):
 
         patches = [
             mock.patch.object(iw._audio, "find_audio_file", return_value="/a.mp3"),
-            mock.patch("streamalign.track_mix.find_original", return_value="/o.wv"),
+            mock.patch("sources_resolve.resolve", return_value="/o.wv"),
             mock.patch.object(iw._isl, "build_slices", side_effect=_rec("slice", {"sr": 16000})),
             mock.patch.object(iw._isl, "refine_seat", side_effect=_rec("refine", {"new_orig_t": 1.0})),
             mock.patch.object(iw._isl, "build_context", side_effect=_rec("context", {"n_cols": 10})),

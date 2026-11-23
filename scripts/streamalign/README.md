@@ -87,7 +87,7 @@ verification.
 . .venv/bin/activate && python -m streamalign align d000-018 d001-026b
 . .venv/bin/activate && python -m streamalign --labels <dir> validate
 . .venv/bin/activate && python -m streamalign track-mix \
-    --meta track-metadata.json --sources sources_local        # the first pass (needs librosa)
+    --meta track-metadata.json                                # the first pass (needs librosa)
 . .venv/bin/activate && python -m streamalign match-hints d376-395 72 --dry-run
 ```
 
