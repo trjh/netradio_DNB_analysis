@@ -28,12 +28,15 @@ labels; Audacity stays the place where a label becomes final. §8 covers working
 - The server finds this checkout from its own location; no setting names it.
 - This repo's `.env`: `NETRADIO_LABELS_DIR` (default `labels/`) and `NETRADIO_MP3_DIR` (the
   capture MP3s the server plays; unset, the inspector and the review page list no captures);
-  `NETRADIO_SOURCES_FLAC_CACHE_DIR` (the originals; the converter defaults to `sources_local/`, but
+  `NETRADIO_SOURCES_FLAC_CACHE_DIR` (the originals; every reader defaults to `sources_local/`, but
   `make align-check` fails when it is unset); for the align
   server, `NETRADIO_ALIGN_HOST` / `NETRADIO_ALIGN_PORT`, and `NETRADIO_AUTH_USER` /
   `NETRADIO_AUTH_PASS` for Basic Auth.
-- The original on disk as `sources_local/NNN-Artist - Title.<ext>` — no original, no
-  alignment (as of 2026-10-20, some originals are still missing).
+- The original on disk as `sources_local/NNN-Artist - Title.<ext>`, or in the audio bucket's
+  `sources/`, from which a reader pulls it — no original, no alignment (as of 2026-10-20, some
+  originals are still missing). Two versions of one track at one rung (two `.flac`, or two lossy
+  files, under one number) take the version recorded in `source-versions.json` at the top of this repo, one entry per track: `{"017": "<file name>"}`. With none recorded,
+  every reader that needs one original stops with an error that names both and says what to add.
 - For the Mac listen-through (§4): `make review-app` builds the app and runs its selftest
   (`swiftc` from the Command Line Tools; no Xcode).
 

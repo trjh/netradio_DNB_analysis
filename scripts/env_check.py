@@ -60,6 +60,8 @@ CACHE_SETTINGS = {
                                "only copy)"},
     "candidates": {"GB": "0.25 GB / 250 MB, the registration's cap",
                    "MAX_AGE_DAYS": "30 days, the registration's age limit"},
+    "sources_flac": {"DIR": "the originals directory: sources_local/ in this checkout where "
+                            "it names none"},
     "stream_tracks": {"GB": "2 GB, the registration's cap",
                       "MAX_AGE_DAYS": "14 days, the registration's age limit"},
 }

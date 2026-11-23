@@ -386,7 +386,7 @@ class TestSwiftMathPins(unittest.TestCase):
 
     def test_wv_refusal_is_final_and_named_never_retried(self):
         # #294 removed the transcode tier: the route's JSON refusal (naming the
-        # DP-23 sync) is surfaced verbatim and marked final — no retry loop
+        # fix) is surfaced verbatim and marked final — no retry loop
         # toward a tier that no longer exists
         self.assertIn('(error as NSError).userInfo["alignFinal"] == nil', self.src)
         # BOTH stages mark refusals final — the probe hits the 503 first (the
@@ -396,7 +396,10 @@ class TestSwiftMathPins(unittest.TestCase):
         self.assertIn('info["alignFinal"] = true', probe)
         fetch = self.src.split("func fetchAudio(")[1].split("\n    private func ")[0]
         self.assertIn('info["alignFinal"] = true', fetch)
-        self.assertIn("run the DP-23 sync (scripts/sync_sources.sh)", self.src)
+        self.assertIn("make a FLAC copy beside the original", self.src)
+        # the fix is named in this repo's terms: no other repo's sync script
+        self.assertNotIn("sync_sources", self.src)
+        self.assertNotIn("DP-23 sync", self.src)
         self.assertNotIn("transcode?", self.src)
 
     def test_default_selection_dedups_duplicate_instants(self):

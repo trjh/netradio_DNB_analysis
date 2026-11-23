@@ -2,10 +2,12 @@
 
 Hermetic: real HTTP against an in-process align server on an ephemeral port,
 temp dirs for the MP3/sources roots. No ffmpeg anywhere — there is nothing to
-transcode: wv-only originals are REFUSED (§6.8 step 3, decision made 2026-08-11).
-Covers: identifier validation (traversal → 404), Range semantics (shared
-`rangeserve.serve`, the /audio contract), the §6.8 resolution tiers including
-the wv-only refusal, the size cap, read-only + auth gates.
+transcode (§6.8 step 3, decision made 2026-08-11): an original's playable form is
+the resolver's pick, else its FLAC copy, here or pulled from the audio bucket
+(`tests/bucket_fake.py`, no network). Covers: identifier validation (traversal → 404),
+Range semantics (shared `rangeserve.serve`, the /audio contract), the resolution
+rule including the refusal of two files at one rung, the pull, the size cap,
+read-only + auth gates.
 """
 
 import test_suite_env  # noqa: F401  (no test reaches a real audio bucket, however it is run)
@@ -25,7 +27,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 import align_inspect
 import align_server
+import cache_budget
 import review_audio
+import sources_resolve
+from bucket_fake import AUDIO_BUCKET, FakeAws, isolate_caches
 
 MP3_BYTES = b"ID3mp3-bytes-of-the-capture-stream-file!"
 
@@ -222,26 +227,25 @@ class TestOrigResolution(RouteCase):
         self.assertEqual(resp.status, 200)
         self.assertEqual(resp.getheader("Content-Type"), "audio/mp4")
 
-    def test_wv_only_is_refused_503_naming_the_sync(self):
-        # §6.8 tier (c), decision made 2026-08-11: no transcode fallback exists —
-        # a wv-only original is refused with the remedy spelled out
+    def test_wv_only_with_no_bucket_is_refused_503_naming_the_fix(self):
+        # decision made 2026-08-11: no transcode fallback exists. With no audio bucket
+        # set nothing is pulled, so a wv-only original is refused with the remedy
         self.write(self.src_dir, "040-only.wv", b"wv-only-master")
         resp, data = self.req("/api/align/audio/orig/40")
         self.assertEqual(resp.status, 503)
-        self.assertIn(b"wv-only", data)
-        self.assertIn(b"DP-23", data)
-        self.assertIn(b"FLAC sibling", data)
+        self.assertIn(b"make a FLAC copy beside the original", data)
         self.assertIn(b"040-only.wv", data)
+        self.assertNotIn(b"DP-23", data)
 
     def test_wav_only_is_refused_the_same_way(self):
-        # wav/aif are lossless masters too — same tier, same refusal
+        # the uncompressed file is not served as it is either: its FLAC copy is
         self.write(self.src_dir, "041-only.wav", b"wav-only-master")
         resp, data = self.req("/api/align/audio/orig/41")
         self.assertEqual(resp.status, 503)
-        self.assertIn(b"wv-only", data)
+        self.assertIn(b"041-only.wav", data)
 
     def test_refusal_lifts_the_moment_the_flac_sibling_appears(self):
-        # the remedy actually works: after the DP-23 sync writes the sibling,
+        # the remedy actually works: once a FLAC copy sits beside the master,
         # the same request serves it (tier a) with no restart or cache involved
         self.write(self.src_dir, "042-late.wv", b"wv-master")
         self.assertEqual(self.req("/api/align/audio/orig/42")[0].status, 503)
@@ -258,13 +262,25 @@ class TestOrigResolution(RouteCase):
         self.assertEqual(self.req("/api/align/audio/orig/43")[0].status, 200)
         self.assertEqual(self.req("/api/align/audio/orig/44")[0].status, 200)
 
-    def test_ambiguous_number_picks_first_sorted_and_names_it(self):
+    def test_two_files_of_one_tier_under_one_number_are_refused(self):
+        # the old pick took the first sorted (050-aaa.mp3); the resolver never picks
+        # between two files at one rung (2026-10-28)
         self.write(self.src_dir, "050-bbb.mp3", b"second-sorted")
         self.write(self.src_dir, "050-aaa.mp3", b"first-sorted")
         resp, data = self.req("/api/align/audio/orig/50")
+        self.assertEqual(resp.status, 409)
+        self.assertIn(b"050-aaa.mp3", data)
+        self.assertIn(b"050-bbb.mp3", data)
+        self.assertIn(b'Choose one: add \\"050\\": \\"<file name>\\" to source-versions.json',
+                      data)
+
+    def test_the_better_rung_wins_over_a_lossy_file(self):
+        # a flac and an mp3 under one number are two rungs: the flac is served
+        self.write(self.src_dir, "055-tune.mp3", b"mp3-copy")
+        self.write(self.src_dir, "055-tune.flac", b"flac-copy")
+        resp, data = self.req("/api/align/audio/orig/55")
         self.assertEqual(resp.status, 200)
-        self.assertEqual(data, b"first-sorted")
-        self.assertEqual(resp.getheader("X-Review-Source"), "050-aaa.mp3")
+        self.assertEqual(data, b"flac-copy")
 
     def test_oversize_original_refused_413(self):
         self.write(self.src_dir, "051-big.flac", b"x" * 64)
@@ -305,6 +321,101 @@ class TestOrigResolution(RouteCase):
                                           os.path.join(self.tmp, "nope")}):
             resp, _ = self.req("/api/align/audio/orig/72")
         self.assertEqual(resp.status, 404)
+
+
+class TestOrigPull(RouteCase):
+    """With an audio bucket set, a missing FLAC copy is pulled, whole and checked, then served."""
+
+    FLAC = b"fLaC" + b"\x02" * 200
+
+    def setUp(self):
+        super().setUp()
+        self.fake = isolate_caches(self, os.path.join(self.tmp, "root"), fake=FakeAws())
+        os.environ["NETRADIO_SOURCES_FLAC_CACHE_DIR"] = self.src_dir
+        self.assertIsNotNone(sources_resolve.register_cache())
+
+    def add(self, name, body=None, sha256=True):
+        self.fake.add(AUDIO_BUCKET, "sources/" + name, body or self.FLAC, sha256=sha256)
+
+    def test_a_wv_only_original_is_pulled_and_served_200(self):
+        self.write(self.src_dir, "060-tune.wv", b"wavpack-master")
+        self.add("060-tune.wv", b"wavpack-master")
+        self.add("060-tune.flac")
+        resp, data = self.req("/api/align/audio/orig/60")
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(data, self.FLAC)
+        self.assertEqual(resp.getheader("X-Review-Source"), "060-tune.flac")
+        with open(os.path.join(self.src_dir, "060-tune.flac"), "rb") as fh:
+            self.assertEqual(fh.read(), self.FLAC)
+        self.assertEqual(self.fake.ops("cp-down"), ["cp-down"])
+
+    def test_an_original_this_disk_lacks_is_pulled_and_served(self):
+        self.add("061-gone.flac")
+        resp, data = self.req("/api/align/audio/orig/61")
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(data, self.FLAC)
+
+    def test_a_master_only_in_the_bucket_is_pulled_as_its_flac(self):
+        self.add("062-x.wv", b"wavpack-master")
+        self.add("062-x.flac")
+        resp, data = self.req("/api/align/audio/orig/62")
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(data, self.FLAC)
+        self.assertFalse(os.path.exists(os.path.join(self.src_dir, "062-x.wv")))
+
+    def test_two_concurrent_requests_share_one_pull(self):
+        self.write(self.src_dir, "063-pair.wv", b"wavpack-master")
+        self.add("063-pair.flac")
+        results = []
+
+        def one():
+            results.append(self.req("/api/align/audio/orig/63"))
+        threads = [threading.Thread(target=one) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(10)
+        self.assertEqual([r[0].status for r in results], [200, 200])
+        self.assertEqual([r[1] for r in results], [self.FLAC, self.FLAC])
+        self.assertEqual(self.fake.ops("cp-down"), ["cp-down"])
+
+    def test_a_machine_with_the_flac_never_pulls(self):
+        self.write(self.src_dir, "064-held.wv", b"wavpack-master")
+        self.write(self.src_dir, "064-held.flac", b"local-flac")
+        self.add("064-held.flac")
+        resp, data = self.req("/api/align/audio/orig/64")
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(data, b"local-flac")
+        self.assertEqual(self.fake.calls, [])
+
+    def test_a_master_with_no_flac_copy_in_the_bucket_says_so(self):
+        self.add("069-master.wv", b"wavpack-master")
+        resp, data = self.req("/api/align/audio/orig/69")
+        self.assertEqual(resp.status, 503)
+        self.assertIn(b"no FLAC copy", data)
+        self.assertIn(b"069-master.wv", data)
+
+    def test_an_object_with_no_sha256_is_refused_never_served(self):
+        self.write(self.src_dir, "065-bad.wv", b"wavpack-master")
+        self.add("065-bad.flac", sha256=False)
+        resp, data = self.req("/api/align/audio/orig/65")
+        self.assertEqual(resp.status, 503)
+        self.assertIn(b"no sha256 metadata", data)
+        self.assertFalse(os.path.exists(os.path.join(self.src_dir, "065-bad.flac")))
+
+    def test_the_pull_is_admitted_by_the_cache_policy(self):
+        self.add("066-new.flac")
+        self.assertEqual(self.req("/api/align/audio/orig/66")[0].status, 200)
+        with open(cache_budget.events_path(), encoding="utf-8") as fh:
+            admits = [line for line in fh if '"admit"' in line and "066-new.flac" in line]
+        self.assertEqual(len(admits), 1)
+
+    def test_the_originals_list_names_what_the_bucket_holds(self):
+        self.write(self.src_dir, "067-here.flac", b"x")
+        self.add("068-there.flac")
+        self.add("068-there.wv", b"wavpack-master")
+        self.assertEqual(align_inspect.list_originals(),
+                         [{"num": 67, "name": "here"}, {"num": 68, "name": "there"}])
 
 
 class TestGateOnAudioRoutes(RouteCase):

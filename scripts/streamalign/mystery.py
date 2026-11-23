@@ -16,6 +16,9 @@ Filenames lie.)
 import json
 import os
 import re
+import sys
+
+import sources_resolve
 
 from . import groundtruth as _gt
 
@@ -32,31 +35,48 @@ def _metadata(path=None):
     return data.get("tracks", data)
 
 
+def clips(sources_dir=None):
+    """({mystery number: path}, {mystery number: [names]}) for the clips in the originals
+    directory, by the one resolver (`sources_resolve`, 2026-10-28): the uncompressed file,
+    else the lossless master, else the flac, else a lossy one. A mystery whose winning rung
+    holds two clips takes the one recorded in `source-versions.json` (2026-11-18); with none
+    recorded it is refused, never guessed: it lands in the second map as {"names", "why"}, the
+    why saying exactly how to choose, and has no clip until a choice is recorded. Local files
+    only: a clip is never pulled.
+
+    `.wv` earned its place the hard way: Mystery Track 4's clip was wavpack-compacted and
+    became INVISIBLE to the whole search -- the harvester ran for days looking for everything
+    except the thing it was missing a clip for. One rule for every reader of an original is
+    what keeps that from recurring."""
+    src = sources_dir or sources_resolve.sources_dir()
+    found, refused = {}, {}
+    for key, names in sources_resolve.group(sources_resolve.local_names(src)).items():
+        if key[0] != "mystery":
+            continue
+        try:
+            found[key[1]] = os.path.join(src, sources_resolve.choose(
+                names, "Mystery Track %d" % key[1], key))
+        except sources_resolve.Ambiguous as exc:
+            refused[key[1]] = {"names": exc.names,
+                               "why": "two clips, choose one: %s. %s, and the mystery "
+                                      "re-enters the search by itself"
+                                      % (", ".join(exc.names), sources_resolve.how_to_choose(key))}
+        except sources_resolve.Unresolved as exc:
+            refused[key[1]] = {"names": exc.names, "why": str(exc)}
+    return found, refused
+
+
 def current(sources_dir=None, metadata_path=None):
-    """[{track, number, title, clip}] for every UNSOLVED mystery, clip only where we have one.
+    """[{track, number, title, clip, clips_refused}] for every UNSOLVED mystery, clip only
+    where we have one.
 
     `track` is the master track number (e.g. 68), `number` the mystery's own number (4).
-    `clip` is the extracted audio if it exists in `sources_dir`, else None -- a mystery with
-    no clip is still a mystery, it just cannot be searched or published yet.
+    `clip` is the extracted audio if the originals directory holds one, else None -- a mystery
+    with no clip is still a mystery, it just cannot be searched or published yet.
+    `clips_refused` names the files when the resolver refused to pick between them (`clips`),
+    and `clips_refused_why` says how to choose; both are absent otherwise.
     """
-    sources_dir = sources_dir or os.environ.get("NETRADIO_SOURCES_FLAC_CACHE_DIR") or ""
-    clips = {}
-    if os.path.isdir(sources_dir):
-        # Lossless beats lossy, and .wav beats .wv only by convention (both are lossless;
-        # ffmpeg decodes WavPack natively, so decode was never the problem). `.wv` earned its
-        # place here the hard way: Mystery Track 4's clip was wavpack-compacted and became
-        # INVISIBLE to the whole search -- the harvester ran for days looking for everything
-        # except the thing it was missing a clip for.
-        rank = {".wav": 0, ".wv": 1, ".flac": 2, ".m4a": 3, ".mp3": 4}
-        best = {}
-        for name in os.listdir(sources_dir):
-            stem, ext = os.path.splitext(name)
-            m = _MYSTERY_RE.match(stem)
-            if m and ext.lower() in rank:
-                key = int(m.group(1))
-                if key not in best or rank[ext.lower()] < best[key]:
-                    best[key] = rank[ext.lower()]
-                    clips[key] = os.path.join(sources_dir, name)
+    found, refused = clips(sources_dir)
 
     out = []
     for num, entry in _metadata(metadata_path).items():
@@ -66,13 +86,28 @@ def current(sources_dir=None, metadata_path=None):
         if not m:
             continue                      # title no longer says "Mystery Track" -> solved
         number = int(m.group(1))
-        out.append({"track": int(num), "number": number,
-                    "title": entry.get("title"), "clip": clips.get(number),
-                    "master_begin_seconds": entry.get("master_begin_seconds"),
-                    "master_end_seconds": entry.get("master_end_seconds")})
+        row = {"track": int(num), "number": number,
+               "title": entry.get("title"), "clip": found.get(number),
+               "master_begin_seconds": entry.get("master_begin_seconds"),
+               "master_end_seconds": entry.get("master_end_seconds")}
+        if number in refused:
+            row["clips_refused"] = refused[number]["names"]
+            row["clips_refused_why"] = refused[number]["why"]
+        out.append(row)
     return sorted(out, key=lambda e: e["number"])
 
 
 def searchable(sources_dir=None, metadata_path=None):
-    """The unsolved mysteries we actually have audio for -- what a matcher should query."""
-    return [e for e in current(sources_dir, metadata_path) if e["clip"]]
+    """The unsolved mysteries we actually have audio for -- what a matcher should query.
+
+    A mystery whose clip the resolver refused is left out, never in silence: a line on stderr
+    names the files and how to choose, so every caller says why it is not searched."""
+    out = []
+    for e in current(sources_dir, metadata_path):
+        if e.get("clips_refused"):
+            print("Mystery Track %d not searched: %s"
+                  % (e["number"], e.get("clips_refused_why") or ", ".join(e["clips_refused"])),
+                  file=sys.stderr)
+        if e["clip"]:
+            out.append(e)
+    return out

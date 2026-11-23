@@ -76,6 +76,18 @@ class WvClipsAreSeen(unittest.TestCase):
         self.assertEqual(self._clip_for("Mystery Track 4.wv", "Mystery Track 4.wav"),
                          "Mystery Track 4.wav")
 
+    def test_a_held_flac_loses_to_its_master(self):
+        # the two mysteries held in two formats today: the master is searched, and the
+        # query key is the master's, as before
+        self.assertEqual(self._clip_for("Mystery Track 4.flac", "Mystery Track 4.wv"),
+                         "Mystery Track 4.wv")
+
+    def test_two_clips_at_one_rung_are_refused_never_picked(self):
+        self.assertIsNone(self._clip_for("Mystery Track 4.wav", "Mystery Track 4 v2.wav"))
+        out = mystery.current(sources_dir=self.tmp, metadata_path=self.meta)
+        self.assertEqual(out[0]["clips_refused"],
+                         ["Mystery Track 4 v2.wav", "Mystery Track 4.wav"])
+
 
 @unittest.skipUnless(harvest, "harvest deps unavailable")
 class PoolStamp(unittest.TestCase):
@@ -169,7 +181,7 @@ class QueryKeysArePublished(unittest.TestCase):
                                            duration=lambda p: 120.0,
                                            load_audio=lambda p: np.zeros(8, dtype="float32"))
         with unittest.mock.patch.object(harvest, "_mystery",
-                                        types.SimpleNamespace(searchable=lambda: [
+                                        types.SimpleNamespace(current=lambda: [
                                             {"number": 4, "clip": clip}])), \
              unittest.mock.patch.object(harvest, "_audio", fake_audio), \
              unittest.mock.patch.object(harvest.chroma_recipe, "compute_chroma",
@@ -180,6 +192,41 @@ class QueryKeysArePublished(unittest.TestCase):
         self.assertEqual(state["searching"], [4])
         self.assertEqual(state["query_keys"], {"4": "4:f00:w120s15"},
                          "the key carries the query shape, so a new shape re-asks the pool")
+        self.assertEqual(state["query_clips"], {"4": "Mystery Track 4.wav"},
+                         "the state names the clip file the resolver chose")
+
+    def test_two_clips_at_one_rung_are_refused_and_named(self):
+        state = {}
+        clip_dir = tempfile.mkdtemp(prefix="qk_")
+        self.addCleanup(shutil.rmtree, clip_dir, True)
+        for name in ("Mystery Track 6.wav", "Mystery Track 6 (longer).wav",
+                     "Mystery Track 4.wav", "Mystery Track 4.wv"):
+            open(os.path.join(clip_dir, name), "wb").close()
+        meta = os.path.join(clip_dir, "track-metadata.json")
+        with open(meta, "w") as fh:
+            json.dump({"tracks": {"68": {"title": "Mystery Track 4"},
+                                  "70": {"title": "Mystery Track 6"}}}, fh)
+        real_current = mystery.current
+        fake_audio = types.SimpleNamespace(SR=harvest._audio.SR,
+                                           duration=lambda p: 120.0,
+                                           load_audio=lambda p: np.zeros(8, dtype="float32"))
+        with unittest.mock.patch.object(harvest._mystery, "current",
+                                        lambda: real_current(clip_dir, meta)), \
+             unittest.mock.patch.object(harvest, "_audio", fake_audio), \
+             unittest.mock.patch.object(harvest.chroma_recipe, "compute_chroma",
+                                        lambda y, **kw: np.zeros((12, 4), dtype="float32")), \
+             unittest.mock.patch.object(harvest, "clip_fingerprint", lambda p: "f00"):
+            qs = harvest.queries(state)
+        self.assertEqual([n for n, _, _ in qs], [4])
+        self.assertEqual(state["query_clips"], {"4": "Mystery Track 4.wav"},
+                         "the .wav wins over the .wv, by the resolver's order")
+        refused = [s for s in state["skipped_queries"] if s["mystery"] == 6]
+        self.assertEqual(len(refused), 1)
+        self.assertEqual(refused[0]["clips"],
+                         ["Mystery Track 6 (longer).wav", "Mystery Track 6.wav"])
+        self.assertIn("two clips, choose one", refused[0]["why"])
+        self.assertIn('add "Mystery Track 6": "<file name>" to source-versions.json',
+                      refused[0]["why"])
 
 
 @unittest.skipUnless(harvest, "harvest deps unavailable")

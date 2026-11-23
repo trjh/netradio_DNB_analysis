@@ -284,11 +284,12 @@ class TestReviewPagePins(unittest.TestCase):
         self.assertIn("PLAN_align_tool.md</code> §6.3", self.src)
         self.assertIn('$("driftInfo").onclick', self.src)
 
-    def test_wv_only_refusal_message_names_the_dp23_sync(self):
+    def test_wv_only_refusal_message_names_the_fix(self):
         # the transcode fallback is gone (§6.8) — the page must surface the
-        # route's refusal (or its own fallback copy naming the DP-23 sync),
+        # route's refusal (or its own fallback copy naming the fix),
         # never retry toward a transcode tier that no longer exists
-        self.assertIn("run the DP-23 flac sync to make its FLAC sibling", self.src)
+        self.assertIn("make a FLAC copy beside the original", self.src)
+        self.assertNotIn("DP-23 flac sync", self.src)
         self.assertNotIn("transcode?", self.src)
         self.assertNotIn("origRetries", self.src)
 

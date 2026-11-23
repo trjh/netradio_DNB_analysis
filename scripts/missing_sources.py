@@ -1,9 +1,12 @@
 """Inventory the original-audio gaps and carry the sourcing leads (pass 1).
 
 Cross-reference the identified tracklist (`track-metadata.json`) against the local
-originals folder (`sources_local/`) and classify every track's source:
+originals folder (`sources_resolve.sources_dir()`: NETRADIO_SOURCES_FLAC_CACHE_DIR, else
+`sources_local/`) and classify every track's source:
 
-- **have**        — a real audio file is present (known audio extension, non-empty).
+- **have**        — a real audio file is present: non-empty, with an extension the one
+                    originals resolver counts (`sources_resolve`), so a track held only as its
+                    lossless master (`.wv`) is held, not on the buy list.
 - **placeholder** — a stub stands in for the missing original: a `.null` file or any
                     zero-byte file (e.g. `014-… Stay (The Midnight Rockers Remix).null`,
                     a track still to be bought).
@@ -13,10 +16,10 @@ For each gap we also surface the acquisition leads already recorded in the track
 metadata (`fields`: discogs / spotify / release / year / allmusic), so pass 2
 (sourcing) starts from real pointers rather than a blank search.
 
-This is inventory only — it never downloads or buys anything (by design). Run:
+This is inventory only — it never downloads, pulls or buys anything (by design): it reads
+this disk alone, and never asks the audio bucket. Run:
 
-    python3 scripts/missing_sources.py --meta track-metadata.json \\
-        --sources sources_local [--json out.json]
+    python3 scripts/missing_sources.py --meta track-metadata.json [--sources DIR] [--json out.json]
 """
 
 import argparse
@@ -24,9 +27,8 @@ import json
 import os
 import re
 
-# Extensions we treat as a usable original. (Matches streamalign.track_mix.find_original
-# plus aac; container video like mp4/webm is NOT counted — those are not clean sources.)
-AUDIO_EXTS = ("mp3", "flac", "m4a", "opus", "wav", "aif", "aiff", "aac")
+import sources_resolve
+
 # Lead fields worth carrying into sourcing, in priority order.
 LEAD_FIELDS = ("discogs", "spotify", "release", "year", "allmusic", "bandcamp")
 
@@ -63,8 +65,11 @@ def _name_matches(filename, artist, title):
 def _classify(filenames, sources_dir, artist=None, title=None):
     """Classify a track's candidate files → (status, chosen_file, ext, size_bytes).
 
-    A usable original is an audio-extension file whose name matches the track's
-    artist/title (largest such wins, so a full flac beats a clip). A `.null`/zero-byte
+    A usable original is a file the resolver counts as one (`sources_resolve.rank`) whose
+    name matches the track's artist/title; among those the resolver's best rung wins, then
+    the largest within that rung (so an uncompressed clip outranks a full flac, as it does in
+    every reader). Two versions at one rung are not refused here: an
+    inventory reports what is held, and the readers use the recorded choice. A `.null`/zero-byte
     stub is a placeholder. Audio files that share only the `NNN-` prefix but don't
     match the track are ignored (not counted as "have"). When there is a single audio
     file and no placeholder competing, it's trusted even without a name match (handles
@@ -80,12 +85,12 @@ def _classify(filenames, sources_dir, artist=None, title=None):
         if ext == "null" or size == 0:
             if placeholder is None or _name_matches(fn, artist, title):
                 placeholder = (fn, ext, size)
-        elif ext in AUDIO_EXTS:
+        elif sources_resolve.rank(fn) is not None:
             audio.append((fn, ext, size))
             if _name_matches(fn, artist, title):
                 matched.append((fn, ext, size))
     if matched:
-        return ("have",) + max(matched, key=lambda t: t[2])
+        return ("have",) + min(matched, key=lambda t: (sources_resolve.rank(t[0]), -t[2]))
     if len(audio) == 1 and placeholder is None:
         return ("have",) + audio[0]
     if placeholder:
@@ -156,7 +161,9 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="missing_sources", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--meta", default="track-metadata.json")
-    p.add_argument("--sources", default="sources_local")
+    p.add_argument("--sources", default=sources_resolve.sources_dir(),
+                   help="the originals (default NETRADIO_SOURCES_FLAC_CACHE_DIR, "
+                        "else sources_local/)")
     p.add_argument("--json", default=None, help="write full inventory JSON here")
     p.add_argument("--gaps-only", action="store_true", help="print only the gaps")
     args = p.parse_args(argv)
