@@ -4,9 +4,12 @@ The aws CLI never runs: `bucketio._run`, the module's one subprocess seam, is sw
 `bucket_fake.FakeAws`, which holds objects in memory and speaks the JSON the real CLI prints.
 """
 
+import copy
+import errno
 import hashlib
 import json
 import os
+import pickle
 import sys
 import tempfile
 import unittest
@@ -203,6 +206,7 @@ class TestFetchVerified(Base):
         target = self.aws.calls[-1][0][3]
         self.assertEqual(os.path.dirname(target), os.path.dirname(self.dest()))
         self.assertTrue(target.endswith(".part"))
+        self.assertTrue(os.path.basename(target).startswith("f.wav.bucketio-"))
 
     def test_passed_size_and_hash_need_no_head(self):
         self.aws.add("b", "k", b"audio")
@@ -372,7 +376,8 @@ class TestPut(Base):
         self.aws._cp_up = rewritten
         got, err = bucketio.put(self.bucket, path, "p/big")
         self.assertIsNone(got)
-        self.assertIn("etag mismatch", err)
+        self.assertEqual(err.kind, bucketio.NOT_PROVED)
+        self.assertIn("the file changed during the upload", err)
 
     def test_a_part_size_under_five_mib_is_not_tried(self):
         mib = bucketio.MIB
@@ -473,6 +478,271 @@ class TestPut(Base):
         got, err = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
         self.assertIsNone(got)
         self.assertIn("size mismatch", err)
+
+
+class TestFailureKinds(Base):
+    def test_a_failure_is_still_its_detail_text(self):
+        err = bucketio.Failure(bucketio.NOT_COPIED, "denied")
+        self.assertIsInstance(err, str)
+        self.assertEqual(err, "denied")
+        self.assertEqual(err.detail, "denied")
+        self.assertIn("deni", err)
+        self.assertEqual("x: %s" % err, "x: denied")
+        with self.assertRaises(ValueError):
+            bucketio.Failure("maybe", "denied")
+
+    def test_a_failure_survives_pickle_and_copy(self):
+        err = bucketio.Failure(bucketio.DIFFERS, "etag mismatch")
+        for again in (pickle.loads(pickle.dumps(err)), copy.copy(err), copy.deepcopy(err)):
+            self.assertEqual(again, "etag mismatch")
+            self.assertEqual(again.kind, bucketio.DIFFERS)
+
+    def test_a_copy_that_says_nothing_is_still_a_true_failure(self):
+        self.aws.fail_next("cp-up", FakeProc(returncode=1, stderr="  \n"))
+        got, err = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
+        self.assertIsNone(got)
+        self.assertTrue(err)
+        self.assertEqual(err, "aws exited 1")
+
+    def test_not_copied_only_when_nothing_was_sent(self):
+        _got, err = bucketio.put(self.bucket, os.path.join(self.tmp, "missing"), "p/f")
+        self.assertEqual(err.kind, bucketio.NOT_COPIED)
+        self.assertEqual(self.aws.calls, [])
+
+    def test_a_failed_copy_may_have_left_an_object(self):
+        self.aws.fail_next("cp-up", FakeProc(returncode=1, stderr="denied"))
+        _got, err = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
+        self.assertEqual((err.kind, str(err)), (bucketio.NOT_PROVED, "denied"))
+        self.aws.fail_next("cp-up", timeout_error())
+        _got, err = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
+        self.assertEqual(err.kind, bucketio.NOT_PROVED)
+
+    def test_a_failed_copy_drops_the_held_listing(self):
+        self.assertEqual(bucketio.listing(self.bucket, "p/"), ({}, None))     # held: empty
+        real = self.aws._cp_up
+
+        def landed_then_failed(args):
+            real(args)                          # the object lands; the answer is lost
+            return FakeProc(returncode=1, stderr="connection reset")
+        self.aws._cp_up = landed_then_failed
+        _got, err = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
+        self.assertEqual(err.kind, bucketio.NOT_PROVED)
+        listed, _ = bucketio.listing(self.bucket, "p/")
+        self.assertIn("p/f", listed)
+
+    def test_not_proved_when_the_head_gives_no_answer(self):
+        self.aws.fail_next("head-object", FakeProc(returncode=255, stderr="Could not connect"))
+        _got, err = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
+        self.assertEqual(err.kind, bucketio.NOT_PROVED)
+        self.assertIn("Could not connect", err)
+
+    def test_not_proved_when_the_cap_cuts_the_part_sizes(self):
+        mib = bucketio.MIB
+        body = os.urandom(20 * mib)
+        path = self.file("big", body)
+        sha = hashlib.sha256(body).hexdigest()
+        # 20 MiB in 2 parts allows 10 to 19 MiB: 10 sizes, over a cap of 4.
+        self.aws.fail_next("head-object", FakeProc(stdout=json.dumps(
+            {"ContentLength": len(body), "ETag": '"%s-2"' % ("0" * 32),
+             "Metadata": {"sha256": sha}})))
+        with mock.patch.object(bucketio, "MAX_PART_SIZE_CANDIDATES", 4):
+            _got, err = bucketio.put(self.bucket, path, "p/big")
+        self.assertEqual(err.kind, bucketio.NOT_PROVED)
+        self.assertIn("4 of 10 part sizes", err)
+
+    def test_not_proved_when_no_whole_mib_size_fits(self):
+        mib = bucketio.MIB
+        self.aws.part_bytes = 3 * mib
+        _got, err = bucketio.put(self.bucket, self.file("big", os.urandom(12 * mib)), "p/big")
+        self.assertEqual(err.kind, bucketio.NOT_PROVED)
+
+    def test_differs(self):
+        self.aws.stored[("b", "p/f")] = b"abd"                       # same size, other bytes
+        _got, err = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
+        self.assertEqual(err.kind, bucketio.DIFFERS)
+        self.assertIn("etag mismatch", err)
+        self.aws.fail_next("head-object", FakeProc(stdout='{"ContentLength": 2, "Metadata": {}}'))
+        _got, err = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
+        self.assertEqual(err.kind, bucketio.DIFFERS)
+        mib = bucketio.MIB
+        body = os.urandom(13 * mib)                                  # 6 MiB parts, all tried
+        self.aws.part_bytes = 6 * mib
+        bad = bytearray(body)
+        bad[0] ^= 1
+        self.aws.stored[("b", "p/big")] = bytes(bad)
+        _got, err = bucketio.put(self.bucket, self.file("big", body), "p/big")
+        self.assertEqual(err.kind, bucketio.DIFFERS)
+
+    def test_etag_verdict(self):
+        got = bucketio.digests(self.file("f", b"abc"))
+        md5 = hashlib.md5(b"abc").hexdigest()
+        self.assertIsNone(bucketio.etag_verdict(md5, 3, got, None))
+        self.assertEqual(bucketio.etag_verdict("0" * 32, 3, got, None), bucketio.DIFFERS)
+        self.assertEqual(bucketio.etag_verdict(None, 3, got, None), bucketio.NOT_PROVED)
+        self.assertEqual(bucketio.etag_verdict("abc-x", 3, got, None), bucketio.NOT_PROVED)
+
+
+class TestEtagForm(Base):
+    def test_one_bare_form_everywhere(self):
+        md5 = hashlib.md5(b"abc").hexdigest()
+        got, _ = bucketio.put(self.bucket, self.file("f", b"abc"), "p/f")
+        self.assertEqual(got.etag, md5)
+        self.assertEqual(bucketio.head(self.bucket, "p/f")[0].etag, md5)
+        self.assertEqual(bucketio.listing(self.bucket, "p/")[0]["p/f"].etag, md5)
+
+    def test_quoted_and_bare(self):
+        self.assertEqual(bucketio.quoted_etag("abc"), '"abc"')
+        self.assertEqual(bucketio.quoted_etag('"abc"'), '"abc"')
+        self.assertEqual(bucketio.bare_etag('"abc"'), "abc")
+        self.assertEqual(bucketio.bare_etag("abc"), "abc")
+        self.assertIsNone(bucketio.quoted_etag(None))
+        self.assertIsNone(bucketio.bare_etag('""'))
+        self.assertEqual(bucketio.bare_etag(bucketio.quoted_etag("abc-2")), "abc-2")
+
+
+class TestListingLastModified(Base):
+    def test_each_entry_carries_its_last_modified_time(self):
+        self.aws.add("b", "p/a", b"1", last_modified="2026-11-23T10:00:00+00:00")
+        self.aws.add("b", "p/b", b"22")
+        listed, err = bucketio.listing(self.bucket, "p/")
+        self.assertIsNone(err)
+        self.assertEqual(listed["p/a"], bucketio.Listed(1, hashlib.md5(b"1").hexdigest(),
+                                                        "2026-11-23T10:00:00+00:00"))
+        self.assertEqual(listed["p/b"].last_modified, FakeAws.LAST_MODIFIED)
+        query = self.aws.calls[0][0]
+        self.assertIn("LastModified", query[query.index("--query") + 1])
+
+    def test_an_entry_without_one_is_none(self):
+        self.aws.fail_next("list-objects-v2", FakeProc(stdout=json.dumps(
+            [[["p/a", 1, '"x"']], None])))
+        listed, _ = bucketio.listing(self.bucket, "p/")
+        self.assertEqual(listed["p/a"], bucketio.Listed(1, "x", None))
+        self.assertEqual(bucketio.Listed(1, "x"), bucketio.Listed(1, "x", None))
+
+
+class TestStagingDir(Base):
+    def setUp(self):
+        super().setUp()
+        self.stage = os.path.join(self.tmp, "stage")
+        self.dest = os.path.join(self.tmp, "out", "f.wav")
+        self.aws.add("b", "k", b"audio", sha256=True)
+
+    def test_the_part_is_made_in_the_staging_dir(self):
+        self.assertIsNone(bucketio.fetch_verified(self.bucket, "k", self.dest,
+                                                  staging_dir=self.stage))
+        target = self.aws.calls[-1][0][3]
+        self.assertEqual(os.path.dirname(target), self.stage)
+        self.assertTrue(target.endswith(".part"))
+        self.assertTrue(os.path.basename(target).startswith("f.wav.bucketio-"))
+        with open(self.dest, "rb") as fh:
+            self.assertEqual(fh.read(), b"audio")
+        self.assertEqual(os.listdir(self.stage), [])
+        self.assertEqual(os.listdir(os.path.dirname(self.dest)), ["f.wav"])
+
+    def test_a_refused_copy_leaves_both_directories_clean(self):
+        self.aws.served[("b", "k")] = b"AUDIO"
+        err = bucketio.fetch_verified(self.bucket, "k", self.dest, staging_dir=self.stage)
+        self.assertIn("sha256 mismatch", err)
+        self.assertEqual(os.listdir(self.stage), [])
+        self.assertEqual(os.listdir(os.path.dirname(self.dest)), [])
+
+    def test_another_file_system_is_copied_beside_dest_then_renamed(self):
+        real = os.replace
+        renames = []
+
+        def replace(src, dst):
+            renames.append((os.path.dirname(src), dst))
+            if os.path.dirname(src) == self.stage:
+                raise OSError(errno.EXDEV, "Invalid cross-device link")
+            return real(src, dst)
+        with mock.patch.object(bucketio.os, "replace", replace):
+            self.assertIsNone(bucketio.fetch_verified(self.bucket, "k", self.dest,
+                                                      staging_dir=self.stage))
+        self.assertEqual(renames[-1], (os.path.dirname(self.dest), self.dest))
+        with open(self.dest, "rb") as fh:
+            self.assertEqual(fh.read(), b"audio")
+        self.assertEqual(os.listdir(self.stage), [])
+        self.assertEqual(os.listdir(os.path.dirname(self.dest)), ["f.wav"])
+
+
+    def test_a_failed_cross_device_copy_is_a_failure(self):
+        os.makedirs(os.path.dirname(self.dest))
+        with open(self.dest, "wb") as fh:
+            fh.write(b"older")                                       # same size, other bytes
+        real = os.replace
+
+        def replace(src, dst):
+            if os.path.dirname(src) == self.stage:
+                raise OSError(errno.EXDEV, "Invalid cross-device link")
+            return real(src, dst)
+
+        def full(_src, _dst):
+            raise OSError(errno.ENOSPC, "No space left on device")
+        with mock.patch.object(bucketio.os, "replace", replace), \
+                mock.patch.object(bucketio.shutil, "copyfile", full):
+            err = bucketio.fetch_verified(self.bucket, "k", self.dest, staging_dir=self.stage)
+        self.assertIn("No space left", err)
+        with open(self.dest, "rb") as fh:
+            self.assertEqual(fh.read(), b"older")
+        self.assertEqual(os.listdir(self.stage), [])
+        self.assertEqual(os.listdir(os.path.dirname(self.dest)), ["f.wav"])
+
+
+class TestFetchSmall(Base):
+    def test_size_only_no_head_small_timeout(self):
+        self.aws.add("b", "t.jpg", b"jpeg")                          # no sha256 metadata
+        dest = os.path.join(self.tmp, "thumbs", "t.jpg")
+        self.assertIsNone(bucketio.fetch_small(self.bucket, "t.jpg", dest, 4))
+        self.assertEqual(self.aws.ops(), ["cp-down"])
+        self.assertEqual(self.aws.calls[0][2], bucketio.TIMEOUTS["small"])
+        with open(dest, "rb") as fh:
+            self.assertEqual(fh.read(), b"jpeg")
+
+    def test_a_wrong_size_is_refused_and_leaves_nothing(self):
+        self.aws.add("b", "t.jpg", b"jpeg")
+        dest = os.path.join(self.tmp, "thumbs", "t.jpg")
+        self.assertIn("size mismatch", bucketio.fetch_small(self.bucket, "t.jpg", dest, 5))
+        self.assertEqual(os.listdir(os.path.dirname(dest)), [])
+
+    def test_a_large_or_unsized_object_is_refused_before_any_call(self):
+        dest = os.path.join(self.tmp, "t")
+        self.assertIn("over the", bucketio.fetch_small(
+            self.bucket, "k", dest, bucketio.SMALL_FETCH_MAX_BYTES + 1))
+        self.assertIn("needs the object's size", bucketio.fetch_small(self.bucket, "k", dest,
+                                                                      None))
+        self.assertEqual(self.aws.calls, [])
+
+    def test_a_staging_dir_works_here_too(self):
+        self.aws.add("b", "t.jpg", b"jpeg")
+        stage = os.path.join(self.tmp, "stage")
+        dest = os.path.join(self.tmp, "thumbs", "t.jpg")
+        self.assertIsNone(bucketio.fetch_small(self.bucket, "t.jpg", dest, 4,
+                                               staging_dir=stage))
+        self.assertEqual(os.path.dirname(self.aws.calls[0][0][3]), stage)
+        self.assertEqual(os.listdir(stage), [])
+
+
+class TestPutTimeout(Base):
+    def timeouts(self):
+        return [(self.aws._operation(args), t) for args, _cmd, t in self.aws.calls]
+
+    def test_a_small_upload_runs_under_the_small_timeout(self):
+        got, err = bucketio.put(self.bucket, self.file("t.jpg", b"jpeg"), "t.jpg",
+                                timeout="small")
+        self.assertIsNone(err)
+        self.assertEqual(self.timeouts(), [("cp-up", bucketio.TIMEOUTS["small"]),
+                                           ("head-object", bucketio.TIMEOUTS["head"])])
+
+    def test_the_default_is_the_copy_timeout(self):
+        bucketio.put(self.bucket, self.file("f", b"abc"), "f")
+        self.assertEqual(self.timeouts()[0], ("cp-up", bucketio.TIMEOUTS["copy"]))
+
+    def test_an_unknown_timeout_raises_before_any_call(self):
+        with mock.patch.object(bucketio, "digests") as digests:
+            with self.assertRaises(ValueError):
+                bucketio.put(self.bucket, self.file("f", b"abc"), "f", timeout="forever")
+        digests.assert_not_called()
+        self.assertEqual(self.aws.calls, [])
 
 
 class TestTimeouts(Base):
