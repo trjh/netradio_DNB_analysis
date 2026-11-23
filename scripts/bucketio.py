@@ -39,14 +39,16 @@ The interface:
         size alone; `require_sha256=False` is for older objects written before `put` carried the
         hash, which are then checked by size, and by hash where they do carry one. The bytes land
         in a `.part` file beside `dest` (or in `staging_dir`, when given) and are renamed into
-        place only after the checks pass; the `.part` file is always removed.
+        place only after the checks pass; the `.part` file is always removed. The `.part` is
+        named `<dest's name>.bucketio-<random>.part`, so a caller that shares the directory
+        with other writers can tell it from theirs.
 
     fetch_small(bucket, key, dest, size, staging_dir=None) -> None | the reason it refused
         A small object (a thumbnail, a sidecar) checked by its size alone: no head, and the copy
         runs under the "small" timeout. An object over SMALL_FETCH_MAX_BYTES is refused before
         any call; it belongs to `fetch_verified`.
 
-    put(bucket, path, key, meta=None) -> (Head, None) | (None, Failure)
+    put(bucket, path, key, meta=None, timeout="copy") -> (Head, None) | (None, Failure)
         Uploads `path` with its SHA-256 stored as object metadata (always computed here, from
         the file being uploaded; never taken from the caller), then heads the object and
         requires the size, the hash and the ETag to match. The ETag is what proves the bytes:
@@ -563,8 +565,10 @@ def _fetch(bucket, key, dest, size, sha256, kind, staging_dir):
         os.makedirs(stage, exist_ok=True)
         # A unique name per call, in dest's own directory by default so the rename stays
         # atomic. It ends `.part`, the cache policy's mark for a write in progress, so an
-        # eviction run does not take a download out from under its own rename.
-        fd, part = tempfile.mkstemp(dir=stage, prefix=os.path.basename(dest) + ".",
+        # eviction run does not take a download out from under its own rename. The name is
+        # `<dest's name>.bucketio-<random>.part`, so a caller that shares the directory with
+        # other writers can tell it from theirs.
+        fd, part = tempfile.mkstemp(dir=stage, prefix=os.path.basename(dest) + ".bucketio-",
                                     suffix=".part")
         os.close(fd)
     except OSError as exc:
@@ -594,7 +598,7 @@ def _fetch(bucket, key, dest, size, sha256, kind, staging_dir):
             # The staging directory is on another file system: copy beside dest first, so
             # dest itself only ever appears by a rename. A failure of this copy is a
             # failure, whatever sits at dest.
-            fd, moved = tempfile.mkstemp(dir=folder, prefix=os.path.basename(dest) + ".",
+            fd, moved = tempfile.mkstemp(dir=folder, prefix=os.path.basename(dest) + ".bucketio-",
                                          suffix=".part")
             os.close(fd)
             shutil.copyfile(part, moved)
@@ -626,7 +630,7 @@ def _meta_arg(digest, meta):
     return ",".join("%s=%s" % pair for pair in pairs)
 
 
-def put(bucket, path, key, meta=None):
+def put(bucket, path, key, meta=None, timeout="copy"):
     """Upload `path` as `key` with its SHA-256 stored as object metadata, then head the object
     and require the size and the hash to match. Returns (Head, None), or (None, Failure): the
     detail text, with `.kind` saying whether this call may have left an object: NOT_COPIED
@@ -637,7 +641,10 @@ def put(bucket, path, key, meta=None):
     stale or wrong, and the metadata is what every later fetch trusts. It is read once per
     unchanged file (`digests`), so a caller that asked for `sha256_file` first costs no second
     read. `meta` adds other user-metadata pairs (`_meta_arg`); a name that is not letters,
-    digits, `-` and `_`, or that would replace the hash, is dropped.
+    digits, `-` and `_`, or that would replace the hash, is dropped. `timeout` names the
+    `TIMEOUTS` entry the copy runs under: "copy" for a whole file, "small" for an object of a
+    few kilobytes, so a stalled upload of one fails in a minute. An unknown name raises
+    ValueError before the file is read. The head after the copy always runs under "head".
 
     The SHA-256 the head returns is only the metadata this call sent, echoed back; the ETag is
     the bucket's own account of the bytes. A single-part object's ETag is its MD5. A multipart
@@ -646,6 +653,8 @@ def put(bucket, path, key, meta=None):
     tried) that gives the same number of parts and the same ETag. An ETag no such part size
     explains is a refusal, never a pass it cannot prove: DIFFERS when the check was complete,
     NOT_PROVED when it was not (`etag_verdict`)."""
+    if timeout not in TIMEOUTS:
+        raise ValueError("unknown timeout %r" % (timeout,))
     try:
         local = os.path.getsize(path)
         got_digests = digests(path)
@@ -653,7 +662,7 @@ def put(bucket, path, key, meta=None):
     except OSError as exc:
         return None, Failure(NOT_COPIED, str(exc))
     _out, err = run(bucket, ["s3", "cp", path, bucket.url(key), "--no-progress",
-                             "--metadata", _meta_arg(digest, meta)], "copy")
+                             "--metadata", _meta_arg(digest, meta)], timeout)
     _forget_listings(bucket, key)       # even a failed copy may have left an object
     if err is not None:
         return None, Failure(NOT_PROVED, err)

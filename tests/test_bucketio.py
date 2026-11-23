@@ -206,6 +206,7 @@ class TestFetchVerified(Base):
         target = self.aws.calls[-1][0][3]
         self.assertEqual(os.path.dirname(target), os.path.dirname(self.dest()))
         self.assertTrue(target.endswith(".part"))
+        self.assertTrue(os.path.basename(target).startswith("f.wav.bucketio-"))
 
     def test_passed_size_and_hash_need_no_head(self):
         self.aws.add("b", "k", b"audio")
@@ -632,6 +633,7 @@ class TestStagingDir(Base):
         target = self.aws.calls[-1][0][3]
         self.assertEqual(os.path.dirname(target), self.stage)
         self.assertTrue(target.endswith(".part"))
+        self.assertTrue(os.path.basename(target).startswith("f.wav.bucketio-"))
         with open(self.dest, "rb") as fh:
             self.assertEqual(fh.read(), b"audio")
         self.assertEqual(os.listdir(self.stage), [])
@@ -718,6 +720,29 @@ class TestFetchSmall(Base):
                                                staging_dir=stage))
         self.assertEqual(os.path.dirname(self.aws.calls[0][0][3]), stage)
         self.assertEqual(os.listdir(stage), [])
+
+
+class TestPutTimeout(Base):
+    def timeouts(self):
+        return [(self.aws._operation(args), t) for args, _cmd, t in self.aws.calls]
+
+    def test_a_small_upload_runs_under_the_small_timeout(self):
+        got, err = bucketio.put(self.bucket, self.file("t.jpg", b"jpeg"), "t.jpg",
+                                timeout="small")
+        self.assertIsNone(err)
+        self.assertEqual(self.timeouts(), [("cp-up", bucketio.TIMEOUTS["small"]),
+                                           ("head-object", bucketio.TIMEOUTS["head"])])
+
+    def test_the_default_is_the_copy_timeout(self):
+        bucketio.put(self.bucket, self.file("f", b"abc"), "f")
+        self.assertEqual(self.timeouts()[0], ("cp-up", bucketio.TIMEOUTS["copy"]))
+
+    def test_an_unknown_timeout_raises_before_any_call(self):
+        with mock.patch.object(bucketio, "digests") as digests:
+            with self.assertRaises(ValueError):
+                bucketio.put(self.bucket, self.file("f", b"abc"), "f", timeout="forever")
+        digests.assert_not_called()
+        self.assertEqual(self.aws.calls, [])
 
 
 class TestTimeouts(Base):
