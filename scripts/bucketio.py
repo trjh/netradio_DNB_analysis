@@ -20,8 +20,9 @@ The interface:
     listing(bucket, prefix, max_age=LISTING_MAX_AGE_S) -> ({key: Listed(size, etag)}, None)
                                                         | (None, detail)
         The keys under one prefix, with their sizes and ETags, held in memory for `max_age`
-        seconds (about a minute by default; 0 asks the bucket every time). A listing carries no
-        user metadata, so it gives sizes and never a SHA-256: it is what a membership check reads.
+        seconds (about a minute by default; 0 asks the bucket every time and holds nothing). A
+        listing carries no user metadata, so it gives sizes and never a SHA-256: it is what a
+        membership check reads. A prefix of more than LIST_MAX_PAGES pages is an error.
 
     head(bucket, key) -> (Head(size, sha256, etag), None)   the object is there
                        | (None, None)                       the bucket answered: no such object
@@ -41,7 +42,7 @@ The interface:
         Uploads `path` with its SHA-256 stored as object metadata (always computed here, from
         the file being uploaded; never taken from the caller), then heads the object and
         requires the size, the hash and the ETag to match. The ETag is what proves the bytes:
-        see `expected_etag`. `meta` adds other user-metadata pairs, each value percent-encoded
+        see `etag_matches`. `meta` adds other user-metadata pairs, each value percent-encoded
         (S3 metadata is ASCII, and the CLI's `name=value,...` form splits on commas).
 
     run(bucket, args, kind) -> (stdout, None) | (None, detail)
@@ -86,10 +87,24 @@ LISTING_MAX_AGE_S = 60          # how long a listing is held in memory by defaul
 # everything inside one process).
 LIST_PAGE_KEYS = 1000
 
+# The most pages one listing reads (ten million keys at LIST_PAGE_KEYS a page). A bucket that
+# keeps answering with a NextToken past this is an error, never a loop without end.
+LIST_MAX_PAGES = 10000
+
 # The part size the aws CLI uses for a multipart upload unless its own configuration says
-# otherwise (`multipart_chunksize`), and the size above which it uploads in parts
-# (`multipart_threshold`). Both are the CLI's defaults, 8 MiB.
+# otherwise (`multipart_chunksize`), and the size from which it uploads in parts
+# (`multipart_threshold`). Both are the CLI's defaults, 8 MiB. Another part size is still
+# proved (`etag_matches`); this one is only the first tried, from the digests already held.
 MULTIPART_PART_BYTES = 8 * 1024 * 1024
+
+MIB = 1024 * 1024
+MIN_PART_BYTES = 5 * MIB            # S3's smallest part (every part but the last)
+MAX_PART_BYTES = 5 * 1024 * MIB     # S3's largest part
+MAX_PARTS = 10000                   # S3's most parts in one upload
+
+# The most other part sizes `etag_matches` hashes for one upload. Each costs one MD5 over the
+# file, all of them in a single read, so the check costs at most this many MD5 passes.
+MAX_PART_SIZE_CANDIDATES = 16
 
 # The user-metadata name the hash is stored under. S3 lowercases user metadata names, and the
 # lookup in `head` ignores case, so another CLI version cannot turn a hash into a miss.
@@ -213,13 +228,86 @@ def sha256_file(path):
     return digests(path).sha256
 
 
-def expected_etag(size, got):
-    """The ETag the bucket gives an object holding exactly these bytes, as the aws CLI uploads
-    them with its default settings: the plain MD5 for a file at or under the multipart
-    threshold, else the MD5 of the parts' MD5s followed by `-<number of parts>`."""
-    if size <= MULTIPART_PART_BYTES:
-        return got.md5
-    return "%s-%d" % (hashlib.md5(b"".join(got.part_md5s)).hexdigest(), len(got.part_md5s))
+def _multipart_etag(part_md5s):
+    return "%s-%d" % (hashlib.md5(b"".join(part_md5s)).hexdigest(), len(part_md5s))
+
+
+def part_size_candidates(size, parts):
+    """The part sizes, in bytes, that could have built a `parts`-part ETag for a file of `size`
+    bytes: whole MiB from MIN_PART_BYTES up to MAX_PART_BYTES that split the file into exactly
+    `parts` parts. The default part size is left out (the caller has tried it already). At most
+    MAX_PART_SIZE_CANDIDATES come back: the powers of two first, as the sizes a configuration
+    most often sets, then the rest from the smallest up.
+
+    The count is small where it matters. Exactly `parts` parts means a part size between
+    size/parts and size/(parts - 1), a range of about size / (parts * (parts - 1)) bytes: under
+    one MiB for a 300 MB file in 19 parts, so one or two candidates. Only a file of a few parts
+    has a wide range, and the cap bounds that."""
+    if parts < 2 or parts > MAX_PARTS:
+        return []
+    low = max(MIN_PART_BYTES // MIB, -(-size // (parts * MIB)))
+    high = min(MAX_PART_BYTES // MIB, -(-size // ((parts - 1) * MIB)) - 1)
+    found = [m * MIB for m in range(low, high + 1)
+             if m * MIB != MULTIPART_PART_BYTES and -(-size // (m * MIB)) == parts]
+    found.sort(key=lambda p: (p & (p - 1) != 0, p))
+    return found[:MAX_PART_SIZE_CANDIDATES]
+
+
+def _etags_for_part_sizes(path, part_sizes):
+    """{part size: multipart ETag} for each part size, from one read of the file. Every part
+    size is whole MiB, so each part boundary falls on a block boundary; each block feeds one
+    running MD5 per part size."""
+    running = {p: hashlib.md5() for p in part_sizes}
+    done = {p: [] for p in part_sizes}
+    offset = 0
+    with open(path, "rb") as fh:
+        while True:
+            block = fh.read(MIB)
+            if not block:
+                break
+            offset += len(block)
+            for p in part_sizes:
+                running[p].update(block)
+                if offset % p == 0:
+                    done[p].append(running[p].digest())
+                    running[p] = hashlib.md5()
+    for p in part_sizes:
+        if offset % p:
+            done[p].append(running[p].digest())
+    return {p: _multipart_etag(done[p]) for p in part_sizes}
+
+
+def etag_matches(etag, size, got, path):
+    """True when the bucket's `etag` is the one these bytes give under some upload the CLI can
+    make. `got` is the file's Digests; `path` is read again only for a part size other than the
+    default.
+
+    - No `-N` suffix: the ETag is the MD5 of the whole file.
+    - `-1`: one part, so the MD5 of the file's MD5. The CLI uploads a file of exactly the
+      threshold size this way.
+    - `-N`, N over 1: the default part size is tried first from the digests already held, then
+      each whole-MiB part size that gives exactly N parts (`part_size_candidates`). Any one that
+      gives the same ETag proves the bytes, since a part size only changes how they were cut."""
+    if not etag:
+        return False
+    if "-" not in etag:
+        return etag == got.md5
+    _body, _, count = etag.rpartition("-")
+    try:
+        parts = int(count)
+    except ValueError:
+        return False
+    if parts == 1:
+        return etag == _multipart_etag([bytes.fromhex(got.md5)])
+    if parts == len(got.part_md5s) and etag == _multipart_etag(got.part_md5s):
+        return True
+    candidates = part_size_candidates(size, parts)
+    if not candidates:
+        return False
+    try:
+        return etag in _etags_for_part_sizes(path, candidates).values()
+    except OSError:
+        return False
 
 
 # --- listing -----------------------------------------------------------------------
@@ -230,7 +318,7 @@ _listing_locks = {}             # (bucket, prefix) -> Lock: one LIST at a time p
 
 def _list_now(bucket, prefix):
     objects, token = {}, None
-    while True:
+    for _page in range(LIST_MAX_PAGES):
         args = ["s3api", "list-objects-v2", "--bucket", bucket.name, "--prefix", prefix,
                 "--max-items", str(LIST_PAGE_KEYS), "--page-size", str(LIST_PAGE_KEYS),
                 "--query", "[Contents[].[Key, Size, ETag], NextToken]", "--output", "json"]
@@ -252,19 +340,24 @@ def _list_now(bucket, prefix):
                 objects[key] = Listed(size, (etag or "").strip('"') or None)
         if not token:
             return objects, None
+    return None, "listing of %r stopped after %d pages: the bucket kept giving a NextToken" % (
+        prefix, LIST_MAX_PAGES)
 
 
 def listing(bucket, prefix, max_age=LISTING_MAX_AGE_S):
     """{key: Listed(size, etag)} for every object under `prefix` (keys in full), or
     (None, detail) when the bucket did not answer. A failed listing is never held, so the next
-    call asks again; a caller must treat "unknown" differently from "empty"."""
+    call asks again; a caller must treat "unknown" differently from "empty". With `max_age` 0
+    (or less) the bucket is asked and nothing is held: no listing and no lock per prefix."""
+    if max_age <= 0:
+        return _list_now(bucket, prefix)
     slot = (bucket, prefix)
     with _lock:
         lock = _listing_locks.setdefault(slot, threading.Lock())
     with lock:
         with _lock:
             held = _listings.get(slot)
-        if held and max_age > 0 and time.monotonic() - held[0] < max_age:
+        if held and time.monotonic() - held[0] < max_age:
             return dict(held[1]), None
         objects, err = _list_now(bucket, prefix)
         if err is not None:
@@ -390,9 +483,9 @@ def put(bucket, path, key, meta=None):
 
     The SHA-256 the head returns is only the metadata this call sent, echoed back; the ETag is
     the bucket's own account of the bytes. A single-part object's ETag is its MD5. A multipart
-    object's is the MD5 of its parts' MD5s, which depends on the part size: the check assumes
-    the CLI's default part size, and a CLI configured with another one gets a refusal that says
-    so, never a pass it cannot prove."""
+    object's is the MD5 of its parts' MD5s, which depends on the part size the CLI chose:
+    `etag_matches` accepts any whole-MiB part size that gives the same number of parts and the
+    same ETag. An ETag no such part size explains is a refusal, never a pass it cannot prove."""
     try:
         local = os.path.getsize(path)
         got_digests = digests(path)
@@ -411,12 +504,11 @@ def put(bucket, path, key, meta=None):
         return None, "size mismatch: local %s, bucket %s" % (local, got.size)
     if got.sha256 != digest:
         return None, "sha256 mismatch after the upload: %s" % key
-    want = expected_etag(local, got_digests)
-    if got.etag != want:
-        if local > MULTIPART_PART_BYTES and got.etag and "-" in got.etag \
-                and got.etag.rsplit("-", 1)[1] != want.rsplit("-", 1)[1]:
-            return None, ("cannot prove the bytes of %s: uploaded in %s parts, not the %s of "
-                          "the CLI's default part size" % (key, got.etag.rsplit("-", 1)[1],
-                                                            want.rsplit("-", 1)[1]))
-        return None, "etag mismatch after the upload: %s (the bytes differ)" % key
-    return got, None
+    if etag_matches(got.etag, local, got_digests, path):
+        return got, None
+    parts = got.etag.rpartition("-")[2] if got.etag and "-" in got.etag else ""
+    if parts.isdigit() and int(parts) > 1 and int(parts) != len(got_digests.part_md5s) \
+            and not part_size_candidates(local, int(parts)):
+        return None, ("cannot prove the bytes of %s: no whole-MiB part size from %d MiB splits "
+                      "it into %s parts" % (key, MIN_PART_BYTES // MIB, parts))
+    return None, "etag mismatch after the upload: %s (the bytes differ)" % key
