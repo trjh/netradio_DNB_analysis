@@ -107,6 +107,24 @@ class TestListing(Base):
         bucketio.listing(self.bucket, "p/", max_age=0)
         self.assertEqual(len(self.aws.ops("list-objects-v2")), 2)
 
+    def test_max_age_zero_holds_nothing(self):
+        self.aws.add("b", "p/a", b"1")
+        listed, err = bucketio.listing(self.bucket, "fresh/", max_age=0)
+        self.assertEqual((listed, err), ({}, None))
+        self.assertNotIn((self.bucket, "fresh/"), bucketio._listings)
+        self.assertNotIn((self.bucket, "fresh/"), bucketio._listing_locks)
+
+    def test_a_listing_that_never_ends_is_an_error(self):
+        self.aws.page_size = 1
+        for i in range(5):
+            self.aws.add("b", "p/k%d" % i, b"x")
+        with mock.patch.object(bucketio, "LIST_MAX_PAGES", 3):
+            listed, err = bucketio.listing(self.bucket, "p/")
+        self.assertIsNone(listed)
+        self.assertIn("stopped after 3 pages", err)
+        self.assertEqual(len(self.aws.ops("list-objects-v2")), 3)
+        self.assertNotIn((self.bucket, "p/"), bucketio._listings)   # not held
+
     def test_a_failed_listing_is_reported_and_not_held(self):
         self.aws.fail_next("list-objects-v2", FakeProc(returncode=255, stderr="AccessDenied"))
         listed, err = bucketio.listing(self.bucket, "p/")
@@ -322,6 +340,106 @@ class TestPut(Base):
         got, err = bucketio.put(self.bucket, path, "p/big")
         self.assertIsNone(got)
         self.assertIn("cannot prove the bytes", err)
+
+    def test_another_part_size_is_proved_from_the_part_count(self):
+        # A CLI set to 6 MiB parts uploads 13 MiB in 3 parts, where the default gives 2.
+        mib = bucketio.MIB
+        body = os.urandom(13 * mib)
+        self.aws.part_bytes = 6 * mib
+        got, err = bucketio.put(self.bucket, self.file("big", body), "p/big")
+        self.assertIsNone(err)
+        self.assertTrue(got.etag.endswith("-3"))
+        bad = bytearray(body)
+        bad[-1] ^= 1
+        self.aws.stored[("b", "p/big")] = bytes(bad)
+        got, err = bucketio.put(self.bucket, self.file("big", body), "p/big")
+        self.assertIsNone(got)
+        self.assertIn("etag mismatch", err)
+
+    def test_a_file_changed_during_the_upload_proves_nothing(self):
+        # The digests are taken before the upload; the file is rewritten at the same size
+        # before the bytes go up. The second read sees the new bytes, which match the ETag but
+        # not the SHA-256 the put stored, so the put is refused.
+        mib = bucketio.MIB
+        path = self.file("big", os.urandom(12 * mib))
+        self.aws.part_bytes = 6 * mib
+        real = self.aws._cp_up
+
+        def rewritten(args):
+            with open(path, "wb") as fh:
+                fh.write(os.urandom(12 * mib))
+            return real(args)
+        self.aws._cp_up = rewritten
+        got, err = bucketio.put(self.bucket, path, "p/big")
+        self.assertIsNone(got)
+        self.assertIn("etag mismatch", err)
+
+    def test_a_part_size_under_five_mib_is_not_tried(self):
+        mib = bucketio.MIB
+        body = os.urandom(12 * mib)
+        self.aws.part_bytes = 3 * mib                                # 4 parts: below S3's floor
+        got, err = bucketio.put(self.bucket, self.file("big", body), "p/big")
+        self.assertIsNone(got)
+        self.assertIn("cannot prove the bytes", err)
+
+    def test_a_file_of_exactly_the_threshold_passes_in_either_form(self):
+        body = os.urandom(bucketio.MULTIPART_PART_BYTES)
+        path = self.file("edge", body)
+        got, err = bucketio.put(self.bucket, path, "p/edge")         # plain MD5
+        self.assertIsNone(err)
+        self.assertNotIn("-", got.etag)
+        self.aws.one_part_at_threshold = True                        # one-part multipart
+        got, err = bucketio.put(self.bucket, path, "p/edge")
+        self.assertIsNone(err)
+        self.assertTrue(got.etag.endswith("-1"))
+        self.aws.stored[("b", "p/edge")] = os.urandom(len(body))
+        got, err = bucketio.put(self.bucket, path, "p/edge")
+        self.assertIsNone(got)
+        self.assertIn("etag mismatch", err)
+
+    def test_part_size_candidates_are_whole_mib_and_bounded(self):
+        mib = bucketio.MIB
+        size = 40 * mib + 3                                          # 3 parts: 14..20 MiB
+        self.assertEqual(bucketio.part_size_candidates(size, 3),
+                         [m * mib for m in (16, 20, 14, 15, 17, 18, 19)])
+        for p in bucketio.part_size_candidates(size, 3):
+            self.assertEqual(-(-size // p), 3)
+        # Two parts of a large file allow hundreds of sizes; the cap holds, round sizes first.
+        many = bucketio.part_size_candidates(1000 * mib, 2)
+        self.assertEqual(len(many), bucketio.MAX_PART_SIZE_CANDIDATES)
+        self.assertEqual(many[:2], [512 * mib, 500 * mib])
+        self.assertIn(100 * mib, bucketio.part_size_candidates(150 * mib, 2))
+        self.assertEqual(bucketio.part_size_candidates(size, 1), [])
+        self.assertEqual(bucketio.part_size_candidates(size, 50), [])  # parts under 5 MiB
+
+    def test_other_part_sizes_cost_one_read(self):
+        mib = bucketio.MIB
+        body = os.urandom(13 * mib)
+        path = self.file("big", body)
+        self.aws.part_bytes = 6 * mib
+        opened = []
+        real_open = open
+
+        def counting_open(p, *a, **kw):
+            if p == path:
+                opened.append(p)
+            return real_open(p, *a, **kw)
+        bucketio.digests(path)
+        with mock.patch("builtins.open", counting_open):
+            _got, err = bucketio.put(self.bucket, path, "p/big")
+        self.assertIsNone(err)
+        self.assertEqual(len(opened), 2)          # the upload, then one read for every size
+
+    def test_expected_etag_is_the_default_part_size_etag(self):
+        part = bucketio.MULTIPART_PART_BYTES
+        small = b"abc"
+        got = bucketio.digests(self.file("s", small))
+        self.assertEqual(bucketio.expected_etag(len(small), got), hashlib.md5(small).hexdigest())
+        big = os.urandom(part * 2 + 5)
+        got = bucketio.digests(self.file("b", big))
+        parts = [hashlib.md5(big[i:i + part]).digest() for i in range(0, len(big), part)]
+        self.assertEqual(bucketio.expected_etag(len(big), got),
+                         hashlib.md5(b"".join(parts)).hexdigest() + "-3")
 
     def test_an_unchanged_file_is_hashed_once(self):
         path = self.file("f", b"abc")
