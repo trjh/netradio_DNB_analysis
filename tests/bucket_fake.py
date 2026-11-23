@@ -36,10 +36,12 @@ class FakeProc:
 NOT_FOUND = ("An error occurred (404) when calling the HeadObject operation: Not Found")
 
 
-def etag(body):
-    """The ETag S3 gives an object the aws CLI uploaded with its default part size."""
-    part = bucketio.MULTIPART_PART_BYTES
-    if len(body) <= part:
+def etag(body, part=None, one_part_at_threshold=False):
+    """The ETag S3 gives an object the aws CLI uploaded: with its default part size, or `part`
+    bytes a part. `one_part_at_threshold` makes a file of exactly one part's size a one-part
+    multipart upload, as the CLI's `>=` threshold test does."""
+    part = part or bucketio.MULTIPART_PART_BYTES
+    if len(body) < part or (len(body) == part and not one_part_at_threshold):
         return hashlib.md5(body).hexdigest()
     parts = [hashlib.md5(body[i:i + part]).digest() for i in range(0, len(body), part)]
     return "%s-%d" % (hashlib.md5(b"".join(parts)).hexdigest(), len(parts))
@@ -52,6 +54,8 @@ class FakeAws:
         self.page_size = page_size      # None: the call's own --max-items, as the CLI does
         self.served = {}            # (bucket, key) -> bytes a download writes instead
         self.stored = {}            # (bucket, key) -> bytes an upload stores instead
+        self.part_bytes = None      # an upload's part size (None: the CLI's default)
+        self.one_part_at_threshold = False  # a file of exactly one part: a one-part upload
         self._fail = {}             # operation -> [FakeProc or exception], used first
 
     # --- set-up --------------------------------------------------------------------
@@ -131,7 +135,9 @@ class FakeAws:
                 meta[name.lower()] = val
         with open(args[2], "rb") as fh:
             body = self.stored.get((bucket, key), fh.read())
-        self.objects[(bucket, key)] = {"body": body, "meta": meta}
+        self.objects[(bucket, key)] = {"body": body, "meta": meta,
+                                       "etag": etag(body, self.part_bytes,
+                                                    self.one_part_at_threshold)}
         return FakeProc()
 
     def _cp_down(self, args):
