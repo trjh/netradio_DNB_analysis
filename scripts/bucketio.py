@@ -17,9 +17,10 @@ The interface:
         reports any trouble with the bucket itself. An empty endpoint or profile adds no flag,
         so the CLI's own default applies.
 
-    listing(bucket, prefix, max_age=LISTING_MAX_AGE_S) -> ({key: Listed(size, etag)}, None)
-                                                        | (None, detail)
-        The keys under one prefix, with their sizes and ETags, held in memory for `max_age`
+    listing(bucket, prefix, max_age=LISTING_MAX_AGE_S)
+        -> ({key: Listed(size, etag, last_modified)}, None) | (None, detail)
+        The keys under one prefix, with their sizes, ETags and last-modified times (the ISO 8601
+        text S3 gives, such as "2026-11-23T10:00:00+00:00"), held in memory for `max_age`
         seconds (about a minute by default; 0 asks the bucket every time and holds nothing). A
         listing carries no user metadata, so it gives sizes and never a SHA-256: it is what a
         membership check reads. A prefix of more than LIST_MAX_PAGES pages is an error.
@@ -29,26 +30,38 @@ The interface:
                        | (None, detail)                     no answer (timeout, credentials, ...)
         One `head-object`. `sha256` is "" when the object carries no SHA-256 metadata.
 
-    fetch_verified(bucket, key, dest, size=None, sha256=None, require_sha256=True)
+    fetch_verified(bucket, key, dest, size=None, sha256=None, require_sha256=True,
+                   staging_dir=None)
         -> None on success, else the reason it refused.
         What a size or hash not passed would check against comes from one `head` of the object.
         By default an object with no SHA-256 metadata is refused, so no object is accepted on its
         size alone; `require_sha256=False` is for older objects written before `put` carried the
         hash, which are then checked by size, and by hash where they do carry one. The bytes land
-        in a `.part` file beside `dest` and are renamed into place only after the checks pass;
-        the `.part` file is always removed.
+        in a `.part` file beside `dest` (or in `staging_dir`, when given) and are renamed into
+        place only after the checks pass; the `.part` file is always removed.
 
-    put(bucket, path, key, meta=None) -> (Head, None) | (None, detail)
+    fetch_small(bucket, key, dest, size, staging_dir=None) -> None | the reason it refused
+        A small object (a thumbnail, a sidecar) checked by its size alone: no head, and the copy
+        runs under the "small" timeout. An object over SMALL_FETCH_MAX_BYTES is refused before
+        any call; it belongs to `fetch_verified`.
+
+    put(bucket, path, key, meta=None) -> (Head, None) | (None, Failure)
         Uploads `path` with its SHA-256 stored as object metadata (always computed here, from
         the file being uploaded; never taken from the caller), then heads the object and
         requires the size, the hash and the ETag to match. The ETag is what proves the bytes:
         see `etag_matches`. `meta` adds other user-metadata pairs, each value percent-encoded
-        (S3 metadata is ASCII, and the CLI's `name=value,...` form splits on commas).
+        (S3 metadata is ASCII, and the CLI's `name=value,...` form splits on commas). A
+        failure is a `Failure`: the detail text as a `str`, with `.kind` saying how far the
+        upload got (NOT_COPIED, NOT_PROVED or DIFFERS).
 
     run(bucket, args, kind) -> (stdout, None) | (None, detail)
         The one command runner: builds and runs one `aws` command for a bucket value under the
-        timeout of its kind ("copy", "head" or "list"). The four functions above call it, and so
+        timeout of its kind ("copy", "head", "list" or "small"). The functions above call it, and so
         may a caller that needs a raw `s3`/`s3api` call this module does not offer.
+
+Every ETag this module returns (`head`, `listing`, `put`) is bare: S3's surrounding double
+quotes are taken off. `quoted_etag` puts them back for a record that keeps the quoted form,
+and `bare_etag` takes them off one read from elsewhere, so the two forms compare.
 
 Why a SHA-256 in the metadata: a multipart upload's ETag is not the file's MD5, so the bucket's
 own checksum cannot prove a file. The uploader computes the hash and stores it on the object;
@@ -58,6 +71,7 @@ only `head-object` returns it (a listing does not).
 import collections
 import contextlib
 import dataclasses
+import errno
 import glob
 import hashlib
 import json
@@ -77,7 +91,10 @@ _lock = threading.Lock()        # guards the module's in-memory state
 # One timeout for each kind of call, defined here once. A copy moves a whole file (a two-hour
 # capture is a few hundred MB), so it gets minutes; a head and one page of a listing are a
 # metadata round trip each.
-TIMEOUTS = {"copy": 600, "head": 60, "list": 60}
+TIMEOUTS = {"copy": 600, "head": 60, "list": 60, "small": 60}
+
+# The largest object `fetch_small` copies under the "small" timeout.
+SMALL_FETCH_MAX_BYTES = 16 * 1024 * 1024
 
 LISTING_MAX_AGE_S = 60          # how long a listing is held in memory by default
 
@@ -111,12 +128,49 @@ MAX_PART_SIZE_CANDIDATES = 16
 # lookup in `head` ignores case, so another CLI version cannot turn a hash into a miss.
 SHA256_META = "sha256"
 
-Listed = collections.namedtuple("Listed", "size etag")
+Listed = collections.namedtuple("Listed", "size etag last_modified", defaults=(None,))
 Head = collections.namedtuple("Head", "size sha256 etag")
 
 
 class BucketError(ValueError):
     """A bucket value that cannot be defined: no name, or no `aws` CLI to be found."""
+
+
+# How far a failed `put` got. The kind is what a caller acts on; the text is for people.
+NOT_COPIED = "not_copied"       # the upload did not complete: the file was unreadable, or the
+                                # copy command failed (an object it may have left is unproved)
+NOT_PROVED = "not_proved"       # copied, but the bytes could not be proved either way
+DIFFERS = "differs"             # copied, and the bucket's object is proved not to be the file
+FAILURE_KINDS = (NOT_COPIED, NOT_PROVED, DIFFERS)
+
+
+class Failure(str):
+    """A failed `put`'s detail text, with `.kind` (one of FAILURE_KINDS) beside it. It is a
+    `str`, so a caller that prints the detail, searches it or tests it for truth works as
+    before."""
+
+    def __new__(cls, kind, detail):
+        if kind not in FAILURE_KINDS:
+            raise ValueError("unknown failure kind %r" % kind)
+        obj = super().__new__(cls, detail)
+        obj.kind = kind
+        return obj
+
+    @property
+    def detail(self):
+        return str(self)
+
+
+def bare_etag(etag):
+    """An ETag without S3's surrounding double quotes (the form every return here uses), or
+    None for an empty one."""
+    return (etag or "").strip().strip('"') or None
+
+
+def quoted_etag(etag):
+    """An ETag in S3's quoted form, `"<etag>"`, as the raw API prints it; None stays None."""
+    bare = bare_etag(etag)
+    return '"%s"' % bare if bare else None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -240,6 +294,22 @@ def expected_etag(size, got):
     return _multipart_etag(got.part_md5s)
 
 
+def _all_part_size_candidates(size, parts):
+    """Every whole-MiB part size `part_size_candidates` chooses from, ranked, before the cap."""
+    if parts < 2 or parts > MAX_PARTS:
+        return []
+    low = max(MIN_PART_BYTES // MIB, -(-size // (parts * MIB)))
+    high = min(MAX_PART_BYTES // MIB, -(-size // ((parts - 1) * MIB)) - 1)
+    found = [m * MIB for m in range(low, high + 1)
+             if m * MIB != MULTIPART_PART_BYTES and -(-size // (m * MIB)) == parts]
+
+    def rank(p):
+        m = p // MIB
+        return (p & (p - 1) != 0, bool(m % 8 and m % 10 and m % 25), p)
+    found.sort(key=rank)
+    return found
+
+
 def part_size_candidates(size, parts):
     """The part sizes, in bytes, that could have built a `parts`-part ETag for a file of `size`
     bytes: whole MiB from MIN_PART_BYTES up to MAX_PART_BYTES that split the file into exactly
@@ -251,17 +321,7 @@ def part_size_candidates(size, parts):
     size/parts and size/(parts - 1), a range of about size / (parts * (parts - 1)) bytes: under
     one MiB for a 300 MB file in 19 parts, so one or two candidates. Only a file of a few parts
     has a wide range, and the cap bounds that."""
-    if parts < 2 or parts > MAX_PARTS:
-        return []
-    low = max(MIN_PART_BYTES // MIB, -(-size // (parts * MIB)))
-    high = min(MAX_PART_BYTES // MIB, -(-size // ((parts - 1) * MIB)) - 1)
-    found = [m * MIB for m in range(low, high + 1)
-             if m * MIB != MULTIPART_PART_BYTES and -(-size // (m * MIB)) == parts]
-    def rank(p):
-        m = p // MIB
-        return (p & (p - 1) != 0, bool(m % 8 and m % 10 and m % 25), p)
-    found.sort(key=rank)
-    return found[:MAX_PART_SIZE_CANDIDATES]
+    return _all_part_size_candidates(size, parts)[:MAX_PART_SIZE_CANDIDATES]
 
 
 def _etags_for_part_sizes(path, part_sizes):
@@ -303,27 +363,57 @@ def etag_matches(etag, size, got, path):
       gives the same ETag proves the bytes, since a part size only changes how they were cut.
       That second read counts only when its SHA-256 equals `got.sha256`, so a file changed
       since its digests were taken proves nothing."""
+    return etag_verdict(etag, size, got, path) is None
+
+
+def etag_verdict(etag, size, got, path):
+    """None when `etag_matches`, else the Failure kind a mismatch means.
+
+    DIFFERS when the check was complete: a plain MD5 or a `-1` ETag that does not match, or an
+    `-N` ETag where every whole-MiB part size giving N parts was tried (none was cut by the
+    cap) and at least one was possible. NOT_PROVED otherwise: no ETag, one this module cannot
+    read, a file that could not be read again or changed since its digests, a candidate list
+    the cap cut short, or a part count no whole-MiB part size gives (a part size set in raw
+    bytes cannot be ruled out)."""
+    return _etag_check(etag, size, got, path)[0]
+
+
+def _etag_check(etag, size, got, path):
+    """(None, "") on a match, else (the Failure kind, why in a few words)."""
     if not etag:
-        return False
+        return NOT_PROVED, "the bucket gave no ETag"
     if "-" not in etag:
-        return etag == got.md5
+        return (None, "") if etag == got.md5 else (DIFFERS, "the MD5 differs")
     _body, _, count = etag.rpartition("-")
     try:
         parts = int(count)
     except ValueError:
-        return False
+        return NOT_PROVED, "an ETag this check cannot read"
     if parts == 1:
-        return etag == _multipart_etag([bytes.fromhex(got.md5)])
-    if parts == len(got.part_md5s) and etag == _multipart_etag(got.part_md5s):
-        return True
-    candidates = part_size_candidates(size, parts)
-    if not candidates:
-        return False
-    try:
-        etags, sha256 = _etags_for_part_sizes(path, candidates)
-    except OSError:
-        return False
-    return sha256 == got.sha256 and etag in etags.values()
+        if etag == _multipart_etag([bytes.fromhex(got.md5)]):
+            return None, ""
+        return DIFFERS, "the one-part ETag differs"
+    default_parts = parts == len(got.part_md5s)
+    if default_parts and etag == _multipart_etag(got.part_md5s):
+        return None, ""
+    every = _all_part_size_candidates(size, parts)
+    candidates = every[:MAX_PART_SIZE_CANDIDATES]
+    if candidates:
+        try:
+            etags, sha256 = _etags_for_part_sizes(path, candidates)
+        except OSError as exc:
+            return NOT_PROVED, "the file could not be read again: %s" % exc
+        if sha256 != got.sha256:
+            return NOT_PROVED, "the file changed during the upload"
+        if etag in etags.values():
+            return None, ""
+    if len(every) > len(candidates):
+        return NOT_PROVED, "%d of %d part sizes for %d parts were tried" % (
+            len(candidates), len(every), parts)
+    if not (candidates or default_parts):
+        return NOT_PROVED, "no whole-MiB part size from %d MiB gives %d parts" % (
+            MIN_PART_BYTES // MIB, parts)
+    return DIFFERS, "no part size for %d parts gives its ETag" % parts
 
 
 # --- listing -----------------------------------------------------------------------
@@ -337,7 +427,8 @@ def _list_now(bucket, prefix):
     for _page in range(LIST_MAX_PAGES):
         args = ["s3api", "list-objects-v2", "--bucket", bucket.name, "--prefix", prefix,
                 "--max-items", str(LIST_PAGE_KEYS), "--page-size", str(LIST_PAGE_KEYS),
-                "--query", "[Contents[].[Key, Size, ETag], NextToken]", "--output", "json"]
+                "--query", "[Contents[].[Key, Size, ETag, LastModified], NextToken]",
+                "--output", "json"]
         if token:
             args += ["--starting-token", token]
         out, err = run(bucket, args, "list")
@@ -352,8 +443,9 @@ def _list_now(bucket, prefix):
                 key, size, etag = entry[0], entry[1], entry[2]
             except (TypeError, IndexError):
                 continue            # a shape the S3 API does not describe: skip it
+            modified = entry[3] if len(entry) > 3 and isinstance(entry[3], str) else None
             if isinstance(key, str) and isinstance(size, int):
-                objects[key] = Listed(size, (etag or "").strip('"') or None)
+                objects[key] = Listed(size, bare_etag(etag), modified or None)
         if not token:
             return objects, None
     return None, "listing of %r stopped after %d pages: the bucket kept giving a NextToken" % (
@@ -361,7 +453,8 @@ def _list_now(bucket, prefix):
 
 
 def listing(bucket, prefix, max_age=LISTING_MAX_AGE_S):
-    """{key: Listed(size, etag)} for every object under `prefix` (keys in full), or
+    """{key: Listed(size, etag, last_modified)} for every object under `prefix` (keys in full),
+    the ETag bare and `last_modified` S3's ISO 8601 text (None if the bucket gave none), or
     (None, detail) when the bucket did not answer. A failed listing is never held, so the next
     call asks again; a caller must treat "unknown" differently from "empty". With `max_age` 0
     (or less) the bucket is asked and nothing is held: no listing and no lock per prefix. A
@@ -412,14 +505,17 @@ def head(bucket, key):
     for name, value in (meta.get("Metadata") or {}).items():
         if name.lower() == SHA256_META:
             sha = (value or "").strip().lower()
-    return Head(size, sha, (meta.get("ETag") or "").strip('"') or None), None
+    return Head(size, sha, bare_etag(meta.get("ETag"))), None
 
 
 # --- fetch -------------------------------------------------------------------------
 
-def fetch_verified(bucket, key, dest, size=None, sha256=None, require_sha256=True):
+def fetch_verified(bucket, key, dest, size=None, sha256=None, require_sha256=True,
+                   staging_dir=None):
     """Copy object `key` to `dest`, checked before it is renamed into place. Returns None, or
-    the reason it refused. See the module docstring for the rules."""
+    the reason it refused. See the module docstring for the rules. `staging_dir` is where the
+    `.part` is made and checked (default: beside `dest`); a staging directory on another file
+    system costs one more copy, made beside `dest` and renamed, so `dest` still appears whole."""
     if sha256 is not None and not sha256.strip():
         return "refused: the caller passed an empty sha256 for %s" % key
     if size is None or sha256 is None:
@@ -434,19 +530,40 @@ def fetch_verified(bucket, key, dest, size=None, sha256=None, require_sha256=Tru
         sha256 = sha256.strip().lower()
     if require_sha256 and not sha256:
         return "no sha256 metadata on the object: %s" % key
+    return _fetch(bucket, key, dest, size, sha256, "copy", staging_dir)
+
+
+def fetch_small(bucket, key, dest, size, staging_dir=None):
+    """Copy a small object `key` to `dest`, checked by `size` alone, with no head and under
+    the "small" timeout. Returns None, or the reason it refused. For an object that is only
+    a convenience (a thumbnail), where its size is known from a listing; anything that must
+    be proved goes through `fetch_verified`."""
+    if not isinstance(size, int) or size < 0:
+        return "refused: fetch_small needs the object's size for %s" % key
+    if size > SMALL_FETCH_MAX_BYTES:
+        return "refused: %s is %d bytes, over the %d a small fetch takes" % (
+            key, size, SMALL_FETCH_MAX_BYTES)
+    return _fetch(bucket, key, dest, size, None, "small", staging_dir)
+
+
+def _fetch(bucket, key, dest, size, sha256, kind, staging_dir):
+    """The copy both fetches share: into a `.part`, checked, then renamed onto `dest`."""
     folder = os.path.dirname(os.path.abspath(dest))
+    stage = os.path.abspath(staging_dir) if staging_dir else folder
     try:
         os.makedirs(folder, exist_ok=True)
-        # A unique name per call, in dest's own directory so the rename stays atomic. It ends
-        # `.part`, the cache policy's mark for a write in progress, so an eviction run does not
-        # take a download out from under its own rename.
-        fd, part = tempfile.mkstemp(dir=folder, prefix=os.path.basename(dest) + ".",
+        os.makedirs(stage, exist_ok=True)
+        # A unique name per call, in dest's own directory by default so the rename stays
+        # atomic. It ends `.part`, the cache policy's mark for a write in progress, so an
+        # eviction run does not take a download out from under its own rename.
+        fd, part = tempfile.mkstemp(dir=stage, prefix=os.path.basename(dest) + ".",
                                     suffix=".part")
         os.close(fd)
     except OSError as exc:
         return str(exc)
+    moved = None
     try:
-        _out, err = run(bucket, ["s3", "cp", bucket.url(key), part, "--no-progress"], "copy")
+        _out, err = run(bucket, ["s3", "cp", bucket.url(key), part, "--no-progress"], kind)
         if err is not None:
             return err
         got_size = os.path.getsize(part)
@@ -455,7 +572,18 @@ def fetch_verified(bucket, key, dest, size=None, sha256=None, require_sha256=Tru
         if sha256 and _digest_file(part).sha256 != sha256:
             return "sha256 mismatch: %s" % key
         try:
-            os.replace(part, dest)
+            try:
+                os.replace(part, dest)
+            except OSError as exc:
+                if exc.errno != errno.EXDEV:
+                    raise
+                # The staging directory is on another file system: copy beside dest first,
+                # so dest itself only ever appears by a rename.
+                fd, moved = tempfile.mkstemp(dir=folder, prefix=os.path.basename(dest) + ".",
+                                             suffix=".part")
+                os.close(fd)
+                shutil.copyfile(part, moved)
+                os.replace(moved, dest)
         except OSError as exc:
             # Another fetch of the same object may have won the race. A complete copy of the
             # right size is the right copy; anything else is a failure.
@@ -470,9 +598,10 @@ def fetch_verified(bucket, key, dest, size=None, sha256=None, require_sha256=Tru
         # (`<target>.<random>`) and renames it at the end, so a copy killed at its timeout
         # leaves that file behind. Its name does not end `.part`, so nothing else would ever
         # take it away.
-        for leftover in [part] + glob.glob(glob.escape(part) + ".*"):
-            with contextlib.suppress(OSError):
-                os.remove(leftover)     # `part` itself is a no-op after the rename
+        for leftover in [part, moved] + glob.glob(glob.escape(part) + ".*"):
+            if leftover:
+                with contextlib.suppress(OSError):
+                    os.remove(leftover)     # a no-op after the rename
 
 
 # --- put ---------------------------------------------------------------------------
@@ -491,7 +620,8 @@ def _meta_arg(digest, meta):
 
 def put(bucket, path, key, meta=None):
     """Upload `path` as `key` with its SHA-256 stored as object metadata, then head the object
-    and require the size and the hash to match. Returns (Head, None), or (None, detail).
+    and require the size and the hash to match. Returns (Head, None), or (None, Failure): the
+    detail text, with `.kind` NOT_COPIED, NOT_PROVED or DIFFERS.
 
     The hash is always computed here, from the file being uploaded: a hash handed in could be
     stale or wrong, and the metadata is what every later fetch trusts. It is read once per
@@ -503,30 +633,32 @@ def put(bucket, path, key, meta=None):
     the bucket's own account of the bytes. A single-part object's ETag is its MD5. A multipart
     object's is the MD5 of its parts' MD5s, which depends on the part size the CLI chose:
     `etag_matches` accepts a whole-MiB part size (the likeliest MAX_PART_SIZE_CANDIDATES are
-    tried) that gives the same number of parts and the same ETag. An ETag no such part size explains is a refusal, never a pass it cannot prove."""
+    tried) that gives the same number of parts and the same ETag. An ETag no such part size
+    explains is a refusal, never a pass it cannot prove: DIFFERS when the check was complete,
+    NOT_PROVED when it was not (`etag_verdict`)."""
     try:
         local = os.path.getsize(path)
         got_digests = digests(path)
         digest = got_digests.sha256
     except OSError as exc:
-        return None, str(exc)
+        return None, Failure(NOT_COPIED, str(exc))
     _out, err = run(bucket, ["s3", "cp", path, bucket.url(key), "--no-progress",
                              "--metadata", _meta_arg(digest, meta)], "copy")
     if err is not None:
-        return None, err
+        return None, Failure(NOT_COPIED, err)
     _forget_listings(bucket, key)
     got, err = head(bucket, key)
     if got is None:
-        return None, err or "the object is not there after the upload: %s" % key
+        return None, Failure(NOT_PROVED,
+                             err or "the object is not there after the upload: %s" % key)
     if got.size != local:
-        return None, "size mismatch: local %s, bucket %s" % (local, got.size)
+        return None, Failure(DIFFERS, "size mismatch: local %s, bucket %s" % (local, got.size))
     if got.sha256 != digest:
-        return None, "sha256 mismatch after the upload: %s" % key
-    if etag_matches(got.etag, local, got_digests, path):
+        return None, Failure(DIFFERS, "sha256 mismatch after the upload: %s" % key)
+    verdict, why = _etag_check(got.etag, local, got_digests, path)
+    if verdict is None:
         return got, None
-    parts = got.etag.rpartition("-")[2] if got.etag and "-" in got.etag else ""
-    if parts.isdigit() and int(parts) > 1 and int(parts) != len(got_digests.part_md5s) \
-            and not part_size_candidates(local, int(parts)):
-        return None, ("cannot prove the bytes of %s: no whole-MiB part size from %d MiB splits "
-                      "it into %s parts" % (key, MIN_PART_BYTES // MIB, parts))
-    return None, "etag mismatch after the upload: %s (the bytes differ)" % key
+    if verdict == DIFFERS:
+        return None, Failure(DIFFERS, "etag mismatch after the upload: %s (the bytes differ: "
+                             "%s)" % (key, why))
+    return None, Failure(NOT_PROVED, "cannot prove the bytes of %s: %s" % (key, why))

@@ -7,7 +7,8 @@ It answers the four calls the module makes, with the JSON the real CLI prints (b
     s3 cp s3://<bucket>/<key> <file>                             download
     s3api head-object --bucket B --key K                         404 when absent
     s3api list-objects-v2 --bucket B --prefix P --max-items N [--starting-token T]
-                                                                 pages of N keys
+                                                                 pages of N keys, each
+                                                                 [Key, Size, ETag, LastModified]
 
 Every call is recorded as (args after the CLI's global flags, the full command, the timeout).
 No network, no real bucket, no process is ever started.
@@ -68,13 +69,17 @@ class FakeAws:
         test.addCleanup(bucketio._listings.clear)
         return self
 
-    def add(self, bucket, key, body, sha256=False, meta=None):
+    LAST_MODIFIED = "2026-01-02T03:04:05+00:00"     # what a listing gives an object by default
+
+    def add(self, bucket, key, body, sha256=False, meta=None, last_modified=None):
         meta = dict(meta or {})
         if sha256 is True:
             meta["sha256"] = hashlib.sha256(body).hexdigest()
         elif sha256:
             meta["sha256"] = sha256
         self.objects[(bucket, key)] = {"body": body, "meta": meta}
+        if last_modified:
+            self.objects[(bucket, key)]["last_modified"] = last_modified
 
     def fail_next(self, operation, result):
         """The next call of `operation` ("cp-up", "cp-down", "head-object", "list-objects-v2")
@@ -166,7 +171,8 @@ class FakeAws:
         page = keys[start:start + size]
         more = start + size < len(keys)
         contents = [[k, len(self.objects[(bucket, k)]["body"]),
-                     '"%s"' % etag(self.objects[(bucket, k)]["body"])]
+                     '"%s"' % etag(self.objects[(bucket, k)]["body"]),
+                     self.objects[(bucket, k)].get("last_modified", self.LAST_MODIFIED)]
                     for k in page]
         return FakeProc(stdout=json.dumps([contents or None,
                                            str(start + size) if more else None]))
